@@ -114,6 +114,7 @@ fn solo_activation_does_not_promote_a_formerly_off_dynamic_after_flash_release()
                 },
             ]),
             playback_solo_regions: Arc::new(vec![PlaybackSoloRegion {
+                color: None,
                 id: Uuid::new_v4(),
                 name: "Across pages".into(),
                 members: vec![a, b],

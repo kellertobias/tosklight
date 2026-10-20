@@ -11,7 +11,7 @@ import type {
  * `accepted_frame`) or one whose frame is not yet available yields nothing, so an unprogrammed
  * fixture is never compared with an invented white. Visible match and UV are described
  * separately. Nothing here is a warning that interrupts work: the Fixture Sheet shows at most
- * one small steady triangle, and the Color modal lists the details on demand.
+ * one small steady information or limitation marker, and the Color modal lists details on demand.
  */
 
 /** Δu′v′ at or below this is not visible on stage (help: 05-color-intent). */
@@ -40,11 +40,12 @@ export interface HeadColorDetail {
 	ownerId: string;
 	name: string;
 	quality: ColorResolutionQuality;
+	uvLimited: boolean;
 	visible: string;
 	deltaUv: number | null;
 	/** UV result, separate from the visible match; `null` when UV plays no part. */
 	uv: string | null;
-	/** An expected limitation worth the passive Fixture Sheet triangle. */
+	/** An expected limitation worth a passive Fixture Sheet marker. */
 	limited: boolean;
 	/** TL-552: colour controls parked at neutral, white only, or why there is no colour model. */
 	note: string | null;
@@ -90,6 +91,7 @@ export function headColorDetail(head: ColorIntentHeadReport): HeadColorDetail {
 		ownerId: head.owner_id,
 		name,
 		quality: head.quality,
+		uvLimited: head.uv?.status === "unsupported" || head.uv?.clipped === true,
 		visible: VISIBLE_TEXT[head.quality],
 		deltaUv: head.delta_uv,
 		uv: uvText(head),
@@ -99,7 +101,9 @@ export function headColorDetail(head: ColorIntentHeadReport): HeadColorDetail {
 }
 
 export interface FixtureColorNotice {
-	/** Accessible label of the triangle. */
+	/** Calibration estimates use information; an unavailable request retains its quiet warning. */
+	kind: "info" | "warning";
+	/** Accessible label of the information or limitation marker. */
 	label: string;
 	heads: readonly HeadColorDetail[];
 }
@@ -126,6 +130,7 @@ export function fixtureColorNotices(
 	}
 	for (const [key, details] of grouped)
 		notices.set(key, {
+			kind: details.every(detail => detail.quality === "uncalibrated" && !detail.uvLimited) ? "info" : "warning",
 			label: `Color details: ${details
 				.flatMap((detail) => [detail.visible, detail.uv])
 				.filter((text, index, all) => text && all.indexOf(text) === index)

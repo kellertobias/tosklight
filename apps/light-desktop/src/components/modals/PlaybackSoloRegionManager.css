@@ -56,11 +56,12 @@
 }
 .solo-region-selected-controls {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
+	grid-template-columns: minmax(0, 1fr) minmax(120px, auto);
 	gap: 12px;
 	align-items: end;
 }
 .solo-region-actions {
+	grid-column: 1 / -1;
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;

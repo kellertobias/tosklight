@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Button } from "../controls";
 import type { VerticalTouchFaderAction } from "../faders";
 import { PlaybackArtwork } from "./PlaybackArtwork";
@@ -12,12 +12,14 @@ import {
 export interface PlaybackTileViewProps {
 	model: PlaybackCardViewModel;
 	action?: VerticalTouchFaderAction;
+	/** Optional context such as Solo membership; the underlying control action is unchanged. */
+	actionLabel?: ReactNode;
 	callbacks?: PlaybackCardCallbacks;
 	slots?: PlaybackCardSlots;
 }
 
 /** A software Playback tile has one real control, including its identity and picture. */
-export function PlaybackTileView({ model, action, callbacks = {}, slots = {} }: PlaybackTileViewProps) {
+export function PlaybackTileView({ model, action, actionLabel = action?.label, callbacks = {}, slots = {} }: PlaybackTileViewProps) {
 	const kind = model.assigned ? (model.kind ?? "cue-list") : "empty";
 	const { id, label: _label, className, style, ...buttonProps } = action ?? {};
 	const classes = [
@@ -55,7 +57,7 @@ export function PlaybackTileView({ model, action, callbacks = {}, slots = {} }: 
 				style={style}
 				disabled={Boolean(model.disabled || action?.disabled || !action)}
 				aria-label={`Playback ${model.page}.${model.slot}: ${model.name}`}
-				aria-description={[action?.label, model.description].filter(Boolean).join(" · ") || undefined}
+				aria-description={[typeof actionLabel === "string" ? actionLabel : action?.label, model.description].filter(Boolean).join(" · ") || undefined}
 				title={model.description}
 				onClick={action?.onClick ?? callbacks.onActivate}
 			>
@@ -64,12 +66,17 @@ export function PlaybackTileView({ model, action, callbacks = {}, slots = {} }: 
 					<strong className="playback-tile-title">{model.name}</strong>
 					<span className="playback-tile-number">{model.page}.{model.slot}</span>
 				</span>
-				{model.summary && <span className="playback-tile-summary">
-					<span>{model.summary.label}</span>
-					{model.summary.detail && <small>{model.summary.detail}</small>}
-				</span>}
-				{model.status && <span className={`playback-tile-status playback-status-${model.status.kind}`}>{model.status.label}</span>}
-				{model.summary?.warning && <em className="playback-tile-warning">{model.summary.warning}</em>}
+				<span className="playback-tile-footer">
+					{model.assigned && actionLabel && <span className="playback-tile-action-label">{actionLabel}</span>}
+					{(model.summary || model.status) && <span className="playback-tile-summary">
+						{model.summary && <>
+							<span className="playback-tile-cue-label">{model.summary.label}</span>
+							{model.summary.detail && <small>{model.summary.detail}</small>}
+						</>}
+						{model.status && <span className={`playback-tile-status playback-status-${model.status.kind}`}>{model.status.label}</span>}
+						{model.summary?.warning && <em className="playback-tile-warning">{model.summary.warning}</em>}
+					</span>}
+				</span>
 			</Button>
 			{slots.overlays}
 		</article>

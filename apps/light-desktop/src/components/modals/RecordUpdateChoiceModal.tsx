@@ -6,7 +6,7 @@ import {
 	MultiValueToggleField,
 	SwitchField,
 } from "@tosklight/ui";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { RecordUpdateOption } from "../../api/types";
 import {
 	optionLabel,
@@ -28,7 +28,11 @@ export interface RecordUpdateChoiceModalProps {
 }
 
 /** RECORD RECORD / UPDATE UPDATE: choose how this Record or Update stores the programmer. */
-export function RecordUpdateChoiceModal({
+export function RecordUpdateChoiceModal(props: RecordUpdateChoiceModalProps) {
+	return <RecordUpdateChoiceContent key={props.kind} {...props} />;
+}
+
+function RecordUpdateChoiceContent({
 	kind,
 	storedDefault,
 	initialOption = null,
@@ -39,13 +43,10 @@ export function RecordUpdateChoiceModal({
 	onTargets,
 }: RecordUpdateChoiceModalProps) {
 	const verb = kind === "record" ? "Record" : "Update";
-	const [option, setOption] = useState<RecordUpdateOption>(
-		initialOption ?? storedDefault ?? "smart",
-	);
+	const [chosenOption, setOption] = useState<RecordUpdateOption | null>(null);
+	// Defaults hydrate asynchronously, but an explicit operator choice always wins.
+	const option = chosenOption ?? initialOption ?? storedDefault ?? "smart";
 	const [setAsDefault, setSetAsDefault] = useState(false);
-	useEffect(() => {
-		if (storedDefault) setOption(initialOption ?? storedDefault);
-	}, [initialOption, storedDefault]);
 	const selected = RECORD_UPDATE_OPTIONS.find(
 		(candidate) => candidate.value === option,
 	);

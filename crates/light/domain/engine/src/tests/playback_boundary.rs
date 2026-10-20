@@ -1052,6 +1052,7 @@ fn install_regions(engine: &Engine, members: &[Vec<PlaybackAddress>]) {
         .iter()
         .enumerate()
         .map(|(index, members)| PlaybackSoloRegion {
+            color: None,
             id: Uuid::new_v4(),
             name: format!("Solo {index}"),
             members: members.clone(),

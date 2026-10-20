@@ -71,6 +71,7 @@ vi.mock("../features/showObjects/ShowObjectsState", () => ({
 	usePortableGroups: () => NO_GROUPS,
 }));
 vi.mock("../features/presetRecall/PresetRecallProvider", () => ({
+	usePresetCountFeedback: () => ({ store: null, feedback: null }),
 	usePresetRecall: () => ({
 		actions: { recall: mocks.recall },
 		selection: { selected: ["fixture-a"] },
@@ -96,15 +97,17 @@ vi.mock("../features/programmingUpdate/ProgrammingUpdateProvider", () => ({
 	useProgrammingUpdate: () => ({ loadSettings: mocks.loadSettings }),
 }));
 vi.mock("../features/recordUpdateOptions/usePoolRecordLabel", () => ({
-	usePoolRecordLabel: () => ({ exists }: { exists: boolean }) => exists ? "Merge" : "REC",
+	usePoolRecordLabel:
+		() =>
+		({ exists }: { exists: boolean }) =>
+			exists ? "Merge" : "REC",
 }));
 vi.mock("../components/control/updateWorkflow", () => ({
 	requestUpdateTarget: mocks.updateTarget,
 }));
-vi.mock(
-	"../features/visualizationRuntime/VisualizationRuntimeView",
-	() => ({ useVisualizationRuntimeSnapshot: () => mocks.visualization }),
-);
+vi.mock("../features/visualizationRuntime/VisualizationRuntimeView", () => ({
+	useVisualizationRuntimeSnapshot: () => mocks.visualization,
+}));
 vi.mock("../components/shared/GroupStrip", () => ({ GroupStrip: () => null }));
 vi.mock("../components/shared/PoolColorSettings", () => ({
 	PoolColorSettings: () => null,
@@ -148,8 +151,11 @@ describe("PresetsWindow normal recording boundary", () => {
 		mocks.state.poolGridDefaultWidth = 160;
 		const { container } = render(<PresetsWindow compact />);
 		expect(
-			(container.querySelector(".preset-pool-window .ui-button-grid") as HTMLElement)
-				.style.getPropertyValue("--grid-cell-min"),
+			(
+				container.querySelector(
+					".preset-pool-window .ui-button-grid",
+				) as HTMLElement
+			).style.getPropertyValue("--grid-cell-min"),
 		).toBe("160px");
 	});
 
@@ -488,32 +494,52 @@ describe("PresetsWindow active / defined fixture counts", () => {
 		const cards = () =>
 			container.querySelectorAll<HTMLButtonElement>(".preset-card");
 
-		expect(cards()[0].querySelector(".pool-card-information > small")).toHaveTextContent(/^0$/);
+		expect(
+			cards()[0].querySelector(".pool-card-information > small"),
+		).toHaveTextContent(/^0$/);
 		expect(cards()[0]).not.toHaveTextContent(/fixtures/);
 		expect(cards()[0]).not.toHaveTextContent(/Beam ·/);
-		expect(cards()[1].querySelector(".pool-card-information > small")).toHaveTextContent(/^0$/);
+		expect(
+			cards()[1].querySelector(".pool-card-information > small"),
+		).toHaveTextContent(/^0$/);
 
 		mocks.visualization = zoomSnapshot(2, 1);
 		rerender(<PresetsWindow compact />);
-		expect(cards()[0].querySelector(".pool-card-information > small")).toHaveTextContent(/^1$/);
+		expect(
+			cards()[0].querySelector(".pool-card-information > small"),
+		).toHaveTextContent(/^1$/);
 	});
 });
 
-
 describe("PresetsWindow effective touch recording option", () => {
 	function existingPreset() {
-		mocks.presets = [{ kind: "preset", id: "2.1", revision: 4, updated_at: "",
-			body: { name: "Blue", number: 1, family: "Color", values: {} } }];
+		mocks.presets = [
+			{
+				kind: "preset",
+				id: "2.1",
+				revision: 4,
+				updated_at: "",
+				body: { name: "Blue", number: 1, family: "Color", values: {} },
+			},
+		];
 	}
 	it("merges an occupied preset directly when the desk default is Merge", async () => {
 		existingPreset();
 		mocks.loadSettings.mockResolvedValue({ record_default: "merge" });
 		render(<PresetsWindow compact />);
 		fireEvent.click(firstPresetCell());
-		await waitFor(() => expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
-			objectId: "2.1", mode: "merge", expectedObjectRevision: 4,
-		})));
-		expect(screen.queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
+		await waitFor(() =>
+			expect(mocks.record).toHaveBeenCalledWith(
+				expect.objectContaining({
+					objectId: "2.1",
+					mode: "merge",
+					expectedObjectRevision: 4,
+				}),
+			),
+		);
+		expect(
+			screen.queryByRole("button", { name: "Merge" }),
+		).not.toBeInTheDocument();
 	});
 	it("keeps the mode dialog when one-off Smart overrides the Merge default", async () => {
 		existingPreset();
@@ -521,26 +547,39 @@ describe("PresetsWindow effective touch recording option", () => {
 		mocks.commandText = "RECORD SMART";
 		render(<PresetsWindow compact />);
 		fireEvent.click(firstPresetCell());
-		expect(await screen.findByRole("button", { name: "Merge" })).toBeInTheDocument();
+		expect(
+			await screen.findByRole("button", { name: "Merge" }),
+		).toBeInTheDocument();
 		expect(mocks.record).not.toHaveBeenCalled();
 	});
 	it("records an empty slot as overwrite even when the default is Merge", () => {
 		mocks.loadSettings.mockResolvedValue({ record_default: "merge" });
 		render(<PresetsWindow compact />);
 		fireEvent.click(firstPresetCell());
-		expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({ mode: "overwrite", expectedObjectRevision: 0 }));
+		expect(mocks.record).toHaveBeenCalledWith(
+			expect.objectContaining({ mode: "overwrite", expectedObjectRevision: 0 }),
+		);
 	});
 	it("cancels a delayed settings decision if the authoritative command changes", async () => {
 		existingPreset();
 		let finish!: (settings: { record_default: string }) => void;
-		mocks.loadSettings.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+		mocks.loadSettings.mockImplementation(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				}),
+		);
 		mocks.commandText = "RECORD";
 		render(<PresetsWindow compact />);
 		fireEvent.click(firstPresetCell());
 		await waitFor(() => expect(mocks.loadSettings).toHaveBeenCalledOnce());
 		mocks.commandText = "DELETE";
-		await act(async () => { finish({ record_default: "merge" }); });
+		await act(async () => {
+			finish({ record_default: "merge" });
+		});
 		expect(mocks.record).not.toHaveBeenCalled();
-		expect(screen.queryByRole("button", { name: "Merge" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Merge" }),
+		).not.toBeInTheDocument();
 	});
 });

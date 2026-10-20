@@ -99,6 +99,7 @@ fn rig() -> (
             }]
             .into(),
             playback_solo_regions: vec![PlaybackSoloRegion {
+                color: None,
                 id: uuid::Uuid::new_v4(),
                 name: "Native Solo".into(),
                 members: vec![playback_address(1, 401), playback_address(1, 402)],

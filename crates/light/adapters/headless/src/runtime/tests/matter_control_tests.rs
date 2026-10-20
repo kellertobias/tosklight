@@ -215,7 +215,7 @@ fn matter_activation_checkpoint_restores_canonical_origin_and_general_solo_state
     let mut second_definition=first_definition.clone(); second_definition.target=light_playback::PlaybackTarget::CueList{cue_list_id:second.id};
     std::sync::Arc::make_mut(&mut snapshot.cue_lists).push(second);
     snapshot.playback_pages=vec![light_playback::PlaybackPage {number:1,name:"Matter Solo".into(),assignments:HashMap::from([(1,first_definition),(2,second_definition)])}].into();
-    snapshot.playback_solo_regions=vec![light_playback::PlaybackSoloRegion {id:Uuid::new_v4(),name:"Matter pair".into(),members:vec![matter_test_address(1,1),matter_test_address(1,2)]}].into();
+    snapshot.playback_solo_regions=vec![light_playback::PlaybackSoloRegion { color: None,id:Uuid::new_v4(),name:"Matter pair".into(),members:vec![matter_test_address(1,1),matter_test_address(1,2)]}].into();
     state.output.replace_snapshot(snapshot).unwrap();
     state.installation.update_configuration(|configuration|configuration.matter_enabled=true);
     state.output.execute_playback(EnginePlaybackCommand::Playback {address:matter_test_address(1,1),action:light_engine::PlaybackAction::On,activation_origin:None,control_source:matter_test_source()}).unwrap();

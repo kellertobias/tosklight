@@ -19,6 +19,7 @@ import { soloFenceClassMap } from "./soloFence";
 import type { PlaybackSlotProjection } from "./types";
 const noSubscribe = () => () => {};
 const noRegions = () => null;
+const notSaving = () => false;
 
 export function usePlaybackGridSolo(
 	controller: Pick<
@@ -34,6 +35,11 @@ export function usePlaybackGridSolo(
 		capability?.subscribe ?? noSubscribe,
 		capability?.getRegions ?? noRegions,
 		capability?.getRegions ?? noRegions,
+	);
+	const saving = useSyncExternalStore(
+		capability?.subscribe ?? noSubscribe,
+		capability?.isSaving ?? notSaving,
+		capability?.isSaving ?? notSaving,
 	);
 	const draft = usePlaybackSoloDraft(capability, regions);
 	const {
@@ -107,11 +113,17 @@ export function usePlaybackGridSolo(
 		);
 		return `${fences.get(playbackCellKey(cell)) ?? ""} ${chosen ? "playback-solo-selected" : ""}`.trim();
 	};
+	const memberPositions = useMemo(() => new Set(
+		(regions ?? []).flatMap(region => region.members
+			.filter(address => address.page === controller.activePageNumber)
+			.map(address => address.position)),
+	), [regions, controller.activePageNumber]);
 	const result = {
+		memberPositions,
 		fenceRegions,
 		available: capability?.available ?? false,
 		ready: regions !== null,
-		saving: creating || (capability?.isSaving() ?? false),
+		saving: creating || saving,
 		error: error ?? capability?.error,
 		selecting,
 		selected,
@@ -135,7 +147,7 @@ export function usePlaybackGridSolo(
 		return registry.register(surfaceId, result);
 	}, [
 		registry, surfaceId, capability?.authorityGeneration, capability?.available,
-		capability?.error, regions, selecting, selected, name, creating, error,
+		capability?.error, regions, selecting, selected, name, creating, saving, error,
 	]);
 	return result;
 }

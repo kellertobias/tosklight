@@ -1626,6 +1626,10 @@ export type PlaybackSurfacePageRequest = { page: number, };
 export type PlaybackSurfacePageLiveActionRequest = { surface_id: string, page: number, };
 export type PlaybackSoloRegion = { id: string, name: string,
 /**
+ * Optional #RRGGBB outline color; absent metadata uses the default amber.
+ */
+color?: string | null,
+/**
  * Explicit stable addresses, independent of panes and desks.
  */
 members: Array<PlaybackAddressValue>, };
@@ -1678,6 +1682,7 @@ batched_messages: boolean,
  * source as the lane messages. A new Subscribe replaces the claim.
  */
 readouts?: VisualizationReadoutClaim | null, } | { "type": "unsubscribe", lanes: Array<VisualizationLane>, } | { "type": "resynchronize", lane: VisualizationLane, } | { "type": "acknowledge", sequence: number, };
+export type FixtureSheetColorPresetName = { fixture_id: string, preset_instance_id: string, name: string, };
 export type VisualizationValue = { fixture_id: string, attribute: string, value: ProgrammingPreloadAttributeValue, };
 export type VisualizationValueKey = { fixture_id: string, attribute: string, };
 export type VisualizationStackEntryType = "ordinary_static" | "dynamic" | "fix_at" | "dynamic_off" | "static";

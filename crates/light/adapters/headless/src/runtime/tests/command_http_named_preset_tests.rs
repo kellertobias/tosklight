@@ -248,3 +248,182 @@ async fn named_preset_missing_and_inapplicable_preserve_selection_and_values() {
     }
     let _ = std::fs::remove_dir_all(scenario.data_dir);
 }
+
+/// The actual sheet route must distinguish an explicit recall from an identical literal.
+#[tokio::test]
+async fn fixture_sheet_color_names_require_actual_preset_provenance() {
+    for prefix in ["FIXTURE 1", "GROUP 1"] {
+        let (scenario, ids, instance) = named_preset_rig(
+            [light_core::FixtureId::new(), light_core::FixtureId::new()],
+            Uuid::new_v4(),
+        )
+        .await;
+        scenario
+            .state
+            .installation
+            .update_configuration(|configuration| configuration.programmer_fade_millis = 0);
+        let response = scenario
+            .execute("recall-sheet", Some(&format!("{prefix} AT COLOR PRESET 1")))
+            .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let response = json(response).await;
+        assert_eq!(response["outcome"], "accepted", "{response}");
+        let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+        assert!(
+            !programmer.values.is_empty() || !programmer.group_values.is_empty(),
+            "{programmer:?}"
+        );
+        assert!(
+            !scenario
+                .state
+                .output
+                .engine()
+                .held_parameter_values()
+                .is_empty(),
+            "held empty: {programmer:?}"
+        );
+        let read = || async {
+            let response = scenario
+                .app
+                .clone()
+                .oneshot(
+                    Request::get(format!(
+                        "/api/v2/output/visualization?dynamic_stack_only=true&fixture_ids={}",
+                        ids[0].0,
+                    ))
+                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                    .body(Body::empty())
+                    .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            json(response).await
+        };
+        let recalled = read().await;
+        assert_eq!(
+            recalled["color_preset_names"],
+            serde_json::json!([{
+                "fixture_id": ids[0].0, "preset_instance_id": instance, "name": "White",
+            }]),
+            "{prefix}: {recalled}"
+        );
+        let value = scenario.state.programming.get(scenario.session.id).unwrap();
+        let literal = value
+            .values
+            .first()
+            .map(|value| value.value.clone())
+            .or_else(|| {
+                value
+                    .group_values
+                    .values()
+                    .next()
+                    .and_then(|values| values.values().next())
+                    .map(|value| value.value.clone())
+            })
+            .unwrap();
+        let (literal_scenario, _, _) = named_preset_rig(ids, instance).await;
+        literal_scenario
+            .state
+            .programming
+            .set_many_immediate_with_delay(
+                literal_scenario.session.id,
+                [(ids[0], light_core::AttributeKey::color(), literal)],
+                Some(0),
+            );
+        let response = literal_scenario
+            .app
+            .clone()
+            .oneshot(
+                Request::get(format!(
+                    "/api/v2/output/visualization?dynamic_stack_only=true&fixture_ids={}",
+                    ids[0].0,
+                ))
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", literal_scenario.token),
+                )
+                .body(Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let literal = json(response).await;
+        assert_eq!(literal["values"], recalled["values"]);
+        assert_eq!(
+            literal["color_preset_names"],
+            serde_json::json!([]),
+            "literal {prefix}: {literal}"
+        );
+        let _ = std::fs::remove_dir_all(scenario.data_dir);
+        let _ = std::fs::remove_dir_all(literal_scenario.data_dir);
+    }
+}
+
+#[tokio::test]
+async fn fixture_sheet_color_names_follow_live_cue_references_after_programmer_clear() {
+    let (scenario, ids, instance) = named_preset_rig(
+        [light_core::FixtureId::new(), light_core::FixtureId::new()],
+        Uuid::new_v4(),
+    )
+    .await;
+    let response = scenario
+        .execute("recall-for-cue", Some("FIXTURE 1 AT COLOR PRESET 1"))
+        .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let programmer = scenario.state.programming.get(scenario.session.id).unwrap();
+    let value = &programmer.values[0];
+    let mut cue = light_playback::Cue::new("1".parse().unwrap());
+    cue.fade_millis = 0;
+    let mut change =
+        light_playback::CueChange::set(ids[0], value.attribute.clone(), value.value.clone());
+    change.preset_reference = programmer
+        .preset_provenance
+        .get(&value.programmer_order)
+        .cloned();
+    cue.changes.push(change);
+    let list: light_playback::CueList = serde_json::from_value(serde_json::json!({
+        "id": light_core::CueListId::new(), "name": "Preset cue", "priority": 0,
+        "mode": "sequence", "looped": false, "cues": [cue],
+    }))
+    .unwrap();
+    let mut snapshot = scenario.state.output.snapshot().as_ref().clone();
+    snapshot.cue_lists = vec![list.clone()].into();
+    snapshot.revision += 1;
+    scenario.state.output.replace_snapshot(snapshot).unwrap();
+    scenario.state.programming.clear(scenario.session.id);
+    scenario
+        .state
+        .output
+        .engine()
+        .execute_playback(light_engine::EnginePlaybackCommand::CueList {
+            id: list.id,
+            action: light_engine::CueListPlaybackAction::Go,
+        })
+        .unwrap();
+    let response = scenario
+        .app
+        .clone()
+        .oneshot(
+            Request::get(format!(
+                "/api/v2/output/visualization?dynamic_stack_only=true&fixture_ids={}",
+                ids[0].0,
+            ))
+            .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+            .body(Body::empty())
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let snapshot = json(response).await;
+    assert_eq!(
+        snapshot["color_preset_names"],
+        serde_json::json!([{
+            "fixture_id": ids[0].0, "preset_instance_id": instance, "name": "White",
+        }]),
+        "{snapshot}"
+    );
+    let _ = std::fs::remove_dir_all(scenario.data_dir);
+}

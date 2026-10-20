@@ -294,11 +294,13 @@ mod tests {
             ]),
             playback_solo_regions: Arc::new(vec![
                 PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "One".into(),
                     members: vec![address(1, 1), address(1, 2)],
                 },
                 PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "Two".into(),
                     members: vec![address(2, 1), address(2, 2)],
@@ -492,6 +494,7 @@ mod tests {
                 }]
                 .into(),
                 playback_solo_regions: vec![PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "Solo".into(),
                     members: vec![address(1, 1), address(1, 2)],
@@ -606,6 +609,7 @@ mod tests {
                 }]
                 .into(),
                 playback_solo_regions: vec![PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "Solo".into(),
                     members: vec![address(1, 1), address(1, 2)],
@@ -734,6 +738,7 @@ mod tests {
             .assignments
             .extend([(3, assigned(ids[0])), (4, assigned(ids[1]))]);
         snapshot.playback_solo_regions = vec![PlaybackSoloRegion {
+            color: None,
             id: uuid::Uuid::new_v4(),
             name: "Partial".into(),
             members: vec![address(1, 1), address(1, 3), address(1, 4)],

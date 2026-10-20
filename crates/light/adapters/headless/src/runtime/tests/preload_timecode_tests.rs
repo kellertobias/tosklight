@@ -305,6 +305,7 @@ fn add_solo_cue(rig: &TransportRig) -> PlaybackAddress {
         .assignments
         .insert(2, definition);
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(),
         name: "Exact transport members".into(),
         members: vec![rig.address, peer],
@@ -780,6 +781,7 @@ fn add_solo_dynamic(rig: &TransportRig) -> PlaybackAddress {
         .assignments
         .insert(4, playback);
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(),
         name: "TC Dynamic order".into(),
         members: vec![rig.address, peer],

@@ -351,6 +351,7 @@ fn assert_preload_typed_exclusion_change(peer_page: u8, peer_number: u16) {
         });
     }
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(), name: "Preload Solo".into(),
         members: vec![light_playback::PlaybackAddress::new(1, 401).unwrap(), light_playback::PlaybackAddress::new(peer_page, peer_number).unwrap()],
     }].into();
@@ -460,6 +461,7 @@ fn staged_preload_applies_solo_without_mutating_the_source_engine() {
     let source = light_playback::PlaybackControlSource { surface_id: "main".into(), control_id: 1 };
     let mut snapshot = preload_atomicity_test_snapshot();
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(), name: "Preload Solo".into(), members: vec![first, second],
     }].into();
     state.output.replace_snapshot(snapshot).unwrap();
@@ -570,6 +572,7 @@ fn explicit_page_preload_keeps_captured_address_after_selected_page_changes() {
         number: 2, name: "Explicit".into(), assignments: HashMap::from([(1, light_playback::PlaybackDefinition::new_cue_list("Independent", target))]),
     });
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(), name: "Main only".into(), members: vec![light_playback::PlaybackAddress::new(1, 1).unwrap(), peer],
     }].into();
     state.output.replace_snapshot(snapshot).unwrap();

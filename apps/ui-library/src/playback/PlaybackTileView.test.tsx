@@ -19,17 +19,34 @@ describe("PlaybackTileView", () => {
 		const { container } = render(<PlaybackTileView model={model} action={{ id: "go", label: "GO +", onClick: press }} callbacks={{ onActivate: activate }} />);
 		const button = screen.getByRole("button", { name: "Playback 3.402: Opening Look" });
 		expect(screen.getAllByRole("button")).toHaveLength(1);
-		expect(screen.queryByText("GO +")).toBeNull();
+		expect(screen.getByText("GO +")).toHaveClass("playback-tile-action-label");
 		expect(screen.getByRole("button")).toHaveAccessibleDescription("GO +");
 		const image = container.querySelector("img")!;
 		expect(image).toHaveAttribute("src", "cue.png");
-		for (const target of [screen.getByText("Opening Look"), screen.getByText("3.402"), image, screen.getByText("Cue 2"), screen.getByText("Blue and Amber")]) {
+		for (const target of [screen.getByText("Opening Look"), screen.getByText("3.402"), image, screen.getByText("GO +"), screen.getByText("Cue 2"), screen.getByText("Blue and Amber")]) {
 			expect(button).toContainElement(target);
 			fireEvent.click(target);
 		}
-		expect(press).toHaveBeenCalledTimes(5);
+		expect(press).toHaveBeenCalledTimes(6);
 		expect(activate).not.toHaveBeenCalled();
 		expect(button.querySelector("button")).toBeNull();
+	});
+
+	it("places the noninteractive cue insert after the action label in a bottom footer", () => {
+		const press = vi.fn();
+		const { container } = render(<PlaybackTileView model={model} action={{ id: "toggle", label: "TOGGLE", onClick: press }} actionLabel="SOLO · TOGGLE" />);
+		const footer = container.querySelector(".playback-tile-footer")!;
+		const label = screen.getByText("SOLO · TOGGLE");
+		const insert = container.querySelector(".playback-tile-summary")!;
+		expect(footer.firstElementChild).toBe(label);
+		expect(footer.lastElementChild).toBe(insert);
+		expect(insert).toHaveTextContent("Cue 2");
+		expect(insert).toHaveTextContent("Blue and Amber");
+		expect(screen.getByRole("button")).toHaveAccessibleDescription("SOLO · TOGGLE");
+		fireEvent.click(label); fireEvent.click(insert);
+		expect(press).toHaveBeenCalledTimes(2);
+		expect(screen.getAllByRole("button")).toHaveLength(1);
+		expect(insert.querySelector("button")).toBeNull();
 	});
 
 	it("preserves pointer and keyboard held-action callbacks and wrapper interception", () => {

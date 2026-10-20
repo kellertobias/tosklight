@@ -105,6 +105,9 @@ impl PlaybackControlKey {
 pub struct PlaybackSoloRegion {
     pub id: Uuid,
     pub name: String,
+    /// Optional outline color; absent metadata retains the default amber presentation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
     pub members: Vec<PlaybackAddress>,
 }
 
@@ -112,6 +115,13 @@ impl PlaybackSoloRegion {
     pub fn validate(&self) -> Result<(), String> {
         if self.id.is_nil() || self.name.trim().is_empty() || self.name.len() > 80 {
             return Err("Solo region requires an id and a name of 1-80 characters".into());
+        }
+        if let Some(color) = &self.color {
+            let bytes = color.as_bytes();
+            if bytes.len() != 7 || bytes[0] != b'#' || !bytes[1..].iter().all(u8::is_ascii_hexdigit)
+            {
+                return Err("Solo region color must be a six-digit hexadecimal color".into());
+            }
         }
         let unique = self.members.iter().copied().collect::<HashSet<_>>();
         if unique.len() != self.members.len() {

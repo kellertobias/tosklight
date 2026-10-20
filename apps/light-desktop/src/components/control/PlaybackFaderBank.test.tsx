@@ -2629,6 +2629,7 @@ function soloBank(
 	initial: readonly PlaybackSoloRegion[] = [],
 	presentation: "buttons" | "push_encoder" = "buttons",
 	layout?: ComponentProps<typeof PhysicalPlaybackFaderBank>["playbackLayout"],
+	tilePresentation = false,
 ) {
 	let regions = initial;
 	let revision = 1;
@@ -2672,6 +2673,7 @@ function soloBank(
 			<SettingsHost />
 			<PlaybackFaderBank
 				pageNumber={mocks.playbacks.active_page}
+				tilePresentation={tilePresentation}
 				count={4}
 				playbackLayout={
 					layout ?? {
@@ -2717,6 +2719,43 @@ describe("shared Playback grid Solo configuration", () => {
 			cueListSetTarget: null,
 			cueListSetArmed: false,
 		});
+	});
+
+	it("labels only saved current-page Solo members while retaining each tile's actual action", async () => {
+		mocks.playbacks.pool = [1, 2, 3, 4].map(position => playbackDefinition(position, {
+			buttons: [position === 2 ? "flash" : "go", "none", "none"], button_count: 1, has_fader: false,
+		}));
+		const bank = soloBank([{ id: "region", name: "Looks", members: [{ page: 1, position: 1 }, { page: 1, position: 2 }] }], "buttons", undefined, true);
+		await screen.findByText("SOLO · GO +");
+		expect(bank.container.querySelector('[data-playback-slot="2"] .playback-tile-action-label')).toHaveTextContent(/^FLASH$/);
+		expect(bank.container.querySelector('[data-playback-slot="3"] .playback-tile-action-label')).toHaveTextContent(/^GO \+$/);
+		mocks.playbacks.active_page = 2;
+		bank.rerenderBank();
+		await waitFor(() => expect(screen.queryByText("SOLO · GO +")).toBeNull());
+	});
+
+	it("re-enables Solo settings after saving one region color and lets another region save independently", async () => {
+		const first = { id: "region-a", name: "Stage looks", members: [{ page: 1, position: 1 }] };
+		const second = { id: "region-b", name: "Audience looks", members: [{ page: 1, position: 2 }] };
+		const bank = soloBank([first, second]);
+		await waitFor(() => expect(bank.container.querySelector('[data-playback-slot="1"]')).toHaveClass("playback-solo-member"));
+		fireEvent.click(screen.getByRole("button", { name: "Manage Solo Regions" }));
+		fireEvent.click(screen.getByRole("button", { name: "Stage looks" }));
+		fireEvent.click(screen.getByRole("button", { name: /#FFB30F/ }));
+		fireEvent.click(screen.getByRole("option", { name: "Use color #06b6d4" }));
+		await waitFor(() => expect(bank.regions()[0].color).toBe("#06b6d4"));
+		await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled());
+		expect(screen.getByRole("button", { name: "Audience looks" })).toBeEnabled();
+		fireEvent.click(screen.getByRole("button", { name: "Audience looks" }));
+		fireEvent.click(screen.getByRole("button", { name: /#FFB30F/ }));
+		fireEvent.click(screen.getByRole("option", { name: "Use color #22c55e" }));
+		await waitFor(() => expect(bank.regions()).toEqual([
+			{ ...first, color: "#06b6d4" },
+			{ ...second, color: "#22c55e" },
+		]));
+		await waitFor(() => expect(screen.getByRole("button", { name: "Edit" })).toBeEnabled());
+		expect(bank.save).toHaveBeenCalledTimes(2);
+		expect(mocks.poolPlaybackAction).not.toHaveBeenCalled();
 	});
 
 	it("draws the outer Solo fence separately for repeated physical rows", async () => {

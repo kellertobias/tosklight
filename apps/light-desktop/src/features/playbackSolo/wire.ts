@@ -79,12 +79,14 @@ export function encodePlaybackSoloSaveRequest(
 			regions.map((zone) => ({
 				id: zone.id,
 				name: zone.name,
+				...(zone.color !== undefined ? { color: zone.color } : {}),
 				members: zone.members,
 			})),
 			"$.regions",
 		).map((zone) => ({
 			id: zone.id,
 			name: zone.name,
+			...(zone.color !== undefined ? { color: zone.color } : {}),
 			members: [...zone.members],
 		})),
 	};
@@ -118,9 +120,7 @@ export function decodePlaybackSoloEvent(
 	};
 }
 
-export function validatePlaybackSoloScope(
-	scope: PlaybackSoloScope,
-) {
+export function validatePlaybackSoloScope(scope: PlaybackSoloScope) {
 	validateScope(scope);
 }
 
@@ -144,20 +144,37 @@ function decodeZone(value: unknown, path: string): PlaybackSoloRegion {
 		`${path}.name`,
 		MAX_ZONE_NAME_LENGTH,
 	);
-	const members = decodePlaybackNumbers(
-		zone.members,
-		`${path}.members`,
-	);
-	return { id, name, members };
+	const members = decodePlaybackNumbers(zone.members, `${path}.members`);
+	const color = zone.color;
+	if (
+		color !== undefined &&
+		color !== null &&
+		(typeof color !== "string" || !/^#[0-9a-f]{6}$/i.test(color))
+	)
+		invalid(`${path}.color`, "six-digit hexadecimal color or null", color);
+	return {
+		id,
+		name,
+		members,
+		...(color !== undefined ? { color: color as string | null } : {}),
+	};
 }
 
 function decodePlaybackNumbers(value: unknown, path: string) {
 	if (!Array.isArray(value)) invalid(path, "array", value);
-	if (value.length < 2) invalid(path, "at least two unique Playback addresses", value);
+	if (value.length < 2)
+		invalid(path, "at least two unique Playback addresses", value);
 	const addresses = value.map((address, index) => {
 		exactObject(address, `${path}[${index}]`, ["page", "position"]);
-		try { return decodeExactAddress(address, `${path}[${index}]`); }
-		catch { return invalid(`${path}[${index}]`, "Playback address page 1–99 position 1–1000", address); }
+		try {
+			return decodeExactAddress(address, `${path}[${index}]`);
+		} catch {
+			return invalid(
+				`${path}[${index}]`,
+				"Playback address page 1–99 position 1–1000",
+				address,
+			);
+		}
 	});
 	if (new Set(addresses.map(playbackAddressKey)).size !== addresses.length)
 		invalid(path, "unique Playback addresses", value);

@@ -333,11 +333,13 @@ mod solo_projection_tests {
             .into(),
             playback_solo_regions: vec![
                 light_playback::PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "Solo".into(),
                     members: vec![address(2, 1), address(2, 2)],
                 },
                 light_playback::PlaybackSoloRegion {
+                    color: None,
                     id: uuid::Uuid::new_v4(),
                     name: "Overlap".into(),
                     members: vec![address(2, 1), address(2, 2)],

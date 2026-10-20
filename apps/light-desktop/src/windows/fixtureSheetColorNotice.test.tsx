@@ -68,9 +68,23 @@ describe("Fixture Sheet quiet Color triangle", () => {
 		render(<>{column?.render?.(row("uv-less"), 0)}{column?.render?.(row("fine"), 1)}</>);
 		const triangles = screen.getAllByTestId("fixture-sheet-color-notice");
 		expect(triangles).toHaveLength(1);
+		expect(triangles[0]).toHaveAttribute("data-tone", "warning");
 		expect(triangles[0]).toHaveAccessibleName(/UV unavailable on this fixture/);
 		expect(document.querySelector("[role=alert], [role=status], [aria-live]")).toBeNull();
 		expect(document.activeElement).toBe(document.body);
+	});
+
+	it("uses a quiet information icon for calibration-only limits while UV unavailability keeps a triangle", async () => {
+		const report = accepted();
+		reads.report = { ...report, heads: [{ ...report.heads[0], quality: "uncalibrated", uv: { status: "not_requested", clipped: false } }] };
+		const { result } = await status(["uv-less"]);
+		const column = fixtureSheetColumns(false, present, "off", result.current).find(c => c.id === "color");
+		render(<>{column?.render?.(row("uv-less"), 0)}</>);
+		const icon = screen.getByTestId("fixture-sheet-color-notice");
+		expect(icon).toHaveAttribute("data-tone", "info");
+		expect(icon.querySelector(".fixture-sheet-color-notice-glyph")).toHaveTextContent("i");
+		expect(icon).toHaveAccessibleName(/no colour calibration/);
+		expect(document.querySelector("[role=alert], [role=status], [aria-live]")).toBeNull();
 	});
 
 	it("opens the Color details on deliberate activation without a toast or a row selection", async () => {

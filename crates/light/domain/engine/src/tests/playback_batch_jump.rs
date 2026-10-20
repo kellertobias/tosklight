@@ -160,6 +160,7 @@ fn preload_solo_go_rig(explicit_millis: u64) -> (Engine, Arc<ManualClock>, Fixtu
             ]
             .into(),
             playback_solo_regions: vec![light_playback::PlaybackSoloRegion {
+                color: None,
                 id: uuid::Uuid::new_v4(),
                 name: "Scalar handover".into(),
                 members: vec![low_address, high_address],

@@ -96,7 +96,7 @@ tabs in its title bar:
 - **Color** is the colour selection: a large hue ring with **Saturation**, **White Blend**,
   **Temperature** and **Duv** beside it. The window always opens on this tab.
 - **Details** shows how the rig shows that colour: the per-fixture results and **Direct color**. It
-  scrolls when it is longer than the window. Tapping a Fixture Sheet colour triangle opens the window
+  scrolls when it is longer than the window. Tapping a Fixture Sheet colour information icon or triangle opens the window
   straight on this tab, at that fixture.
 
 To spread a range, hold **Shift** (the desk key, the on-screen **SHIFT** or the attached hardware) and
@@ -162,9 +162,14 @@ colours on the CIE 1976 chromaticity diagram; about 0.004 and below is not visib
 fixture that nothing programs a colour for is not listed.
 
 These are normal capability results, not errors. Nothing interrupts programming: no message, sound
-or window opens. The Fixture Sheet shows at most one small, steady triangle beside a fixture's
-Color value when it cannot show the request as asked; tap or select it to open the full Color window
+or window opens. The Fixture Sheet uses a small, steady information icon for an uncalibrated colour estimate.
+A request the fixture cannot provide, such as UV on a fixture without UV, retains its quiet triangle.
+Both sit beside the fixture's Color value; tap or select it to open the full Color window
 on that fixture's details.
+
+The Fixture Sheet names a recalled Color Preset only when the current value retains its explicit
+Preset reference. Otherwise it shows the nearest known colour name in angle brackets, such as
+`<Red>`. Matching a Preset's numerical colour never makes a literal value a Preset reference.
 
 ## Universal Color presets
 
