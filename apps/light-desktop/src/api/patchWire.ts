@@ -170,6 +170,9 @@ function mapFixtureProjection(
 		scenerySizeMetres: mapScenerySize(fixture.scenery_size_metres),
 		sceneryOptions: fixture.scenery_options
 			? {
+					...(fixture.scenery_options.architecture
+						? { architecture: fixture.scenery_options.architecture }
+						: {}),
 					colourSrgb: fixture.scenery_options.colour_srgb ?? null,
 					chainTop: fixture.scenery_options.chain_top ?? null,
 					chainBottom: fixture.scenery_options.chain_bottom ?? null,
@@ -244,7 +247,7 @@ function mapProfileRevision(
 		patchPolicy: profile.patch_policy,
 		referencedModes: profile.referenced_modes.map((mode) => ({
 			nativeColorIdentities: mode.native_color_identities ?? [],
- positionCalibrationIdentity: mode.position_calibration_identity ?? null,
+			positionCalibrationIdentity: mode.position_calibration_identity ?? null,
 			modeId: mode.mode_id,
 			name: mode.name,
 			splits: mode.splits.map((split) => ({ ...split })),

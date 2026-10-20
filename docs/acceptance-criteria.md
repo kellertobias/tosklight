@@ -75,3 +75,10 @@ the applicable compatibility and recovery path above.
   opened. Only newly authored `source_order` or `spatial` ordering requires marker 5,
   including embedded Dynamic fallbacks; older readers refuse it before writable use.
   The SQLite schema is unchanged. Native and release acceptance remain separately tracked.
+
+- **Venue architecture (TL-843), reader capability schema 11.** Existing shows remain at
+  schema 10 and retain their scenery behavior. The first authored venue construction object
+  promotes the portable reader floor to 11 in the same transaction; removing that object never
+  lowers it. Schema-10 readers refuse the file before writable use, preserving walls, openings,
+  slab outlines and furniture details. No SQL table migration is required. Save/reopen and
+  Undo/Redo preserve the typed integer-millimetre construction contract.

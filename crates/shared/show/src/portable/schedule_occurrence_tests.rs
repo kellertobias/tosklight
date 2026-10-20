@@ -1,5 +1,5 @@
 use super::{
-    SHOW_SCHEMA_VERSION, ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult,
+    BASE_SHOW_SCHEMA_VERSION, ScheduleOccurrenceClaim, ScheduleOccurrenceClaimResult,
     ScheduleOccurrenceResolution, ScheduleOccurrenceStatus, SkippedScheduleOccurrence,
 };
 use crate::{ShowStore, StoreError};
@@ -347,7 +347,7 @@ fn schema_four_show_migrates_without_rewriting_unknown_or_schedule_objects() {
     drop(show);
 
     let migrated = ShowStore::open(&path).unwrap();
-    assert_eq!(schema_version(&migrated.conn), SHOW_SCHEMA_VERSION);
+    assert_eq!(schema_version(&migrated.conn), BASE_SHOW_SCHEMA_VERSION);
     assert_eq!(migrated.portable_revision().unwrap(), revision);
     assert_eq!(
         migrated.objects("schedule").unwrap()[0].body,
@@ -366,7 +366,7 @@ fn schema_four_show_migrates_without_rewriting_unknown_or_schedule_objects() {
     drop(migrated);
 
     let reopened = ShowStore::open(&path).unwrap();
-    assert_eq!(schema_version(&reopened.conn), SHOW_SCHEMA_VERSION);
+    assert_eq!(schema_version(&reopened.conn), BASE_SHOW_SCHEMA_VERSION);
     assert!(
         reopened
             .schedule_occurrence_history("future")

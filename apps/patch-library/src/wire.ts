@@ -1,5 +1,13 @@
-import type { InstalledColorCalibration, NativeColorIdentity } from "./colorCalibration";
+import type { VenueArchitecture } from "./venueArchitecture";
+
+export type * from "./venueArchitecture";
+
+import type {
+	InstalledColorCalibration,
+	NativeColorIdentity,
+} from "./colorCalibration";
 import type { InstalledPositionCalibration } from "./positionCalibration";
+
 export type { InstalledPositionCalibration } from "./positionCalibration";
 export interface PatchedFixture {
 	fixture_id: string;
@@ -52,6 +60,7 @@ export interface PatchedFixture {
 	 * and a chain's top and bottom ends. An absent choice is the kind's own default.
 	 */
 	scenery_options?: {
+		architecture?: VenueArchitecture | null;
 		colour_srgb?: string | null;
 		chain_top?: "motor" | "direct" | "steelflex_loop" | null;
 		chain_bottom?: "direct" | "steelflex_loop" | "motor" | null;
@@ -133,15 +142,16 @@ export interface SplitPatch {
 }
 
 export * from "./fixtureProfile";
-import type {
-	FixtureProfile,
-	XyzValue,
-} from "./fixtureProfile";
+
+import type { FixtureProfile, XyzValue } from "./fixtureProfile";
 
 export interface FixtureDefinition {
 	/** Read-only server context for installed calibration; never written into a profile. */
-	color_calibration_context?: { identities: readonly NativeColorIdentity[]; mode: import("./fixtureProfile").FixtureMode };
- position_calibration_context?: import("./positionCalibration").PositionCalibrationContext;
+	color_calibration_context?: {
+		identities: readonly NativeColorIdentity[];
+		mode: import("./fixtureProfile").FixtureMode;
+	};
+	position_calibration_context?: import("./positionCalibration").PositionCalibrationContext;
 	schema_version: number;
 	id: string;
 	revision: number;

@@ -694,3 +694,57 @@ fn internal_fixtures_use_regular_ids_and_reject_every_physical_patch() {
     fixture.address = Some(1);
     assert!(validate_patch(std::slice::from_ref(&fixture)).is_err());
 }
+
+#[test]
+fn venue_architecture_rejects_dmx_and_out_of_bounds_wall_openings() {
+    let mut fixture = schema_v2_two_split_fixture();
+    fixture.scenery_options.architecture = Some(VenueArchitecture::Wall {
+        openings: vec![],
+        ceiling_height_millimetres: None,
+    });
+    let error = validate_patch(std::slice::from_ref(&fixture))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("visual-only scenery"), "{error}");
+    let mut profile = FixtureProfile::blank();
+    profile.manufacturer = "Venue".into();
+    profile.name = "Wall".into();
+    profile.patch_policy = PatchPolicy::VisualOnly;
+    profile.modes[0].splits[0].footprint = 0;
+    profile.physical.width_millimetres = Some(4000.0);
+    profile.physical.height_millimetres = Some(3000.0);
+    profile.physical.depth_millimetres = Some(200.0);
+    fixture=serde_json::from_value(serde_json::json!({"fixture_id":FixtureId::new(),"virtual_fixture_number":1,"definition":profile.resolved_definition(profile.modes[0].id).unwrap()})).unwrap();
+    fixture.scenery_options.architecture = Some(VenueArchitecture::Wall {
+        openings: vec![WallOpening {
+            id: Uuid::new_v4(),
+            offset_millimetres: 3000,
+            sill_millimetres: 1000,
+            width_millimetres: 1000,
+            height_millimetres: 2000,
+            opening: WallOpeningKind::Window {
+                shape: VenueWindowShape::Rectangular,
+            },
+        }],
+        ceiling_height_millimetres: None,
+    });
+    validate_patch(std::slice::from_ref(&fixture)).unwrap();
+    fixture.scenery_size_metres = Some(FixtureVector {
+        x: 3500.0,
+        y: 3000.0,
+        z: 200.0,
+    });
+    let error = validate_patch(std::slice::from_ref(&fixture))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("outside its wall"), "{error}");
+    fixture.scenery_size_metres = Some(FixtureVector {
+        x: 4000.0,
+        y: 2500.0,
+        z: 200.0,
+    });
+    let error = validate_patch(std::slice::from_ref(&fixture))
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("outside its wall"), "{error}");
+}

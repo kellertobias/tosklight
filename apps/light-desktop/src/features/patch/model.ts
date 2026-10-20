@@ -199,6 +199,9 @@ export function patchedFixtureCandidate(
 			scenerySizeMetres: fixture.scenery_size_metres ?? null,
 			sceneryOptions: fixture.scenery_options
 				? {
+						...(fixture.scenery_options.architecture
+							? { architecture: fixture.scenery_options.architecture }
+							: {}),
 						colourSrgb: fixture.scenery_options.colour_srgb ?? null,
 						chainTop: fixture.scenery_options.chain_top ?? null,
 						chainBottom: fixture.scenery_options.chain_bottom ?? null,
@@ -258,16 +261,45 @@ export function projectionToPatchedFixture(
 		virtual_fixture_number: projection.virtualFixtureNumber,
 		name: projection.name,
 		definition: (() => {
-            const identities = profile.referencedModes.find((m) => m.modeId === projection.modeId)?.nativeColorIdentities;
-            const mode = profile.profileSnapshot?.modes.find((m) => m.id === projection.modeId);
-            // Never retain an earlier mode's calibration context through a fallback definition.
-            const { color_calibration_context: _oldContext, position_calibration_context: _oldPosition, ...base } = definition;
-            const identity=profile.referencedModes.find(m=>m.modeId===projection.modeId)?.positionCalibrationIdentity;
-            const geometry=mode&&profile.profileSnapshot?modeGeometry(profile.profileSnapshot,mode):null;
-            const bindings=mode?.position_physical?.bindings;
-            const axes=bindings?.filter((b,i)=>bindings.findIndex(a=>a.node_id===b.node_id)===i).map(b=>({node_id:b.node_id,role:b.role,name:geometry?.nodes.find(n=>n.id===b.node_id)?.name??"Axis"}));
-            return {...base,...(identities?.length&&mode?{color_calibration_context:{identities,mode}}:{}),...(identity&&axes?{position_calibration_context:{identity,axes}}:{})};
-        })(),
+			const identities = profile.referencedModes.find(
+				(m) => m.modeId === projection.modeId,
+			)?.nativeColorIdentities;
+			const mode = profile.profileSnapshot?.modes.find(
+				(m) => m.id === projection.modeId,
+			);
+			// Never retain an earlier mode's calibration context through a fallback definition.
+			const {
+				color_calibration_context: _oldContext,
+				position_calibration_context: _oldPosition,
+				...base
+			} = definition;
+			const identity = profile.referencedModes.find(
+				(m) => m.modeId === projection.modeId,
+			)?.positionCalibrationIdentity;
+			const geometry =
+				mode && profile.profileSnapshot
+					? modeGeometry(profile.profileSnapshot, mode)
+					: null;
+			const bindings = mode?.position_physical?.bindings;
+			const axes = bindings
+				?.filter(
+					(b, i) => bindings.findIndex((a) => a.node_id === b.node_id) === i,
+				)
+				.map((b) => ({
+					node_id: b.node_id,
+					role: b.role,
+					name: geometry?.nodes.find((n) => n.id === b.node_id)?.name ?? "Axis",
+				}));
+			return {
+				...base,
+				...(identities?.length && mode
+					? { color_calibration_context: { identities, mode } }
+					: {}),
+				...(identity && axes
+					? { position_calibration_context: { identity, axes } }
+					: {}),
+			};
+		})(),
 		universe: primary?.universe ?? null,
 		address: primary?.address ?? null,
 		split_patches: [...projection.splitPatches],
@@ -340,6 +372,9 @@ export function projectionToPatchedFixture(
 		scenery_size_metres: projection.scenerySizeMetres ?? null,
 		scenery_options: projection.sceneryOptions
 			? {
+					...(projection.sceneryOptions.architecture
+						? { architecture: projection.sceneryOptions.architecture }
+						: {}),
 					colour_srgb: projection.sceneryOptions.colourSrgb ?? null,
 					chain_top: projection.sceneryOptions.chainTop ?? null,
 					chain_bottom: projection.sceneryOptions.chainBottom ?? null,

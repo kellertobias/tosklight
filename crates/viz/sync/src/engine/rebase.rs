@@ -225,3 +225,7 @@ fn ensure_profile(
         .retain_fixture_profile(body.clone())
         .map_err(|e| e.to_string())
 }
+
+#[cfg(test)]
+#[path = "venue_tests.rs"]
+mod venue_tests;

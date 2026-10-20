@@ -1041,7 +1041,7 @@ http_port?: number | null, };
 export type PatchInternalFixtureBindings = { library: string | null, output: string | null, };
 export type PatchFixtureLocation = { x: number, y: number, z: number, };
 export type PatchFixtureRotation = { x: number, y: number, z: number, };
-export type PatchSceneryOptions = {
+export type PatchSceneryOptions = { architecture?: VenueArchitecture | null,
 /**
  * The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.
  */
@@ -1058,6 +1058,26 @@ chain_bottom?: PatchChainBottomEnd | null,
  * Which sides of a flight of stairs carry a handrail. Absent keeps what the profile declares.
  */
 handrails?: PatchStairHandrails | null, };
+export type VenueArchitecture = { "kind": "wall", openings: Array<WallOpening>,
+/**
+ * Height of a ceiling generated when this wall participates in a closed room.
+ */
+ceiling_height_millimetres?: number | null, } | { "kind": "slab", purpose: VenueSlabPurpose, outline_millimetres: Array<VenuePlanPoint>,
+/**
+ * Bottom face above the placement's floor datum; independent slabs can be stacked.
+ */
+elevation_millimetres: number, thickness_millimetres: number, } | { "kind": "pillar", shape: VenueFootprint, } | { "kind": "table", shape: VenueTableShape, } | { "kind": "chair", style: VenueChairStyle, } | { "kind": "bar" };
+export type VenuePlanPoint = { x: number, y: number, };
+export type VenueSlabPurpose = "roof" | "balcony";
+export type VenueFootprint = "round" | "square" | "rectangular";
+export type VenueTableShape = "round" | "rectangular";
+export type VenueChairStyle = "black_metal" | "white" | "bar_stool";
+export type WallOpening = { id: string, offset_millimetres: number, sill_millimetres: number, width_millimetres: number, height_millimetres: number, opening: WallOpeningKind, };
+export type WallOpeningKind = { "kind": "window", shape: VenueWindowShape, } | { "kind": "door", leaves: VenueDoorLeaves, swing: VenueDoorSwing, hinge: VenueDoorHinge, };
+export type VenueWindowShape = "rectangular" | "round" | "arched";
+export type VenueDoorLeaves = "single" | "double";
+export type VenueDoorSwing = "inward" | "outward";
+export type VenueDoorHinge = "left" | "right";
 export type PatchChainTopEnd = "motor" | "direct" | "steelflex_loop";
 export type PatchChainBottomEnd = "direct" | "steelflex_loop" | "motor";
 export type PatchStairHandrails = "none" | "left" | "right" | "both";

@@ -6,12 +6,17 @@
 use super::{ApiError, AppState, ShowEntry};
 use light_show::PortableShowTransaction;
 
-/// Startup and activation reader. `Ok` at contract 0 without touching the file. At contract 1 it
-/// inspects the file read-only before anything opens it for writing, so a rejected show keeps
+/// Startup and activation reader. Reader-version and Playback gates always apply; semantic
+/// programming is checked at contract 1 or later. Read-only inspection precedes writing, so a rejected show keeps
 /// its original bytes (no schema migration, no compatibility commit, no backup rename). A file
 /// the inspection cannot read (missing, not SQLite, malformed JSON) is left to the ordinary
 /// loader, which reports it through the existing "corrupted or incompatible" recovery path.
 pub(super) fn check_show_file(path: &std::path::Path, supported: u16) -> Result<(), String> {
+    if let Err(light_show::StoreError::Invalid(message)) =
+        light_show::validate_show_reader_version(path)
+    {
+        return Err(message);
+    }
     match light_show::validate_show_playback_contract(path) {
         Err(light_show::StoreError::Invalid(message)) => return Err(message),
         Ok(()) | Err(_) => {}

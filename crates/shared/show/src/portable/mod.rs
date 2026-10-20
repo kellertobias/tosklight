@@ -10,6 +10,7 @@ mod schedule_occurrence;
 mod store;
 mod sync_requests;
 mod transaction;
+mod venue_compatibility;
 mod venue_copies;
 
 pub use cue_thumbnail::{CueThumbnail, CueThumbnailEntry};
@@ -33,7 +34,8 @@ pub use sync_requests::{SYNC_APPLIED_REQUEST_RETENTION, SyncAppliedRequest, Sync
 pub use transaction::{PortableShowCommit, PortableShowTransaction};
 
 pub(crate) use migration::{
-    SHOW_SCHEMA_VERSION, migrate_show, validate_show_connection, validate_show_connection_observed,
+    BASE_SHOW_SCHEMA_VERSION, migrate_show, validate_schema_version, validate_show_connection,
+    validate_show_connection_observed,
 };
 pub(crate) use repository::{
     delete_legacy_object, mutate_legacy_objects, prepare_redo, prepare_undo, put_legacy_object,

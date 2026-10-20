@@ -36,7 +36,7 @@ fn old_show_migration_adds_profile_table_without_repurposing_embedded_fixtures()
         .unwrap();
     assert_eq!(
         (version, embedded.as_str()),
-        (crate::portable::SHOW_SCHEMA_VERSION, "{\"keep\":true}")
+        (crate::portable::BASE_SHOW_SCHEMA_VERSION, "{\"keep\":true}")
     );
     assert!(
         migrated

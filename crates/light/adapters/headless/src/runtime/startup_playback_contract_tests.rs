@@ -87,3 +87,69 @@ fn incompatible_active_default_and_explicit_show_enter_recovery_before_identity_
     assert_eq!(std::fs::read(&active.path).unwrap(), original);
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future_recovery() {
+    let dir = directory();
+    let initial = StartupState::load(options(&dir)).unwrap();
+    assert!(
+        initial.active_show_error.is_none(),
+        "{:?}",
+        initial.active_show_error
+    );
+    let active = initial.persistent.active_show.as_ref().unwrap().clone();
+    drop(initial);
+    let conn = rusqlite::Connection::open(&active.path).unwrap();
+    let version: i64 = conn
+        .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(version, 10);
+    conn.execute("UPDATE schema_info SET version=11", [])
+        .unwrap();
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .unwrap();
+    drop(conn);
+    let started = StartupState::load(options(&dir)).unwrap();
+    assert!(
+        started.active_show_error.is_none(),
+        "{:?}",
+        started.active_show_error
+    );
+    drop(started);
+    let conn = rusqlite::Connection::open(&active.path).unwrap();
+    assert_eq!(
+        conn.query_row("SELECT version FROM schema_info", [], |row| row
+            .get::<_, i64>(0))
+            .unwrap(),
+        11
+    );
+    conn.execute("UPDATE schema_info SET version=12", [])
+        .unwrap();
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+        .unwrap();
+    drop(conn);
+    let before = std::fs::read(&active.path).unwrap();
+    let started = StartupState::load(options(&dir)).unwrap();
+    assert!(
+        started
+            .active_show_error
+            .as_deref()
+            .unwrap()
+            .contains("newer than supported schema 11")
+    );
+    drop(started);
+    assert_eq!(std::fs::read(&active.path).unwrap(), before);
+    let mut explicit = options(&dir);
+    explicit.show_file = Some(active.path.clone().into());
+    let started = StartupState::load(explicit).unwrap();
+    assert!(
+        started
+            .active_show_error
+            .as_deref()
+            .unwrap()
+            .contains("newer than supported schema 11")
+    );
+    drop(started);
+    assert_eq!(std::fs::read(&active.path).unwrap(), before);
+    std::fs::remove_dir_all(dir).unwrap();
+}

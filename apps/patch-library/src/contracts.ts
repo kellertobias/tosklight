@@ -1,3 +1,7 @@
+import type { VenueArchitecture } from "./venueArchitecture";
+
+export type * from "./venueArchitecture";
+
 import type {
 	InstalledColorCalibration,
 	NativeColorIdentity,
@@ -126,6 +130,7 @@ export interface PatchFixtureWrite {
 	scenerySizeMetres?: { x: number; y: number; z: number } | null;
 	/** A generated Venue object's colour and a chain's ends; absent choices are the kind's defaults. */
 	sceneryOptions?: {
+		architecture?: VenueArchitecture | null;
 		colourSrgb?: string | null;
 		chainTop?: "motor" | "direct" | "steelflex_loop" | null;
 		chainBottom?: "direct" | "steelflex_loop" | "motor" | null;
@@ -175,7 +180,9 @@ export interface PatchFixtureProjection extends PatchFixtureWrite {
 
 export interface PatchModeProjection {
 	nativeColorIdentities?: readonly NativeColorIdentity[];
- positionCalibrationIdentity?: import("@tosklight/patch").PositionCalibrationIdentity | null;
+	positionCalibrationIdentity?:
+		| import("@tosklight/patch").PositionCalibrationIdentity
+		| null;
 	modeId: string;
 	name: string;
 	splits: readonly { split: number; footprint: number }[];

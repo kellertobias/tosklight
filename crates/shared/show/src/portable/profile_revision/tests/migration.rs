@@ -17,7 +17,7 @@ fn schema_three_upgrade_deduplicates_nested_profiles_without_rewriting_objects()
     let profiles = migrated.list_fixture_profile_revisions().unwrap();
     assert_eq!(
         schema_version(&migrated.conn),
-        crate::portable::SHOW_SCHEMA_VERSION
+        crate::portable::BASE_SHOW_SCHEMA_VERSION
     );
     assert_eq!(migrated.portable_revision().unwrap().value(), 0);
     assert_eq!(profiles.len(), 1);
@@ -39,7 +39,7 @@ fn schema_three_upgrade_preserves_opaque_snapshot_names() {
     let migrated = ShowStore::open(&path).unwrap();
     assert_eq!(
         schema_version(&migrated.conn),
-        crate::portable::SHOW_SCHEMA_VERSION
+        crate::portable::BASE_SHOW_SCHEMA_VERSION
     );
     assert_eq!(migrated.portable_revision().unwrap().value(), 0);
     assert!(
@@ -115,7 +115,7 @@ fn reopening_a_migrated_show_is_idempotent() {
     assert_eq!(reopened.list_fixture_profile_revisions().unwrap(), before);
     assert_eq!(
         schema_version(&reopened.conn),
-        crate::portable::SHOW_SCHEMA_VERSION
+        crate::portable::BASE_SHOW_SCHEMA_VERSION
     );
     assert_eq!(raw_body(&reopened.conn, "fixture", "one"), body);
     drop(reopened);

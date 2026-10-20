@@ -1,8 +1,8 @@
 //! Portable-show programming-contract marker and the legacy-programming validator (TL-560).
 //!
-//! The marker is an ordinary portable-show metadata key, not a schema bump. `SHOW_SCHEMA_VERSION`
-//! describes the SQLite layout, and `ShowStore::open` raises it in place on every older file, so
-//! it cannot say which programming contract wrote the content. A metadata key is retained by
+//! The marker is an ordinary portable-show metadata key, not a schema bump. The base SQLite
+//! layout migrates independently, and the reader-version floor can also protect authored venue
+//! construction, so neither identifies the programming contract. A metadata key is retained by
 //! every reader and writer that does not own it, and an older build simply ignores it.
 //!
 //! The validator is dormant at contract 0: [`validate_show_programming_contract`] returns

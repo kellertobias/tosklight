@@ -1301,6 +1301,16 @@
       "description": "Per-placement choices for a generated Venue object beyond its size.",
       "type": "object",
       "properties": {
+        "architecture": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VenueArchitecture"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "chain_bottom": {
           "description": "What the bottom of a chain holds.",
           "anyOf": [
@@ -1385,6 +1395,298 @@
         "left",
         "right",
         "both"
+      ]
+    },
+    "VenueArchitecture": {
+      "description": "Parametric construction choices. This is authoring data, not a promise that a renderer or\nediting surface implements a kind yet. An absent contract keeps existing scenery unchanged.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "ceiling_height_millimetres": {
+              "description": "Height of a ceiling generated when this wall participates in a closed room.",
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint32",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "const": "wall"
+            },
+            "openings": {
+              "type": "array",
+              "default": [],
+              "items": {
+                "$ref": "#/$defs/WallOpening"
+              }
+            }
+          },
+          "required": [
+            "kind",
+            "openings"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "elevation_millimetres": {
+              "description": "Bottom face above the placement's floor datum; independent slabs can be stacked.",
+              "type": "integer",
+              "format": "int32"
+            },
+            "kind": {
+              "type": "string",
+              "const": "slab"
+            },
+            "outline_millimetres": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/VenuePlanPoint"
+              }
+            },
+            "purpose": {
+              "$ref": "#/$defs/VenueSlabPurpose"
+            },
+            "thickness_millimetres": {
+              "type": "integer",
+              "format": "uint32",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "kind",
+            "purpose",
+            "outline_millimetres",
+            "elevation_millimetres",
+            "thickness_millimetres"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "pillar"
+            },
+            "shape": {
+              "$ref": "#/$defs/VenueFootprint"
+            }
+          },
+          "required": [
+            "kind",
+            "shape"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "table"
+            },
+            "shape": {
+              "$ref": "#/$defs/VenueTableShape"
+            }
+          },
+          "required": [
+            "kind",
+            "shape"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "chair"
+            },
+            "style": {
+              "$ref": "#/$defs/VenueChairStyle"
+            }
+          },
+          "required": [
+            "kind",
+            "style"
+          ]
+        },
+        {
+          "description": "A closed, solid counter; its width, height and depth belong to the placement.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "bar"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "VenueChairStyle": {
+      "type": "string",
+      "enum": [
+        "black_metal",
+        "white",
+        "bar_stool"
+      ]
+    },
+    "VenueDoorHinge": {
+      "description": "Viewed from the wall's local front. Double doors have one hinge at each outer jamb.",
+      "type": "string",
+      "enum": [
+        "left",
+        "right"
+      ]
+    },
+    "VenueDoorLeaves": {
+      "type": "string",
+      "enum": [
+        "single",
+        "double"
+      ]
+    },
+    "VenueDoorSwing": {
+      "type": "string",
+      "enum": [
+        "inward",
+        "outward"
+      ]
+    },
+    "VenueFootprint": {
+      "type": "string",
+      "enum": [
+        "round",
+        "square",
+        "rectangular"
+      ]
+    },
+    "VenuePlanPoint": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "y": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ]
+    },
+    "VenueSlabPurpose": {
+      "type": "string",
+      "enum": [
+        "roof",
+        "balcony"
+      ]
+    },
+    "VenueTableShape": {
+      "type": "string",
+      "enum": [
+        "round",
+        "rectangular"
+      ]
+    },
+    "VenueWindowShape": {
+      "type": "string",
+      "enum": [
+        "rectangular",
+        "round",
+        "arched"
+      ]
+    },
+    "WallOpening": {
+      "description": "An opening's origin is its lower-left corner measured from the wall's local start and base.\nIts stable identity survives resizing and reordering; it is not a separate patch fixture.",
+      "type": "object",
+      "properties": {
+        "height_millimetres": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "offset_millimetres": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "opening": {
+          "$ref": "#/$defs/WallOpeningKind"
+        },
+        "sill_millimetres": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "width_millimetres": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "offset_millimetres",
+        "sill_millimetres",
+        "width_millimetres",
+        "height_millimetres",
+        "opening"
+      ]
+    },
+    "WallOpeningKind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "window"
+            },
+            "shape": {
+              "$ref": "#/$defs/VenueWindowShape"
+            }
+          },
+          "required": [
+            "kind",
+            "shape"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "hinge": {
+              "$ref": "#/$defs/VenueDoorHinge"
+            },
+            "kind": {
+              "type": "string",
+              "const": "door"
+            },
+            "leaves": {
+              "$ref": "#/$defs/VenueDoorLeaves"
+            },
+            "swing": {
+              "$ref": "#/$defs/VenueDoorSwing"
+            }
+          },
+          "required": [
+            "kind",
+            "leaves",
+            "swing",
+            "hinge"
+          ]
+        }
       ]
     }
   }

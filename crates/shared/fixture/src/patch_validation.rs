@@ -58,6 +58,7 @@ impl PatchValidator {
         fixture.scenery_options.validate().map_err(|message| {
             FixtureError::Invalid(format!("fixture {:?}: {message}", fixture.name))
         })?;
+        validate_venue_placement(fixture)?;
         if let Some(message) = crate::model_scale_error(fixture.model_scale) {
             return Err(invalid(format!("fixture {:?}: {message}", fixture.name)));
         }
@@ -481,4 +482,32 @@ fn validate_split_assignments(
 
 fn invalid(message: impl Into<String>) -> FixtureError {
     FixtureError::Invalid(message.into())
+}
+
+fn validate_venue_placement(fixture: &PatchedFixture) -> Result<(), FixtureError> {
+    let Some(architecture) = &fixture.scenery_options.architecture else {
+        return Ok(());
+    };
+    if fixture.definition.patch_policy() != crate::PatchPolicy::VisualOnly {
+        return Err(invalid(
+            "scenery_options.architecture is only available for visual-only scenery",
+        ));
+    }
+    let physical = &fixture.definition.physical;
+    let size = fixture
+        .scenery_size_metres
+        .map(|v| [v.x as f64, v.y as f64, v.z as f64])
+        .unwrap_or([
+            physical.width_millimetres.unwrap_or(0.0) as f64,
+            physical.height_millimetres.unwrap_or(0.0) as f64,
+            physical.depth_millimetres.unwrap_or(0.0) as f64,
+        ]);
+    architecture
+        .validate_placement_millimetres(size)
+        .map_err(|message| {
+            invalid(format!(
+                "fixture {:?} scenery_options.architecture: {message}",
+                fixture.name
+            ))
+        })
 }

@@ -4,6 +4,9 @@
 //! references. Fixture definitions and fixture-library catalog records deliberately do not cross
 //! this command boundary.
 
+mod venue;
+pub use venue::*;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -503,6 +506,8 @@ pub struct PatchFixtureLocation {
 /// Per-placement choices for a generated Venue object beyond its size.
 #[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct PatchSceneryOptions {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<VenueArchitecture>,
     /// The object's colour as `#RRGGBB` in sRGB. Absent keeps its kind's own material.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub colour_srgb: Option<String>,

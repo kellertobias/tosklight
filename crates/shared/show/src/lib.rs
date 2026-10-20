@@ -50,7 +50,7 @@ pub use programming_contract::{
 };
 pub use show_store::{
     AtomicObjectDelete, AtomicObjectWrite, ObjectStamp, ShowStore, ShowStoreOpenPhase,
-    initialise_show, validate_show_file,
+    initialise_show, validate_show_file, validate_show_reader_version,
 };
 
 pub(crate) use connection::set_schema_version;

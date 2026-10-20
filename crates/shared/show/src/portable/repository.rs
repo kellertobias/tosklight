@@ -312,6 +312,7 @@ fn write_stored(
     expected: Revision,
     updated_at: &str,
 ) -> Result<Revision, StoreError> {
+    super::venue_compatibility::stamp(tx, kind, body)?;
     let body_json = serde_json::to_string(body)?;
     let revision = next_revision(expected)?;
     if let Some(current) = current {
@@ -459,6 +460,7 @@ fn restore_history(
     updated_at: &str,
     table: &str,
 ) -> Result<(), StoreError> {
+    super::venue_compatibility::stamp(tx, key.kind(), &serde_json::from_str(&previous.body_json)?)?;
     let updated = tx.execute(
         "UPDATE objects SET body_json=?3,revision=?4,updated_at=?5 WHERE kind=?1 AND id=?2",
         params![

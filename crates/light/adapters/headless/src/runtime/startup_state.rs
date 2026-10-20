@@ -349,8 +349,19 @@ pub(super) fn load_configuration(
 fn adopt_show_file(desk: &DeskStore, path: &std::path::Path) -> anyhow::Result<ShowEntry> {
     let path = std::fs::canonicalize(path)
         .with_context(|| format!("show file {} cannot be opened", path.display()))?;
-    super::validate_show_file(&path)
-        .map_err(|error| anyhow::anyhow!("show file {} is not usable: {error}", path.display()))?;
+    if let Err(error) = super::validate_show_file(&path) {
+        // A readable future show is still catalogued so startup can show the ordinary
+        // actionable recovery state. It must never be opened writable to adopt its identity.
+        if !matches!(
+            light_show::validate_show_reader_version(&path),
+            Err(light_show::StoreError::Invalid(_))
+        ) {
+            return Err(anyhow::anyhow!(
+                "show file {} is not usable: {error}",
+                path.display()
+            ));
+        }
+    }
     let name = path
         .file_stem()
         .and_then(|stem| stem.to_str())

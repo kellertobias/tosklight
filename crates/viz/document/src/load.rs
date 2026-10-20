@@ -11,6 +11,7 @@ pub(crate) fn open_canonical(path: &Path) -> Result<ShowId, DocumentError> {
             path.display()
         )));
     }
+    light_show::validate_show_reader_version(path)?;
     // Match the desk's read-only pre-open compatibility gate: invalid programming must not
     // cause even a SQLite schema upgrade. Other read errors use the ordinary store recovery.
     if let Err(StoreError::Invalid(message)) =

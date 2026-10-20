@@ -108,7 +108,11 @@ function wireSnapshot() {
 				fixture_type: "rigging",
 				patch_policy: "visual_only",
 				referenced_modes: [
-					{ mode_id: MODE_ID, name: "Default", splits: [{ split: 1, footprint: 0 }] },
+					{
+						mode_id: MODE_ID,
+						name: "Default",
+						splits: [{ split: 1, footprint: 0 }],
+					},
 				],
 			},
 		],
@@ -128,25 +132,27 @@ function storedChain(): PatchedFixture {
 /** What one write of `fixture` puts on the wire. */
 async function writtenFixture(fixture: PatchedFixture) {
 	let body: { fixtures: Record<string, unknown>[] } | null = null;
-	const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-		body = JSON.parse(String(init?.body));
-		const requestId = (body as unknown as { request_id: string }).request_id;
-		return new Response(
-			JSON.stringify({
-				request_id: requestId,
-				replayed: false,
-				changed: true,
-				show_id: SHOW_ID,
-				show_revision: 2,
-				patch_revision: 2,
-				event_sequence: 11,
-				fixtures: [],
-				removed_fixture_ids: [],
-				profile_revisions: [],
-			}),
-			{ status: 200, headers: { "content-type": "application/json" } },
-		);
-	});
+	const fetchMock = vi.fn(
+		async (_input: RequestInfo | URL, init?: RequestInit) => {
+			body = JSON.parse(String(init?.body));
+			const requestId = (body as unknown as { request_id: string }).request_id;
+			return new Response(
+				JSON.stringify({
+					request_id: requestId,
+					replayed: false,
+					changed: true,
+					show_id: SHOW_ID,
+					show_revision: 2,
+					patch_revision: 2,
+					event_sequence: 11,
+					fixtures: [],
+					removed_fixture_ids: [],
+					profile_revisions: [],
+				}),
+				{ status: 200, headers: { "content-type": "application/json" } },
+			);
+		},
+	);
 	const transport = new HttpPatchTransport({
 		baseUrl: "http://desk.local",
 		sessionToken: "session-token",
@@ -158,7 +164,9 @@ async function writtenFixture(fixture: PatchedFixture) {
 		removeFixtureIds: [],
 	});
 	expect(fetchMock).toHaveBeenCalledOnce();
-	return (body as { fixtures: Record<string, unknown>[] } | null)?.fixtures[0] ?? {};
+	return (
+		(body as { fixtures: Record<string, unknown>[] } | null)?.fixtures[0] ?? {}
+	);
 }
 
 describe("a Venue object's size, colour and chain ends on the desk", () => {
@@ -171,13 +179,21 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 			chain_bottom: "motor",
 			handrails: "left",
 		});
-		expect(chain.multipatch?.[0].scenery_size_metres).toEqual({ x: 0, y: 0, z: 5000 });
+		expect(chain.multipatch?.[0].scenery_size_metres).toEqual({
+			x: 0,
+			y: 0,
+			z: 5000,
+		});
 	});
 
 	it("writes a Footprint, Colour and Chain edit made in Show Patch", async () => {
 		const edited = changedPatchFixtureCandidate(storedChain(), {
 			scenery_size_metres: { x: 0, y: 0, z: 6500 },
-			scenery_options: { colour_srgb: "#00FF00", chain_top: "motor", chain_bottom: "steelflex_loop" },
+			scenery_options: {
+				colour_srgb: "#00FF00",
+				chain_top: "motor",
+				chain_bottom: "steelflex_loop",
+			},
 		}).fixture;
 		const written = await writtenFixture(edited);
 		expect(written.scenery_size_metres).toEqual({ x: 0, y: 0, z: 6500 });
@@ -190,7 +206,9 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 	});
 
 	it("keeps the stored size, colour, chain ends and copy size when only the name is edited", async () => {
-		const renamed = changedPatchFixtureCandidate(storedChain(), { name: "Chain DS" }).fixture;
+		const renamed = changedPatchFixtureCandidate(storedChain(), {
+			name: "Chain DS",
+		}).fixture;
 		const written = await writtenFixture(renamed);
 		expect(written.name).toBe("Chain DS");
 		expect(written.scenery_size_metres).toEqual({ x: 0, y: 0, z: 3000 });
@@ -201,7 +219,8 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 			handrails: "left",
 		});
 		expect(
-			(written.multipatch as Record<string, unknown>[] | undefined)?.[0]?.scenery_size_metres,
+			(written.multipatch as Record<string, unknown>[] | undefined)?.[0]
+				?.scenery_size_metres,
 		).toEqual({ x: 0, y: 0, z: 5000 });
 	});
 
@@ -214,4 +233,37 @@ describe("a Venue object's size, colour and chain ends on the desk", () => {
 		expect(written.scenery_size_metres ?? null).toBeNull();
 		expect(written.scenery_options ?? null).toBeNull();
 	});
+});
+
+it("TL843 retains venue wall openings through the complete Control patch HTTP path", async () => {
+	const wire = wireSnapshot();
+	const architecture = {
+		kind: "wall" as const,
+		ceiling_height_millimetres: 4500,
+		openings: [
+			{
+				id: "841f0baa-06a7-4a72-a93b-d824577e751c",
+				offset_millimetres: 1200,
+				sill_millimetres: 900,
+				width_millimetres: 1500,
+				height_millimetres: 1500,
+				opening: { kind: "window" as const, shape: "arched" as const },
+			},
+		],
+	};
+	Object.assign(wire.fixtures[0].scenery_options, { architecture });
+	const snapshot = decodePatchSnapshot(wire);
+	expect(snapshot.fixtures[0].sceneryOptions?.architecture).toEqual(
+		architecture,
+	);
+	const fixture = projectionToPatchedFixture(
+		snapshot.fixtures[0],
+		snapshot.profileRevisions[0],
+		createPatchDefinitionResolver([venueDefinition()]),
+	);
+	expect(fixture.scenery_options?.architecture).toEqual(architecture);
+	const written = await writtenFixture(
+		changedPatchFixtureCandidate(fixture, { name: "Wall renamed" }).fixture,
+	);
+	expect(written.scenery_options).toMatchObject({ architecture });
 });

@@ -2,6 +2,7 @@ import type {
 	InstalledColorCalibration,
 	InstalledPositionCalibration,
 	NativeColorIdentity,
+	VenueArchitecture,
 } from "@tosklight/patch";
 
 export type { InstalledPositionCalibration } from "@tosklight/patch";
@@ -41,6 +42,7 @@ export interface PatchedFixture {
 	 * (`#RRGGBB` sRGB) and what hangs at each end of a chain. Absent keeps the kind's defaults.
 	 */
 	scenery_options?: {
+		architecture?: VenueArchitecture | null;
 		colour_srgb?: string | null;
 		chain_top?: "motor" | "direct" | "steelflex_loop" | null;
 		chain_bottom?: "direct" | "steelflex_loop" | "motor" | null;
@@ -133,9 +135,12 @@ import type {
 } from "@tosklight/patch/fixture-profile";
 
 export interface FixtureDefinition {
- position_calibration_context?: import("@tosklight/patch").PositionCalibrationContext;
+	position_calibration_context?: import("@tosklight/patch").PositionCalibrationContext;
 	/** Read-only server context for installed calibration; never written into a profile. */
-	color_calibration_context?: { identities: readonly NativeColorIdentity[]; mode: import("@tosklight/patch/fixture-profile").FixtureMode };
+	color_calibration_context?: {
+		identities: readonly NativeColorIdentity[];
+		mode: import("@tosklight/patch/fixture-profile").FixtureMode;
+	};
 	schema_version: number;
 	id: string;
 	revision: number;
@@ -208,7 +213,12 @@ export interface MediaServerFixture {
 	fixture_number?: number | null;
 	name: string;
 	kind?: "media_server" | "audio_player";
-	endpoint: { protocol: "citp"; ip_address: string; port: number; http_port?: number | null } | null;
+	endpoint: {
+		protocol: "citp";
+		ip_address: string;
+		port: number;
+		http_port?: number | null;
+	} | null;
 	native_action?: string | null;
 	layers: Array<{
 		fixture_id: string;

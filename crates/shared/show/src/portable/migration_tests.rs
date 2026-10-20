@@ -95,7 +95,7 @@ fn demo_venue_records_go_once_the_patch_carries_the_scenery() {
         .conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, crate::portable::SHOW_SCHEMA_VERSION);
+    assert_eq!(version, crate::portable::BASE_SHOW_SCHEMA_VERSION);
     drop(store);
     let _ = fs::remove_file(path);
 }

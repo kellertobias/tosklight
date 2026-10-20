@@ -76,7 +76,7 @@ impl ShowStore {
             })
             .ok();
         completed(ShowStoreOpenPhase::SchemaVersion);
-        if version.is_none_or(|version| version < portable::SHOW_SCHEMA_VERSION) {
+        if version.is_none_or(|version| version < portable::BASE_SHOW_SCHEMA_VERSION) {
             portable::migrate_show(&mut conn)?;
         }
         completed(ShowStoreOpenPhase::Migration);
@@ -478,6 +478,12 @@ pub fn initialise_show(path: impl AsRef<Path>, name: &str) -> Result<ShowId, Sto
     }
     let (_, id) = ShowStore::create(path, name)?;
     Ok(id)
+}
+
+/// Checks the portable reader capability without opening writable or scanning show objects.
+pub fn validate_show_reader_version(path: impl AsRef<Path>) -> Result<(), StoreError> {
+    let conn = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+    portable::validate_schema_version(&conn)
 }
 
 pub fn validate_show_file(path: impl AsRef<Path>) -> Result<(ShowId, String), StoreError> {

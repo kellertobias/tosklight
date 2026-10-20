@@ -299,14 +299,23 @@ function toWireFixtureUpdateAction(
 ): WirePatchFixtureUpdateAction {
 	switch (action.type) {
 		case "replace_profile":
-			return { action: action.type, profile_id: action.profileId,
-				profile_revision: action.profileRevision, mode_id: action.modeId,
-				head_mapping: action.headMapping.map(head => ({fixture_id: head.fixtureId,
-					target_profile_head_id: head.targetProfileHeadId})),
-				root_programming_mapping: (action.rootProgrammingMapping ?? []).map(mapping => ({
-					source_profile_head_id: mapping.sourceProfileHeadId, attribute: mapping.attribute,
-					target_profile_head_ids: [...mapping.targetProfileHeadIds],
-				})) };
+			return {
+				action: action.type,
+				profile_id: action.profileId,
+				profile_revision: action.profileRevision,
+				mode_id: action.modeId,
+				head_mapping: action.headMapping.map((head) => ({
+					fixture_id: head.fixtureId,
+					target_profile_head_id: head.targetProfileHeadId,
+				})),
+				root_programming_mapping: (action.rootProgrammingMapping ?? []).map(
+					(mapping) => ({
+						source_profile_head_id: mapping.sourceProfileHeadId,
+						attribute: mapping.attribute,
+						target_profile_head_ids: [...mapping.targetProfileHeadIds],
+					}),
+				),
+			};
 		case "set_masters":
 			return {
 				action: action.type,
@@ -322,7 +331,12 @@ function toWireFixtureUpdateAction(
 		case "set_color_calibration":
 			return { action: action.type, calibration: action.calibration };
 		case "set_position_calibration":
-			return { action: action.type, calibration: action.calibration ? { ...action.calibration, source: action.calibration.source ?? null } : null };
+			return {
+				action: action.type,
+				calibration: action.calibration
+					? { ...action.calibration, source: action.calibration.source ?? null }
+					: null,
+			};
 		case "set_move_in_black":
 			return {
 				action: action.type,
@@ -394,8 +408,13 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			rotation: { ...instance.rotation },
 			invert_pan: instance.invertPan ?? false,
 			invert_tilt: instance.invertTilt ?? false,
-			position_calibration: instance.positionCalibration ? { ...instance.positionCalibration, source: instance.positionCalibration.source ?? null } : null,
-		color_calibration: instance.colorCalibration ?? null,
+			position_calibration: instance.positionCalibration
+				? {
+						...instance.positionCalibration,
+						source: instance.positionCalibration.source ?? null,
+					}
+				: null,
+			color_calibration: instance.colorCalibration ?? null,
 			bracket_angle: instance.bracketAngle ?? 0,
 			shaper_angle: instance.shaperAngle ?? null,
 			installed_appearance: toWireInstalledAppearance(
@@ -409,7 +428,12 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 		grand_master_enabled: fixture.grandMasterEnabled ?? true,
 		invert_pan: fixture.invertPan ?? false,
 		invert_tilt: fixture.invertTilt ?? false,
-		position_calibration: fixture.positionCalibration ? { ...fixture.positionCalibration, source: fixture.positionCalibration.source ?? null } : null,
+		position_calibration: fixture.positionCalibration
+			? {
+					...fixture.positionCalibration,
+					source: fixture.positionCalibration.source ?? null,
+				}
+			: null,
 		color_calibration: fixture.colorCalibration ?? null,
 		bracket_angle: fixture.bracketAngle ?? 0,
 		shaper_angle: fixture.shaperAngle ?? null,
@@ -430,6 +454,9 @@ export function toWireFixture(fixture: PatchFixtureWrite): PatchFixtureInput {
 			: null,
 		scenery_options: fixture.sceneryOptions
 			? {
+					...(fixture.sceneryOptions.architecture
+						? { architecture: fixture.sceneryOptions.architecture }
+						: {}),
 					colour_srgb: fixture.sceneryOptions.colourSrgb ?? null,
 					chain_top: fixture.sceneryOptions.chainTop ?? null,
 					chain_bottom: fixture.sceneryOptions.chainBottom ?? null,

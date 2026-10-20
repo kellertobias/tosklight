@@ -14,6 +14,7 @@ use light_wire::v2::patch as wire;
 use std::collections::BTreeMap;
 
 mod calibration;
+mod venue;
 
 pub use calibration::{application_color_calibration, application_position_calibration};
 use calibration::{
@@ -139,9 +140,7 @@ fn wire_vector(size: fixture::FixtureVector) -> wire::PatchFixtureLocation {
 
 fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::SceneryOptions {
     fixture::SceneryOptions {
-        // Venue construction is not exposed through the wire until the typed editor contract
-        // and reader capability gate land together. Existing fixture edits keep prior behavior.
-        architecture: None,
+        architecture: input.architecture.map(venue::application_architecture),
         colour_srgb: input.colour_srgb,
         chain_top: input.chain_top.map(|end| match end {
             wire::PatchChainTopEnd::Motor => fixture::ChainTopEnd::Motor,
@@ -164,6 +163,7 @@ fn application_scenery_options(input: wire::PatchSceneryOptions) -> fixture::Sce
 
 fn wire_scenery_options(options: &fixture::SceneryOptions) -> Option<wire::PatchSceneryOptions> {
     (!options.is_empty()).then(|| wire::PatchSceneryOptions {
+        architecture: options.architecture.clone().map(venue::wire_architecture),
         colour_srgb: options.colour_srgb.clone(),
         chain_top: options.chain_top.map(|end| match end {
             fixture::ChainTopEnd::Motor => wire::PatchChainTopEnd::Motor,

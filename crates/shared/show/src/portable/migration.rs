@@ -2,7 +2,8 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 10;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 11;
+pub(crate) const BASE_SHOW_SCHEMA_VERSION: i64 = 10;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -21,7 +22,7 @@ pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {
         "INSERT INTO metadata(key,value) VALUES(?1,?2) ON CONFLICT(key) DO NOTHING",
         [crate::PLAYBACK_CONTRACT_METADATA_KEY, "1"],
     )?;
-    set_schema_version(&tx, SHOW_SCHEMA_VERSION)?;
+    set_schema_version(&tx, BASE_SHOW_SCHEMA_VERSION)?;
     tx.commit()?;
     Ok(())
 }
@@ -90,7 +91,7 @@ fn validate_integrity(conn: &Connection) -> Result<(), StoreError> {
     }
 }
 
-fn validate_schema_version(conn: &Connection) -> Result<(), StoreError> {
+pub(crate) fn validate_schema_version(conn: &Connection) -> Result<(), StoreError> {
     let version: i64 = conn
         .query_row("SELECT version FROM schema_info", [], |row| row.get(0))
         .map_err(|_| StoreError::Invalid("not a Light show file: schema_info is missing".into()))?;
