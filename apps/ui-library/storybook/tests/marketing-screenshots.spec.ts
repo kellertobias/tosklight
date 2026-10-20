@@ -137,6 +137,14 @@ test("captures the reviewed Storybook marketing gallery and preserves static sti
 			await applyInteraction(page, interaction);
 		await page.evaluate(() => window.scrollTo(0, 0));
 		await settleRenderedLayout(page);
+		if (entry.file === "media-server-library.png") {
+			const thumbnails = page.locator(".media-library-file-pool-grid img");
+			expect(await thumbnails.count()).toBeGreaterThan(0);
+			await expect.poll(() => thumbnails.evaluateAll((images) =>
+				images.every((image) => image instanceof HTMLImageElement &&
+					image.complete && image.naturalWidth > 0),
+			)).toBe(true);
+		}
 
 		const captureTarget = entry.captureSelector
 			? page.locator(entry.captureSelector)

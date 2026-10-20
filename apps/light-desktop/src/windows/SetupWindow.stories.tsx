@@ -36,6 +36,7 @@ import {
 import { ScreensProvider } from "../features/screens/ScreensContext";
 import type { ScreensContextValue } from "../features/screens/types";
 import { SetupWindowView } from "./SetupWindow";
+import { SetupHelpReady } from "../../../ui-library/storybook/providers/SetupHelpReady";
 import type { SetupWindowController } from "./setupWindow/controller";
 import type { SetupSection } from "./setupWindow/SetupChrome";
 
@@ -546,4 +547,20 @@ export const NetworkAndInputs: Story = {
 
 export const ScreensAndPlayback: Story = {
 	render: () => <MarketingSetupWindow initialSection="screens" />,
+};
+
+export const NetworkAndInputsHelp: Story = {
+	render: () => (
+		<SetupHelpReady>
+			<MarketingSetupWindow initialSection="network" />
+		</SetupHelpReady>
+	),
+};
+
+export const ShowsAndRecoveryHelp: Story = {
+	render: () => (
+		<SetupHelpReady>
+			<MarketingSetupWindow initialSection="shows" />
+		</SetupHelpReady>
+	),
 };

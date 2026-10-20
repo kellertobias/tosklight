@@ -3,9 +3,10 @@
 The reviewed PNG files below `assets/screenshots` are generated from deterministic
 Storybook application stories. `screenshot-manifest.json` is the source contract
 for their filenames, gallery order, titles, captions, story IDs, viewport sizes,
-operator mode, and any deterministic interactions. The 3D Previsualizer is the
-one documented exception: Storybook cannot render the native 3D surface, so its
-manifest entry copies the reviewed desktop capture from `assets/stills`.
+operator mode, and any deterministic interactions. Native surfaces and other desktop-only compositions use reviewed captures from
+`assets/stills`, identified by `sourceFile` in the manifest. Refresh these from the
+actual app before generating the final gallery; Storybook cannot render the native
+Stage surface. Generated gallery images are not committed.
 
 Run:
 
@@ -13,9 +14,10 @@ Run:
 npm run test:marketing-screenshots
 ```
 
-This builds static Storybook, captures every manifest entry, writes inspection
-candidates under `.artifacts/test/marketing-screenshots/storybook`, and compares
-them with the reviewed PNGs without modifying tracked files.
+This builds static Storybook, captures its manifest entries, copies the native
+stills, and refreshes `assets/screenshots`. Capture candidates also appear under
+`.artifacts/test/marketing-screenshots/storybook`. This is a content and rendering
+gate, not a pixel comparison against a baseline.
 
 Recreate the complete reviewed gallery with the root command:
 
@@ -23,16 +25,11 @@ Recreate the complete reviewed gallery with the root command:
 npm run screenshots:marketing
 ```
 
-After visually inspecting every generated image, run the non-mutating comparison
-gate:
-
-```sh
-npm run test:marketing-screenshots
-```
+Visually inspect the generated images against their titles and captions.
 
 The capture gate fixes the clock, waits for Storybook's documentation-ready
 signal and web fonts, disables animation, rejects live REST or WebSocket access,
-checks image dimensions and rendered content, and rejects unreviewed pixel drift.
+checks image dimensions and rendered content, and verifies library thumbnails decode.
 All generated scratch files and reports stay within the canonical `.artifacts`
 tree.
 
@@ -41,7 +38,8 @@ directly. CI runs `npm run screenshots:marketing`, uploads the generated
 `marketing-screenshots` artifact, and downloads that exact artifact before
 assembling the public Pages site. Marketing screenshots remain separate from
 `docs/help/screenshot-manifest.json`; Help and manual images are refreshed through
-their own reviewed workflow.
+their own manifest. Help can also preserve real native Stage stills; it never
+substitutes an unavailable browser canvas for a Stage illustration.
 
 On pushes to `main`, the Pages assembly job downloads that generated artifact and,
 immediately beside its GitHub Pages artifact upload, uploads the same PNG files to

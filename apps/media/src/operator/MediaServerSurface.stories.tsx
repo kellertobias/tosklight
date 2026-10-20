@@ -570,8 +570,10 @@ function uploadStoryFiles(
 }
 
 function storyThumbnail(file: number) {
+	// Library revision suffixes must not become part of the SVG data payload.
+	// A fragment accepts those suffixes while retaining the deterministic local preview.
 	const hue = (file * 37) % 360;
-	return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g"><stop stop-color="hsl(${hue} 75% 38%)"/><stop offset="1" stop-color="#070b12"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/><circle cx="${35 + (file % 70)}" cy="45" r="23" fill="hsl(${(hue + 80) % 360} 80% 62%)" opacity=".7"/></svg>`)}`;
+	return `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><defs><linearGradient id="g"><stop stop-color="hsl(${hue} 75% 38%)"/><stop offset="1" stop-color="#070b12"/></linearGradient></defs><rect width="160" height="90" fill="url(#g)"/><circle cx="${35 + (file % 70)}" cy="45" r="23" fill="hsl(${(hue + 80) % 360} 80% 62%)" opacity=".7"/></svg>`)}#preview`;
 }
 
 function StatefulPlayback() {

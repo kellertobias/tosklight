@@ -26,7 +26,7 @@ interface ScreenshotInteraction {
 
 interface ScreenshotEntry {
 	file: string;
-	source: "storybook" | "live-app";
+	source: "storybook" | "live-app" | "native-still";
 	storyId: string | null;
 	viewport: { width: number; height: number };
 	theme: "dark";
@@ -34,6 +34,7 @@ interface ScreenshotEntry {
 	interactions: ScreenshotInteraction[];
 	reason?: string;
 	captureSelector?: string;
+	sourceFile?: string;
 }
 
 interface ScreenshotManifest {
@@ -94,6 +95,10 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 		// desk. This run neither produces nor judges it: the two captures write into the same
 		// directory and are assembled from both jobs.
 		if (entry.source === "live-app") continue;
+		if (entry.source === "native-still") {
+			await preserveNativeCapture(page, entry);
+			continue;
+		}
 
 		const consoleErrors: string[] = [];
 		const pageErrors: string[] = [];
@@ -234,13 +239,18 @@ function validateEntry(entry: ScreenshotEntry, storyIds: Set<string>) {
 		).toBe(true);
 		expect(entry.reason).toBeUndefined();
 	} else {
+		if (entry.source === "native-still")
+			expect(entry.sourceFile).toMatch(
+				/^docs\/marketing\/assets\/stills\/[a-z0-9-]+\.png$/u,
+			);
+		else expect(entry.sourceFile).toBeUndefined();
 		expect(
 			entry.storyId,
 			`${entry.file} must not pretend to have a story`,
 		).toBeNull();
 		expect(
 			entry.reason?.trim().length,
-			`${entry.file} needs a live-app reason`,
+			`${entry.file} needs an explicit source reason`,
 		).toBeGreaterThan(10);
 	}
 }
@@ -335,4 +345,25 @@ async function imageMetrics(
 			luminanceRange: maximum - minimum,
 		};
 	}, buffer.toString("base64"));
+}
+
+/** Native-only surfaces are preserved from real app captures, never imitated in the browser. */
+async function preserveNativeCapture(
+	page: import("@playwright/test").Page,
+	entry: ScreenshotEntry,
+) {
+	if (!entry.sourceFile)
+		throw new Error(`${entry.file} needs a native sourceFile`);
+	const actual = await fs.readFile(path.join(ROOT, entry.sourceFile));
+	const size = pngDimensions(actual);
+	expect(size.width, `${entry.file} native width`).toBeGreaterThanOrEqual(320);
+	expect(size.height, `${entry.file} native height`).toBeGreaterThanOrEqual(
+		160,
+	);
+	await assertNotBlank(page, actual, entry.file);
+	for (const root of [ACTUAL_ROOT, SCREENSHOT_ROOT]) {
+		const target = path.join(root, entry.file);
+		await fs.mkdir(path.dirname(target), { recursive: true });
+		await fs.writeFile(target, actual);
+	}
 }

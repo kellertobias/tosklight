@@ -11,7 +11,10 @@
 			"file": "control-groups.png", "sourceFile": "docs/marketing/assets/stills/control-groups.png", "title": "Groups", "caption": "Keep the fixture selections you use throughout the show close at hand.", "theme": "dark"
 		},
 		{
-			"file": "control-cues.png", "sourceFile": "docs/marketing/assets/stills/control-cues.png", "title": "Cues", "caption": "Build a repeatable sequence of intentions for the show.", "theme": "dark"
+			"file": "control-cues.png", "storyId": "tosklight-marketing--cues-window",
+			"viewport": { "width": 1180, "height": 560 },
+			"mode": "software",
+			"interactions": [], "title": "Cues", "caption": "Build a repeatable sequence of intentions for the show.", "theme": "dark"
 		},
 		{
 			"file": "control-preload-go.png", "sourceFile": "docs/marketing/assets/stills/control-preload-go.png", "title": "Preload and GO", "caption": "Set up a change while the current look remains live.", "theme": "dark"
@@ -170,7 +173,9 @@
 			"viewport": { "width": 960, "height": 560 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [
+				{ "action": "click", "selector": "button[role='tab']:has-text('Routes')" }
+			]
 		},
 		{
 			"file": "channels.png",
@@ -246,10 +251,12 @@
 			"title": "Every visual, ready for the show",
 			"caption": "Manage videos, transparent images, live visualizers, and flexible text in one visual library. Pixel prepares imported media for reliable playback and keeps every asset ready at a predictable desk address.",
 			"storyId": "tosklight-media-server--library",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": { "width": 1440, "height": 1100 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [
+				{ "action": "click", "selector": "button:has-text('Golden cloth')" }
+			]
 		},
 		{
 			"file": "media-server-visualizers.png",

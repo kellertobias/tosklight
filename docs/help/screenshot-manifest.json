@@ -13,13 +13,12 @@
 		},
 		{
 			"file": "default-desk-overview.png",
-			"source": "live-app",
-			"storyId": null,
-			"viewport": { "width": 1600, "height": 1100 },
+			"source": "storybook",
+			"storyId": "tosklight-marketing--full-application",
+			"viewport": { "width": 1600, "height": 920 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": [],
-			"reason": "The operator overview requires the complete dock, desktop panes, command line, and control surface; the current representative arrangement story renders only isolated panes."
+			"interactions": []
 		},
 		{
 			"file": "fixture-sheet-programmer.png",
@@ -59,25 +58,28 @@
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": ".channels-window"
 		},
 		{
 			"file": "panes/cuelist-pool.png",
 			"source": "storybook",
-			"storyId": "tosklight-windows-cuelists-and-cues--pool-compact",
-			"viewport": { "width": 1496, "height": 761 },
+			"storyId": "tosklight-windows-cuelists-and-cues--pool-compact-help",
+			"viewport": { "width": 1000, "height": 420 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"cuelist-pool\"]"
 		},
 		{
 			"file": "panes/cuelists.png",
 			"source": "storybook",
-			"storyId": "tosklight-windows-cuelists-and-cues--pool",
-			"viewport": { "width": 1496, "height": 761 },
+			"storyId": "tosklight-windows-cuelists-and-cues--pool-help",
+			"viewport": { "width": 1000, "height": 420 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"cuelist-pool\"]"
 		},
 		{
 			"file": "panes/cues.png",
@@ -101,10 +103,11 @@
 			"file": "panes/dynamics.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-dynamics--full-application-discussion",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": { "width": 1496, "height": 1100 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": "section.dynamic-full-discussion-editor"
 		},
 		{
 			"file": "panes/file-manager.png",
@@ -118,11 +121,12 @@
 		{
 			"file": "panes/fixtures.png",
 			"source": "storybook",
-			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
-			"viewport": { "width": 1496, "height": 761 },
+			"storyId": "tosklight-windows-fixture-sheet--selected-steps-help",
+			"viewport": { "width": 1496, "height": 380 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": ".fixture-window"
 		},
 		{
 			"file": "panes/fixtures-icon-only.png",
@@ -180,14 +184,15 @@
 			"interactions": []
 		},
     {
-      "file": "panes/stage.png",
-      "source": "live-app",
-      "storyId": null,
+			"file": "panes/stage.png",
+			"source": "native-still",
+			"storyId": null,
 			"viewport": { "width": 1496, "height": 761 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": [],
-      "reason": "The pane image includes Stage header actions and the production 3D composition; current Stage stories expose isolated 2D or 3D views."
+			"interactions": [],
+			"reason": "Native Stage rendering is captured in the renderer; browser Storybook cannot host this native surface.",
+			"sourceFile": "docs/marketing/assets/stills/stage-3d-production.png"
 		},
     {
       "file": "panes/text-editor.png",
@@ -280,14 +285,15 @@
 			"reason": "The documented Show Patch contains representative patched fixtures; the current deterministic Patch story is an empty state."
 		},
     {
-      "file": "workflows/stage-window-2d.png",
-      "source": "live-app",
-      "storyId": null,
+			"file": "workflows/stage-window-2d.png",
+			"source": "native-still",
+			"storyId": null,
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": [],
-      "reason": "The workflow image includes the complete Stage header and Group shortcuts; the current Stage 2D story renders only the isolated view."
+			"interactions": [],
+			"reason": "The actual native Control Stage controls and 2D plan are captured in Control; browser Storybook cannot host this surface.",
+			"sourceFile": "docs/marketing/assets/stills/control-stage.png"
 		},
 
     {
@@ -310,13 +316,13 @@
 			"reason": "No deterministic Desk Lock dialog story exists."
 		},
     {
-      "file": "workflows/desk-setup-network-api.png",
-      "source": "storybook",
-      "storyId": "tosklight-windows-setup--network-and-inputs",
+			"file": "workflows/desk-setup-network-api.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-setup--network-and-inputs-help",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+			"interactions": []
 		},
     {
       "file": "workflows/desk-setup-output-engine.png",
@@ -337,13 +343,13 @@
       "interactions": []
 		},
     {
-      "file": "workflows/desk-setup-shows-recovery.png",
-      "source": "storybook",
-      "storyId": "tosklight-windows-setup--shows-and-recovery",
+			"file": "workflows/desk-setup-shows-recovery.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-setup--shows-and-recovery-help",
 			"viewport": { "width": 1496, "height": 756 },
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+			"interactions": []
 		},
 		{
 			"file": "workflows/fixture-library-create.png",

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { type PropsWithChildren, useMemo } from "react";
+import { PoolTileLayoutProvider } from "@tosklight/ui/pools";
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type {
 	CueList,
@@ -132,7 +133,22 @@ function CuelistStoryState({ children }: PropsWithChildren) {
 		const next = new ShowObjectsStore();
 		next.reset(SHOW_ID);
 		next.setCollection(SHOW_ID, "cue_list", [
-			versioned("cue_list", "main-object", cueList),
+			versioned("cue_list", "main-object", { ...cueList, pool_number: 1 }),
+			versioned("cue_list", "color-chase", {
+				...cueList,
+				id: "color-chase",
+				pool_number: 2,
+				name: "Color Chase",
+				mode: "chaser",
+				cues: cueList.cues.slice(0, 4),
+			}),
+			versioned("cue_list", "audience", {
+				...cueList,
+				id: "audience",
+				pool_number: 3,
+				name: "Audience Sweep",
+				cues: cueList.cues.slice(0, 2),
+			}),
 		]);
 		next.setCollection(SHOW_ID, "playback_page", [
 			versioned("playback_page", "page-1", page),
@@ -261,3 +277,15 @@ export const FollowSelectionEmpty: Story = {
 		showCueSidebar: true,
 	},
 };
+
+function HelpPool({ compact = false }: { compact?: boolean }) {
+	return (
+		<div data-help-capture="cuelist-pool" style={{ width: 900, height: 280 }}>
+			<PoolTileLayoutProvider layout={{ mode: "fixed", rows: 1, columns: 3 }}>
+				<CuelistWindow active compact={compact} cueListTab="pool" />
+			</PoolTileLayoutProvider>
+		</div>
+	);
+}
+export const PoolHelp: Story = { render: () => <HelpPool /> };
+export const PoolCompactHelp: Story = { render: () => <HelpPool compact /> };

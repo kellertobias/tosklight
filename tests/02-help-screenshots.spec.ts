@@ -25,7 +25,7 @@ const screenshotManifest = JSON.parse(
     path.join(ROOT, "docs/help/screenshot-manifest.json"),
     "utf8",
   ),
-) as { entries: Array<{ file: string; source: "storybook" | "live-app" }> };
+) as { entries: Array<{ file: string; source: "storybook" | "live-app" | "native-still" }> };
 const liveScreenshotFiles = new Set(
   screenshotManifest.entries
     .filter((entry) => entry.source === "live-app")
@@ -156,6 +156,8 @@ async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
   });
   await api.openShow(show.id, { transition: "hold_current" });
   await seedScreenshotProgramming(api, show.id);
+  await api.saveShowRevision(show.id, "Technical rehearsal");
+  await api.saveShowRevision(show.id, "Opening night");
   return show;
 }
 
@@ -224,7 +226,13 @@ async function captureWorkflowReference(page: Page) {
   await page.getByRole("button", { name: "Load", exact: true }).click();
   const loadShow = page.getByRole("dialog", { name: "Load show" });
   await expect(loadShow.getByRole("button", { name: "Load Latest" }).first()).toBeVisible();
-  await loadShow.screenshot({ path: workflowShot("show-load-revisions.png") });
+  await loadShow.getByRole("button", { name: "Revisions for Spring Tour", exact: true }).click();
+  const revisions = page.getByRole("dialog", { name: "Revisions for Spring Tour", exact: true });
+  await expect(revisions.getByRole("row").filter({ hasText: "Latest Autosave" })).toBeVisible();
+  await expect(revisions.getByRole("row").filter({ hasText: "Technical rehearsal" })).toBeVisible();
+  await expect(revisions.getByRole("row").filter({ hasText: "Opening night" })).toBeVisible();
+  await revisions.screenshot({ path: workflowShot("show-load-revisions.png") });
+  await revisions.getByRole("button", { name: "Close revisions", exact: true }).click();
   await closeNested(".load-show-modal");
   // Save As writes the MVR archive straight to the chosen location and then shows the server's
   // summary of that archive: where it went, what it carries and every export warning.
@@ -293,9 +301,11 @@ async function captureWorkflowReference(page: Page) {
   await page.getByRole("button", { name: "Edit channels for Default", exact: true }).click();
   const modeEditor = page.getByRole("dialog", { name: "Edit Default mode" });
   await expect(modeEditor).toBeVisible();
-  await modeEditor.screenshot({ path: workflowShot("fixture-library-mode-editor.png") });
+  await captureModeEditorChannels(page);
   await modeEditor.getByRole("button", { name: "Close mode editor", exact: true }).click();
   await page.getByRole("button", { name: "Close fixture editor", exact: true }).click();
+  await page.getByRole("button", { name: "Discard changes", exact: true }).click();
+  await expect(page.locator(".fixture-profile-editor-modal")).toBeHidden();
   await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
   await page.locator(".gdtf-import-modal").screenshot({ path: workflowShot("fixture-library-import.png") });
   await page.getByRole("button", { name: "Close Import GDTF", exact: true }).click();
@@ -317,6 +327,40 @@ async function captureWorkflowReference(page: Page) {
   await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-columns.png") });
   await fixtureSettings.getByRole("button", { name: "Close settings" }).click();
 
+}
+
+/** Author a small six-channel moving wash through the same attribute picker used by operators. */
+async function captureModeEditorChannels(page: Page) {
+  const editor = page.getByRole("dialog", { name: "Edit Default mode", exact: true });
+  await editor.getByRole("tab", { name: "Channels", exact: true }).click();
+  const channels = [
+    ["Intensity", "Intensity"], ["Position", "Pan"], ["Position", "Tilt"],
+    ["Color", "Red"], ["Color", "Green"], ["Color", "Blue"],
+  ];
+  for (const [index, [group, attribute]] of channels.entries()) {
+    const slot = index + 1;
+    await editor.getByRole("button", { name: "Add channel", exact: true }).click();
+    if (attribute === "Intensity") continue;
+    await editor.getByRole("button", { name: `Attribute for slot ${slot}: Intensity`, exact: true }).click();
+    const picker = page.getByRole("dialog", { name: `Attribute · slot ${slot}`, exact: true });
+    await picker.getByRole("textbox", { name: "Search attributes", exact: true }).fill(attribute);
+    await picker.getByRole("listbox", { name: "Encoder groups", exact: true }).getByRole("option", { name: new RegExp(`^${group}\\b`) }).click();
+    // Production registry groups Pan/Tilt under Position and RGB under Color.
+    await picker.getByRole("listbox", { name: "Activation groups", exact: true }).getByRole("option").first().click();
+    await picker.getByRole("listbox", { name: / attributes$/ }).getByRole("option", { name: new RegExp(`^${attribute}\\b`) }).first().click();
+    await expect(picker).toBeHidden();
+    await expect(editor.getByRole("button", { name: `Attribute for slot ${slot}: ${attribute}`, exact: true })).toBeVisible();
+  }
+  await expect(editor.locator(".fixture-channel-row")).toHaveCount(channels.length);
+  await expect(editor.getByText(/No logical channels/)).toHaveCount(0);
+  const bounds = await editor.boundingBox();
+  const lastRow = await editor.locator(".fixture-channel-row").last().boundingBox();
+  if (!bounds || !lastRow) throw new Error("The populated mode editor is not visible");
+  // Capture the real title, channel table and controls without a page of unused modal space.
+  await page.screenshot({ path: workflowShot("fixture-library-mode-editor.png"), clip: {
+    x: bounds.x, y: bounds.y, width: bounds.width,
+    height: lastRow.y + lastRow.height - bounds.y + 24,
+  } });
 }
 
 async function capturePaneReference(page: Page, selectedDmx: { universe: number; address: number }) {

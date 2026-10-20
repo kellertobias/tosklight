@@ -1,12 +1,7 @@
-import { StageRendererView } from "./windows/stageWindow/StageRendererView";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { GridDesktop, PaneView } from "@tosklight/ui/desktop";
 import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
 import { useState } from "react";
-import {
-	stageOptions,
-	stageSelection,
-} from "../../ui-library/storybook/fixtures/application";
 import { CommandSectionFixture } from "../../ui-library/storybook/fixtures/controlSection";
 import {
 	dmxOutputHealth,
@@ -17,8 +12,6 @@ import {
 	marketingFixtureSheetPresentStep,
 	marketingFixtureSheetRows,
 	marketingFixtureSheetSelectedFixtureIds,
-	marketingStage3dFixtures,
-	marketingStageVisualization,
 } from "../../ui-library/storybook/fixtures/marketingApplication";
 import { ApplicationStateHarness } from "../../ui-library/storybook/providers/ApplicationStateHarness";
 import { SourceLegend } from "./components/shared/SourceLegend";
@@ -150,40 +143,19 @@ function FullApplicationComposition() {
 									</PaneView>
 									<PaneView
 										pane={{
-											id: "stage",
-											title: "Stage 3D",
-											type: "stage",
+											id: "cues",
+											title: "Cues",
+											type: "cues",
 											x: 1,
 											y: 10,
 											width: 12,
 											height: 9,
 										}}
-										info={{
-											primary: "0 selected",
-											secondary: "Tap to select · Shift for range",
-										}}
-										groups={[
-											{ id: "stage-view", actions: [
-												{
-													id: "follow",
-													label: "Follow Preload",
-													active: true,
-													onPress: () => undefined,
-												},
-											] },
-											{ id: "stage-navigation", actions: [
-												{
-													id: "groups",
-													label: "Groups",
-													onPress: () => undefined,
-												},
-											] },
-										]}
 										settings
 										onSettings={() => undefined}
 										onRectChange={() => undefined}
 									>
-										<StageRendererView options={{ ...stageOptions, view: "3d" }} selection={stageSelection} />
+										<MarketingCuesWindow />
 									</PaneView>
 									<PaneView
 										pane={{

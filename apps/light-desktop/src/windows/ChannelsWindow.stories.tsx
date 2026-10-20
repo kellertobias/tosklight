@@ -41,7 +41,7 @@ function ChannelsStory({ compact = false }: { compact?: boolean }) {
 	);
 	return (
 		<AppProvider>
-			<div style={{ height: "100vh" }}>
+			<div style={{ height: "calc(100vh - 48px)" }}>
 				<ChannelsWindowView
 					channels={channels}
 					compact={compact}

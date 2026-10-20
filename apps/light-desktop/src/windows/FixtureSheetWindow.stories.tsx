@@ -334,10 +334,12 @@ function FixtureSheetStory({
 	compact = false,
 	compactMode = "off",
 	small = false,
+	height,
 }: {
 	compact?: boolean;
 	compactMode?: FixtureSheetCompactMode;
 	small?: boolean;
+	height?: number;
 }) {
 	const [activeRow, setActiveRow] = useState(1);
 	const columns = useMemo(
@@ -364,7 +366,7 @@ function FixtureSheetStory({
 	return (
 		<div
 			style={{
-				height: small ? 360 : 680,
+				height: height ?? (small ? 360 : 680),
 				width: small ? 430 : undefined,
 				minWidth: small ? 430 : compact ? 420 : 760,
 			}}
@@ -417,4 +419,8 @@ export const TextOnly: Story = {
 
 export const OffSmallScreen: Story = {
 	render: () => <FixtureSheetStory compact compactMode="off" small />,
+};
+
+export const SelectedStepsHelp: Story = {
+	render: () => <FixtureSheetStory height={300} />,
 };

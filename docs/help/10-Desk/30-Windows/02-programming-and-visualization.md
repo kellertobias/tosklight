@@ -175,11 +175,11 @@ With fixture labels enabled, **UV** beside a fixture number means native UV driv
 
 Stage receives authoritative Live and Preload output from the engine. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output.
 
-![Stage pane](../../assets/screenshots/panes/stage.png)
+![Native Stage rendering](../../assets/screenshots/panes/stage.png)
 
 ![Stage pane settings](../../assets/screenshots/panes/stage-settings.png)
 
-![Full Stage window](../../assets/screenshots/workflows/stage-window-2d.png)
+![Stage controls and 2D plan](../../assets/screenshots/workflows/stage-window-2d.png)
 
 ## Visualization
 
