@@ -411,7 +411,7 @@ function modelPlanePoint(
 	}
 }
 
-function modelDepth(
+export function modelDepth(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
 ): number {

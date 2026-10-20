@@ -139,7 +139,12 @@ function painterFor(camera: TileCamera): Painter {
 			color[3] ?? 1,
 		);
 	};
-	const triangle = (a: PlanPoint, b: PlanPoint, c: PlanPoint, color: LineColor) => {
+	const triangle = (
+		a: PlanPoint,
+		b: PlanPoint,
+		c: PlanPoint,
+		color: LineColor,
+	) => {
 		vertex(overlayVertices, a, color);
 		vertex(overlayVertices, b, color);
 		vertex(overlayVertices, c, color);
@@ -220,7 +225,11 @@ export function renderDepthMaskedLinework(
 }
 
 /** The datum guide of an elevation, and the coordinate axes when they are switched on. */
-function paintDatum(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement) {
+function paintDatum(
+	painter: Painter,
+	frame: CadFrame,
+	canvas: HTMLCanvasElement,
+) {
 	const { view, rotationQuarterTurns, camera } = frame;
 	const worldOrigin = projectPoint([0, 0, 0], view, rotationQuarterTurns);
 	if (view !== "top_down") {
@@ -283,11 +292,17 @@ function paintAnnotations(painter: Painter, frame: CadFrame) {
 	}
 }
 
+type VenueGeometryCache = WeakMap<
+	NonNullable<CadEntity["venueGeometry"]>,
+	Map<string, PlanGeometry>
+>;
+
 /** The rig itself: every entity's drawing, its depth mask, its outline and its beam direction. */
 function paintEntities(
 	painter: Painter,
 	frame: CadFrame,
 	geometryCache: Map<string, PlanGeometry>,
+	venueGeometryCache: VenueGeometryCache,
 ) {
 	const { view, rotationQuarterTurns, drawings, selected, preview } = frame;
 	const ordered = [...frame.entities].sort(
@@ -309,10 +324,15 @@ function paintEntities(
 		// The viewport always draws mounting hardware; the key says so, because a print page's
 		// geometry for the same fixture can differ in exactly that.
 		const key = `${entity.drawingId}:${view}:${entity.sizeMillimetres.join(",")}:${entity.rotationDegrees.join(",")}:hardware`;
-		let geometry = geometryCache.get(key);
+		let cache = geometryCache;
+		if (entity.venueGeometry) {
+			cache = venueGeometryCache.get(entity.venueGeometry) ?? new Map();
+			venueGeometryCache.set(entity.venueGeometry, cache);
+		}
+		let geometry = cache.get(key);
 		if (!geometry) {
 			geometry = entityPlanGeometry(entity, drawing, view);
-			geometryCache.set(key, geometry);
+			cache.set(key, geometry);
 		}
 		const projected = worldGeometry(
 			entity,
@@ -377,7 +397,11 @@ function paintEntities(
  * The move gizmo at the selection's origin, and the axis guide a constrained drag follows. Its
  * arrows are two pixels wide with filled heads, so they stand out from the one-pixel rig.
  */
-function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement) {
+function paintGizmo(
+	painter: Painter,
+	frame: CadFrame,
+	canvas: HTMLCanvasElement,
+) {
 	const { view, rotationQuarterTurns, camera, preview, guide } = frame;
 	const gizmo = frame.editEnabled
 		? gizmoGeometry(
@@ -394,13 +418,19 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 	// Picked text has a gizmo on its anchor: arrows and a square, with no rotate arc.
 	const textGizmo =
 		!gizmo && frame.editEnabled && frame.textGizmo
-			? { origin: frame.textGizmo, length: 48 / camera.zoom, square: 7 / camera.zoom }
+			? {
+					origin: frame.textGizmo,
+					length: 48 / camera.zoom,
+					square: 7 / camera.zoom,
+				}
 			: null;
 	if (!gizmo && !textGizmo) return;
 	const axes = viewAxes(view, rotationQuarterTurns);
 	const horizontal = axisColor(axes.horizontal.axis);
 	const vertical = axisColor(axes.vertical.axis);
-	const { origin, length, square } = (gizmo ?? textGizmo) as NonNullable<typeof gizmo>;
+	const { origin, length, square } = (gizmo ?? textGizmo) as NonNullable<
+		typeof gizmo
+	>;
 	const handle: LineColor = [0.75, 0.8, 0.84];
 	const width = 2 * painter.pixel;
 	const corners: PlanPoint[] = [
@@ -412,8 +442,22 @@ function paintGizmo(painter: Painter, frame: CadFrame, canvas: HTMLCanvasElement
 	corners.forEach((corner, index) =>
 		painter.line(corner, corners[(index + 1) % corners.length], handle),
 	);
-	drawGizmoArrow(painter, origin, [origin[0] + length, origin[1]], horizontal, square, width);
-	drawGizmoArrow(painter, origin, [origin[0], origin[1] + length], vertical, square, width);
+	drawGizmoArrow(
+		painter,
+		origin,
+		[origin[0] + length, origin[1]],
+		horizontal,
+		square,
+		width,
+	);
+	drawGizmoArrow(
+		painter,
+		origin,
+		[origin[0], origin[1] + length],
+		vertical,
+		square,
+		width,
+	);
 	// The rotate handle: a quarter arc between the arrows, turning about the axis the view looks
 	// along, with a head at each end to say it turns both ways. Text does not turn.
 	if (gizmo) paintRotateHandle(painter, origin, length, square, width);
@@ -439,7 +483,8 @@ export type SnapGuide = readonly [PlanPoint, PlanPoint];
 /** A snapped fit: a magenta diamond eight pixels across, so it reads apart from the cyan selection. */
 function paintSnapMarkers(painter: Painter, frame: CadFrame) {
 	const color: LineColor = [1, 0.3, 0.85];
-	for (const [start, end] of frame.snapGuides ?? []) painter.stroke(start, end, color, 2 * painter.pixel);
+	for (const [start, end] of frame.snapGuides ?? [])
+		painter.stroke(start, end, color, 2 * painter.pixel);
 	const size = 8 * painter.pixel * (window.devicePixelRatio || 1);
 	for (const [x, y] of frame.snapMarkers ?? []) {
 		const corners: PlanPoint[] = [
@@ -449,7 +494,12 @@ function paintSnapMarkers(painter: Painter, frame: CadFrame) {
 			[x - size, y],
 		];
 		corners.forEach((corner, index) =>
-			painter.stroke(corner, corners[(index + 1) % corners.length], color, 2 * painter.pixel),
+			painter.stroke(
+				corner,
+				corners[(index + 1) % corners.length],
+				color,
+				2 * painter.pixel,
+			),
 		);
 	}
 }
@@ -471,10 +521,16 @@ function buildEntityLayer(
 	entities: readonly CadEntity[],
 	frame: CadFrame,
 	geometryCache: Map<string, PlanGeometry>,
+	venueGeometryCache: VenueGeometryCache,
 ): EntityLayer {
 	if (!entities.length) return EMPTY_LAYER;
 	const painter = painterFor(frame.camera);
-	paintEntities(painter, { ...frame, entities }, geometryCache);
+	paintEntities(
+		painter,
+		{ ...frame, entities },
+		geometryCache,
+		venueGeometryCache,
+	);
 	return {
 		fill: new Float32Array(painter.fillVertices),
 		depthLines: new Float32Array(painter.depthLineVertices),
@@ -498,6 +554,7 @@ function keyChanged(previous: readonly unknown[], next: readonly unknown[]) {
  */
 export class EntityLayerCache {
 	private readonly geometryCache = new Map<string, PlanGeometry>();
+	private readonly venueGeometryCache: VenueGeometryCache = new WeakMap();
 	private stillKey: readonly unknown[] = [];
 	private still: EntityLayer = EMPTY_LAYER;
 	private movingKey: readonly unknown[] = [];
@@ -519,9 +576,12 @@ export class EntityLayerCache {
 		const stillKey = [...base, preview?.entityIds.join("\n") ?? ""];
 		if (keyChanged(this.stillKey, stillKey)) {
 			this.still = buildEntityLayer(
-				frame.entities.filter((entity) => !movingIds.has(entity.logicalFixtureId)),
+				frame.entities.filter(
+					(entity) => !movingIds.has(entity.logicalFixtureId),
+				),
 				{ ...frame, preview: null },
 				this.geometryCache,
+				this.venueGeometryCache,
 			);
 			this.stillKey = stillKey;
 			this.builds.still += 1;
@@ -530,9 +590,12 @@ export class EntityLayerCache {
 		if (keyChanged(this.movingKey, movingKey)) {
 			this.moving = movingIds.size
 				? buildEntityLayer(
-						frame.entities.filter((entity) => movingIds.has(entity.logicalFixtureId)),
+						frame.entities.filter((entity) =>
+							movingIds.has(entity.logicalFixtureId),
+						),
 						frame,
 						this.geometryCache,
+						this.venueGeometryCache,
 					)
 				: EMPTY_LAYER;
 			this.movingKey = movingKey;
@@ -655,11 +718,19 @@ export class LineRenderer {
 				this.drawSlot("moving-depth-lines", moving.depthLines, gl.LINES);
 			},
 		);
-		this.drawSlot("under-lines", new Float32Array(under.lineVertices), gl.LINES);
+		this.drawSlot(
+			"under-lines",
+			new Float32Array(under.lineVertices),
+			gl.LINES,
+		);
 		this.drawSlot("still-lines", still.lines, gl.LINES);
 		this.drawSlot("moving-lines", moving.lines, gl.LINES);
 		this.drawSlot("over-lines", new Float32Array(over.lineVertices), gl.LINES);
-		this.drawSlot("over-triangles", new Float32Array(over.overlayVertices), gl.TRIANGLES);
+		this.drawSlot(
+			"over-triangles",
+			new Float32Array(over.overlayVertices),
+			gl.TRIANGLES,
+		);
 	}
 
 	private drawSlot(name: string, data: Float32Array, mode: number) {
@@ -714,7 +785,11 @@ function paintRotateHandle(
 	width: number,
 ) {
 	const arc = rotateArc(origin, length);
-	arc.slice(1).forEach((point, index) => painter.stroke(arc[index], point, ROTATE_HANDLE, width));
+	arc
+		.slice(1)
+		.forEach((point, index) =>
+			painter.stroke(arc[index], point, ROTATE_HANDLE, width),
+		);
 	for (const [end, before] of [
 		[arc[arc.length - 1], arc[arc.length - 2]],
 		[arc[0], arc[1]],
@@ -735,7 +810,10 @@ function drawGizmoArrow(
 	const length = Math.max(0.0001, Math.hypot(dx, dy));
 	const unitX = dx / length;
 	const unitY = dy / length;
-	const back: PlanPoint = [end[0] - unitX * head * 1.8, end[1] - unitY * head * 1.8];
+	const back: PlanPoint = [
+		end[0] - unitX * head * 1.8,
+		end[1] - unitY * head * 1.8,
+	];
 	painter.stroke(origin, back, color, width);
 	painter.triangle(
 		end,

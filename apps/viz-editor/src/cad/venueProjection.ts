@@ -1,5 +1,6 @@
 /** The shared venue solids and plan symbols, including real openings and door swing arcs. */
 import {
+	modelDepth,
 	type PlanGeometry,
 	type PlanPoint,
 	projectModelPoint,
@@ -75,14 +76,27 @@ export function venuePlanGeometry(
 		// Edge-on walls retain their thickness outline. Face-on elevations use frame symbols,
 		// avoiding seams from the physical mesh's aperture-subtraction strips.
 		if (Math.abs(faceArea) > 0.01) {
-			result.lines = geometry.elevation.map((line) => ({
-				points: line.map((point) =>
-					projectModelPoint(
-						rotateModelPoint(point, entity.rotationDegrees),
-						view,
-					),
-				) as [PlanPoint, PlanPoint],
-			}));
+			const thickness = entity.sizeMillimetres[1];
+			const normalDepth = modelDepth(
+				rotateModelPoint([0, 0, 1], entity.rotationDegrees),
+				view,
+			);
+			const faceZ = ((normalDepth <= 0 ? 1 : -1) * thickness) / 2;
+			result.lines = geometry.elevation.map((line) => {
+				const points = line.map(([x, y, z]) =>
+					rotateModelPoint([x, y, z + faceZ], entity.rotationDegrees),
+				) as [[number, number, number], [number, number, number]];
+				return {
+					points: points.map((point) => projectModelPoint(point, view)) as [
+						PlanPoint,
+						PlanPoint,
+					],
+					depths: points.map((point) => modelDepth(point, view)) as [
+						number,
+						number,
+					],
+				};
+			});
 			result.outlines = [];
 		}
 	}

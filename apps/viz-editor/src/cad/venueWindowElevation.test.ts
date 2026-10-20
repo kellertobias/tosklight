@@ -203,3 +203,27 @@ it("keeps the shared top plan and legacy geometry without semantic elevation unc
 			.length,
 	).toBeGreaterThan(0);
 });
+
+it("places frame endpoints on the nearest physical wall face with actual view depths", () => {
+	for (const view of ["front_to_back", "back_to_front"] as const) {
+		const geometry = entityPlanGeometry(wall, undefined, view);
+		expect(
+			geometry.lines.every((line) =>
+				line.depths?.every((depth) => Math.abs(depth + 100) < 1e-6),
+			),
+		).toBe(true);
+	}
+	const turned = {
+		...wall,
+		rotationDegrees: [0, 0, 30] as [number, number, number],
+	};
+	const geometry = entityPlanGeometry(turned, undefined, "front_to_back");
+	// At an oblique view the nearest face contributes -100 cos(30°), while the two
+	// endpoints carry opposite width-axis depth offsets. They cannot share depth zero.
+	expect(geometry.lines[0].depths?.[0]).toBeCloseTo(
+		-1000 - Math.cos(Math.PI / 6) * 100,
+	);
+	expect(geometry.lines[0].depths?.[1]).toBeCloseTo(
+		1000 - Math.cos(Math.PI / 6) * 100,
+	);
+});
