@@ -105,13 +105,10 @@ impl PositionStageLocator {
         let present = |source: &OriginalSource| {
             sources.iter().any(|bound| {
                 bound.original_index == source.slot
-                    && source.member.as_ref().is_none_or(|member| {
-                        bound
-                            .origins
-                            .locations
-                            .values()
-                            .any(|location| *location == member.node)
-                    })
+                    && source
+                        .member
+                        .as_ref()
+                        .is_none_or(|member| bound.origins.maps_to(member.node))
             })
         };
         if !self.trigger.iter().all(|source| present(source)) {
