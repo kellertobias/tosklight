@@ -1,5 +1,5 @@
 import "./PlaybackSoloRegionManager.css";
-import { Button, ErrorAlert, TextField, WindowScrollArea } from "@tosklight/ui";
+import { Button, ColorPickerField, ErrorAlert, TextField, WindowScrollArea } from "@tosklight/ui";
 import { useState } from "react";
 import type { PlaybackSoloEditor } from "../../features/playbackSolo/PlaybackSoloEditorContext";
 import type {
@@ -37,6 +37,17 @@ export function PlaybackSoloRegionManager({
 			setPending(false);
 		}
 	};
+	const setColor = async (color: string) => {
+		if (!selected || !regions || busy) return;
+		setPending(true);
+		try {
+			await capability.save(regions.map((region) =>
+				region.id === selected.id ? { ...region, color } : region,
+			));
+		} finally {
+			setPending(false);
+		}
+	};
 	const remove = async () => {
 		if (!selected || !regions || busy) return;
 		setPending(true);
@@ -51,7 +62,7 @@ export function PlaybackSoloRegionManager({
 	};
 	return (
 		<section className="solo-region-manager" aria-label="Manage Solo Regions">
-			<p className="solo-region-manager-help">Select a Solo Region to rename, edit its Playback cells, or delete it.</p>
+			<p className="solo-region-manager-help">Select a Solo Region to rename, choose its outline color, edit its Playback cells, or delete it.</p>
 			{regions === null ? <p role="status">Loading Solo Regions…</p>
 				: regions.length === 0 ? <p className="solo-region-manager-empty" role="status">No Solo Regions.</p>
 					: <WindowScrollArea className="solo-region-table-scroll">
@@ -74,6 +85,8 @@ export function PlaybackSoloRegionManager({
 			{selected && <div className="solo-region-selected-controls">
 				<TextField label="Region name" value={name} disabled={busy}
 					onChange={(event) => setName(event.target.value)} />
+				<ColorPickerField label="Region color" value={selected.color ?? "#ffb30f"}
+					disabled={busy} onChange={(color) => void setColor(color)} />
 				<div className="solo-region-actions">
 					<Button disabled={busy || !name.trim() || name.trim() === selected.name}
 						onClick={() => void rename()}>Rename</Button>

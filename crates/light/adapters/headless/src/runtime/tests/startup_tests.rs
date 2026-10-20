@@ -574,7 +574,7 @@ fn startup_playback_address(position: u16) -> light_playback::PlaybackAddress {
 }
 
 fn startup_solo_region(cells: &[u16]) -> light_playback::PlaybackSoloRegion {
-    light_playback::PlaybackSoloRegion { id: Uuid::new_v4(), name: "Restart Solo".into(), members: cells.iter().copied().map(startup_playback_address).collect() }
+    light_playback::PlaybackSoloRegion { color: None, id: Uuid::new_v4(), name: "Restart Solo".into(), members: cells.iter().copied().map(startup_playback_address).collect() }
 }
 
 fn restored_exclusion_active_with_origin(

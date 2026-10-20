@@ -58,6 +58,34 @@ describe("Manage Solo Regions", () => {
 		expect(s.queryByRole("button", { name: "Edit" })).toBeNull();
 	});
 
+	it("saves only the selected region color and preserves names and cross-page membership", async () => {
+		const colored = { ...region, color: "#f97316" };
+		const peer = { ...region, id: "peer", name: "Other region", color: "#22c55e" };
+		const s = setup([colored, peer]);
+		fireEvent.click(s.getByRole("button", { name: "Across pages" }));
+		fireEvent.click(s.getByRole("button", { name: /#F97316/ }));
+		await act(async () => fireEvent.click(s.getByRole("option", { name: "Use color #06b6d4" })));
+		expect(s.capability.save).toHaveBeenCalledWith([{ ...colored, color: "#06b6d4" }, peer]);
+		expect(s.editor.beginEdit).not.toHaveBeenCalled();
+		fireEvent.click(s.getByRole("button", { name: "Other region" }));
+		expect(s.getByRole("button", { name: /#22C55E/ })).toBeTruthy();
+	});
+	it("keeps a saved outline color through rename and membership editing", async () => {
+		const colored = { ...region, color: "#06b6d4" };
+		const s = setup([colored]);
+		fireEvent.click(s.getByRole("button", { name: "Across pages" }));
+		fireEvent.change(s.getByLabelText("Region name"), { target: { value: "Renamed" } });
+		await act(async () => fireEvent.click(s.getByRole("button", { name: "Rename" })));
+		expect(s.capability.save).toHaveBeenCalledWith([{ ...colored, name: "Renamed" }]);
+		fireEvent.click(s.getByRole("button", { name: "Edit" }));
+		expect(s.editor.beginEdit).toHaveBeenCalledWith(colored);
+	});
+	it("shows the amber default for a region saved before colors existed", () => {
+		const s = setup();
+		fireEvent.click(s.getByRole("button", { name: "Across pages" }));
+		expect(s.getByRole("button", { name: /#FFB30F/ })).toBeTruthy();
+		expect(s.capability.save).not.toHaveBeenCalled();
+	});
 	it("starts a new grid draft and closes without persisting", () => {
 		const s = setup();
 		fireEvent.click(s.getByRole("button", { name: "Create New Solo Region" }));

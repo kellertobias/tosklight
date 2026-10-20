@@ -26,6 +26,7 @@ import { HardwarePlaybackCard } from "./HardwarePlaybackCard";
 import { playbackCellGridStyle } from "./projection";
 import { buildPlaybackActions, createSlotInterceptors } from "./slotActions";
 import { TouchPlaybackCard } from "./TouchPlaybackCard";
+import { playbackTileActionLabel } from "./playbackTileActionLabel";
 import { timecodePlaybackSummary } from "./timecodePlaybackSummary";
 import type { PlaybackSlotProjection } from "./types";
 
@@ -75,15 +76,19 @@ function isSelectedPlayback(
 	);
 }
 
+interface PlaybackSlotProps {
+	controller: PlaybackBankController;
+	slotData: PlaybackSlotProjection;
+	soloClasses?: string;
+	soloMember?: boolean;
+}
+
 export function PlaybackSlot({
 	controller: bankController,
 	slotData,
 	soloClasses = "",
-}: {
-	controller: PlaybackBankController;
-	slotData: PlaybackSlotProjection;
-	soloClasses?: string;
-}) {
+	soloMember = false,
+}: PlaybackSlotProps) {
 	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
 	const controller = { ...bankController, controlSourceId };
 	const { playback, cue, group, slot, row } = slotData;
@@ -215,6 +220,7 @@ export function PlaybackSlot({
 			value={value}
 			touchActions={touchActions}
 			primaryAction={primaryAction}
+			primaryActionLabel={playbackTileActionLabel(primaryAction, soloMember)}
 			className={className}
 			cardStyle={cardStyle}
 			commandTarget={commandTarget}

@@ -93,6 +93,7 @@ fn retained_off_engine() -> (Engine, Arc<ManualClock>, CueList, FixtureId, CueLi
             }]
             .into(),
             playback_solo_regions: vec![PlaybackSoloRegion {
+                color: None,
                 id: Uuid::new_v4(),
                 name: "Peers".into(),
                 members: vec![address(1), address(2)],

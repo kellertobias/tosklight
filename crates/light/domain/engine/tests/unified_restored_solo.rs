@@ -30,6 +30,7 @@ fn start(engine: &Engine, address: PlaybackAddress, tick: i64) {
 }
 fn region(members: Vec<PlaybackAddress>) -> PlaybackSoloRegion {
     PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(),
         name: "Restore".into(),
         members,

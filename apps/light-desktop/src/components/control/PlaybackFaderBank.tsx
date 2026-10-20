@@ -131,6 +131,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 									controller={controller}
 									slotData={slotData}
 									soloClasses={solo.classes(slotData)}
+									soloMember={solo.memberPositions.has(slotData.slot)}
 									key={playbackCellKey(slotData)}
 								/>
 							))}

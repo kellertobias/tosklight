@@ -39,7 +39,8 @@ export function usePlaybackSoloDraft(
 		setError(null);
 	};
 	const create = async () => {
-		if (!capability || !regions || !selecting || createPending.current !== null) return;
+		if (!capability || !regions || !selecting || createPending.current !== null)
+			return;
 		const id = draftId.current;
 		if (!id) return;
 		if (editingId && !regions.some((region) => region.id === editingId)) {
@@ -59,10 +60,13 @@ export function usePlaybackSoloDraft(
 		createPending.current = version;
 		setCreating(true);
 		try {
-			const region = { id, name: name.trim(), members: selected };
+			const original = editingId
+				? regions.find((item) => item.id === editingId)
+				: undefined;
+			const region = { ...original, id, name: name.trim(), members: selected };
 			const next = await capability.save(
 				editingId
-					? regions.map((item) => item.id === editingId ? region : item)
+					? regions.map((item) => (item.id === editingId ? region : item))
 					: [...regions, region],
 			);
 			if (next && version === draftVersion.current) {
@@ -87,7 +91,17 @@ export function usePlaybackSoloDraft(
 		setSelecting(true);
 	};
 	return {
-		creating, selecting, selected, setSelected, name, setName, error,
-		managing, setManaging, cancel, create, beginEdit,
+		creating,
+		selecting,
+		selected,
+		setSelected,
+		name,
+		setName,
+		error,
+		managing,
+		setManaging,
+		cancel,
+		create,
+		beginEdit,
 	};
 }

@@ -3,6 +3,8 @@ import type { PlaybackAddressValue } from "../../api/playbackAddress";
 export interface PlaybackSoloRegion {
 	readonly id: string;
 	readonly name: string;
+	/** Absent or null retains the default amber outline. */
+	readonly color?: string | null;
 	readonly members: readonly PlaybackAddressValue[];
 }
 
@@ -22,8 +24,7 @@ export interface PlaybackSoloSnapshot {
 	readonly regions: readonly PlaybackSoloRegion[];
 }
 
-export interface PlaybackSoloSaveOutcome
-	extends PlaybackSoloSnapshot {
+export interface PlaybackSoloSaveOutcome extends PlaybackSoloSnapshot {
 	readonly requestId: string;
 	readonly replayed: boolean;
 	readonly changed: boolean;

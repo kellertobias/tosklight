@@ -123,6 +123,7 @@ fn rig() -> Rig {
             }]
             .into(),
             playback_solo_regions: vec![light_playback::PlaybackSoloRegion {
+                color: None,
                 id: Uuid::new_v4(),
                 name: "Exact members".into(),
                 members: vec![incoming, peer_address],

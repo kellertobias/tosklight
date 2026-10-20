@@ -7,6 +7,7 @@ import {
 } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PlaybackSoloRegion } from "../../../features/playbackSolo/contracts";
 import { SoloFenceOverlay } from "./SoloFenceOverlay";
 const regions = [
 	{
@@ -23,7 +24,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
-function harness() {
+function harness(savedRegions: readonly PlaybackSoloRegion[] = regions) {
 	let offset = 20;
 	let peerWidth = 100;
 	let resize: ResizeObserverCallback = () => {};
@@ -58,7 +59,7 @@ function harness() {
 			};
 		},
 	);
-	function View({ version = 0 }: { version?: number }) {
+	function View({ version = 0, currentRegions = savedRegions }: { version?: number; currentRegions?: readonly PlaybackSoloRegion[] }) {
 		const [bank, setBank] = useState<HTMLDivElement | null>(null);
 		return (
 			<div data-testid="viewport" style={{ overflow: "auto" }}>
@@ -68,7 +69,7 @@ function harness() {
 					<SoloFenceOverlay
 						bank={bank}
 						page={1}
-						regions={regions}
+						regions={currentRegions}
 						layoutKey={version}
 					/>
 				</div>
@@ -88,6 +89,7 @@ function harness() {
 			act(() => resize([], {} as ResizeObserver));
 		},
 		relayout: () => view.rerender(<View version={1} />),
+		recolor: (next: readonly PlaybackSoloRegion[]) => view.rerender(<View currentRegions={next} />),
 	};
 }
 const coordinates = (container: HTMLElement) =>
@@ -109,6 +111,38 @@ describe("measured Solo perimeter overlay", () => {
 		expect(view.observe).toHaveBeenCalledTimes(3);
 		view.widen();
 		expect(coordinates(view.container)[0]).not.toContain("102.5");
+	});
+	it("renders distinct saved stroke colors for adjacent regions and amber for legacy regions", () => {
+		const view = harness([
+			{ id: "upper", name: "Upper", color: "#06b6d4", members: [{ page: 1, position: 1 }] },
+			{ id: "lower", name: "Lower", color: "#22c55e", members: [{ page: 1, position: 3 }] },
+			{ id: "legacy", name: "Legacy", members: [{ page: 1, position: 1 }] },
+		]);
+		expect(view.container.querySelector('[data-solo-region="upper"]')).toHaveAttribute("stroke", "#06b6d4");
+		expect(view.container.querySelector('[data-solo-region="lower"]')).toHaveAttribute("stroke", "#22c55e");
+		expect(view.container.querySelector('[data-solo-region="legacy"]')).toHaveAttribute("stroke", "var(--amber)");
+		expect(coordinates(view.container)).toHaveLength(3);
+	});
+	it("updates an authoritative region color without changing its measured outline", () => {
+		const view = harness();
+		const before = coordinates(view.container);
+		view.recolor([{ ...regions[0], color: "#06b6d4" }]);
+		expect(coordinates(view.container)).toEqual(before);
+		expect(view.container.querySelector('[data-solo-region="pair"]')).toHaveAttribute("stroke", "#06b6d4");
+	});
+	it("keeps overlapping regions as closed perimeters in each region's own color", () => {
+		const view = harness([
+			{ ...regions[0], color: "#06b6d4" },
+			{ id: "overlap", name: "Overlap", color: "#f97316", members: [{ page: 1, position: 1 }] },
+		]);
+		const pair = view.container.querySelector('[data-solo-region="pair"]')!;
+		const overlap = view.container.querySelector('[data-solo-region="overlap"]')!;
+		expect(pair).toHaveAttribute("stroke", "#06b6d4");
+		expect(overlap).toHaveAttribute("stroke", "#f97316");
+		expect(pair.getAttribute("d")).toMatch(/ Z$/);
+		expect(overlap.getAttribute("d")).toMatch(/ Z$/);
+		expect(pair.getAttribute("d")).not.toEqual(overlap.getAttribute("d"));
+		expect(coordinates(view.container)).toHaveLength(2);
 	});
 	it("keeps content-relative fences through scrolling and recomputes/cleans observers on layout changes", () => {
 		const view = harness();

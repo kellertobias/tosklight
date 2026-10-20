@@ -9,6 +9,7 @@ import {
 } from "@tosklight/ui/playback";
 import type {
 	CSSProperties,
+	ReactNode,
 	MouseEvent as ReactMouseEvent,
 	PointerEvent as ReactPointerEvent,
 } from "react";
@@ -43,6 +44,7 @@ type TouchPlaybackCardProps = {
 	value: number;
 	touchActions: VerticalTouchFaderAction[];
 	primaryAction?: VerticalTouchFaderAction;
+	primaryActionLabel?: ReactNode;
 	className: string;
 	cardStyle: CSSProperties | undefined;
 	commandTarget: "record" | "set" | "off" | null;
@@ -63,6 +65,7 @@ export function TouchPlaybackCard({
 	value,
 	touchActions,
 	primaryAction,
+	primaryActionLabel,
 	className,
 	cardStyle,
 	commandTarget,
@@ -113,6 +116,7 @@ export function TouchPlaybackCard({
 	return (
 		<Card
 			action={primaryAction}
+			actionLabel={primaryActionLabel}
 			hardware={controller.hardware}
 			model={model}
 			slots={{

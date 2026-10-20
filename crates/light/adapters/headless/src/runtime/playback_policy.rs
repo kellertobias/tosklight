@@ -195,3 +195,6 @@ fn error(error: light_application::ActionError) -> ApiError {
         _ => ApiError::internal(error.message),
     }
 }
+
+#[cfg(test)]
+mod solo_color_tests;

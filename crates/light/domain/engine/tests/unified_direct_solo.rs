@@ -33,11 +33,13 @@ fn direct_cuelist_start_does_not_activate_assigned_solo_members() {
             ]),
             playback_solo_regions: Arc::new(vec![
                 PlaybackSoloRegion {
+                    color: None,
                     id: Uuid::new_v4(),
                     name: "First".into(),
                     members: addresses[..2].to_vec(),
                 },
                 PlaybackSoloRegion {
+                    color: None,
                     id: Uuid::new_v4(),
                     name: "Second".into(),
                     members: addresses[2..].to_vec(),
@@ -102,6 +104,7 @@ fn external_timecode_solo_bridge_uses_exact_member_address() {
                 },
             ]),
             playback_solo_regions: Arc::new(vec![PlaybackSoloRegion {
+                color: None,
                 id: Uuid::new_v4(),
                 name: "Across aliases".into(),
                 members: vec![alias, b],
@@ -175,11 +178,13 @@ fn prepared_solo_batch_reports_exact_region_releases_and_shared_peer_feedback() 
             ]),
             playback_solo_regions: Arc::new(vec![
                 PlaybackSoloRegion {
+                    color: None,
                     id: Uuid::new_v4(),
                     name: "One".into(),
                     members: vec![alias, peer_address],
                 },
                 PlaybackSoloRegion {
+                    color: None,
                     id: Uuid::new_v4(),
                     name: "Overlapping".into(),
                     members: vec![alias, peer_address],

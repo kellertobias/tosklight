@@ -61,24 +61,59 @@
 	white-space: nowrap;
 }
 
-.playback-tile-summary {
+.playback-tile-footer {
 	display: flex;
-	flex: 1;
+	flex: none;
 	flex-direction: column;
 	gap: 3px;
-	min-height: 0;
+	width: 100%;
+	min-width: 0;
+	margin-top: auto;
+}
+
+.playback-tile-action-label {
+	align-self: flex-end;
+	max-width: 100%;
 	overflow: hidden;
-	overflow-wrap: anywhere;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+/* Noninteractive cue insert: pressing any part still operates the tile's sole button. */
+.playback-tile-summary {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 3px 5px;
+	min-width: 0;
+	min-height: 21px;
+	padding: 3px 5px;
+	border-radius: 4px;
+	background: #05080cf2;
+	color: var(--text);
+	font-size: 10px;
+	line-height: 1.1;
+	text-shadow: none;
+}
+
+.playback-tile-summary > .playback-tile-cue-label,
+.playback-tile-summary > small {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .playback-tile-status,
 .playback-tile-warning {
-	flex: none;
-	font-size: 11px;
+	grid-column: 1 / -1;
+	font-size: 10px;
 }
 
 .playback-tile-warning {
-	margin-top: auto;
 	padding: 3px;
 	background: #231818e8;
 	color: #ffcfbf;

@@ -13,7 +13,10 @@ const SCOPE = { showId: SHOW_ID };
 const ZONE = {
 	id: "stage-left",
 	name: "Stage Left",
-	members: [{page:1,position:1},{page:2,position:201}],
+	members: [
+		{ page: 1, position: 1 },
+		{ page: 2, position: 201 },
+	],
 };
 
 describe("Playback Solo Region wire", () => {
@@ -30,7 +33,10 @@ describe("Playback Solo Region wire", () => {
 				{
 					id: "stage-left",
 					name: "Stage Left",
-					members: [{page:1,position:1},{page:2,position:201}],
+					members: [
+						{ page: 1, position: 1 },
+						{ page: 2, position: 201 },
+					],
 				},
 			],
 		});
@@ -44,7 +50,15 @@ describe("Playback Solo Region wire", () => {
 				{
 					show_id: SHOW_ID,
 					revision: 0,
-					regions: [{ ...ZONE, members: [{page:0,position:1},{page:1,position:1}] }],
+					regions: [
+						{
+							...ZONE,
+							members: [
+								{ page: 0, position: 1 },
+								{ page: 1, position: 1 },
+							],
+						},
+					],
 				},
 			],
 			[
@@ -52,7 +66,15 @@ describe("Playback Solo Region wire", () => {
 				{
 					show_id: SHOW_ID,
 					revision: 0,
-					regions: [{ ...ZONE, members: [{page:1,position:1},{page:1,position:1}] }],
+					regions: [
+						{
+							...ZONE,
+							members: [
+								{ page: 1, position: 1 },
+								{ page: 1, position: 1 },
+							],
+						},
+					],
 				},
 			],
 			[
@@ -63,16 +85,18 @@ describe("Playback Solo Region wire", () => {
 					regions: [
 						{
 							...ZONE,
-							members: [{page:1,position:1},{page:99,position:1001}],
+							members: [
+								{ page: 1, position: 1 },
+								{ page: 99, position: 1001 },
+							],
 						},
 					],
 				},
 			],
 		] as const)
-			expect(
-				() => decodePlaybackSoloSnapshot(value, SCOPE),
-				label,
-			).toThrow(PlaybackSoloProtocolError);
+			expect(() => decodePlaybackSoloSnapshot(value, SCOPE), label).toThrow(
+				PlaybackSoloProtocolError,
+			);
 	});
 
 	it("encodes only show-global edit intent", () => {
@@ -81,7 +105,10 @@ describe("Playback Solo Region wire", () => {
 				{
 					id: "stage-left",
 					name: "Stage Left",
-					members: [{page:1,position:1},{page:2,position:201}],
+					members: [
+						{ page: 1, position: 1 },
+						{ page: 2, position: 201 },
+					],
 				},
 			]),
 		).toEqual({
@@ -109,7 +136,14 @@ describe("Playback Solo Region wire", () => {
 			showId: SHOW_ID,
 			revision: 5,
 			requestId: "request-a",
-			regions: [{ members: [{page:1,position:1},{page:2,position:201}] }],
+			regions: [
+				{
+					members: [
+						{ page: 1, position: 1 },
+						{ page: 2, position: 201 },
+					],
+				},
+			],
 		});
 	});
 
@@ -125,5 +159,70 @@ describe("Playback Solo Region wire", () => {
 				},
 			}),
 		).toEqual({ showId: SHOW_ID, revision: 7 });
+	});
+});
+
+describe("Solo Region color compatibility", () => {
+	it("preserves a saved color when editing another field", () => {
+		const loaded = decodePlaybackSoloSnapshot(
+			{
+				show_id: SHOW_ID,
+				revision: 4,
+				regions: [{ ...ZONE, color: "#aB12fF" }],
+			},
+			SCOPE,
+		);
+		const renamed = { ...loaded.regions[0], name: "Renamed" };
+		expect(
+			encodePlaybackSoloSaveRequest("color-edit", 4, [renamed]).regions,
+		).toEqual([{ ...ZONE, name: "Renamed", color: "#aB12fF" }]);
+	});
+	it("keeps missing legacy colors absent and accepts explicit reset to default", () => {
+		const loaded = decodePlaybackSoloSnapshot(
+			{ show_id: SHOW_ID, revision: 4, regions: [ZONE] },
+			SCOPE,
+		);
+		expect(loaded.regions[0]).not.toHaveProperty("color");
+		expect(
+			encodePlaybackSoloSaveRequest("legacy", 4, loaded.regions).regions[0],
+		).not.toHaveProperty("color");
+		expect(
+			encodePlaybackSoloSaveRequest("reset", 4, [{ ...ZONE, color: null }])
+				.regions[0].color,
+		).toBeNull();
+	});
+	it.each([
+		"red",
+		"#abc",
+		"#aabbccdd",
+		"aabbcc",
+		"#GG1122",
+		" #112233",
+		7,
+	])("rejects invalid saved or edited color %s", (color) => {
+		expect(() =>
+			decodePlaybackSoloSnapshot(
+				{ show_id: SHOW_ID, revision: 4, regions: [{ ...ZONE, color }] },
+				SCOPE,
+			),
+		).toThrow(/regions\[0\]\.color/);
+		expect(() =>
+			encodePlaybackSoloSaveRequest("bad", 4, [{ ...ZONE, color } as never]),
+		).toThrow(/regions\[0\]\.color/);
+	});
+	it("retains color in the authoritative save outcome", () => {
+		const outcome = decodePlaybackSoloSaveOutcome(
+			{
+				show_id: SHOW_ID,
+				revision: 5,
+				regions: [{ ...ZONE, color: "#123456" }],
+				request_id: "color-save",
+				replayed: false,
+				changed: true,
+			},
+			SCOPE,
+			"color-save",
+		);
+		expect(outcome.regions[0].color).toBe("#123456");
 	});
 });

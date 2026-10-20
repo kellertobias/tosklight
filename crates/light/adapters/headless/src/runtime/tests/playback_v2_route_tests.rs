@@ -2686,6 +2686,7 @@ fn install_virtual_playback_test_state(state: &AppState) {
         .assignments
         .extend(assignments);
     snapshot.playback_solo_regions = vec![light_playback::PlaybackSoloRegion {
+        color: None,
         id: Uuid::new_v4(),
         name: "Zone A".into(),
         members: vec![

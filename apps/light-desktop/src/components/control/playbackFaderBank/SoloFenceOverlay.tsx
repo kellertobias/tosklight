@@ -1,11 +1,7 @@
 import { useLayoutEffect, useState } from "react";
 import { soloFencePaths } from "./soloFencePaths";
 import type { PlaybackSoloRegion } from "../../../features/playbackSolo/contracts";
-import {
-	soloFenceSegments,
-	type SoloFenceCell,
-	type SoloFenceSegment,
-} from "./soloFence";
+import { soloFenceSegments, type SoloFenceCell } from "./soloFence";
 
 export function SoloFenceOverlay({
 	bank,
@@ -21,8 +17,8 @@ export function SoloFenceOverlay({
 	const [drawing, setDrawing] = useState<{
 		width: number;
 		height: number;
-		segments: SoloFenceSegment[];
-	}>({ width: 0, height: 0, segments: [] });
+		fences: { regionId: string; color: string; paths: string[] }[];
+	}>({ width: 0, height: 0, fences: [] });
 	useLayoutEffect(() => {
 		const grid = bank;
 		if (!grid || page == null) return;
@@ -56,7 +52,11 @@ export function SoloFenceOverlay({
 			setDrawing({
 				width: bounds.width,
 				height: bounds.height,
-				segments: soloFenceSegments(cells, page, regions),
+				fences: regions.map((region) => ({
+					regionId: region.id,
+					color: region.color ?? "var(--amber)",
+					paths: soloFencePaths(soloFenceSegments(cells, page, [region])),
+				})),
 			});
 		};
 		measure();
@@ -83,9 +83,16 @@ export function SoloFenceOverlay({
 			preserveAspectRatio="none"
 			style={{ pointerEvents: "none" }}
 		>
-			{soloFencePaths(drawing.segments).map((path, index) => (
-				<path key={index} d={path} />
-			))}
+			{drawing.fences.flatMap((fence) =>
+				fence.paths.map((path, index) => (
+					<path
+						key={`${fence.regionId}:${index}`}
+						d={path}
+						data-solo-region={fence.regionId}
+						stroke={fence.color}
+					/>
+				)),
+			)}
 		</svg>
 	);
 }

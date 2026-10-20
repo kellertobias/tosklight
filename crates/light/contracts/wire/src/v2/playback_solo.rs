@@ -9,6 +9,10 @@ use uuid::Uuid;
 pub struct PlaybackSoloRegion {
     pub id: Uuid,
     pub name: String,
+    /// Optional #RRGGBB outline color; absent metadata uses the default amber.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional = nullable)]
+    pub color: Option<String>,
     /// Explicit stable addresses, independent of panes and desks.
     pub members: Vec<super::playback::PlaybackAddressValue>,
 }

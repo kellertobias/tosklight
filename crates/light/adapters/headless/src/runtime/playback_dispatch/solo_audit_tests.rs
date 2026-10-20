@@ -45,6 +45,7 @@ async fn solo_dispatch_audit_reports_actual_released_aliases_and_osc_source() {
             ]
             .into(),
             playback_solo_regions: vec![PlaybackSoloRegion {
+                color: None,
                 id: Uuid::new_v4(),
                 name: "Pair".into(),
                 members: vec![address(1, 1), address(1, 2)],

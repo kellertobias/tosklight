@@ -1626,6 +1626,10 @@ export type PlaybackSurfacePageRequest = { page: number, };
 export type PlaybackSurfacePageLiveActionRequest = { surface_id: string, page: number, };
 export type PlaybackSoloRegion = { id: string, name: string,
 /**
+ * Optional #RRGGBB outline color; absent metadata uses the default amber.
+ */
+color?: string | null,
+/**
  * Explicit stable addresses, independent of panes and desks.
  */
 members: Array<PlaybackAddressValue>, };
