@@ -248,7 +248,7 @@ Every head has a stable identity and an optional master/shared designation. Head
 
 A split is an independently patchable address block configured in Channels. Its footprint follows the slots its channels take up, and every physical channel belongs to one split; each split gets its own optional universe and address in Show Patch. An unpatched split remains selectable, programmable, and visible but emits no DMX.
 
-![Nested fixture mode editor with Heads, Channels, Color, and Geometry tabs](../../assets/screenshots/workflows/fixture-library-mode-editor.png)
+![Nested fixture mode editor with populated channel rows](../../assets/screenshots/workflows/fixture-library-mode-editor.png)
 
 ### Channels
 
