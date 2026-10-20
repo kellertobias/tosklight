@@ -661,6 +661,9 @@ export function decodeVisualizationRuntimeSnapshot(
 			snapshot.profile_output_values,
 			"$.profile_output_values",
 		).sort(compareVisualizationValues),
+		...(snapshot.color_preset_names === undefined
+			? {}
+			: { color_preset_names: decodeColorPresetNames(snapshot.color_preset_names, "$.color_preset_names") }),
 		...(snapshot.commanded_positions === undefined
 			? {}
 			: {
@@ -670,6 +673,19 @@ export function decodeVisualizationRuntimeSnapshot(
 					),
 				}),
 	};
+}
+
+/** Explicit winning Preset authorship, retained only when published by the sheet endpoint. */
+function decodeColorPresetNames(value: unknown, path: string) {
+	return arrayAt(value, path).map((entry, index) => {
+		const rowPath = `${path}[${index}]`;
+		const row = recordAt(entry, rowPath);
+		return {
+			fixture_id: stringAt(row.fixture_id, `${rowPath}.fixture_id`),
+			preset_instance_id: programmingUuidAt(row.preset_instance_id, `${rowPath}.preset_instance_id`),
+			name: stringAt(row.name, `${rowPath}.name`),
+		};
+	});
 }
 
 /** The Fixture Sheet's commanded Pan/Tilt rows (TL-552). */

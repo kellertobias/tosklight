@@ -1,5 +1,7 @@
 import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { decodeVisualizationRuntimeSnapshot } from "../api/VisualizationRuntimeTransport";
+import { srgbToXyz } from "../features/presetPreview/colorDisplay";
 import { fixtureSheetColumns } from "./fixtureSheetColumns";
 import { useFixtureSheetRows } from "./fixtureSheetProjection";
 
@@ -154,6 +156,32 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Fixture Sheet scoped Group runtime", () => {
+	it("carries decoded wire Preset provenance through the real sheet rows and Color cell, then clears it for identical literals", () => {
+		const wire = {
+			scope: { show_id: "show-a" }, revision: 1, generated_at: "2026-10-20T12:00:00.000Z",
+			grand_master: 1, blackout: false, preload: false,
+			values: [{ fixture_id: "fixture-1", attribute: "color", value: { kind: "color_xyz", value: srgbToXyz(1, 0, 0) } }],
+			profile_output_values: [],
+			color_preset_names: [{ fixture_id: "fixture-1", preset_instance_id: "33333333-3333-4333-8333-333333333333", name: "Opening ruby" }],
+		};
+		let visualization = decodeVisualizationRuntimeSnapshot(wire, "normal");
+		const view = renderHook(() => useFixtureSheetRows({
+			visualization, preloadVisualization: null, fixtureOrder: "fixture-id", activeOnly: false,
+			selectedCueList: null, includedHeads: "all", highlight: null, active: true,
+		}));
+		expect(view.result.current.rows[0].colorLabel).toBe("Opening ruby");
+		const column = fixtureSheetColumns(false, () => ({ base: false, containedBase: false, containedCurrent: false, current: false })).find(column => column.id === "color")!;
+		const cell = render(<>{column.render(view.result.current.rows[0], 0)}</>);
+		expect(screen.getByText("Opening ruby")).toBeVisible();
+		expect(screen.queryByText("<Red>")).toBeNull();
+		visualization = decodeVisualizationRuntimeSnapshot({ ...wire, color_preset_names: [] }, "normal");
+		view.rerender();
+		expect(view.result.current.rows[0].colorLabel).toBe("<Red>");
+		cell.rerender(<>{column.render(view.result.current.rows[0], 0)}</>);
+		expect(screen.getByText("<Red>")).toBeVisible();
+		expect(screen.queryByText("Opening ruby")).toBeNull();
+	});
+
 	it("uses authoritative assignment and master for limiting-group output", () => {
 		const view = renderHook(rows);
 
