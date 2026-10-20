@@ -21,7 +21,8 @@ def request():
     return dict(schema=1, candidate_sha='a' * 40, runner_pid=10, runner_start_ticks=100,
                 root_pid=20, root_start_ticks=200, target_pid=30, target_start_ticks=300,
                 uid=1000, elf_sha256='b' * 64, elf_build_id='c' * 40, duration_seconds=10,
-                allow_root=0, perf_path='/usr/lib/linux-tools/perf', perf_sha256='d' * 64)
+                allow_root=0, perf_path='/usr/lib/linux-tools/perf', perf_sha256='d' * 64,
+                decoder_path='/usr/lib/linux-hwe-tools/perf', decoder_sha256='e' * 64)
 
 
 def sample(symbol='light_dynamics::runtime::sampling::staged::evaluate', period=7,
@@ -71,7 +72,8 @@ class Pure(unittest.TestCase):
         with mock.patch.object(p.os, 'getuid', return_value=1000):
             self.assertEqual(p.validate_request(request()), request())
             for key, value in [('extra', 1), ('duration_seconds', 11), ('target_pid', True),
-                               ('schema', True), ('elf_build_id', '/secret'), ('perf_path', 'perf')]:
+                               ('schema', True), ('elf_build_id', '/secret'), ('perf_path', 'perf'),
+                               ('decoder_path', 'perf'), ('decoder_sha256', 'f' * 63)]:
                 bad = request(); bad[key] = value
                 self.refused('request', p.validate_request, bad)
         with mock.patch.object(p.os, 'getuid', return_value=0):
@@ -274,6 +276,32 @@ class Pure(unittest.TestCase):
             self.assertEqual(value['available'], 0)
             p.validate_envelope(dict(report=value, provenance=provenance))
 
+    def test_rust_v0_frames_demangle_before_categories_and_unknown_names_stay_unrecognized(self):
+        mangled = '_RNvNtNtCs1_14light_dynamics7runtime8sampling8evaluate'
+        local = '_RNvNtCs2_12light_engine6render'
+        text = (f'30/31 1.234567890: 7 cpu-clock:u: a1 {mangled}.llvm.123 (/owned)\n'
+                f'\ta2 {local} (/owned)\n\ta3 _RNvCs3_7unknownx (/owned)\n\n')
+        seen = []
+        def demangle(names):
+            seen.append(names)
+            known = {mangled: '<light_dynamics[b6d1476a5a254282]::runtime::sampling::Lane>::evaluate',
+                     local: 'light_engine[0123456789abcdef]::render::<[f32]>'}
+            return [known.get(name, name) for name in names]
+        result = p.demangle_rust(text, demangle)
+        self.assertEqual(seen, [sorted({mangled, local, '_RNvCs3_7unknownx'})])
+        self.assertIn('a1 <light_dynamics::runtime::sampling::Lane>::evaluate (/owned)', result)
+        self.assertIn('\ta2 light_engine::render::<[f32]> (/owned)', result)
+        self.assertIn('\ta3 _RNvCs3_7unknownx (/owned)', result)
+        decoded_rows = p.decode(result, 30, {30, 31}, '/owned', {'samples': 1, 'lost': 0},
+                                interval=(1, 2), executable_maps=[(0xa0, 0xb0, 0)])
+        self.assertEqual(decoded_rows['owned_rust_chains'], 1)
+        self.assertEqual(decoded_rows['rows'][1]['self_samples'], 1)
+        # Plain text passes through untouched without asking the demangler.
+        self.assertEqual(p.demangle_rust(sample(), lambda names: self.fail(names)), sample())
+        for broken in (lambda names: names[:-1], lambda names: [''] * len(names), lambda names: None):
+            with self.assertRaises(p.Refused):
+                p.demangle_rust(text, broken)
+
     def test_weighted_self_inclusive_and_owned_rust_multiframe(self):
         result = decoded(sample(period=7) + sample(symbol='light_engine::render', period=11), n=2)
         self.assertEqual((result['samples'], result['period'], result['frames']), (2, 18, 4))
@@ -465,6 +493,36 @@ class Pure(unittest.TestCase):
                 r = p.capture('/perf', 30, {31}, '/owned', output, 2, 100, lambda: None,
                               executable_maps=[(0xa0, 0xb0, 0)])
                 self.assertEqual(r['samples'], 1)
+
+    def test_capture_records_with_the_recorder_and_decodes_with_the_decoder(self):
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+            used = {}
+            def tool(argv, spool, name, deadline, seconds=None, guard=None, window=None):
+                used[name] = argv[0]
+                if name == 'record':
+                    window['begin'] = 1.0
+                    return b''
+                return sample().encode()
+            for decoder, expected in ((None, '/perf'), (Path('/decoder/perf'), '/decoder/perf')):
+                used.clear()
+                with mock.patch.object(p, 'run_tool', side_effect=tool), \
+                     mock.patch.object(p, 'bounded_read', return_value=raw()), \
+                     mock.patch.object(p.time, 'monotonic', side_effect=[1.0, 2.0, 3.0]):
+                    p.capture('/perf', 30, {31}, '/owned', Path(folder) / f'capture-{expected[1:4]}', 2, 100,
+                              lambda: None, executable_maps=[(0xa0, 0xb0, 0)], decoder=decoder)
+                self.assertEqual(used, {'record': '/perf', 'decode': expected})
+
+    def test_decoder_selection_reads_its_own_pinned_hash(self):
+        requested = []
+        def tool_hash(fd, deadline, cap):
+            return 'e' * 64
+        with tempfile.TemporaryDirectory(dir=p.artifact_path('LIGHT_TMP_DIR', 'TMP_ROOT')) as folder:
+            perf = Path(folder) / 'perf'; perf.write_bytes(b'\x7fELF' + b'0' * 64); perf.chmod(0o755)
+            with mock.patch.object(p, 'stream_hash', side_effect=tool_hash), \
+                 mock.patch.object(p.os, 'fstat', side_effect=lambda fd: mock.Mock(st_mode=0o100755, st_uid=0, st_size=68, st_dev=1, st_ino=2, st_mtime_ns=3, st_ctime_ns=4)):
+                value = dict(request(), perf_path=str(perf), decoder_path=str(perf))
+                self.assertEqual(p.selected_perf(value, 100, 'decoder')[0], perf)
+                self.refused('tool', p.selected_perf, value, 100)
 
     def test_time_conv_fixed_structural_bounds(self):
         good = bytearray(raw((79, 9)))
