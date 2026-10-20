@@ -20,6 +20,7 @@ import type {
 	TileCamera,
 } from "./types";
 import { directionIndicator, planeDelta, projectPoint } from "./types";
+import { venueWorldCentre } from "./venueGeometryPoints";
 
 /** The axis a move is constrained to while a drag is in flight. */
 export type MoveAxis = "plane" | "horizontal" | "vertical";
@@ -213,6 +214,10 @@ export function worldGeometry(
 				PlanPoint,
 			],
 		})),
+		pickTriangles: geometry.pickTriangles?.map((triangle) => ({
+			...triangle,
+			points: triangle.points.map(transform) as typeof triangle.points,
+		})),
 		outlines: geometry.outlines.map((outline) => outline.map(transform)),
 		lines: geometry.lines.map((line) => ({
 			...line,
@@ -262,17 +267,18 @@ export function pointInPolygon(
 
 /** Paint order along the axis the view looks down. */
 export function viewDepth(entity: CadEntity, view: CadViewDirection): number {
+	const position = venueWorldCentre(entity) ?? entity.positionMillimetres;
 	switch (view) {
 		case "top_down":
-			return entity.positionMillimetres[2];
+			return position[2];
 		case "left_to_right":
-			return -entity.positionMillimetres[0];
+			return -position[0];
 		case "right_to_left":
-			return entity.positionMillimetres[0];
+			return position[0];
 		case "front_to_back":
-			return -entity.positionMillimetres[1];
+			return -position[1];
 		case "back_to_front":
-			return entity.positionMillimetres[1];
+			return position[1];
 	}
 }
 
@@ -396,8 +402,8 @@ export function pickEntity(
 			rotationQuarterTurns,
 		);
 		if (
-			geometry.triangles.some((triangle) =>
-				pointInTriangle(point, triangle.points),
+			[...geometry.triangles, ...(geometry.pickTriangles ?? [])].some(
+				(triangle) => pointInTriangle(point, triangle.points),
 			)
 		)
 			return entity;
@@ -407,6 +413,7 @@ export function pickEntity(
 		if (
 			venue &&
 			venue.kind !== "wall" &&
+			geometry.pickTriangles === undefined &&
 			view === "top_down" &&
 			pointInPolygon(
 				point,

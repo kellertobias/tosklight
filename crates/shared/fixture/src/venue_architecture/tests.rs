@@ -292,3 +292,62 @@ fn scenery_options_cannot_bypass_architecture_validation() {
         .is_err()
     );
 }
+
+#[test]
+fn stairs_steps_and_placement_dimensions_are_validated_and_roundtrip() {
+    for steps in [0, 257, u32::MAX] {
+        let stairs = VenueArchitecture::Stairs { steps };
+        assert!(stairs.validate().unwrap_err().contains("1 to 256 steps"));
+        assert!(
+            SceneryOptions {
+                architecture: Some(stairs),
+                ..Default::default()
+            }
+            .validate()
+            .is_err()
+        );
+    }
+    for steps in [1, 16, 256] {
+        let stairs = VenueArchitecture::Stairs { steps };
+        stairs
+            .validate_placement_millimetres([1200.0, 3000.0, 4500.0])
+            .unwrap();
+        let encoded = serde_json::to_value(&stairs).unwrap();
+        assert_eq!(encoded, json!({"kind":"stairs","steps":steps}));
+        assert_eq!(
+            serde_json::from_value::<VenueArchitecture>(encoded).unwrap(),
+            stairs
+        );
+        for dimensions in [
+            [0.0, 3000.0, 4500.0],
+            [1200.0, -1.0, 4500.0],
+            [1200.0, 3000.0, 0.0],
+            [f64::NAN, 3000.0, 4500.0],
+        ] {
+            assert!(stairs.validate_placement_millimetres(dimensions).is_err());
+        }
+    }
+}
+
+#[test]
+fn floor_slab_purpose_roundtrips_with_its_dimensions_and_elevation() {
+    let floor = VenueArchitecture::Slab {
+        purpose: VenueSlabPurpose::Floor,
+        outline_millimetres: vec![
+            VenuePlanPoint { x: 0, y: 0 },
+            VenuePlanPoint { x: 4000, y: 0 },
+            VenuePlanPoint { x: 0, y: 3000 },
+        ],
+        elevation_millimetres: 0,
+        thickness_millimetres: 150,
+    };
+    floor
+        .validate_placement_millimetres([4000.0, 150.0, 3000.0])
+        .unwrap();
+    let encoded = serde_json::to_value(&floor).unwrap();
+    assert_eq!(encoded["purpose"], "floor");
+    assert_eq!(
+        serde_json::from_value::<VenueArchitecture>(encoded).unwrap(),
+        floor
+    );
+}

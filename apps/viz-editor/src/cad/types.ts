@@ -46,6 +46,7 @@ export interface CadEntity {
 	venueGeometry?: {
 		triangles: [number[], number[], number[]][];
 		plan: [[number, number], [number, number]][];
+		elevation?: [[number, number, number], [number, number, number]][];
 	};
 	/** The clip this fixture hangs by, at the size it is drawn; absent when it has no box. */
 	mounting?: CadMounting;

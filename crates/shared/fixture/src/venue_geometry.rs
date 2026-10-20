@@ -4,6 +4,8 @@ use crate::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct VenueGeometry {
+    /// Context removed physical floor area; false preserves a legacy floor unchanged.
+    pub has_stair_cutouts: bool,
     pub triangles: Vec<[[f64; 3]; 3]>,
     /// Parallel surface roles; structural furniture legs are bare metal.
     pub metallic: Vec<bool>,
@@ -18,6 +20,7 @@ pub fn venue_geometry(
     architecture.validate_placement_millimetres(size)?;
     let mut result = VenueGeometry::default();
     match architecture {
+        VenueArchitecture::Stairs { steps } => stairs::build(&mut result, size, *steps),
         VenueArchitecture::Wall { openings, .. } => wall::build(&mut result, size, openings),
         VenueArchitecture::Slab {
             outline_millimetres,
@@ -186,7 +189,11 @@ fn triangulate(p: &[[f64; 2]]) -> Vec<[usize; 3]> {
 }
 mod furniture;
 mod rooms;
+mod stairs;
 pub use rooms::{VenueRoom, VenueWallRun, venue_rooms};
+pub use stairs::{
+    VenueStairVolume, venue_floor_slab, venue_geometry_in_context, venue_stair_volume,
+};
 #[cfg(test)]
 mod tests;
 mod wall;

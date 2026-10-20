@@ -733,7 +733,7 @@ right of the drawing.
 ## Rough venue tools
 
 **Venue tools** in the CAD title opens the venue builder. Choose **Wall**, **Pillar**,
-**Roof / balcony**, **Table**, **Chair** or **Bar**, give it a name and dimensions, then press
+**Floor / roof / balcony**, **Stairs**, **Table**, **Chair** or **Bar**, give it a name and dimensions, then press
 **Place**. Dimensions and positions are in metres; **Angle** turns the object around the vertical
 axis. Position X/Y is the centre of a wall or furniture footprint, and Position Z is its floor
 height. Nothing is written until **Place**. A refused shape stays in the dialog with the reason.
@@ -741,7 +741,9 @@ height. Nothing is written until **Place**. A refused shape stays in the dialog 
 A **Wall** has length, height and thickness. Its centre, length and angle determine its endpoints.
 **Snap endpoints to nearby walls (25 cm)** is on initially: placing or applying a wall moves the
 nearest endpoint onto another endpoint within that distance, keeping its length and heading.
-Turn it off for a deliberate gap. **Room ceiling height** sets the height used when walls enclose
+Turn it off for a deliberate gap. **Wall colour** offers a colour picker and a six-digit **Wall colour hex** value; the colour is
+kept with that wall and its Undo/Redo history. New walls start neutral grey.
+**Room ceiling height** sets the height used when walls enclose
 a room. If enclosing walls request different ceiling heights, the lowest requested height is used.
 
 **Add window** and **Add door** add openings to that wall. Each opening has an offset from the
@@ -757,13 +759,22 @@ footprints keep width and depth equal. **Table** offers round and rectangular fo
 custom dimensions. **Chair** offers **Black with metal legs**, **Decorative white** and **Bar stool**.
 A **Bar** is a solid counter with adjustable width, height and depth.
 
-For **Roof / balcony**, choose **Roof** or **Balcony**, then set **Elevation above floor** and
-**Slab thickness**. The outline is an ordered list of local horizontal points: X is across the
+For **Floor / roof / balcony**, choose **Floor**, **Roof** or **Balcony**, then set **Elevation above floor** and
+**Slab thickness**. A floor uses the same editable outline and elevation controls as a balcony;
+set elevation to 0 for the venue floor or raise it for a landing. Stair intersections create floor
+openings automatically. The outline is an ordered list of local horizontal points: X is across the
 object and **Depth** is positive toward the front (audience). Edit each point in metres, use **Add outline point**
 to insert a point on the closing edge, or **Remove point** to simplify the outline. At least three
 points must remain. Crossing edges and zero-area outlines are refused. Position moves the whole
 outline; Angle turns it. Elevation is measured above the placement's floor datum, so a balcony can
 be duplicated and raised independently to form several stacked theatre levels.
+
+**Stairs** has **Width**, total **Rise**, horizontal **Run** and **Steps** (1–256). A new flight
+starts at 1.2 m wide, rises 3 m over a 4.5 m run and has 16 steps. The flight rises along positive
+local Depth, towards the front (audience); use **Angle** to turn its direction. Position Z is the
+lower floor datum. A staircase intersecting a floor or balcony creates its opening automatically in
+Architect, exported plans and 3D; moving or resizing the stairs updates that opening. No separate
+cutout object is needed.
 
 Select a venue construction and open **Info → Placement → Edit venue element** to change these
 choices later. **Apply** stores the complete assembly as one operation. The normal CAD selection,

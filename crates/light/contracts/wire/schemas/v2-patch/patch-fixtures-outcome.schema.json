@@ -1528,6 +1528,26 @@
           ]
         },
         {
+          "description": "A solid flight sized by the placement's width, rise and horizontal run.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "stairs"
+            },
+            "steps": {
+              "type": "integer",
+              "format": "uint32",
+              "maximum": 256,
+              "minimum": 1
+            }
+          },
+          "required": [
+            "kind",
+            "steps"
+          ]
+        },
+        {
           "description": "A closed, solid counter; its width, height and depth belong to the placement.",
           "type": "object",
           "properties": {
@@ -1600,6 +1620,7 @@
     "VenueSlabPurpose": {
       "type": "string",
       "enum": [
+        "floor",
         "roof",
         "balcony"
       ]

@@ -35,6 +35,7 @@ pub(super) fn application_architecture(
         wire::VenueArchitecture::Chair { style } => fixture::VenueArchitecture::Chair {
             style: application_chair_style(style),
         },
+        wire::VenueArchitecture::Stairs { steps } => fixture::VenueArchitecture::Stairs { steps },
         wire::VenueArchitecture::Bar => fixture::VenueArchitecture::Bar,
     }
 }
@@ -63,6 +64,7 @@ fn application_opening(value: wire::WallOpening) -> fixture::WallOpening {
 }
 fn application_slab_purpose(v: wire::VenueSlabPurpose) -> fixture::VenueSlabPurpose {
     match v {
+        wire::VenueSlabPurpose::Floor => fixture::VenueSlabPurpose::Floor,
         wire::VenueSlabPurpose::Roof => fixture::VenueSlabPurpose::Roof,
         wire::VenueSlabPurpose::Balcony => fixture::VenueSlabPurpose::Balcony,
     }
@@ -144,6 +146,7 @@ pub(super) fn wire_architecture(value: fixture::VenueArchitecture) -> wire::Venu
         fixture::VenueArchitecture::Chair { style } => wire::VenueArchitecture::Chair {
             style: wire_chair_style(style),
         },
+        fixture::VenueArchitecture::Stairs { steps } => wire::VenueArchitecture::Stairs { steps },
         fixture::VenueArchitecture::Bar => wire::VenueArchitecture::Bar,
     }
 }
@@ -172,6 +175,7 @@ fn wire_opening(value: fixture::WallOpening) -> wire::WallOpening {
 }
 fn wire_slab_purpose(v: fixture::VenueSlabPurpose) -> wire::VenueSlabPurpose {
     match v {
+        fixture::VenueSlabPurpose::Floor => wire::VenueSlabPurpose::Floor,
         fixture::VenueSlabPurpose::Roof => wire::VenueSlabPurpose::Roof,
         fixture::VenueSlabPurpose::Balcony => wire::VenueSlabPurpose::Balcony,
     }
@@ -231,6 +235,10 @@ mod tests {
         let id = "b2da4015-5cb5-4fd4-bf90-6ffeb9ff8751";
         let mut values = vec![
             json!({"kind":"bar"}),
+            json!({"kind":"slab","purpose":"floor","outline_millimetres":[{"x":0,"y":0},{"x":4000,"y":0},{"x":2000,"y":3000}],"elevation_millimetres":0,"thickness_millimetres":150}),
+            json!({"kind":"stairs","steps":1}),
+            json!({"kind":"stairs","steps":16}),
+            json!({"kind":"stairs","steps":256}),
             json!({"kind":"slab","purpose":"balcony","outline_millimetres":[{"x":0,"y":0},{"x":4000,"y":0},{"x":2000,"y":3000}],"elevation_millimetres":3000,"thickness_millimetres":300}),
         ];
         for shape in ["round", "square", "rectangular"] {

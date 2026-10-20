@@ -22,6 +22,7 @@ mod position_freeze;
 mod profile;
 mod scenery_options;
 mod venue_architecture;
+mod venue_drawing;
 mod venue_geometry;
 
 pub use color_calibration::*;
@@ -42,7 +43,11 @@ pub use position_freeze::*;
 pub use profile::*;
 pub use scenery_options::*;
 pub use venue_architecture::*;
-pub use venue_geometry::{VenueGeometry, VenueRoom, VenueWallRun, venue_geometry, venue_rooms};
+pub use venue_drawing::venue_wall_drawing;
+pub use venue_geometry::{
+    VenueGeometry, VenueRoom, VenueStairVolume, VenueWallRun, venue_floor_slab, venue_geometry,
+    venue_geometry_in_context, venue_rooms, venue_stair_volume,
+};
 
 #[cfg(test)]
 mod tests;

@@ -245,3 +245,33 @@ describe("Elements › Objects groups", () => {
 		);
 	});
 });
+
+it("labels a floor by its slab purpose", () => {
+	renderObjects([
+		venue("11", "Ground level", {
+			scenery: {
+				kind: "box",
+				chords: 0,
+				pattern: "standard",
+				architecture: {
+					kind: "slab",
+					purpose: "floor",
+					outline_millimetres: [
+						{ x: 0, y: 0 },
+						{ x: 1000, y: 0 },
+						{ x: 0, y: 1000 },
+					],
+					elevation_millimetres: 0,
+					thickness_millimetres: 150,
+				},
+			},
+		}),
+	]);
+	const row = within(
+		screen.getByRole("region", { name: "Venue items" }),
+	).getByRole("button", { name: /Ground level/ });
+	expect(row.querySelector(".cad-elements-object-kind")).toHaveTextContent(
+		"Floor",
+	);
+	expect(row).not.toHaveTextContent("box");
+});

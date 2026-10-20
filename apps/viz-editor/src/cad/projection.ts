@@ -53,6 +53,8 @@ export interface PlanLine {
 export interface PlanGeometry {
 	source: "live_model" | "model_drawing" | "model" | "typed" | "unknown";
 	triangles: PlanTriangle[];
+	/** Physical hit faces retained when venue plan rendering uses linework only. */
+	pickTriangles?: PlanTriangle[];
 	outlines: PlanPoint[][];
 	lines: PlanLine[];
 	/**

@@ -73,3 +73,19 @@ representative exported venue plan have been exercised with a separate Showcase 
 captures cover all four qualities and an interior capture retains the enclosure. CI and final
 integration evidence are recorded in TL-843's Working Log. Human acceptance remains separate from
 source/test completion.
+
+## Stairs, wall finishes and architectural symbols
+
+Stairs expose width, total rise, horizontal run and step count. Their transformed footprint
+subtracts a real opening from every intersected raised floor, balcony or roof slab within the
+flight's rise. The supporting floor and higher, unreached floors remain intact. Context is
+recomputed after placement changes, deletion and Undo; holes are derived rather than stored
+separately. Shared clipped solids and boundary contours feed CAD picking, PDF and native 3D.
+Existing floor scenery also receives openings when intersected, without changing other legacy
+floors. The Floor slab purpose supports custom outlines and raised landings.
+
+Wall creation and editing include a colour picker and hexadecimal colour value. Colours use
+the existing portable scenery finish and follow the same undoable transaction as the wall.
+Top plans draw paired glazing between jambs. Elevations use clean rectangular, circular and
+flat-bottom arched frame contours instead of the physical wall mesh's subtraction-strip seams.
+Drawing symbols do not add opaque glass to the renderer's physical light blockers.

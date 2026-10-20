@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
 	patchSnapshot: vi.fn(),
 	patchVenue: vi.fn(),
 	snapshot: vi.fn(),
+	placeProfile: vi.fn(),
 }));
 vi.mock("../document/session", () => ({
 	documentSession: { patchSnapshot: mocks.patchSnapshot },
@@ -16,7 +17,7 @@ vi.mock("../document/session", () => ({
 vi.mock("./session", () => ({
 	cadSession: { snapshot: mocks.snapshot, patchVenue: mocks.patchVenue },
 }));
-vi.mock("./cadPlacement", () => ({ placeProfile: vi.fn() }));
+vi.mock("./cadPlacement", () => ({ placeProfile: mocks.placeProfile }));
 const wall = () =>
 	({
 		fixtureId: "wall-a",
@@ -41,6 +42,10 @@ beforeEach(() => {
 	});
 	mocks.snapshot.mockResolvedValue({ sceneRevision: 9 });
 	mocks.patchVenue.mockResolvedValue({});
+	mocks.placeProfile.mockResolvedValue({
+		ok: true,
+		fixtureIds: ["new-stairs"],
+	});
 });
 function edit(fixture = wall()) {
 	render(
@@ -143,4 +148,98 @@ it("snaps a chosen endpoint to a rotated wall and excludes the wall being edited
 		z: 0,
 	});
 	expect(snapWallDraft(draft, [other], "other")).toEqual(draft);
+});
+
+it("creates stairs with explicit width, rise, run and an integer step count", async () => {
+	const onPlaced = vi.fn();
+	render(
+		<ModalProvider>
+			<CadArchitectureModal onClose={() => {}} onPlaced={onPlaced} />
+		</ModalProvider>,
+	);
+	fireEvent.change(
+		screen.getByRole("combobox", { name: "Venue element type" }),
+		{ target: { value: "stairs" } },
+	);
+	expect(screen.getByRole("textbox", { name: "Width" })).toHaveValue("1.2");
+	expect(screen.getByRole("textbox", { name: "Rise" })).toHaveValue("3");
+	expect(screen.getByRole("textbox", { name: "Run" })).toHaveValue("4.5");
+	expect(screen.getByRole("textbox", { name: "Steps" })).toHaveValue("16");
+	number("Rise", "3.6");
+	number("Run", "5.4");
+	number("Steps", "18");
+	fireEvent.click(screen.getByRole("button", { name: "Place" }));
+	await waitFor(() => expect(onPlaced).toHaveBeenCalledWith(["new-stairs"]));
+	expect(mocks.placeProfile.mock.calls[0][4]).toMatchObject({
+		sceneryOptions: { architecture: { kind: "stairs", steps: 18 } },
+		scenerySizeMetres: { x: 1200, y: 3600, z: 5400 },
+	});
+});
+it("edits stair dimensions and steps through the whole-assembly undoable command", async () => {
+	edit({
+		...wall(),
+		sceneryOptions: { architecture: { kind: "stairs", steps: 16 } },
+		scenerySizeMetres: { x: 1200, y: 3000, z: 4500 },
+	} as PatchFixtureProjection);
+	number("Steps", "20");
+	number("Rise", "4");
+	fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+	await waitFor(() => expect(mocks.patchVenue).toHaveBeenCalledOnce());
+	expect(mocks.patchVenue.mock.calls[0][1][0]).toMatchObject({
+		sceneryOptions: { architecture: { kind: "stairs", steps: 20 } },
+		scenerySizeMetres: { x: 1200, y: 4000, z: 4500 },
+	});
+});
+it("preserves a wall's stored colour and commits picker or hex changes with its complete assembly", async () => {
+	edit({
+		...wall(),
+		sceneryOptions: {
+			colourSrgb: "#aabbcc",
+			architecture: { kind: "wall", openings: [] },
+		},
+	} as PatchFixtureProjection);
+	expect(screen.getByLabelText("Wall colour")).toHaveValue("#aabbcc");
+	fireEvent.change(screen.getByLabelText("Wall colour"), {
+		target: { value: "#112233" },
+	});
+	const hex = screen.getByRole("textbox", { name: "Wall colour hex" });
+	expect(hex).toHaveValue("#112233");
+	fireEvent.change(hex, { target: { value: "#334455" } });
+	fireEvent.blur(hex);
+	fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+	await waitFor(() => expect(mocks.patchVenue).toHaveBeenCalledOnce());
+	expect(mocks.patchVenue.mock.calls[0][1][0].sceneryOptions).toMatchObject({
+		colourSrgb: "#334455",
+		architecture: { kind: "wall", openings: [] },
+	});
+});
+
+it("authors a floor with its own outline, floor datum and thickness", async () => {
+	const onPlaced = vi.fn();
+	render(
+		<ModalProvider>
+			<CadArchitectureModal onClose={() => {}} onPlaced={onPlaced} />
+		</ModalProvider>,
+	);
+	fireEvent.change(
+		screen.getByRole("combobox", { name: "Venue element type" }),
+		{ target: { value: "slab" } },
+	);
+	expect(screen.getByRole("option", { name: "Floor" })).toBeInTheDocument();
+	fireEvent.change(screen.getByRole("combobox", { name: "Slab type" }), {
+		target: { value: "floor" },
+	});
+	number("Elevation above floor", "0");
+	number("Slab thickness", "0.15");
+	fireEvent.click(screen.getByRole("button", { name: "Place" }));
+	await waitFor(() => expect(onPlaced).toHaveBeenCalled());
+	expect(
+		mocks.placeProfile.mock.calls[0][4].sceneryOptions.architecture,
+	).toMatchObject({
+		kind: "slab",
+		purpose: "floor",
+		elevation_millimetres: 0,
+		thickness_millimetres: 150,
+		outline_millimetres: expect.any(Array),
+	});
 });

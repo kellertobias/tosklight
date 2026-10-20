@@ -357,22 +357,22 @@ fn push_plan_scenery(
     values: &SceneValues,
     style: &FrameStyle,
 ) {
-    let posed: Vec<_> = scene
+    let mut posed: Vec<_> = scene
         .scenery
         .iter()
         .map(|o| o.posed_by(&values.position_points))
         .collect();
+    scenery::architecture::apply_floor_cutouts(&mut posed);
     let outline_style = FrameStyle {
         scenery_surfaces: false,
         camera_position: None,
         ..style.clone()
     };
     scenery::architecture::push_all(frame, &posed, &outline_style);
-    for object in &scene.scenery {
+    for object in &posed {
         if object.architecture.is_some() {
             continue;
         }
-        let object = object.posed_by(&values.position_points);
         frame.mesh(MeshKind::Cube).push(MeshInstance::new(
             Mat4::from_rotation_translation(
                 euler_degrees(object.rotation_degrees),

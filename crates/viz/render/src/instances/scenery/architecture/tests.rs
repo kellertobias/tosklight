@@ -195,3 +195,91 @@ fn open_door_centre_passes_light_but_actual_leaf_blocks_it() {
         }
     }
 }
+
+#[test]
+fn stair_cutouts_are_open_in_visible_slab_and_physical_blockers() {
+    use bytemuck::Zeroable;
+    let stair = SceneryObject {
+        size: Vec3::new(1.2, 3.0, 4.5),
+        position: Vec3::new(0.0, 1.5, 0.0),
+        architecture: Some(VenueArchitecture::Stairs { steps: 16 }),
+        ..Default::default()
+    };
+    let slab = SceneryObject {
+        size: Vec3::new(8.0, 0.2, 8.0),
+        architecture: Some(VenueArchitecture::Slab {
+            purpose: VenueSlabPurpose::Balcony,
+            outline_millimetres: vec![
+                light_fixture::VenuePlanPoint { x: -4000, y: -4000 },
+                light_fixture::VenuePlanPoint { x: 4000, y: -4000 },
+                light_fixture::VenuePlanPoint { x: 4000, y: 4000 },
+                light_fixture::VenuePlanPoint { x: -4000, y: 4000 },
+            ],
+            elevation_millimetres: 1500,
+            thickness_millimetres: 200,
+        }),
+        ..Default::default()
+    };
+    let mut frame = FrameInstances::default();
+    push_all(&mut frame, &[stair, slab], &FrameStyle::default());
+    let blocked = |x: f32| {
+        let mut lights = [super::super::super::GpuLight {
+            position_range: [x, 1.0, -1.8, 20.0],
+            direction_cos_outer: [0.0, 1.0, 0.0, 0.1],
+            ..Zeroable::zeroed()
+        }];
+        let packed = crate::renderer::curtain_occlusion::pack(&mut lights, &frame.curtain_blockers);
+        let point = Vec3::new(x, 2.5, -1.8).extend(1.0);
+        packed.iter().skip(1).any(|b| {
+            glam::Vec4::from_array(b.planes[4]).dot(point) > 0.0
+                && b.planes[..4]
+                    .iter()
+                    .all(|plane| glam::Vec4::from_array(*plane).dot(point) >= -1e-6)
+        })
+    };
+    assert!(
+        !blocked(0.0),
+        "true stairwell aperture must pass light above the low steps"
+    );
+    assert!(
+        blocked(2.0),
+        "the floor beside the stairwell must remain a physical blocker"
+    );
+}
+
+#[test]
+fn legacy_floor_conversion_keeps_support_floor_and_cuts_the_reached_floor_only() {
+    let stairs = SceneryObject {
+        size: Vec3::new(1.2, 3.0, 4.5),
+        position: Vec3::new(0.0, 1.5, 0.0),
+        architecture: Some(VenueArchitecture::Stairs { steps: 16 }),
+        ..Default::default()
+    };
+    let support = SceneryObject {
+        kind: SceneryKind::Floor,
+        size: Vec3::new(8.0, 0.2, 8.0),
+        position: Vec3::new(0.0, -0.1, 0.0),
+        ..Default::default()
+    };
+    let upper = SceneryObject {
+        kind: SceneryKind::Floor,
+        size: Vec3::new(8.0, 0.2, 8.0),
+        position: Vec3::new(0.0, 1.6, 0.0),
+        ..Default::default()
+    };
+    let distant = SceneryObject {
+        position: Vec3::new(20.0, 1.6, 0.0),
+        ..upper.clone()
+    };
+    let mut objects = [stairs, support, upper, distant];
+    apply_floor_cutouts(&mut objects);
+    assert!(objects[1].architecture.is_none());
+    assert!(matches!(
+        objects[2].architecture,
+        Some(VenueArchitecture::Slab {
+            purpose: VenueSlabPurpose::Floor,
+            ..
+        })
+    ));
+    assert!(objects[3].architecture.is_none());
+}

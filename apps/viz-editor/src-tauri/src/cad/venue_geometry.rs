@@ -7,6 +7,8 @@ use serde::Serialize;
 pub struct CadVenueGeometry {
     pub triangles: Vec<[[f64; 3]; 3]>,
     pub plan: Vec<[[f64; 2]; 2]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub elevation: Vec<[[f64; 3]; 2]>,
 }
 
 pub fn for_fixture(patch: &PatchedFixturePatch, size: [f32; 3]) -> Option<CadVenueGeometry> {
@@ -26,6 +28,16 @@ pub fn for_fixture(patch: &PatchedFixturePatch, size: [f32; 3]) -> Option<CadVen
             .map(|t| t.map(|p| [p[0], p[1] + lift, p[2]]))
             .collect(),
         plan: geometry.plan,
+        elevation: match architecture {
+            VenueArchitecture::Wall { openings, .. } => light_fixture::venue_wall_drawing(
+                [size[0], size[2], size[1]].map(f64::from),
+                openings,
+            )
+            .into_iter()
+            .map(|line| line.map(|p| [p[0], p[1] + lift, p[2]]))
+            .collect(),
+            _ => vec![],
+        },
     })
 }
 
@@ -79,13 +91,18 @@ pub fn with_ceilings(mut entities: Vec<super::CadEntity>) -> Vec<super::CadEntit
         ceiling.venue_geometry = Some(CadVenueGeometry {
             triangles: geometry.triangles,
             plan: geometry.plan,
+            elevation: vec![],
         });
         ceiling.scenery.as_mut().unwrap().architecture = Some(roof);
         entities.push(ceiling);
     }
+    context::apply(&mut entities);
     entities
 }
 
 #[cfg(test)]
 #[path = "venue_geometry_tests.rs"]
 mod tests;
+
+#[path = "venue_geometry_context.rs"]
+mod context;

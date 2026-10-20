@@ -267,3 +267,14 @@ it("TL843 retains venue wall openings through the complete Control patch HTTP pa
 	);
 	expect(written.scenery_options).toMatchObject({ architecture });
 });
+
+it("TL843 retains venue stair steps through the complete Control patch HTTP path", async () => {
+    const wire=wireSnapshot();
+    const architecture={kind:"stairs" as const,steps:24};
+    Object.assign(wire.fixtures[0].scenery_options,{architecture});
+    const snapshot=decodePatchSnapshot(wire);
+    expect(snapshot.fixtures[0].sceneryOptions?.architecture).toEqual(architecture);
+    const fixture=projectionToPatchedFixture(snapshot.fixtures[0],snapshot.profileRevisions[0],createPatchDefinitionResolver([venueDefinition()]));
+    const written=await writtenFixture(changedPatchFixtureCandidate(fixture,{name:"Balcony stairs"}).fixture);
+    expect(written.scenery_options).toMatchObject({architecture});
+});

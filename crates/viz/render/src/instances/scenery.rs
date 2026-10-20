@@ -21,11 +21,12 @@ pub(super) fn push_scenery(
     // A Venue object slaved to a 3D Point stands where the point puts it, so everything below
     // reads the posed objects: a truss flown on a point takes its chords, and the chains made fast
     // to them, along with it.
-    let posed: Vec<SceneryObject> = scene
+    let mut posed: Vec<SceneryObject> = scene
         .scenery
         .iter()
         .map(|object| object.posed_by(&values.position_points))
         .collect();
+    architecture::apply_floor_cutouts(&mut posed);
     // A chain end is made fast to the nearest truss chord, by a steelflex or a pipe clamp as that
     // chord's truss calls for, so a chain needs every chord in the room.
     let chords = if posed.iter().any(|object| object.kind == SceneryKind::Chain) {

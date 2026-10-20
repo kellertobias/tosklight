@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Scene scenery now carries portable parametric venue construction. This changes the
+// Scene scenery now includes stair construction and contextual floor apertures. This changes the
 // postcard scene shape, so stale helpers must be refused before decoding this build's scene.
-pub const PROTOCOL_MAJOR: u16 = 7;
+pub const PROTOCOL_MAJOR: u16 = 8;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 

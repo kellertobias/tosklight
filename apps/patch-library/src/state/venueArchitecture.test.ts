@@ -68,7 +68,13 @@ describe("TL843 venue construction placement transport", () => {
 			elevation_millimetres: 3000,
 			thickness_millimetres: 200,
 		},
+		{
+            kind: "slab", purpose: "floor", outline_millimetres: [{x:0,y:0},{x:4000,y:0},{x:0,y:3000}], elevation_millimetres: 0, thickness_millimetres: 150,
+        },
 		{ kind: "chair", style: "white" },
+		{ kind: "stairs", steps: 1 },
+		{ kind: "stairs", steps: 16 },
+		{ kind: "stairs", steps: 256 },
 	])("preserves construction through reads, writes and moves: %j", (architecture) => {
 		const { fixture, profile, definition } = arrange();
 		fixture.scenery_options = { colour_srgb: "#445566", architecture };

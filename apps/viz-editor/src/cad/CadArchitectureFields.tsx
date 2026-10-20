@@ -29,15 +29,17 @@ export function CadArchitectureFields({
 						<CommitNumber
 							key={axis}
 							label={
-								axis === "x"
-									? architecture.kind === "wall"
-										? "Length"
-										: "Width"
-									: axis === "y"
-										? "Height"
-										: architecture.kind === "wall"
-											? "Thickness"
-											: "Depth"
+								architecture.kind === "stairs"
+									? ({ x: "Width", y: "Rise", z: "Run" } as const)[axis]
+									: axis === "x"
+										? architecture.kind === "wall"
+											? "Length"
+											: "Width"
+										: axis === "y"
+											? "Height"
+											: architecture.kind === "wall"
+												? "Thickness"
+												: "Depth"
 							}
 							unit="m"
 							min={0.001}
@@ -85,6 +87,7 @@ export function CadArchitectureFields({
 			</fieldset>
 			{architecture.kind === "wall" ? (
 				<>
+					<WallColour draft={draft} onChange={onChange} />
 					<CommitNumber
 						label="Room ceiling height"
 						unit="m"
@@ -109,10 +112,61 @@ export function CadArchitectureFields({
 					/>
 				</>
 			) : null}
+			{architecture.kind === "stairs" ? (
+				<section aria-label="Stair construction">
+					<CommitNumber
+						label="Steps"
+						digits={0}
+						min={1}
+						max={256}
+						value={architecture.steps}
+						onCommit={(value) =>
+							set({ ...architecture, steps: Math.round(value) })
+						}
+					/>
+					<p>
+						Stairs rise along positive local Depth, towards the front
+						(audience). Position Z is the lower floor datum. Width spans the
+						stairs, Rise is the full height, and Run is the total horizontal
+						depth. Intersecting floors and balconies receive an opening
+						automatically.
+					</p>
+				</section>
+			) : null}
 			<ArchitectureOptions draft={draft} onChange={onChange} />
 		</>
 	);
 }
+function WallColour({
+	draft,
+	onChange,
+}: {
+	draft: ArchitectureDraft;
+	onChange(next: ArchitectureDraft): void;
+}) {
+	return (
+		<div className="cad-architecture-grid">
+			<label className="cad-field">
+				Wall colour
+				<input
+					type="color"
+					aria-label="Wall colour"
+					value={draft.colourSrgb}
+					onChange={(event) =>
+						onChange({ ...draft, colourSrgb: event.currentTarget.value })
+					}
+				/>
+			</label>
+			<CommitText
+				label="Wall colour hex"
+				value={draft.colourSrgb}
+				accepts={(value) => /^#[0-9a-f]{6}$/i.test(value)}
+				onCommit={(colourSrgb) => onChange({ ...draft, colourSrgb })}
+			/>
+		</div>
+	);
+}
+
 function ArchitectureOptions({
 	draft,
 	onChange,
@@ -199,10 +253,11 @@ function SlabFields({
 					onChange={(event) =>
 						onChange({
 							...architecture,
-							purpose: event.currentTarget.value as "roof" | "balcony",
+							purpose: event.currentTarget.value as typeof architecture.purpose,
 						})
 					}
 				>
+					<option value="floor">Floor</option>
 					<option value="roof">Roof</option>
 					<option value="balcony">Balcony</option>
 				</select>

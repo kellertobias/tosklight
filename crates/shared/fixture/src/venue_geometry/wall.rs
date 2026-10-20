@@ -55,6 +55,14 @@ pub(super) fn build(g: &mut VenueGeometry, s: [f64; 3], openings: &[WallOpening]
     }
     for o in openings {
         door_assembly(g, o, s);
+        if matches!(o.opening, WallOpeningKind::Window { .. }) {
+            let start = f64::from(o.offset_millimetres) - s[0] / 2.0;
+            let end = start + f64::from(o.width_millimetres);
+            // Conventional top-plan glazing: paired thin lines between the solid jambs.
+            for z in [-s[2] * 0.12, s[2] * 0.12] {
+                g.plan.push([[start, z], [end, z]]);
+            }
+        }
     }
     // Top plan retains genuine door/window gaps rather than replacing them with a solid box.
     let mut plan_cuts = vec![-s[0] / 2.0, s[0] / 2.0];

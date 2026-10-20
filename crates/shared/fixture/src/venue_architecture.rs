@@ -36,6 +36,10 @@ pub enum VenueArchitecture {
     Chair {
         style: VenueChairStyle,
     },
+    /// A solid flight sized by the placement's width, rise and horizontal run.
+    Stairs {
+        steps: u32,
+    },
     /// A closed, solid counter; its width, height and depth belong to the placement.
     Bar,
 }
@@ -49,6 +53,7 @@ pub struct VenuePlanPoint {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VenueSlabPurpose {
+    Floor,
     Roof,
     Balcony,
 }
@@ -152,6 +157,9 @@ impl VenueArchitecture {
                     return Err("venue slab thickness must be positive".into());
                 }
                 validate_outline(outline_millimetres)
+            }
+            Self::Stairs { steps } if !(1..=256).contains(steps) => {
+                Err("venue stairs require 1 to 256 steps".into())
             }
             _ => Ok(()),
         }

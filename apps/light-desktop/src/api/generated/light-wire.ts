@@ -1066,9 +1066,9 @@ ceiling_height_millimetres?: number | null, } | { "kind": "slab", purpose: Venue
 /**
  * Bottom face above the placement's floor datum; independent slabs can be stacked.
  */
-elevation_millimetres: number, thickness_millimetres: number, } | { "kind": "pillar", shape: VenueFootprint, } | { "kind": "table", shape: VenueTableShape, } | { "kind": "chair", style: VenueChairStyle, } | { "kind": "bar" };
+elevation_millimetres: number, thickness_millimetres: number, } | { "kind": "pillar", shape: VenueFootprint, } | { "kind": "table", shape: VenueTableShape, } | { "kind": "chair", style: VenueChairStyle, } | { "kind": "stairs", steps: number, } | { "kind": "bar" };
 export type VenuePlanPoint = { x: number, y: number, };
-export type VenueSlabPurpose = "roof" | "balcony";
+export type VenueSlabPurpose = "floor" | "roof" | "balcony";
 export type VenueFootprint = "round" | "square" | "rectangular";
 export type VenueTableShape = "round" | "rectangular";
 export type VenueChairStyle = "black_metal" | "white" | "bar_stool";

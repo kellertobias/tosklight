@@ -1,6 +1,6 @@
 /** Integer-millimetre venue construction carried unchanged through portable shows. */
 export type VenuePlanPoint = { x: number; y: number };
-export type VenueSlabPurpose = "roof" | "balcony";
+export type VenueSlabPurpose = "floor" | "roof" | "balcony";
 export type VenueFootprint = "round" | "square" | "rectangular";
 export type VenueTableShape = "round" | "rectangular";
 export type VenueChairStyle = "black_metal" | "white" | "bar_stool";
@@ -40,4 +40,5 @@ export type VenueArchitecture =
 	| { kind: "pillar"; shape: VenueFootprint }
 	| { kind: "table"; shape: VenueTableShape }
 	| { kind: "chair"; style: VenueChairStyle }
+	| { kind: "stairs"; steps: number }
 	| { kind: "bar" };

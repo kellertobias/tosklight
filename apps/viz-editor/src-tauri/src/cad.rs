@@ -306,7 +306,10 @@ pub fn emit_scene_state_delta(
     let hidden_fixtures = hidden_fixture_ids(session, "visible2d")?;
     let hidden_layers = hidden_layers(session, "visible2d")?;
     let notes = fixture_notes(session)?;
-    let all_entities = aim_lamps(connect_chains(entities(&patch, &locked, &notes)), &patch);
+    let all_entities = venue_geometry::with_ceilings(aim_lamps(
+        connect_chains(entities(&patch, &locked, &notes)),
+        &patch,
+    ));
     let removed_ids = all_entities
         .iter()
         .filter(|entity| {

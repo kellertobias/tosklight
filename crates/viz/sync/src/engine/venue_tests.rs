@@ -19,6 +19,21 @@ fn schema(path: &std::path::Path) -> i64 {
 
 #[test]
 fn venue_rebase_and_history_patch_save_reopen_preserve_architecture_and_reader_floor() {
+    architecture_roundtrip(
+        json!({"kind":"wall","ceiling_height_millimetres":4000,"openings":[{
+            "id":uuid::Uuid::new_v4(),"offset_millimetres":1000,"sill_millimetres":900,
+            "width_millimetres":1400,"height_millimetres":1800,
+            "opening":{"kind":"window","shape":"arched"}
+        }]}),
+    );
+}
+
+#[test]
+fn stairs_rebase_and_history_patch_save_reopen_preserve_steps_and_reader_floor() {
+    architecture_roundtrip(json!({"kind":"stairs","steps":16}));
+}
+
+fn architecture_roundtrip(architecture: Value) {
     let scratch = std::path::PathBuf::from(
         std::env::var_os("LIGHT_TMP_DIR").expect("canonical scratch directory"),
     )
@@ -42,11 +57,7 @@ fn venue_rebase_and_history_patch_save_reopen_preserve_architecture_and_reader_f
         .retain_fixture_profile(serde_json::to_value(&profile).unwrap())
         .unwrap();
     let fixture_id = FixtureId::new();
-    let architecture = json!({"kind":"wall","ceiling_height_millimetres":4000,"openings":[{
-        "id":uuid::Uuid::new_v4(),"offset_millimetres":1000,"sill_millimetres":900,
-        "width_millimetres":1400,"height_millimetres":1800,
-        "opening":{"kind":"window","shape":"arched"}
-    }]});
+
     let patch: PatchedFixturePatch = serde_json::from_value(json!({
         "fixture_id":fixture_id,"virtual_fixture_number":1,"name":"Venue wall",
         "split_patches":[{"split":1,"universe":null,"address":null}],
@@ -78,7 +89,12 @@ fn venue_rebase_and_history_patch_save_reopen_preserve_architecture_and_reader_f
         architecture
     );
     let mut changed = original.clone();
-    changed["scenery_options"]["architecture"]["openings"][0]["width_millimetres"] = json!(1600);
+    if architecture["kind"] == "stairs" {
+        changed["scenery_options"]["architecture"]["steps"] = json!(24);
+    } else {
+        changed["scenery_options"]["architecture"]["openings"][0]["width_millimetres"] =
+            json!(1600);
+    }
     changed["location"]["x"] = json!(4200);
     apply_changes(
         &document,

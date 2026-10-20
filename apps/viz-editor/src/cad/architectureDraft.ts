@@ -8,6 +8,7 @@ export const ARCHITECTURE_PROFILE = "0087038f-6a2f-5d74-9185-8d14d7e1ee48";
 export type ArchitectureKind = VenueArchitecture["kind"];
 export interface ArchitectureDraft {
 	name: string;
+	colourSrgb: string;
 	architecture: VenueArchitecture;
 	size: { x: number; y: number; z: number };
 	position: { x: number; y: number; z: number };
@@ -37,7 +38,9 @@ export function newArchitecture(kind: ArchitectureKind): ArchitectureDraft {
 						? { kind, shape: "rectangular" }
 						: kind === "chair"
 							? { kind, style: "black_metal" }
-							: { kind: "bar" };
+							: kind === "stairs"
+								? { kind, steps: 16 }
+								: { kind: "bar" };
 	const sizes = {
 		wall: [6000, 4000, 200],
 		slab: [6000, 200, 4000],
@@ -45,6 +48,7 @@ export function newArchitecture(kind: ArchitectureKind): ArchitectureDraft {
 		table: [1600, 750, 800],
 		chair: [500, 900, 500],
 		bar: [2000, 1100, 700],
+		stairs: [1200, 3000, 4500],
 	};
 	const [x, y, z] = sizes[kind];
 	return {
@@ -53,6 +57,7 @@ export function newArchitecture(kind: ArchitectureKind): ArchitectureDraft {
 				? "Balcony"
 				: kind.charAt(0).toUpperCase() + kind.slice(1),
 		architecture,
+		colourSrgb: "#808080",
 		size: { x, y, z },
 		position: { x: 0, y: 0, z: 0 },
 		angle: 0,
@@ -63,6 +68,7 @@ export function architectureFromFixture(
 ): ArchitectureDraft {
 	return {
 		name: fixture.name,
+		colourSrgb: fixture.sceneryOptions?.colourSrgb ?? "#808080",
 		architecture:
 			fixture.sceneryOptions?.architecture ??
 			newArchitecture("wall").architecture,

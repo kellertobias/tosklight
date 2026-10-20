@@ -8,12 +8,23 @@ pub(crate) fn push(
     style: &FrameStyle,
     hidden: bool,
 ) {
+    push_context(frame, object, style, hidden, &[]);
+}
+fn push_context(
+    frame: &mut FrameInstances,
+    object: &SceneryObject,
+    style: &FrameStyle,
+    hidden: bool,
+    stairs: &[light_fixture::VenueStairVolume],
+) {
     let Some(architecture) = &object.architecture else {
         return;
     };
-    let Ok(geometry) = light_fixture::venue_geometry(
+    let Ok(geometry) = light_fixture::venue_geometry_in_context(
         architecture,
         object.size.as_dvec3().to_array().map(|v| v * 1000.0),
+        millimetre_pose(object),
+        stairs,
     ) else {
         return;
     };
@@ -74,7 +85,9 @@ pub(crate) fn push(
     };
     let physical = matches!(
         architecture,
-        VenueArchitecture::Wall { .. } | VenueArchitecture::Slab { .. }
+        VenueArchitecture::Wall { .. }
+            | VenueArchitecture::Slab { .. }
+            | VenueArchitecture::Stairs { .. }
     );
     let mut triangles = geometry.triangles.iter().peekable();
     let mut triangle_index = 0;
@@ -238,6 +251,16 @@ fn inside(p: glam::Vec2, outline: &[glam::Vec2]) -> bool {
 }
 
 pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], style: &FrameStyle) {
+    let stairs: Vec<_> = objects
+        .iter()
+        .filter(|object| matches!(object.architecture, Some(VenueArchitecture::Stairs { .. })))
+        .map(|object| {
+            light_fixture::venue_stair_volume(
+                object.size.as_dvec3().to_array().map(|v| v * 1000.0),
+                millimetre_pose(object),
+            )
+        })
+        .collect();
     let rooms = rooms(objects);
     let mut hidden = std::collections::HashSet::new();
     if let Some(camera) = style.camera_position {
@@ -277,7 +300,13 @@ pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], st
             ) => camera.y > object.position.y + *elevation_millimetres as f32 * 0.001,
             _ => false,
         };
-        push(frame, object, style, hidden.contains(&index) || roof_hidden);
+        push_context(
+            frame,
+            object,
+            style,
+            hidden.contains(&index) || roof_hidden,
+            &stairs,
+        );
     }
     for room in rooms {
         let Some(first) = room.walls.iter().map(|(i, _)| &objects[*i]).find(|o| {
@@ -312,8 +341,46 @@ pub(crate) fn push_all(frame: &mut FrameInstances, objects: &[SceneryObject], st
         let roof_hidden = style.camera_position.is_some_and(|p| {
             p.y > room.floor + room.height || !inside(glam::Vec2::new(p.x, p.z), &room.outline)
         });
-        push(frame, &roof, style, roof_hidden);
+        push_context(frame, &roof, style, roof_hidden, &stairs);
     }
 }
 #[cfg(test)]
 mod tests;
+
+fn millimetre_pose(object: &SceneryObject) -> [[f64; 4]; 4] {
+    Mat4::from_rotation_translation(
+        euler_degrees(object.rotation_degrees),
+        object.position * 1000.0,
+    )
+    .to_cols_array_2d()
+    .map(|column| column.map(f64::from))
+}
+
+/// Only a legacy floor actually intersected by stairs changes its rendering path.
+pub(crate) fn apply_floor_cutouts(objects: &mut [SceneryObject]) {
+    let stairs: Vec<_> = objects
+        .iter()
+        .filter(|o| matches!(o.architecture, Some(VenueArchitecture::Stairs { .. })))
+        .map(|o| {
+            light_fixture::venue_stair_volume(
+                o.size.as_dvec3().to_array().map(|v| v * 1000.0),
+                millimetre_pose(o),
+            )
+        })
+        .collect();
+    if stairs.is_empty() {
+        return;
+    }
+    for object in objects {
+        if object.kind != SceneryKind::Floor || object.architecture.is_some() {
+            continue;
+        }
+        let size = object.size.as_dvec3().to_array().map(|v| v * 1000.0);
+        let floor = light_fixture::venue_floor_slab(size);
+        if light_fixture::venue_geometry_in_context(&floor, size, millimetre_pose(object), &stairs)
+            .is_ok_and(|g| g.has_stair_cutouts)
+        {
+            object.architecture = Some(floor);
+        }
+    }
+}

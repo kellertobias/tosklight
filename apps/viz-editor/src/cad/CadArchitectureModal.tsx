@@ -43,6 +43,7 @@ export function CadArchitectureModal({
 				name: next.name,
 				sceneryOptions: {
 					...fixture?.sceneryOptions,
+					colourSrgb: next.colourSrgb,
 					architecture: next.architecture,
 				},
 				scenerySizeMetres: next.size,
@@ -111,15 +112,21 @@ export function CadArchitectureModal({
 								)
 							}
 						>
-							{["wall", "pillar", "slab", "table", "chair", "bar"].map(
-								(value) => (
-									<option key={value} value={value}>
-										{value === "slab"
-											? "Roof / balcony"
-											: value.charAt(0).toUpperCase() + value.slice(1)}
-									</option>
-								),
-							)}
+							{[
+								"wall",
+								"pillar",
+								"slab",
+								"stairs",
+								"table",
+								"chair",
+								"bar",
+							].map((value) => (
+								<option key={value} value={value}>
+									{value === "slab"
+										? "Floor / roof / balcony"
+										: value.charAt(0).toUpperCase() + value.slice(1)}
+								</option>
+							))}
 						</select>
 					</label>
 				) : null}

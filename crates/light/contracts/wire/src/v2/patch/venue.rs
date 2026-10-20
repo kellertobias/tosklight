@@ -37,6 +37,11 @@ pub enum VenueArchitecture {
     Chair {
         style: VenueChairStyle,
     },
+    /// A solid flight sized by the placement's width, rise and horizontal run.
+    Stairs {
+        #[schemars(range(min = 1, max = 256))]
+        steps: u32,
+    },
     /// A closed, solid counter; its width, height and depth belong to the placement.
     Bar,
 }
@@ -50,6 +55,7 @@ pub struct VenuePlanPoint {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum VenueSlabPurpose {
+    Floor,
     Roof,
     Balcony,
 }
