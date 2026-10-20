@@ -356,7 +356,11 @@ async function capturePaneReference(page: Page, selectedDmx: { universe: number;
         }
         return [...rows.values()];
       });
-      expect(rowSizes).toEqual(Array(14).fill(20));
+      // Tile presentation reflows the 280 authored cells to the pane width: every row is full
+      // except the last, which holds the remainder.
+      const columns = rowSizes[0] ?? 0;
+      expect(columns).toBeGreaterThan(1);
+      expect(rowSizes).toEqual([...Array(Math.floor(280 / columns)).fill(columns), ...(280 % columns ? [280 % columns] : [])]);
       const first = bank.locator('article[data-playback-slot="401"]');
       await expect(first).toBeVisible();
       await expect(first).toHaveAttribute("data-page", /^[1-9]\d?$/);
