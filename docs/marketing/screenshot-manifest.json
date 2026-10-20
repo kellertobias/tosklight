@@ -2,14 +2,45 @@
 	"version": 1,
 	"entries": [
 		{
-			"file": "control-desk.png", "sourceFile": "docs/marketing/assets/stills/control-desk.png", "title": "The desk", "caption": "Everything an operator touches, on one surface.", "theme": "dark"
-		},
+			"file": "control-desk.png",
+			"title": "The desk",
+			"caption": "Everything an operator touches, on one surface.",
+			"storyId": "tosklight-marketing--full-application",
+			"viewport": {
+						"width": 1600,
+						"height": 920
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+},
 		{
-			"file": "control-programmer.png", "sourceFile": "docs/marketing/assets/stills/control-programmer.png", "title": "The programmer", "caption": "Familiar attribute banks, encoders, and command-line programming.", "theme": "dark"
-		},
+			"file": "control-programmer.png",
+			"title": "The programmer",
+			"caption": "Familiar attribute banks, encoders, and command-line programming.",
+			"storyId": "tosklight-command-section--programmer-software",
+			"viewport": {
+						"width": 1920,
+						"height": 761
+			},
+			"captureSelector": ".control-section",
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+},
 		{
-			"file": "control-groups.png", "sourceFile": "docs/marketing/assets/stills/control-groups.png", "title": "Groups", "caption": "Keep the fixture selections you use throughout the show close at hand.", "theme": "dark"
-		},
+			"file": "control-groups.png",
+			"title": "Groups",
+			"caption": "Keep the fixture selections you use throughout the show close at hand.",
+			"storyId": "tosklight-marketing--groups-window",
+			"viewport": {
+						"width": 960,
+						"height": 560
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+},
 		{
 			"file": "control-cues.png", "storyId": "tosklight-marketing--cues-window",
 			"viewport": { "width": 1180, "height": 560 },
@@ -17,17 +48,75 @@
 			"interactions": [], "title": "Cues", "caption": "Build a repeatable sequence of intentions for the show.", "theme": "dark"
 		},
 		{
-			"file": "control-preload-go.png", "sourceFile": "docs/marketing/assets/stills/control-preload-go.png", "title": "Preload and GO", "caption": "Set up a change while the current look remains live.", "theme": "dark"
+			"file": "control-preload-go.png",
+			"title": "Preload and GO",
+			"caption": "Set up a change while the current look remains live.",
+			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
+			"viewport": {
+						"width": 1180,
+						"height": 720
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+},
+		{
+			"file": "control-stage.png", "sourceFile": "docs/marketing/assets/stills/control-stage.png", "title": "Visualizer", "caption": "Select fixtures and navigate the measured Stage plan directly from the desk.", "theme": "dark"
 		},
 		{
-			"file": "control-stage.png", "sourceFile": "docs/marketing/assets/stills/control-stage.png", "title": "Visualizer", "caption": "See the rig and its beams without a second copy of the show.", "theme": "dark"
-		},
+			"file": "control-fixture-library.png",
+			"title": "Fixture library",
+			"caption": "Bring real fixture data into the show.",
+			"storyId": "tosklight-marketing--fixture-library-window",
+			"viewport": {
+						"width": 1200,
+						"height": 640
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+						{
+									"action": "fill",
+									"selector": "input[aria-label='Search fixture library']",
+									"value": "Robe"
+						},
+						{
+									"action": "expect-visible",
+									"selector": "button:has-text('ESPRITE')"
+						},
+						{
+									"action": "expect-hidden",
+									"selector": "button:has-text('Titan Tube')"
+						},
+						{
+									"action": "fill",
+									"selector": "input[aria-label='Search fixture library']",
+									"value": ""
+						},
+						{
+									"action": "expect-visible",
+									"selector": "button:has-text('Titan Tube')"
+						}
+			]
+},
 		{
-			"file": "control-fixture-library.png", "sourceFile": "docs/marketing/assets/stills/control-fixture-library.png", "title": "Fixture library", "caption": "Bring real fixture data into the show.", "theme": "dark"
-		},
-		{
-			"file": "control-output-engine.png", "sourceFile": "docs/marketing/assets/stills/control-output-engine.png", "title": "Output", "caption": "Map logical universes to Art-Net and streaming ACN routes.", "theme": "dark"
-		},
+			"file": "control-output-engine.png",
+			"title": "Output",
+			"caption": "Map logical universes to Art-Net and streaming ACN routes.",
+			"storyId": "tosklight-marketing--desk-setup-outputs-window",
+			"viewport": {
+						"width": 960,
+						"height": 560
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+						{
+									"action": "click",
+									"selector": "button[role='tab']:has-text('Routes')"
+						}
+			]
+},
 		{
 			"file": "tracked-programming.png",
 			"title": "Track every change",
