@@ -199,3 +199,99 @@ fn absent_family_scans_skip_actual_pool_jobs_and_unpatched_targets_still_match()
         assert_eq!((current, old), (0, 0));
     }
 }
+
+/// TL-842: a serial static-target scan checks the lane's frame once per owner it finds, not
+/// once per target, and answers every target exactly as a single descriptor lookup does.
+#[test]
+fn serial_static_scans_check_the_frame_once_and_answer_like_descriptor_lookups() {
+    use super::super::super::lane::DESCRIPTOR_FRAME_CHECKS;
+    let rig = Rig::new();
+    for (target, owner, value) in [
+        (rig.show.mover, ProgrammingOwner::Position, angles(10., 20.)),
+        (rig.show.wash, ProgrammingOwner::Color, program(&magenta())),
+        (rig.show.layer, ProgrammingOwner::Color, program(&magenta())),
+    ] {
+        rig.clock.advance_millis(25);
+        rig.programmers.set(rig.session, target, owner.key(), value);
+    }
+    for foreign in [false, true] {
+        let lanes = FamilyLanes::live();
+        let capture = rig.engine.prepare_output_frame(Default::default());
+        let other = rig.engine.prepare_output_frame(Default::default());
+        // A stale lookup: the lanes began this capture's frame, the scan asks with another.
+        lanes.begin_frame(&capture.frame_token()).unwrap();
+        let token = if foreign {
+            other.frame_token()
+        } else {
+            capture.frame_token()
+        };
+        let mut baseline = rig.engine.prepare_static_family_frame(&capture, &[]);
+        let geometry = rig
+            .engine
+            .observe_static_family_geometry(&capture, &mut baseline)
+            .unwrap();
+        let models = light_dynamics::DynamicRuntime::default().captured_native_color_models();
+        let frame = HybridFrameContext {
+            capture: &capture,
+            geometry: &geometry,
+            native_models: models.as_ref(),
+            token: &token,
+            scalar: &baseline,
+        };
+        let color = &lanes.color;
+        let checks = DESCRIPTOR_FRAME_CHECKS.with(std::cell::Cell::get);
+        let (mut targets, mut seen) = (Vec::new(), FxHashSet::default());
+        let scanned = color.static_targets(
+            frame,
+            &baseline,
+            ProgrammingOwner::Color,
+            |value| matches!(value, AttributeValue::ColorProgram(_)),
+            &mut targets,
+            &mut seen,
+            None,
+        );
+        assert_eq!(
+            DESCRIPTOR_FRAME_CHECKS.with(std::cell::Cell::get) - checks,
+            1,
+            "foreign {foreign}: one frame check for two Color targets"
+        );
+        let targets_of = capture
+            .snapshot()
+            .fixtures
+            .iter()
+            .flat_map(|fixture| {
+                std::iter::once(fixture.fixture_id)
+                    .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let singles = targets_of
+            .iter()
+            .map(|target| {
+                color
+                    .descriptor(frame, *target, ProgrammingOwner::Color)
+                    .map(|_| ())
+            })
+            .collect::<Vec<_>>();
+        let mut presence = color.descriptor_presence(frame, ProgrammingOwner::Color);
+        for (target, single) in targets_of.iter().zip(singles) {
+            let scanned = presence.has(*target);
+            match single {
+                Ok(()) => assert!(scanned.unwrap()),
+                Err(TransitionError::Requires(_)) => assert!(!scanned.unwrap()),
+                Err(error) => {
+                    assert_eq!(format!("{:?}", scanned.unwrap_err()), format!("{error:?}"))
+                }
+            }
+        }
+        drop(presence);
+        if foreign {
+            assert!(scanned.is_err());
+        } else {
+            scanned.unwrap();
+            assert_eq!(targets.len(), 2);
+        }
+        let mut unowned = color.descriptor_presence(frame, ProgrammingOwner::Position);
+        assert_eq!(unowned.has(rig.show.wash).unwrap(), false);
+    }
+}

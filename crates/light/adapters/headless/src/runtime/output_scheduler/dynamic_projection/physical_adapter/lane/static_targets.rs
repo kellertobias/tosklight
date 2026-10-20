@@ -44,6 +44,8 @@ where
             .filter(|_| fixtures.len() >= MIN_PARALLEL_FIXTURES)
             .and_then(|pool| self.scan_on(pool, frame, values, owner, has_family));
         let Some(found) = scanned else {
+            // TL-842: one frame check and lane borrow for the whole scan, not one per target.
+            let mut presence = self.descriptor_presence(frame, owner);
             for fixture in fixtures.iter() {
                 for target in std::iter::once(fixture.fixture_id)
                     .chain(fixture.logical_heads.iter().map(|head| head.fixture_id))
@@ -53,13 +55,9 @@ where
                     {
                         continue;
                     }
-                    match self.descriptor(frame, target, owner) {
-                        Ok(_) => {
-                            seen.insert((target, owner));
-                            targets.push((target, owner));
-                        }
-                        Err(TransitionError::Requires(_)) => {}
-                        Err(error) => return Err(error),
+                    if presence.has(target)? {
+                        seen.insert((target, owner));
+                        targets.push((target, owner));
                     }
                 }
             }

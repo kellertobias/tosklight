@@ -225,7 +225,20 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
             return Err(TransitionError::Requires(owner_requirement(owner)));
         }
         let mut state = self.state.borrow_mut();
-        if !Self::staged_token_matches(&state, frame.token) {
+        Self::check_descriptor_frame(&mut state, frame)?;
+        self.cached_descriptor(&mut state, frame, target)?
+            .cloned()
+            .ok_or(TransitionError::Requires(owner_requirement(owner)))
+    }
+
+    /// The frame checks every descriptor lookup makes; a scan of many targets makes them once.
+    fn check_descriptor_frame(
+        state: &mut LaneState<A>,
+        frame: HybridFrameContext<'_>,
+    ) -> Result<(), TransitionError> {
+        #[cfg(test)]
+        DESCRIPTOR_FRAME_CHECKS.with(|count| count.set(count.get() + 1));
+        if !Self::staged_token_matches(state, frame.token) {
             return invalid("physical adapter lookup uses a mixed or stale frame token");
         }
         let generation = frame.token.generation();
@@ -237,7 +250,18 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
             cache.entries.clear();
             cache.generation = Some(generation);
         }
-        let compiled = match cache.entries.entry(target) {
+        Ok(())
+    }
+
+    /// One target's descriptor of this generation, compiled on first use; `None` when the lane
+    /// has no destination for it. The frame must have been checked.
+    fn cached_descriptor<'s>(
+        &self,
+        state: &'s mut LaneState<A>,
+        frame: HybridFrameContext<'_>,
+        target: FixtureId,
+    ) -> Result<Option<&'s Arc<A::Descriptor>>, TransitionError> {
+        let compiled = match state.descriptors.entries.entry(target) {
             std::collections::hash_map::Entry::Occupied(entry) => entry.into_mut(),
             std::collections::hash_map::Entry::Vacant(entry) => entry.insert(
                 self.adapter
@@ -245,9 +269,23 @@ impl<A: PhysicalFamilyAdapter> PhysicalAdapterLane<A> {
                     .map(Arc::new),
             ),
         };
-        compiled
-            .clone()
-            .ok_or(TransitionError::Requires(owner_requirement(owner)))
+        Ok(compiled.as_ref())
+    }
+
+    /// Whether the lane has a destination for `owner` at each target a scan asks about, with
+    /// exactly [`Self::descriptor`]'s answers and errors: the frame is checked once, at the
+    /// first asked target, and no descriptor is cloned.
+    pub(super) fn descriptor_presence<'l>(
+        &'l self,
+        frame: HybridFrameContext<'l>,
+        owner: ProgrammingOwner,
+    ) -> DescriptorPresence<'l, A> {
+        DescriptorPresence {
+            lane: self,
+            frame,
+            owned: self.adapter.owns(owner),
+            state: None,
+        }
     }
 
     /// Resolve and stage one composed head. Returns the engine metadata and the owned sidecar.
@@ -567,4 +605,40 @@ impl<A: PhysicalFamilyAdapter> HybridFrameResolver for PhysicalPreloadLanes<A> {
     fn accept_frame(&self, token: &CapturedFrameToken) -> bool {
         self.lane_for(token).is_ok_and(|lane| lane.accept(token))
     }
+}
+
+/// [`PhysicalAdapterLane::descriptor_presence`]: one frame's descriptor answers for a scan.
+pub(super) struct DescriptorPresence<'l, A: PhysicalFamilyAdapter> {
+    lane: &'l PhysicalAdapterLane<A>,
+    frame: HybridFrameContext<'l>,
+    owned: bool,
+    state: Option<std::cell::RefMut<'l, LaneState<A>>>,
+}
+
+impl<A: PhysicalFamilyAdapter> DescriptorPresence<'_, A> {
+    /// `Ok(true)` where [`PhysicalAdapterLane::descriptor`] answers a descriptor, `Ok(false)`
+    /// where it answers a requirement, and its error otherwise.
+    pub(super) fn has(&mut self, target: FixtureId) -> Result<bool, TransitionError> {
+        if !self.owned {
+            return Ok(false);
+        }
+        let state = match &mut self.state {
+            Some(state) => state,
+            None => {
+                let mut state = self.lane.state.borrow_mut();
+                PhysicalAdapterLane::<A>::check_descriptor_frame(&mut state, self.frame)?;
+                self.state.insert(state)
+            }
+        };
+        Ok(self
+            .lane
+            .cached_descriptor(state, self.frame, target)?
+            .is_some())
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Frame checks made by descriptor lookups, for scan tests.
+    pub(super) static DESCRIPTOR_FRAME_CHECKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
