@@ -35,10 +35,11 @@
 			"file": "help-command-line.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-help--nested-topic",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": { "width": 1200, "height": 810 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureSelector": ".help-content"
 		},
 		{
 			"file": "software-keypad.png",
@@ -463,6 +464,66 @@
 			"mode": "software",
 			"interactions": [],
 			"reason": "No deterministic Stage Settings dialog story exists."
+		},
+		{
+			"file": "panes/groups-tile-counts.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--group-counts",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"tile-details\"]"
+		},
+		{
+			"file": "panes/groups-tile-markers.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--group-markers",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"tile-details\"]"
+		},
+		{
+			"file": "panes/presets-color-details.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--color-preview-counts",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"tile-details\"]"
+		},
+		{
+			"file": "panes/presets-position-details.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--position-previews",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"tile-details\"]"
+		},
+		{
+			"file": "panes/playback-tile-details.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--playback-cue-and-solo",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"playback-details\"]"
+		},
+		{
+			"file": "panes/playback-tile-shallow.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-tile-details--playback-shallow",
+			"viewport": { "width": 1000, "height": 420 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "[data-help-capture=\"playback-details\"]"
 		}
 	]
 }

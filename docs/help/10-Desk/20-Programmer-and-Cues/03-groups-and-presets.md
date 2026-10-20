@@ -8,6 +8,8 @@ Select fixtures, press `[REC]`, and choose a Group target or enter its number. N
 
 The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. The bottom-left fixture count is grey when none of the members are selected. When all members are selected, it shows only the total in white. When some members are selected, it shows selected/total, with the selected count in white and the remaining text grey. These counts also reflect frozen fixture selections without selecting the Group reference itself. Double-pressing a Group selects its current members as frozen fixtures. Clearing selection returns the count to grey.
 
+![Group tiles with no selected members, some selected members, and all members selected](../../assets/screenshots/panes/groups-tile-counts.png)
+
 A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](01-command-line.md) for exact syntax.
 
 Plain-click a Group to select its live membership. Double-press it quickly to select the current
@@ -60,6 +62,8 @@ contributors. Changing a Playback to **None** removes that assignment without ch
 
 ![Group pool with populated ordered Groups](../../assets/screenshots/panes/groups.png)
 
+![Group tiles showing the source Group, a derived Group, and a frozen snapshot](../../assets/screenshots/panes/groups-tile-markers.png)
+
 ## Presets
 
 Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity stores only intensity attributes, including Shutter and Strobe. Color stores RGB, CMY, color-wheel, and other Color attributes. Position stores only Position attributes. Beam stores Beam and Focus attributes such as Zoom, Iris, Gobo, Prism and Frost. Mixed stores any attributes the operator chooses; it does not mean a combined list of every preset family. Recalling a Preset applies compatible values to the current selection while retaining the relationship needed for later updates where supported.
@@ -94,6 +98,8 @@ and fixtures that are currently unpatched remain part of the Preset's targets. I
 **universal**: it applies to every selected fixture. Its tile uses the same active fixture count,
 for example `2` when two fixtures currently show it.
 
+![Color Preset tiles with active fixture counts, segmented previews, and a chosen icon](../../assets/screenshots/panes/presets-color-details.png)
+
 ### Automatic Color and Position previews
 
 A Color or Position Preset recorded as a [Color Intent](05-color-intent.md) or as Pan/Tilt angles
@@ -116,6 +122,8 @@ its aim when it holds no colour.
   through the rest of the aims, so a dense cluster keeps more dots than a single outlier. The square keeps the true shape of the
   spread, so a line of fixtures is drawn as a line. When a Preset mixes angles and Targets, the
   kind most fixtures use is drawn.
+
+![Position Preset tiles showing a fan, an audience grid, and a centre-stage target](../../assets/screenshots/panes/presets-position-details.png)
 
 An icon or button colour chosen in the Preset's button settings, or stored with the Preset in the
 show, replaces the automatic preview and keeps the tile as it was. **Automatic icon** in the button

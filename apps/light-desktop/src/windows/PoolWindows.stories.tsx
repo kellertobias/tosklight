@@ -13,6 +13,7 @@ import {
 import { ApplicationStateHarness } from "../../../ui-library/storybook/providers/ApplicationStateHarness";
 import type { CommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { defaultPoolPresentation } from "../features/poolPresentation/poolPresentation";
+import type { PresetFixtureCounts } from "../features/presetRecording/presetFixtureCounts";
 import type { PresetCard } from "../features/presetRecording/presetCards";
 import { ShowObjectsStateProvider } from "../features/showObjects/ShowObjectsState";
 import { ShowObjectsStore } from "../features/showObjects/store";
@@ -189,8 +190,10 @@ export function MarketingPresetWindow({
 	family,
 	presets,
 	showHeader = true,
+	fixtureCounts,
 	...viewport
 }: PoolViewport & {
+	fixtureCounts?: ReadonlyMap<string, PresetFixtureCounts>;
 	family: PresetFamily;
 	presets: readonly PresetCard[];
 }) {
@@ -213,6 +216,7 @@ export function MarketingPresetWindow({
 					/>
 				)}
 				<PresetCardGrid
+					fixtureCounts={fixtureCounts}
 					cards={cards}
 					family={family}
 					cardSizing={poolCardSizing(initialState)}

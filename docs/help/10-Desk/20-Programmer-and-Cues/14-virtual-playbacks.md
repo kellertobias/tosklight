@@ -4,6 +4,10 @@ A Playbacks pane is a configurable control surface for the same show-owned Playb
 
 By default, each Playback is a tile that acts as one large button. Its title is at the top left and its Playback number at the top right, with its background image and current Cue visible inside the tile. The current Cue appears in a dark insert at the bottom, with the button action just above it on the right. In shallow rows, the action and Cue share one bottom line. In pane Settings, enable **Show playback controls** to display the configured buttons, faders or push encoders instead. This setting applies to both **Screen** and **Free region**, is saved for this pane, and does not change Playback assignments or another surface's controls.
 
+![Playback tile details with the current Cue, action label, and green Solo-region outline](../../assets/screenshots/panes/playback-tile-details.png)
+
+![Shallow Playback tiles keep the action and current Cue on one line](../../assets/screenshots/panes/playback-tile-shallow.png)
+
 In pane Settings, choose **Screen** to display a selected screen’s live configured rows, or **Free region** to keep independent rows. Both modes fit every configured row and column inside the pane without scrolling. Tiles stretch independently across the pane’s full width and height; resizing the pane changes the cell proportions without changing the configured row or column count. Three configured rows always remain three visible rows. Its page may follow the displayed screen, follow another screen, or use a **Custom page**. Select a custom page through the page number and caret in the pane title. Free region retains its independently configured positions and rows.
 
 Configure each free-region row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a 20-column, 14-row pane starting at 401 covers positions 401–680 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.

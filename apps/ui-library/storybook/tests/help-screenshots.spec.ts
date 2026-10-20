@@ -33,6 +33,7 @@ interface ScreenshotEntry {
 	mode: "software" | "hardware";
 	interactions: ScreenshotInteraction[];
 	reason?: string;
+	captureSelector?: string;
 }
 
 interface ScreenshotManifest {
@@ -139,13 +140,52 @@ test("captures the complete help screenshot manifest from truthful sources", asy
 			`${entry.file} viewport origin`,
 		).toEqual({ x: 0, y: 0 });
 
-		const actual = await page.screenshot({
-			animations: "disabled",
-			fullPage: false,
-		});
-		expect(pngDimensions(actual), `${entry.file} capture dimensions`).toEqual(
-			entry.viewport,
+		await page.evaluate(
+			() =>
+				new Promise<void>((resolve) =>
+					requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+				),
 		);
+		const target = entry.captureSelector
+			? page.locator(entry.captureSelector)
+			: null;
+		if (target) {
+			await expect(
+				target,
+				`${entry.file} capture selector must identify one subject`,
+			).toHaveCount(1);
+			await expect(target).toBeVisible();
+			const bounds = await target.boundingBox();
+			expect(
+				bounds,
+				`${entry.file} subject has no visible bounds`,
+			).not.toBeNull();
+			if (!bounds) throw new Error(`Missing capture bounds for ${entry.file}`);
+			expect(bounds.x).toBeGreaterThanOrEqual(0);
+			expect(bounds.y).toBeGreaterThanOrEqual(0);
+			expect(bounds.x + bounds.width).toBeLessThanOrEqual(
+				entry.viewport.width + 1,
+			);
+			expect(bounds.y + bounds.height).toBeLessThanOrEqual(
+				entry.viewport.height + 1,
+			);
+		}
+		const actual = target
+			? await target.screenshot({ animations: "disabled" })
+			: await page.screenshot({ animations: "disabled", fullPage: false });
+		const dimensions = pngDimensions(actual);
+		if (target) {
+			const bounds = (await target.boundingBox())!;
+			expect(dimensions.width).toBeGreaterThan(80);
+			expect(dimensions.height).toBeGreaterThan(60);
+			expect(Math.abs(dimensions.width - bounds.width)).toBeLessThanOrEqual(1);
+			expect(Math.abs(dimensions.height - bounds.height)).toBeLessThanOrEqual(
+				1,
+			);
+		} else
+			expect(dimensions, `${entry.file} capture dimensions`).toEqual(
+				entry.viewport,
+			);
 		await assertNotBlank(page, actual, entry.file);
 		expect(forbiddenRequests, `${entry.file} requested a live desk`).toEqual(
 			[],
@@ -179,6 +219,8 @@ function validateEntry(entry: ScreenshotEntry, storyIds: Set<string>) {
 	expect(entry.file).toMatch(/^(?:panes\/|workflows\/)?[^/]+\.png$/u);
 	expect(entry.viewport.width).toBeGreaterThanOrEqual(320);
 	expect(entry.viewport.height).toBeGreaterThanOrEqual(160);
+	if (entry.captureSelector !== undefined)
+		expect(entry.captureSelector.trim().length).toBeGreaterThan(0);
 	expect(entry.theme).toBe("dark");
 	expect(["software", "hardware"]).toContain(entry.mode);
 	expect(Array.isArray(entry.interactions)).toBe(true);
@@ -220,7 +262,6 @@ async function applyInteraction(
 		);
 }
 
-
 function pngDimensions(buffer: Buffer) {
 	expect(buffer.subarray(1, 4).toString("ascii")).toBe("PNG");
 	return {
@@ -248,7 +289,6 @@ async function assertNotBlank(
 		`${label} has no meaningful contrast`,
 	).toBeGreaterThan(12);
 }
-
 
 async function imageMetrics(
 	page: import("@playwright/test").Page,
