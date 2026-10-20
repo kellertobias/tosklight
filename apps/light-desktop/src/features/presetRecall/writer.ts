@@ -46,9 +46,16 @@ export interface PresetRecallWriterOptions {
 	repairCaptureMode(error: Error): Promise<void>;
 	repairSelection(error: Error): Promise<void>;
 	onError?: (error: Error | null) => void;
+	onAccepted?(
+		before: ProgrammerValuesProjection,
+		outcome: PresetRecallOutcome,
+		live: boolean,
+	): void;
 }
 
 interface RecallAuthority {
+	previousValues: ProgrammerValuesProjection;
+	live: boolean;
 	showGeneration: number;
 	presetStamp: ShowObjectAuthorityStamp<"preset">;
 	valuesScope: number;
@@ -178,6 +185,9 @@ export class PresetRecallWriter implements PresetRecallActions {
 		)
 			throw new Error("Preset recall authority is still loading");
 		return {
+			previousValues: values,
+			live:
+				target === "programmer" && !captureMode.blind && !captureMode.preview,
 			showGeneration: show.authorityGeneration,
 			presetStamp,
 			valuesScope,
@@ -289,6 +299,11 @@ export class PresetRecallWriter implements PresetRecallActions {
 			authority.showGeneration,
 		);
 		if (!(await this.reconcileValues(authority, outcome))) return false;
+		this.options.onAccepted?.(
+			authority.previousValues,
+			outcome,
+			authority.live,
+		);
 		if (!(await this.reconcileSelection(authority, outcome))) return false;
 		return this.isCurrent(authority);
 	}

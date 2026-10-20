@@ -75,8 +75,8 @@ export function presetFixtureTargets(
 					spread
 						? { kind: "normalized", value: spread[index] ?? 0 }
 						: value.kind === "group_family"
-                            ? value.value.members?.[fixtureId] ?? value.value.template
-                            : value,
+							? (value.value.members?.[fixtureId] ?? value.value.template)
+							: value,
 				);
 			});
 		}
@@ -157,7 +157,9 @@ function asAttributeValue(raw: unknown): AttributeValue | null {
 		case "position":
 		case "zoom":
 		case "color_xyz":
-			return value && typeof value === "object" ? (raw as AttributeValue) : null;
+			return value && typeof value === "object"
+				? (raw as AttributeValue)
+				: null;
 		default:
 			return null;
 	}
@@ -170,7 +172,10 @@ function near(left: number, right: number) {
 	);
 }
 
-function sameEffectiveValue(stored: AttributeValue, effective: AttributeValue) {
+export function sameEffectiveValue(
+	stored: AttributeValue,
+	effective: AttributeValue,
+) {
 	switch (stored.kind) {
 		case "color_xyz":
 			return (
@@ -193,7 +198,10 @@ function sameEffectiveValue(stored: AttributeValue, effective: AttributeValue) {
 		case "zoom":
 			// Requested semantic intent, never the achieved output: equal intents match even when
 			// the stored and resolved spellings differ in float width.
-			return effective.kind === stored.kind && sameIntent(stored.value, effective.value);
+			return (
+				effective.kind === stored.kind &&
+				sameIntent(stored.value, effective.value)
+			);
 		default:
 			return (
 				effective.kind === stored.kind && near(stored.value, effective.value)
@@ -210,7 +218,12 @@ function sameIntent(stored: unknown, effective: unknown): boolean {
 			stored.length === effective.length &&
 			stored.every((item, index) => sameIntent(item, effective[index]))
 		);
-	if (!stored || typeof stored !== "object" || !effective || typeof effective !== "object")
+	if (
+		!stored ||
+		typeof stored !== "object" ||
+		!effective ||
+		typeof effective !== "object"
+	)
 		return stored === effective;
 	const left = stored as Record<string, unknown>;
 	const right = effective as Record<string, unknown>;

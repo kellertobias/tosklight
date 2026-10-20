@@ -19,16 +19,14 @@ import {
 	usePoolPresentationSettings,
 } from "../features/poolPresentation/poolPresentation";
 import type { PresetRecallActions } from "../features/presetRecall/contracts";
+import { usePresetCountValues } from "../features/presetRecall/usePresetCountValues";
 import { usePresetRecall } from "../features/presetRecall/PresetRecallProvider";
 import { usePresetRecording } from "../features/presetRecording/PresetRecordingProvider";
 import {
 	type PresetCard,
 	resolvePresetCards,
 } from "../features/presetRecording/presetCards";
-import {
-	presetFixtureCounts,
-	resolvedValueIndex,
-} from "../features/presetRecording/presetFixtureCounts";
+import { presetFixtureCounts } from "../features/presetRecording/presetFixtureCounts";
 import { submitPresetRecording } from "../features/presetRecording/submitRecording";
 import { useProgrammerActions } from "../features/programmerActions/ProgrammerActionsContext";
 import { useProgrammerPreloadLifecycleView } from "../features/programmerPreloadLifecycle/ProgrammerPreloadLifecycleView";
@@ -168,15 +166,15 @@ function usePresetFixtureCounts(
 	});
 	const groups = usePortableGroups(active);
 	const groupMembers = useMemo(() => resolveGroupMembership(groups), [groups]);
-	const resolved = useMemo(
-		() => resolvedValueIndex(visualization),
-		[visualization],
-	);
+	const resolved = usePresetCountValues(visualization, groupMembers, active);
 	const counts = useMemo(() => {
 		const counts = new Map<string, ReturnType<typeof presetFixtureCounts>>();
 		for (const card of cards)
 			if (card)
-				counts.set(card.id, presetFixtureCounts(card.body, resolved, groupMembers));
+				counts.set(
+					card.id,
+					presetFixtureCounts(card.body, resolved, groupMembers),
+				);
 		return counts;
 	}, [cards, groupMembers, resolved]);
 	return { counts, groupMembers };
@@ -204,7 +202,9 @@ function usePresetPoolCards(
 }
 
 function usePresetCustomizations(
-	items: ReturnType<typeof usePoolPresentationSettings>["configuration"]["items"],
+	items: ReturnType<
+		typeof usePoolPresentationSettings
+	>["configuration"]["items"],
 	showId: string,
 ) {
 	return useMemo(() => {
@@ -227,13 +227,23 @@ function presetStoreHandler(
 		if (!occupied) return void recordPreset(target, "overwrite");
 		const before = command.read();
 		if (!before.ready) return;
-		void resolveRecordOption(before.text, programmingUpdate, "preset").then(option => {
-			const current = command.read();
-			if (!current.ready || current.text !== before.text) return;
-			if (option === "merge") void recordPreset(target, "merge");
-			else chooseRecordMode(target);
-		});
+		void resolveRecordOption(before.text, programmingUpdate, "preset").then(
+			(option) => {
+				const current = command.read();
+				if (!current.ready || current.text !== before.text) return;
+				if (option === "merge") void recordPreset(target, "merge");
+				else chooseRecordMode(target);
+			},
+		);
 	};
+}
+
+function presetCustomizationId(
+	cards: readonly (PresetCard | null)[],
+	index: number,
+	family: ReturnType<typeof presetAddress>["family"],
+) {
+	return cards[index]?.id ?? presetStorageKey(presetAddress(family, index + 1));
 }
 
 function usePresetsWindowModel({
@@ -329,7 +339,10 @@ function usePresetsWindowModel({
 				setConfigureDraft(draft);
 			},
 			onStore: presetStoreHandler(
-				command, programmingUpdate, recordPreset, setRecordPresetIndex,
+				command,
+				programmingUpdate,
+				recordPreset,
+				setRecordPresetIndex,
 			),
 			onDisarmSet: () =>
 				dispatch({ type: "SET_PRESET_SET_ARMED", value: false }),
@@ -339,9 +352,7 @@ function usePresetsWindowModel({
 		});
 	const saveCustomization = () => {
 		if (configureIndex == null) return;
-		const id =
-			cards[configureIndex]?.id ??
-			presetStorageKey(presetAddress(family, configureIndex + 1));
+		const id = presetCustomizationId(cards, configureIndex, family);
 		void poolSettings
 			.setItem("preset", id, configureDraft)
 			.then(() => setConfigureIndex(null));

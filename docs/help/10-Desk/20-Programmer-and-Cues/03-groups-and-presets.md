@@ -88,7 +88,7 @@ Preset tile reads only the number of fixtures currently showing that Preset, for
 The count compares each fixture's current effective values, after the Programmer and every
 Playback have been merged, with every value the Preset stores for it. A Preset that is only
 stored, or whose values another source has overridden, is not active. The count follows the
-live output state while the pane is open; no matching fixtures means `0`. Stored Group members
+live output state while the pane is open; no matching fixtures means `0`. After an accepted recall, the count updates promptly and then follows the resulting live output. Stored Group members
 and fixtures that are currently unpatched remain part of the Preset's targets. In a
 [Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is
 **universal**: it applies to every selected fixture. Its tile uses the same active fixture count,

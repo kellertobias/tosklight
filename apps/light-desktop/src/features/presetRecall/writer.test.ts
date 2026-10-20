@@ -163,7 +163,12 @@ function harness(
 		cursor: 30,
 		projection: {
 			deskId: DESK_ID,
-			alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
+			alignment: {
+				revision: 0,
+				mode: "off" as const,
+				binding: null,
+				fixtureCount: 0,
+			},
 			commandLine: {
 				text: "FIXTURE",
 				target: "FIXTURE",
@@ -191,6 +196,7 @@ function harness(
 		showRevision: 12,
 	}));
 	const onError = vi.fn();
+	const onAccepted = vi.fn();
 	const writer = new PresetRecallWriter({
 		scope: { showId: SHOW_ID, sessionId: SESSION_ID, deskId: DESK_ID },
 		showStore,
@@ -205,6 +211,7 @@ function harness(
 		repairCaptureMode,
 		repairSelection,
 		onError,
+		onAccepted,
 	});
 	return {
 		writer,
@@ -220,6 +227,7 @@ function harness(
 		repairSelection,
 		loadPreset,
 		onError,
+		onAccepted,
 	};
 }
 
@@ -290,7 +298,12 @@ describe("PresetRecallWriter", () => {
 				cursor: 42,
 				projection: {
 					deskId: DESK_ID,
-					alignment: { revision: 0, mode: "off" as const, binding: null, fixtureCount: 0 },
+					alignment: {
+						revision: 0,
+						mode: "off" as const,
+						binding: null,
+						fixtureCount: 0,
+					},
 					commandLine: currentCommand(responseFirst.programmingStore),
 					selection: {
 						selected: [FIXTURE_ID],
@@ -616,4 +629,26 @@ describe("PresetRecallWriter", () => {
 			expect.objectContaining({ message: "revision conflict" }),
 		);
 	});
+});
+
+it("publishes count feedback only after a scoped recall response has been accepted", async () => {
+	const pending = deferred<PresetRecallOutcome>();
+	const setup = harness(() => pending.promise);
+	const before = setup.valuesStore.getSnapshot().projection;
+	const promise = setup.writer.recall(input);
+	await Promise.resolve();
+	expect(setup.onAccepted).not.toHaveBeenCalled();
+	const response = outcome(setup.recall.mock.calls[0][1]);
+	pending.resolve(response);
+	await promise;
+	expect(setup.onAccepted).toHaveBeenCalledExactlyOnceWith(
+		before,
+		response,
+		true,
+	);
+	const rejected = harness(async () => {
+		throw new Error("Refused");
+	});
+	await rejected.writer.recall(input);
+	expect(rejected.onAccepted).not.toHaveBeenCalled();
 });
