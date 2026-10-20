@@ -6,8 +6,9 @@ import {
 	waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PlaybackPaneViewSettings } from "./PlaybackPaneViewSettings";
 import type { PaneModel } from "../../types";
+import { PlaybackPaneViewSettings } from "./PlaybackPaneViewSettings";
+
 const model = vi.hoisted(() => ({
 	update: vi.fn(),
 	dispatch: vi.fn(),
@@ -58,6 +59,11 @@ describe("Playback pane live screen and independent page", () => {
 		);
 		expect(model.update).toHaveBeenCalledExactlyOnceWith("pane:playbacks", {
 			page_source: { type: "follow", surface_id: "screen:second" },
+		});
+		expect(model.dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_TILE_LAYOUT",
+			id: "playbacks",
+			layout: undefined,
 		});
 	});
 	it("retains a custom pane page when its displayed screen changes", async () => {

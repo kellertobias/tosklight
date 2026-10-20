@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **420 root cases across 130 files**.
+Default catalog: **423 root cases across 133 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -234,6 +234,9 @@ Default catalog: **420 root cases across 130 files**.
 | 130-tl714-held-page-change.spec.ts | TL714-HELD-OSC @ui @osc › compact held capture and explicit-page independent sources survive Page changes | repository contract | @ui @osc | tl714-held-page-change | standard failure evidence | parallel | pending-semantic-migration |
 | 133-screen-playback-fit-geometry.spec.ts | TL714 Screen pane fits 15 faders with three actions and 15 buttons, recovers after enlargement | repository contract | none | screen-playback-fit-geometry | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 134-screen-fullscreen-layout.spec.ts | TL714 fullscreen Screen fills width with compact unobstructed exit, normal chrome remains | repository contract | none | screen-fullscreen-layout | standard failure evidence | parallel | reviewed-low-level-boundary |
+| 135-pool-tile-layout-geometry.spec.ts | @ui pool layouts switch between automatic squares and a viewport-filling fixed grid without hiding later addresses | repository contract | @ui | pool-tile-layout-geometry | standard failure evidence | parallel | pending-semantic-migration |
+| 136-pane-presentation-settings.spec.ts | PANE-001 @ui pane titles and square/fixed tile layouts are available in the catalog and survive a real server restart | repository contract | @ui | pane-presentation-settings | standard failure evidence | parallel | pending-semantic-migration |
+| 137-playback-tile-modes.spec.ts | Playback tile modes retain authored sparse addresses, scroll and Solo outlines @ui | repository contract | @ui | playback-tile-modes | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

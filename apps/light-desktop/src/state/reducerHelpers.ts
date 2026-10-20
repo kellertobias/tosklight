@@ -95,11 +95,15 @@ export const cueListWindowKind = (kind: BuiltInWindow): BuiltInWindow =>
 				? "cues"
 				: kind;
 export const cueListWindowTitle = (title: string, kind: BuiltInWindow) => {
-	if (kind === "cuelists") return "Cuelists";
-	if (kind === "cuelist_pool") return "Cuelist Pool";
+	if (kind === "cuelists")
+		return /^(playback|qlists?|cue ?lists?)$/i.test(title) ? "Cuelists" : title;
+	if (kind === "cuelist_pool")
+		return /^(playback[ _]pool|qlist[ _]pool|cuelist[ _]pool)$/i.test(title)
+			? "Cuelist Pool"
+			: title;
 	if (kind !== "cues") return title;
 	if (/^(cue list|sequence)$/i.test(title)) return "Cues · Cuelist";
-	return title.replace(/^Qs\s*·\s*/i, "Cues · ").replace(/QList/g, "Cuelist");
+	return title.replace(/^Qs\s*·\s*/i, "Cues · ");
 };
 export const fixtureSheetColumnIds = new Set<FixtureSheetColumn>([
 	"id",

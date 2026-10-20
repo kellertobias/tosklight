@@ -36,6 +36,13 @@ A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in th
 
 Add a pane from the empty-cell picker or **Open Window**. Open Window groups descriptive pane choices into **Programming**, **Playback & Automation**, **Show & Visual**, and **Miscellaneous** title tabs. Macro Pool is under Programming. Running, Scheduler, and Help are under Miscellaneous. Cuelists is the single catalog entry for the integrated Pool, Cues, and Cuelist Settings workflow. Drag a pane by its header to move it. Open the pane settings to set its exact grid position and size, maximize it, change window-specific options, or remove it. Panes cannot overlap; moves and resizes are constrained to the grid.
 
+In a pane's **Settings → Pane Settings**, edit **Pane title** to name that pane. The title is saved with the Desktop and survives reopening the show. It does not rename the pool's objects or change the pane type offered by **Open Window**.
+
+Tiled panes also offer **Tile layout**. **Automatic squares** is the default for new panes: tiles stay square and the column count follows the pane width and the Desktop's default and minimum tile widths. **Fixed grid** lets you set **Tile rows** and **Tile columns**; those rows and columns fill the visible pane, so tiles may be rectangular. Scroll to reach later pool entries. Groups, Presets, Cuelists, Dynamics, Macro Pool, Timecode, Media file pools, and free-region Playback tiles share these controls.
+
+Existing saved pane layouts retain their appearance until changed. A legacy Group pool with a fixed column count keeps its square tiles; its settings explain this until you choose a new mode. Playback panes showing controls or mirroring a Screen keep that surface's authored layout. Use **Free region** with Playback controls hidden to select square tiles or a fixed grid. Applying **Configure layout and page source** restores that authored Playback layout.
+
+
 Some options belong to one pane rather than the whole application. Examples include Stage 2D/3D view and Follow Preload, Preset family and pool color mode, Fixture ordering/filtering, the virtual-playback grid, and the selected text file. Pool panes can use **Type colors** or **Individual colors**. Type colors use the configured object-type or Preset-family default. Individual colors show an item's explicit presentation color and use grey when none is assigned.
 
 ## Built-in windows

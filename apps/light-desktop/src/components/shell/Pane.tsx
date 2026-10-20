@@ -1,3 +1,4 @@
+import { PoolTileLayoutProvider } from "@tosklight/ui/pools";
 import { type GridRect, PaneView } from "@tosklight/ui/desktop";
 import { useRef, useState } from "react";
 import { poolMutationTarget } from "../../features/controlSurfaceInteraction/poolCommandTarget";
@@ -28,6 +29,7 @@ export function Pane({
 	editing: boolean;
 }) {
 	const { dispatch } = useApp();
+	const title = pane.kind === "file_manager" && !pane.titleIsCustom ? "File Manager" : pane.title;
 	const selection = useProgrammingSelectionView(
 		active && (pane.kind === "stage" || pane.kind === "fixtures"),
 	);
@@ -95,7 +97,7 @@ export function Pane({
 		<PaneView
 			pane={{
 				...pane,
-				title: pane.kind === "file_manager" ? "File Manager" : pane.title,
+				title,
 				type: pane.kind,
 			}}
 			active={active}
@@ -144,7 +146,7 @@ export function Pane({
 			onTitleClick={deleteArmed ? removeFromDelete : undefined}
 			titleActionLabel={
 				deleteArmed
-					? `Remove ${pane.kind === "file_manager" ? "File Manager" : pane.title} pane`
+					? `Remove ${title} pane`
 					: undefined
 			}
 			onRectChange={updateRect}
@@ -175,6 +177,7 @@ function PaneContent({
 	const Window = windowRegistry[pane.kind];
 	return (
 		<PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
+			<PoolTileLayoutProvider layout={pane.poolTileLayout}>
 			<Window
 				active={active}
 				compact
@@ -236,6 +239,7 @@ function PaneContent({
 					})
 				}
 			/>
+			</PoolTileLayoutProvider>
 		</PaneChromeProvider>
 	);
 }

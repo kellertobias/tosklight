@@ -79,6 +79,29 @@ function schedulerPaneLayout(pane: AppState["desks"][number]["panes"][number]) {
 			};
 }
 
+/** Additive pane options must not reinterpret legacy fixed-column layouts. */
+function normalizePoolTileLayout(value: unknown) {
+	if (value === undefined) return undefined;
+	if (value && typeof value === "object" && "mode" in value) {
+		if (value.mode === "automatic") return { mode: "automatic" as const };
+		if (
+			value.mode === "fixed" &&
+			"rows" in value &&
+			typeof value.rows === "number" &&
+			Number.isFinite(value.rows) &&
+			"columns" in value &&
+			typeof value.columns === "number" &&
+			Number.isFinite(value.columns)
+		)
+			return {
+				mode: "fixed" as const,
+				rows: Math.min(24, Math.max(1, Math.trunc(value.rows))),
+				columns: Math.min(24, Math.max(1, Math.trunc(value.columns))),
+			};
+	}
+	return { mode: "automatic" as const };
+}
+
 function hydrateDesks(
 	state: AppState,
 	action: Extract<Action, { type: "HYDRATE_LAYOUT" }>,
@@ -90,10 +113,14 @@ function hydrateDesks(
 			.map((pane) => {
 				const { layoutGroupId: _retiredPaneGroupId, ...activePane } = pane;
 				const kind = cueListWindowKind(pane.kind);
+				const poolTileLayout = normalizePoolTileLayout(pane.poolTileLayout);
 				const migrated = {
 					...activePane,
 					kind,
-					title: cueListWindowTitle(pane.title, kind),
+					title: pane.titleIsCustom === true
+						? pane.title
+						: cueListWindowTitle(pane.title, kind),
+					...(poolTileLayout === undefined ? {} : { poolTileLayout }),
 					...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
 					...(kind === "channels"
 						? {
@@ -115,8 +142,9 @@ function hydrateDesks(
 				};
 				if (pane.kind !== "presets") return migrated;
 				const legacyDefault =
-					pane.title === "All Presets" ||
-					(pane.id === "presets" && pane.title === "Color & Position Presets");
+					pane.titleIsCustom !== true &&
+					(pane.title === "All Presets" ||
+						(pane.id === "presets" && pane.title === "Color & Position Presets"));
 				return {
 					...migrated,
 					title: legacyDefault ? "Mixed Presets" : pane.title,

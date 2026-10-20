@@ -1,12 +1,12 @@
-import { ScreenPlaybackFit } from "../features/screens/ScreenPlaybackFit";
-import { PlaybackPaneTitleControls } from "./PlaybackPaneTitleControls";
 import { Button, ErrorAlert } from "@tosklight/ui";
 import { gridPlaybackLayout } from "@tosklight/ui/playback";
 import { useState } from "react";
 import { PlaybackFaderBank } from "../components/control/PlaybackFaderBank";
+import { ScreenPlaybackFit } from "../features/screens/ScreenPlaybackFit";
 import { useScreens } from "../features/screens/ScreensContext";
 import { useApp } from "../state/AppContext";
 import type { PaneModel } from "../types";
+import { PlaybackPaneTitleControls } from "./PlaybackPaneTitleControls";
 import type { WindowProps } from "./windowTypes";
 
 /** A pane renders the same sparse Playback addresses as every other surface. */
@@ -43,8 +43,8 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 		<section className="playback-pane" aria-label="Playbacks">
 			{registry?.[surfaceId] ? (
 				<>
-				<PlaybackPaneTitleControls surfaceId={surfaceId} />
-				<PlaybackPaneBank pane={pane} surfaceId={surfaceId} />
+					<PlaybackPaneTitleControls surfaceId={surfaceId} />
+					<PlaybackPaneBank pane={pane} surfaceId={surfaceId} />
 				</>
 			) : (
 				<>
@@ -62,12 +62,42 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 	);
 }
 
-function PlaybackPaneBank({ pane, surfaceId }: { pane?: PaneModel; surfaceId: string }) {
+function PlaybackPaneBank({
+	pane,
+	surfaceId,
+}: {
+	pane?: PaneModel;
+	surfaceId: string;
+}) {
 	const { surfaces, bootstrap } = useScreens();
 	if (pane?.playbackViewMode !== "screen")
-		return <ScreenPlaybackFit className="screen-bank-fit"><PlaybackFaderBank surfaceId={surfaceId} tilePresentation={!pane?.playbackShowControls} /></ScreenPlaybackFit>;
+		return (
+			<ScreenPlaybackFit className="screen-bank-fit">
+				<PlaybackFaderBank
+					surfaceId={surfaceId}
+					tilePresentation={!pane?.playbackShowControls}
+					tileLayout={
+						pane?.playbackShowControls ? undefined : pane?.poolTileLayout
+					}
+				/>
+			</ScreenPlaybackFit>
+		);
 	const screen = pane.playbackScreenSurfaceId ?? "main";
 	if (!surfaces?.playback_surfaces[screen])
-		return <ErrorAlert role="alert">The selected screen layout is unavailable. Choose another screen in Pane Settings.</ErrorAlert>;
-	return <ScreenPlaybackFit className="screen-bank-fit"><PlaybackFaderBank surfaceId={surfaceId} tilePresentation={!pane.playbackShowControls} layoutSourceSurfaceId={screen} hardwareConnected={Boolean(bootstrap?.hardware_connected)} /></ScreenPlaybackFit>;
+		return (
+			<ErrorAlert role="alert">
+				The selected screen layout is unavailable. Choose another screen in Pane
+				Settings.
+			</ErrorAlert>
+		);
+	return (
+		<ScreenPlaybackFit className="screen-bank-fit">
+			<PlaybackFaderBank
+				surfaceId={surfaceId}
+				tilePresentation={!pane.playbackShowControls}
+				layoutSourceSurfaceId={screen}
+				hardwareConnected={Boolean(bootstrap?.hardware_connected)}
+			/>
+		</ScreenPlaybackFit>
+	);
 }

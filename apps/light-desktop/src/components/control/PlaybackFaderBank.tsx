@@ -1,31 +1,28 @@
-import { PlaybackArtworkProvider } from "./playbackFaderBank/PlaybackArtworkProvider";
 import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
-import { memo, useEffect, useId, useRef, useState } from "react";
+import { memo, useEffect, useId, useState } from "react";
 import { routeControlSurfaceIntentWithFeedback } from "../../features/controlSurfaceInteraction/registry";
 import { AssignedPlaybackConfigurationModal } from "./AssignedPlaybackConfigurationModal";
-import {
-	type PlaybackFaderBankProps,
-	usePlaybackBankController,
-} from "./playbackFaderBank/controller";
-import { SoloFenceOverlay } from "./playbackFaderBank/SoloFenceOverlay";
-import { playbackCellKey } from "./playbackFaderBank/projection";
-import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
-import { usePlaybackTileGeometry } from "./playbackFaderBank/usePlaybackTileGeometry";
-import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
-import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
-import { usePlaybackBankConfiguration } from "./playbackFaderBank/usePlaybackBankConfiguration";
 import { CueRecordChoiceModal } from "./playbackFaderBank/CueRecordChoiceModal";
+import type { PlaybackFaderBankProps } from "./playbackFaderBank/controller";
+import { PlaybackArtworkProvider } from "./playbackFaderBank/PlaybackArtworkProvider";
+import { PlaybackSlot } from "./playbackFaderBank/PlaybackSlot";
+import { playbackCellKey } from "./playbackFaderBank/projection";
+import { SoloFenceOverlay } from "./playbackFaderBank/SoloFenceOverlay";
+import { scrollablePlaybackGeometry } from "./playbackFaderBank/scrollableGeometry";
+import { usePlaybackBankConfiguration } from "./playbackFaderBank/usePlaybackBankConfiguration";
+import { usePlaybackGridSolo } from "./playbackFaderBank/usePlaybackGridSolo";
+import { usePlaybackPaneController } from "./playbackFaderBank/usePlaybackPaneController";
+import { usePlaybackTileGeometry } from "./playbackFaderBank/usePlaybackTileGeometry";
 
 export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 	function PlaybackFaderBank(props: PlaybackFaderBankProps = {}) {
-		const controller = usePlaybackBankController(props);
-		const [bankElement, setBankElement] = useState<HTMLDivElement | null>(null);
-		const viewport = useRef<HTMLDivElement | null>(null);
+		const { controller, paneGeometry, viewport, bankElement, setBankElement } =
+			usePlaybackPaneController(props);
 		const interactionSurfaceId = useId();
 		usePlaybackBankConfiguration(controller, interactionSurfaceId);
 		const solo = usePlaybackGridSolo(controller);
 		const tileGeometry = usePlaybackTileGeometry(
-			Boolean(props.tilePresentation),
+			Boolean(props.tilePresentation) && !props.tileLayout,
 			viewport.current,
 			bankElement,
 			controller.columns,
@@ -69,9 +66,18 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 				<div
 					ref={viewport}
 					className={
-						geometry ? "playback-bank-viewport" : "playback-bank-fixed"
+						geometry || paneGeometry
+							? "playback-bank-viewport"
+							: "playback-bank-fixed"
 					}
-					style={props.tilePresentation ? { overflow: "hidden" } : undefined}
+					style={
+						props.tilePresentation
+							? {
+									overflow: props.tileLayout ? "auto" : "hidden",
+									scrollbarGutter: props.tileLayout ? "stable" : undefined,
+								}
+							: undefined
+					}
 				>
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: This container routes the pointer-only context menu to the exact typed playback target. */}
 					<div
@@ -92,7 +98,9 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 						onKeyDownCapture={solo.keyDown}
 						onKeyUpCapture={solo.block}
 						data-playback-surface={controller.surfaceId}
-						data-playback-presentation={props.tilePresentation ? "tiles" : "controls"}
+						data-playback-presentation={
+							props.tilePresentation ? "tiles" : "controls"
+						}
 						data-command-surface={
 							controller.playbackDesk?.selected_surface_id ===
 							controller.surfaceId
@@ -114,6 +122,7 @@ export const PlaybackFaderBank = memo<PlaybackFaderBankProps>(
 							});
 						}}
 						style={
+							paneGeometry?.style ??
 							tileGeometry ?? {
 								gridTemplateColumns:
 									geometry?.gridTemplateColumns ??
@@ -164,6 +173,11 @@ function equalPlaybackFaderBankProps(
 	return (
 		(left.surfaceId ?? "main") === (right.surfaceId ?? "main") &&
 		left.layoutSourceSurfaceId === right.layoutSourceSurfaceId &&
+		left.tileLayout?.mode === right.tileLayout?.mode &&
+		(left.tileLayout?.mode !== "fixed" ||
+			(right.tileLayout?.mode === "fixed" &&
+				left.tileLayout.rows === right.tileLayout.rows &&
+				left.tileLayout.columns === right.tileLayout.columns)) &&
 		Boolean(left.scrollable) === Boolean(right.scrollable) &&
 		Boolean(left.tilePresentation) === Boolean(right.tilePresentation) &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
