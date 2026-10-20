@@ -505,11 +505,11 @@ fn push_prepared_sample(
                 match sample {
                     FamilyCompositionSample::Known(sample) => {
                         scratch.known.push(sample);
-                        scratch.known_origins.push(origins.clone());
+                        scratch.known_origins.push(origins);
                     }
                     sample => {
                         scratch.sources.push(sample);
-                        scratch.source_origins.push(origins.clone());
+                        scratch.source_origins.push(origins);
                     }
                 }
             }

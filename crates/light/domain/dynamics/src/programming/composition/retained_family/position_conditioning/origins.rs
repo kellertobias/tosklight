@@ -6,6 +6,9 @@ use super::*;
 #[derive(Clone, Default)]
 pub(super) struct PositionSourceOriginMap {
     locations: HashMap<NodeLocation, NodeLocation>,
+    /// TL-842: an unconditioned source maps each of its active captured nodes to itself, read
+    /// from the captured program rather than copied into `locations` every frame.
+    identity: Option<(Arc<CapturedProgram>, usize)>,
 }
 impl PositionSourceOriginMap {
     pub fn insert(
@@ -13,6 +16,13 @@ impl PositionSourceOriginMap {
         local: NodeLocation,
         original: NodeLocation,
     ) -> Result<(), TransitionError> {
+        if let Some((captured, index)) = self.identity.take() {
+            self.locations = captured.active[index]
+                .iter()
+                .copied()
+                .map(|node| (node, node))
+                .collect();
+        }
         if let Some(previous) = self.locations.insert(local, original) {
             ensure(
                 previous == original,
@@ -22,16 +32,30 @@ impl PositionSourceOriginMap {
         Ok(())
     }
     pub fn get(&self, local: NodeLocation) -> Option<NodeLocation> {
-        self.locations.get(&local).copied()
-    }
-    pub fn identity(captured: &CapturedProgram, index: usize) -> Self {
-        Self {
-            locations: captured.active[index]
-                .iter()
-                .copied()
-                .map(|node| (node, node))
-                .collect(),
+        match &self.identity {
+            Some((captured, index)) => captured.active[*index].contains(&local).then_some(local),
+            None => self.locations.get(&local).copied(),
         }
+    }
+    /// Whether some conditioned location maps to `original`.
+    pub fn maps_to(&self, original: NodeLocation) -> bool {
+        match &self.identity {
+            Some((captured, index)) => captured.active[*index].contains(&original),
+            None => self
+                .locations
+                .values()
+                .any(|location| *location == original),
+        }
+    }
+    pub fn identity(captured: &Arc<CapturedProgram>, index: usize) -> Self {
+        Self {
+            locations: HashMap::new(),
+            identity: Some((Arc::clone(captured), index)),
+        }
+    }
+    #[cfg(test)]
+    pub fn is_identity_view(&self) -> bool {
+        self.identity.is_some() && self.locations.is_empty()
     }
 }
 

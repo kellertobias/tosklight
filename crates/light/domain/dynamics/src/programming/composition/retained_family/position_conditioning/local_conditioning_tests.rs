@@ -652,3 +652,45 @@ fn wrong_registry_kind_conflict_and_inactive_histories_reject_without_mutation()
             .is_err()
     );
 }
+
+/// TL-842 P2: an unconditioned source maps every active captured node to itself. The binding
+/// answers that from the captured program instead of copying it into a map every frame, and
+/// answers exactly what the copied map answered.
+#[test]
+fn unconditioned_sources_answer_identity_origins_without_copying_them() {
+    let sources = [
+        whole(
+            resume(
+                Some(scale(
+                    angles(5.),
+                    required(Some(leaf(angles(10.))), Some(leaf(angles(90.)))),
+                    1.5,
+                )),
+                Some(leaf(angles(180.))),
+                40,
+            ),
+            3,
+        ),
+        whole(leaf(angles(250.)), 4),
+    ];
+    let registry = CapturedPositionProgram::new(Uuid::new_v4(), &angles(0.), &sources).unwrap();
+    let bound = registry.branch().conditioned_with_origins().unwrap();
+    assert_eq!(bound.len(), 2);
+    for source in &bound {
+        assert!(source.origins.is_identity_view(), "no per-frame map copy");
+        let index = source.original_index;
+        let nodes = original_nodes(&registry, index);
+        assert!(!nodes.is_empty());
+        for node in &nodes {
+            assert_eq!(source.origins.get(node.node), Some(node.node));
+            assert!(source.origins.maps_to(node.node));
+        }
+        // Another source's nodes are not this source's origins.
+        for other in original_nodes(&registry, 1 - index) {
+            if !nodes.iter().any(|node| node.node == other.node) {
+                assert_eq!(source.origins.get(other.node), None);
+                assert!(!source.origins.maps_to(other.node));
+            }
+        }
+    }
+}
