@@ -109,6 +109,9 @@ impl Scene {
             bounds.expand(fixture.position);
         }
         for object in &self.scenery {
+            if crate::venue_bounds::expand(&mut bounds, object) {
+                continue;
+            }
             bounds.expand(object.position - object.size * 0.5);
             bounds.expand(object.position + object.size * 0.5);
         }
@@ -714,6 +717,9 @@ pub struct SceneryObject {
     /// rigged.
     #[serde(default)]
     pub position_master: Option<Uuid>,
+    /// Portable parametric venue construction; absent for legacy scenery.
+    #[serde(default)]
+    pub architecture: Option<light_fixture::VenueArchitecture>,
 }
 
 impl SceneryObject {
@@ -1153,6 +1159,7 @@ mod tests {
             chords: 0,
             detail: Default::default(),
             position_master: None,
+            architecture: None,
         });
         scene.recompute_bounds();
         assert!(scene.bounds.radius() > 100.0);

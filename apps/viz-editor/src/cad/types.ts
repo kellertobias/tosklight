@@ -1,3 +1,4 @@
+import type { VenueArchitecture } from "@tosklight/patch";
 import type { CutPlanes } from "./cutPlanes";
 /** Which sides of a flight of stairs a handrail runs up, as seen climbing it. */
 export type CadStairHandrails = "none" | "left" | "right" | "both";
@@ -42,6 +43,10 @@ export interface CadEntity {
 	bracketAngle?: number;
 	/** How a generated Venue object is built; absent for fixtures and modelled objects. */
 	scenery?: CadScenery;
+	venueGeometry?: {
+		triangles: [number[], number[], number[]][];
+		plan: [[number, number], [number, number]][];
+	};
 	/** The clip this fixture hangs by, at the size it is drawn; absent when it has no box. */
 	mounting?: CadMounting;
 	/** A 3D model imported into this show (manufacturer "Imported models"), not a shipped Venue object. */
@@ -54,6 +59,7 @@ export interface CadEntity {
 }
 
 export interface CadScenery {
+	architecture?: VenueArchitecture;
 	/** The generated kind: `truss`, `curtain`, `chain`, `riser` and so on. */
 	kind: string;
 	/** Chords in a truss section: 1 a pipe, 2 a ladder, 3 a triangle, 4 a box. */
@@ -409,7 +415,10 @@ export function directionIndicator(
 	const offset = entity.emitterOffsetMillimetres
 		? projectPoint(entity.emitterOffsetMillimetres, view, rotationQuarterTurns)
 		: [0, 0];
-	const start: [number, number] = [centre[0] + offset[0], centre[1] + offset[1]];
+	const start: [number, number] = [
+		centre[0] + offset[0],
+		centre[1] + offset[1],
+	];
 	const direction = projectPoint(
 		entity.outputDirection.map(
 			(value) => value * DIRECTION_INDICATOR_MILLIMETRES,

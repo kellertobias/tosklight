@@ -446,6 +446,19 @@ fn point_in_triangle(point: [f32; 2], first: [f32; 2], second: [f32; 2], third: 
 /// its triangles come from the fixture package, not from this file.
 pub fn procedural(kind: MeshKind) -> Option<(&'static str, MeshData)> {
     match kind {
+        MeshKind::Triangle => Some((
+            "triangle",
+            MeshData {
+                vertices: [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+                    .map(|position| Vertex {
+                        position,
+                        normal: [0.0, 0.0, 1.0],
+                        uv: [0.0; 2],
+                    })
+                    .to_vec(),
+                indices: vec![0, 1, 2],
+            },
+        )),
         MeshKind::Cube => Some(("cube", unit_cube())),
         MeshKind::Cylinder => Some(("cylinder", unit_cylinder(20))),
         MeshKind::Sphere => Some(("sphere", unit_sphere(8, 14))),

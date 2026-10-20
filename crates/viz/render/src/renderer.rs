@@ -937,7 +937,7 @@ impl Renderer {
 }
 
 mod buffers;
-mod curtain_occlusion;
+pub(crate) mod curtain_occlusion;
 mod frame;
 mod groups;
 mod layouts;

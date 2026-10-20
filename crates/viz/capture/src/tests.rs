@@ -681,3 +681,25 @@ fn the_demo_scene_carries_emitters_for_every_fixture() {
         scene.emitters.len()
     );
 }
+
+#[test]
+fn explicit_inside_and_outside_cameras_are_reproducible_and_checked() {
+    let run = |extra: &[&str]| {
+        parse(
+            ["--show", "venue.show", "--output", "frames"]
+                .into_iter()
+                .chain(extra.iter().copied())
+                .map(str::to_owned),
+        )
+    };
+    let options = run(&["--camera", "0,1.6,2", "--target", "0,1.6,-2"])
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        options.camera.unwrap(),
+        viz_scene::glam::Vec3::new(0.0, 1.6, 2.0)
+    );
+    assert!(run(&["--camera", "0,1,2"]).is_err());
+    assert!(run(&["--camera", "NaN,1,2", "--target", "0,1,0"]).is_err());
+    assert!(run(&["--camera", "0,1,2", "--target", "0,1,2"]).is_err());
+}

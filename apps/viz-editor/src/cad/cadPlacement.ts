@@ -1,4 +1,3 @@
-import { formatErrorDetails } from "@tosklight/ui";
 /**
  * How the CAD add buttons read the fixture library and place a Venue object in the show.
  *
@@ -12,11 +11,17 @@ import {
 	newPatchFixtureCandidate,
 	type PatchFixtureWrite,
 } from "@tosklight/patch";
+import { formatErrorDetails } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { documentSession } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
 import type { PlanPlacement } from "./bulkPlacement";
-import { definitionForProfile, nextVirtualNumber, type VenuePart } from "./venueParts";
+import { cadSession } from "./session";
+import {
+	definitionForProfile,
+	nextVirtualNumber,
+	type VenuePart,
+} from "./venueParts";
 
 const transport = new TauriPatchTransport();
 
@@ -26,9 +31,14 @@ export type FixtureLibrary =
 	| { state: "ready"; definitions: readonly FixtureDefinition[] }
 	| { state: "failed"; reason: string };
 
-export async function readLibrary(): Promise<Exclude<FixtureLibrary, { state: "loading" }>> {
+export async function readLibrary(): Promise<
+	Exclude<FixtureLibrary, { state: "loading" }>
+> {
 	try {
-		const definitions = mergeFixtureDefinitions(await documentSession.fixtureProfiles(), []);
+		const definitions = mergeFixtureDefinitions(
+			await documentSession.fixtureProfiles(),
+			[],
+		);
 		return { state: "ready", definitions };
 	} catch (reason) {
 		return { state: "failed", reason: formatErrorDetails(reason) };
@@ -59,7 +69,9 @@ export function useFixtureLibrary(): FixtureLibrary {
  * element is placed or none is, and the show's own reason comes back for the batch.
  */
 /** What a part is placed with beyond its profile: its options, and a size other than the default. */
-export type PlacedWith = Partial<Pick<PatchFixtureWrite, "sceneryOptions" | "scenerySizeMetres">>;
+export type PlacedWith = Partial<
+	Pick<PatchFixtureWrite, "sceneryOptions" | "scenerySizeMetres">
+> & { name?: string };
 
 /** What a part is placed with: its options, and its size in the patch's millimetres. */
 export function placedWith(part: VenuePart | undefined): PlacedWith {
@@ -67,7 +79,11 @@ export function placedWith(part: VenuePart | undefined): PlacedWith {
 	return {
 		sceneryOptions: part?.sceneryOptions,
 		scenerySizeMetres: size
-			? { x: Math.round(size.x * 1000), y: Math.round(size.y * 1000), z: Math.round(size.z * 1000) }
+			? {
+					x: Math.round(size.x * 1000),
+					y: Math.round(size.y * 1000),
+					z: Math.round(size.z * 1000),
+				}
 			: undefined,
 	};
 }
@@ -78,13 +94,15 @@ async function placeDefinitions(
 	extras: PlacedWith = {},
 ): Promise<string[]> {
 	const snapshot = await documentSession.patchSnapshot();
-	const taken = snapshot.fixtures.map((fixture) => fixture.virtualFixtureNumber);
+	const taken = snapshot.fixtures.map(
+		(fixture) => fixture.virtualFixtureNumber,
+	);
 	const fixtureIds: string[] = [];
 	const fixtures = placements.map((placement) => {
 		const virtual = nextVirtualNumber(taken);
 		taken.push(virtual);
 		const candidate = newPatchFixtureCandidate({
-			name: definition.name,
+			name: extras.name ?? definition.name,
 			fixture_number: null,
 			virtual_fixture_number: virtual,
 			definition,
@@ -97,16 +115,25 @@ async function placeDefinitions(
 			...candidate.input,
 			location: placement.position,
 			rotation: placement.rotation,
-			...(extras.sceneryOptions ? { sceneryOptions: extras.sceneryOptions } : {}),
-			...(extras.scenerySizeMetres ? { scenerySizeMetres: extras.scenerySizeMetres } : {}),
+			...(extras.sceneryOptions
+				? { sceneryOptions: extras.sceneryOptions }
+				: {}),
+			...(extras.scenerySizeMetres
+				? { scenerySizeMetres: extras.scenerySizeMetres }
+				: {}),
 		};
 	});
 	if (!fixtures.length) return [];
-	await transport.patchFixtures(snapshot.showId, snapshot.patchRevision, {
-		requestId: crypto.randomUUID(),
-		fixtures,
-		removeFixtureIds: [],
-	});
+	if (extras.sceneryOptions?.architecture) {
+		const scene = await cadSession.snapshot();
+		await cadSession.patchVenue(scene.sceneRevision, fixtures);
+	} else {
+		await transport.patchFixtures(snapshot.showId, snapshot.patchRevision, {
+			requestId: crypto.randomUUID(),
+			fixtures,
+			removeFixtureIds: [],
+		});
+	}
 	return fixtureIds;
 }
 
@@ -134,13 +161,25 @@ export async function placeProfile(
 ): Promise<PlaceResult> {
 	const library = known?.state === "ready" ? known : await readLibrary();
 	if (library.state === "failed")
-		return { ok: false, reason: `The fixture library could not be read: ${library.reason}` };
+		return {
+			ok: false,
+			reason: `The fixture library could not be read: ${library.reason}`,
+		};
 	const definition = definitionForProfile(library.definitions, profileId);
 	if (!definition)
-		return { ok: false, reason: `The ${label} is not in this computer's fixture library.` };
+		return {
+			ok: false,
+			reason: `The ${label} is not in this computer's fixture library.`,
+		};
 	try {
-		return { ok: true, fixtureIds: await placeDefinitions(definition, placements, extras) };
+		return {
+			ok: true,
+			fixtureIds: await placeDefinitions(definition, placements, extras),
+		};
 	} catch (reason) {
-		return { ok: false, reason: `The show refused the ${label}: ${formatErrorDetails(reason)}` };
+		return {
+			ok: false,
+			reason: `The show refused the ${label}: ${formatErrorDetails(reason)}`,
+		};
 	}
 }

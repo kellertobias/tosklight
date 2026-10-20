@@ -36,8 +36,13 @@ export function fitCadOverview(
 	viewportHeight: number,
 ): TileCamera {
 	const camera = fitCadGeometry(
-		entities, drawings, OVERVIEW_VIEW, OVERVIEW_ROTATION_QUARTER_TURNS,
-		viewportWidth, viewportHeight, false,
+		entities,
+		drawings,
+		OVERVIEW_VIEW,
+		OVERVIEW_ROTATION_QUARTER_TURNS,
+		viewportWidth,
+		viewportHeight,
+		false,
 	);
 	// Preserve the Show overview's existing zoom limit; interactive CAD Fit has no clipping floor.
 	return { ...camera, zoom: Math.max(0.001, camera.zoom) };
@@ -66,19 +71,41 @@ export function fitCadGeometry(
 	};
 	for (const entity of entities) {
 		const geometry = worldGeometry(
-			entity, entityPlanGeometry(entity, drawings.get(entity.drawingId), view),
-			view, rotationQuarterTurns,
+			entity,
+			entityPlanGeometry(entity, drawings.get(entity.drawingId), view),
+			view,
+			rotationQuarterTurns,
 		);
-		for (const triangle of geometry.triangles) for (const point of triangle.points) include(point);
-		for (const outline of geometry.outlines) for (const point of outline) include(point);
-		for (const line of geometry.lines) for (const point of line.points) include(point);
-		if (includeDirectionIndicators && entity.kind !== "venue" && !isPositionPoint(entity)) {
-			const centre = projectPoint(entity.positionMillimetres, view, rotationQuarterTurns);
-			for (const point of directionIndicator(entity, centre, view, rotationQuarterTurns)) include(point);
+		for (const triangle of geometry.triangles)
+			for (const point of triangle.points) include(point);
+		for (const outline of geometry.outlines)
+			for (const point of outline) include(point);
+		for (const line of geometry.lines)
+			for (const point of line.points) include(point);
+		if (
+			includeDirectionIndicators &&
+			entity.kind !== "venue" &&
+			!isPositionPoint(entity)
+		) {
+			const centre = projectPoint(
+				entity.positionMillimetres,
+				view,
+				rotationQuarterTurns,
+			);
+			for (const point of directionIndicator(
+				entity,
+				centre,
+				view,
+				rotationQuarterTurns,
+			))
+				include(point);
 		}
 	}
 	if (minX === Infinity) {
-		for (const entity of entities) include(projectPoint(entity.positionMillimetres, view, rotationQuarterTurns));
+		for (const entity of entities)
+			include(
+				projectPoint(entity.positionMillimetres, view, rotationQuarterTurns),
+			);
 	}
 	const width = Math.max(500, maxX - minX);
 	const height = Math.max(500, maxY - minY);
@@ -294,7 +321,10 @@ export function gizmoGeometry(
 			Math.max(...points.map((point) => point[axis]))) /
 		2;
 	return {
-		origin: [middle(0) + preview[0], middle(1) + preview[1]] as [number, number],
+		origin: [middle(0) + preview[0], middle(1) + preview[1]] as [
+			number,
+			number,
+		],
 		length: 48 / camera.zoom,
 		square: 7 / camera.zoom,
 	};
@@ -373,16 +403,48 @@ export function pickEntity(
 			return entity;
 		if (geometry.outlines.some((outline) => pointInPolygon(point, outline)))
 			return entity;
-		const distance = Math.hypot(
-			projected[0] - point[0],
-			projected[1] - point[1],
+		const venue = entity.scenery?.architecture;
+		if (
+			venue &&
+			venue.kind !== "wall" &&
+			view === "top_down" &&
+			pointInPolygon(
+				point,
+				geometry.lines.map((line) => line.points[0]),
+			)
+		)
+			return entity;
+		const lineDistance = Math.min(
+			...geometry.lines.map((line) => pointSegmentDistance(point, line.points)),
 		);
+		// A wall's doorway remains an opening even when it contains the entity's placement point.
+		const centreDistance = venue
+			? Infinity
+			: Math.hypot(projected[0] - point[0], projected[1] - point[1]);
+		const distance = Math.min(lineDistance, centreDistance);
 		const threshold = Math.max(90, 8 / camera.zoom);
 		if (distance <= threshold && (!best || distance < best.distance)) {
 			best = { entity, distance };
 		}
 	}
 	return best?.entity ?? null;
+}
+
+/** Distance to the visible linework, including long wall ends and door leaves. */
+function pointSegmentDistance(
+	point: PlanPoint,
+	[a, b]: [PlanPoint, PlanPoint],
+): number {
+	const dx = b[0] - a[0],
+		dy = b[1] - a[1];
+	const square = dx * dx + dy * dy;
+	const t = square
+		? Math.max(
+				0,
+				Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / square),
+			)
+		: 0;
+	return Math.hypot(point[0] - a[0] - t * dx, point[1] - a[1] - t * dy);
 }
 
 /** World-space guide bounds that remain just outside both screen edges at any pan and zoom. */

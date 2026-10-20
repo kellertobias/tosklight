@@ -1,13 +1,19 @@
 import { chainPlan } from "./chainPlan";
 import { crowdPlan, seedOf } from "./crowdPlan";
 import { curtainPlan } from "./curtainPlan";
-import { discoBallPlan, flightRackPlan, lineArrayPlan, paSpeakerPlan } from "./equipmentPlan";
+import {
+	discoBallPlan,
+	flightRackPlan,
+	lineArrayPlan,
+	paSpeakerPlan,
+} from "./equipmentPlan";
 import { hideCoveredEdges } from "./hiddenLines";
 import {
 	bakedYawQuarterTurns,
 	lampRelativeView,
 	modelDrawingGeometry,
 } from "./modelDrawing";
+import { cameraVector, dot3, normalOf, point3Key } from "./projectionMath";
 import { stairElevation, stairPlan } from "./stairPlan";
 import { trussPlan } from "./trussPlan";
 import type {
@@ -17,6 +23,7 @@ import type {
 	CadStairHandrails,
 	CadViewDirection,
 } from "./types";
+import { venuePlanGeometry } from "./venueProjection";
 
 /**
  * How an audience is drawn lives in `crowdPlan`, but the crowd shares its stature and its seed
@@ -179,6 +186,8 @@ function liveModelGeometry(
 	drawing: CadDrawing | undefined,
 	view: CadViewDirection,
 ): PlanGeometry | null {
+	if (entity.venueGeometry)
+		return venuePlanGeometry(entity, view, liveModelGeometry);
 	const pose = view === "top_down" ? "top" : "elevation";
 	const mesh = drawing?.liveMeshes?.find(
 		(candidate) => candidate.pose === pose,
@@ -305,50 +314,6 @@ function modelFeatureLines(
 		.map(({ points, depths }) => ({ points, depths }));
 }
 
-function normalOf(
-	points: [
-		[number, number, number],
-		[number, number, number],
-		[number, number, number],
-	],
-): [number, number, number] {
-	const first = points[1].map((value, index) => value - points[0][index]);
-	const second = points[2].map((value, index) => value - points[0][index]);
-	const cross: [number, number, number] = [
-		first[1] * second[2] - first[2] * second[1],
-		first[2] * second[0] - first[0] * second[2],
-		first[0] * second[1] - first[1] * second[0],
-	];
-	const length = Math.hypot(...cross) || 1;
-	return cross.map((value) => value / length) as [number, number, number];
-}
-
-function dot3(
-	first: readonly [number, number, number],
-	second: readonly [number, number, number],
-) {
-	return first[0] * second[0] + first[1] * second[1] + first[2] * second[2];
-}
-
-function cameraVector(view: CadViewDirection): [number, number, number] {
-	switch (view) {
-		case "top_down":
-			return [0, 1, 0];
-		case "left_to_right":
-			return [-1, 0, 0];
-		case "right_to_left":
-			return [1, 0, 0];
-		case "front_to_back":
-			return [0, 0, 1];
-		case "back_to_front":
-			return [0, 0, -1];
-	}
-}
-
-function point3Key(point: readonly [number, number, number]) {
-	return point.map((value) => Math.round(value * 20)).join(",");
-}
-
 export function rotateModelPoint(
 	point: readonly [number, number, number],
 	rotation: readonly [number, number, number],
@@ -417,7 +382,7 @@ export function rotateDeskPoint(
  * model's +Z is downstage, as the Visualizer places it (desk y = −z).
  */
 /** A model point on the drawing plane of a view, with negative zero folded to zero. */
-function projectModelPoint(
+export function projectModelPoint(
 	point: readonly [number, number, number],
 	view: CadViewDirection,
 ): PlanPoint {
@@ -475,7 +440,9 @@ function isSemanticPlanSymbol(type: string): boolean {
  * body, so the plan draws a marker for it rather than the lamp the Visualizer's fallback would
  * pick for a profile without a model.
  */
-export function isPositionPoint(entity: Pick<CadEntity, "fixtureType">): boolean {
+export function isPositionPoint(
+	entity: Pick<CadEntity, "fixtureType">,
+): boolean {
 	return entity.fixtureType === "position_point";
 }
 
@@ -596,7 +563,9 @@ function typedGeometry(
 		scenery?.kind === "cylinder" ||
 		scenery?.kind === "sphere"
 	) {
-		polygons = [primitive(scenery.kind, horizontal, vertical, view === "top_down")];
+		polygons = [
+			primitive(scenery.kind, horizontal, vertical, view === "top_down"),
+		];
 	} else if (scenery?.kind === "flight_rack") {
 		polygons = flightRackPlan(horizontal, vertical, view);
 	} else if (scenery?.kind === "pa_top") {
@@ -615,11 +584,13 @@ function typedGeometry(
 			scenery?.chords || trussChordCount(type),
 			scenery ? scenery.pattern === "deco" : /deco/.test(type),
 		);
-	} else if (
-		scenery?.kind === "chain" ||
-		(!scenery && /chain/.test(type))
-	) {
-		return chainPlan(entity.sizeMillimetres, view, scenery?.chain, scenery?.anchor);
+	} else if (scenery?.kind === "chain" || (!scenery && /chain/.test(type))) {
+		return chainPlan(
+			entity.sizeMillimetres,
+			view,
+			scenery?.chain,
+			scenery?.anchor,
+		);
 	} else if (
 		scenery?.kind === "railing" ||
 		(!scenery && /railing|handrail/.test(type))
@@ -636,7 +607,13 @@ function typedGeometry(
 		return {
 			...fromPolygons(
 				"typed",
-				stairElevation(width, depth, height, scenery?.handrails ?? "none", lampRelativeView(view, yaw)),
+				stairElevation(
+					width,
+					depth,
+					height,
+					scenery?.handrails ?? "none",
+					lampRelativeView(view, yaw),
+				),
 			),
 			yawQuarterTurnsShown: bakedYawQuarterTurns(view, yaw),
 		};
@@ -882,13 +859,30 @@ const RAIL_SECTION = 40;
 function railing(width: number, height: number, top: boolean): Polygon[] {
 	const w = Math.max(200, width);
 	const h = Math.max(200, height);
-	if (top) return [rect(-w / 2, -Math.max(RAIL_SECTION, height) / 2, w, Math.max(RAIL_SECTION, height), BODY)];
+	if (top)
+		return [
+			rect(
+				-w / 2,
+				-Math.max(RAIL_SECTION, height) / 2,
+				w,
+				Math.max(RAIL_SECTION, height),
+				BODY,
+			),
+		];
 	// A railing stands on the floor it is placed on, like a stage element, so its rails are
 	// measured up from the origin rather than from the middle of a box.
 	const posts = Math.min(40, Math.max(2, Math.round(w / 1200)));
 	const polygons: Polygon[] = [];
 	for (let index = 0; index <= posts; index += 1)
-		polygons.push(rect(-w / 2 + (w * index) / posts - RAIL_SECTION / 2, 0, RAIL_SECTION, h, BODY));
+		polygons.push(
+			rect(
+				-w / 2 + (w * index) / posts - RAIL_SECTION / 2,
+				0,
+				RAIL_SECTION,
+				h,
+				BODY,
+			),
+		);
 	for (const at of [h - RAIL_SECTION, h * 0.55])
 		polygons.push(rect(-w / 2, at, w, RAIL_SECTION, DETAIL));
 	return polygons;
@@ -948,7 +942,9 @@ function scissorStage(w: number, h: number): Polygon[] {
 			thickLine([left, high], [right, low], arm, BODY),
 		])
 			polygons.push({ ...arm_, points: clipBetween(arm_.points, bottom, top) });
-		polygons.push(ellipse(0, (low + high) / 2, arm * 0.45, arm * 0.45, DARK, 10));
+		polygons.push(
+			ellipse(0, (low + high) / 2, arm * 0.45, arm * 0.45, DARK, 10),
+		);
 	}
 	polygons.push(
 		rect(-w / 2, top, w, deck, DETAIL),
@@ -958,8 +954,16 @@ function scissorStage(w: number, h: number): Polygon[] {
 }
 
 /** The part of a convex polygon between two heights. */
-function clipBetween(points: PlanPoint[], low: number, high: number): PlanPoint[] {
-	const clip = (input: PlanPoint[], inside: (y: number) => boolean, edge: number) => {
+function clipBetween(
+	points: PlanPoint[],
+	low: number,
+	high: number,
+): PlanPoint[] {
+	const clip = (
+		input: PlanPoint[],
+		inside: (y: number) => boolean,
+		edge: number,
+	) => {
 		const output: PlanPoint[] = [];
 		input.forEach((current, index) => {
 			const previous = input[(index + input.length - 1) % input.length];
@@ -1126,10 +1130,22 @@ function venueProp(width: number, height: number): Polygon[] {
 function positionPointMarker(): PlanGeometry {
 	const radius = 120;
 	const reach = 200;
-	const geometry = fromPolygons("typed", [ellipse(0, 0, radius, radius, BASE, 24)]);
+	const geometry = fromPolygons("typed", [
+		ellipse(0, 0, radius, radius, BASE, 24),
+	]);
 	geometry.lines.push(
-		{ points: [[-reach, 0], [reach, 0]] },
-		{ points: [[0, -reach], [0, reach]] },
+		{
+			points: [
+				[-reach, 0],
+				[reach, 0],
+			],
+		},
+		{
+			points: [
+				[0, -reach],
+				[0, reach],
+			],
+		},
 	);
 	return geometry;
 }

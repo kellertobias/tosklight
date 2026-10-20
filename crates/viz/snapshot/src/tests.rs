@@ -74,6 +74,7 @@ fn rig() -> (Scene, SceneValues) {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     scene.recompute_bounds();
     let mut values = SceneValues::default();

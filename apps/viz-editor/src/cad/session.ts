@@ -41,7 +41,10 @@ export const cadSession = {
 			rotationDegrees: [number, number, number];
 		}>,
 	) =>
-		invoke<CadTransformOutcome>("cad_set_transforms", { expectedSceneRevision, transforms }),
+		invoke<CadTransformOutcome>("cad_set_transforms", {
+			expectedSceneRevision,
+			transforms,
+		}),
 	/** Exact numeric poses: base and copy edits never shift other physical placements. */
 	setNumericTransforms: (
 		expectedSceneRevision: number,
@@ -61,6 +64,9 @@ export const cadSession = {
 			expectedSceneRevision,
 			fixtures,
 		}),
+	/** Creates or edits complete venue assemblies as one undoable step. */
+	patchVenue: (expectedSceneRevision: number, fixtures: readonly unknown[]) =>
+		invoke("cad_patch_venue", { expectedSceneRevision, fixtures }),
 	/** Deletes fixtures from the show as one step that `undo` brings back. */
 	delete: (expectedSceneRevision: number, fixtureIds: readonly string[]) =>
 		invoke<{ sceneRevision: number; deletedIds: string[] }>("cad_delete", {

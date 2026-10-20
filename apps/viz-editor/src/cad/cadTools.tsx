@@ -14,17 +14,29 @@ import {
 	useMemo,
 	useState,
 } from "react";
-import { type CadAnnotation, annotationSession } from "./annotations";
+import { annotationSession, type CadAnnotation } from "./annotations";
 import { type PlacedWith, placeProfile } from "./cadPlacement";
 
 /**
  * What the add buttons place: a truss, a stage element, a curtain, a primitive shape (box, cylinder
  * or ball), or any other Venue object.
  */
-export type CadAddKind = "truss" | "stage" | "curtain" | "primitive" | "venue";
+export type CadAddKind =
+	| "truss"
+	| "stage"
+	| "curtain"
+	| "primitive"
+	| "venue"
+	| "architecture";
 
 /** What a press on a viewport does. */
-export type CadDrawTool = "select" | "polyline" | "box" | "text" | "measure" | "erase";
+export type CadDrawTool =
+	| "select"
+	| "polyline"
+	| "box"
+	| "text"
+	| "measure"
+	| "erase";
 
 export interface CadTools {
 	/**
@@ -32,7 +44,9 @@ export interface CadTools {
 	 * element opens its picture list). With `several`, the part's bulk wizard opens instead of one
 	 * being placed. Null hides the toolbar.
 	 */
-	onAdd: ((kind: CadAddKind, profileId?: string, several?: boolean) => void) | null;
+	onAdd:
+		| ((kind: CadAddKind, profileId?: string, several?: boolean) => void)
+		| null;
 	tool: CadDrawTool;
 	setTool(tool: CadDrawTool): void;
 	annotations: readonly CadAnnotation[];
@@ -48,7 +62,9 @@ export interface CadTools {
 	selectText(id: string | null): void;
 	/** Where a text being dragged is drawn until the move is committed. */
 	textPreview: { id: string; points: [number, number][] } | null;
-	setTextPreview(preview: { id: string; points: [number, number][] } | null): void;
+	setTextPreview(
+		preview: { id: string; points: [number, number][] } | null,
+	): void;
 	/** Why the show refused the last drawn item, until the operator dismisses it. */
 	error: string | null;
 	clearError(): void;
@@ -156,7 +172,8 @@ export function CadToolProvider({
 		const report = (reason: unknown) => setError(formatErrorDetails(reason));
 		const announcePlaced = (fixtureIds: string | readonly string[]) =>
 			setPlaced((current) => ({
-				fixtureIds: typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],
+				fixtureIds:
+					typeof fixtureIds === "string" ? [fixtureIds] : [...fixtureIds],
 				request: (current?.request ?? 0) + 1,
 			}));
 		return {
@@ -192,13 +209,16 @@ export function CadToolProvider({
 			clearError: () => setError(null),
 			save: (annotation) =>
 				annotationSession.save(annotation).then(() => undefined, report),
-			remove: (id) => annotationSession.remove(id).then(() => undefined, report),
+			remove: (id) =>
+				annotationSession.remove(id).then(() => undefined, report),
 			// The changed item is drawn from the show's answer at once, so moved text never falls back
 			// to where it was between its preview clearing and the delta every window receives.
 			change: (annotation) =>
 				annotationSession.change(annotation).then((changed) => {
 					if (changed?.id)
-						setAnnotations((all) => all.map((each) => (each.id === changed.id ? changed : each)));
+						setAnnotations((all) =>
+							all.map((each) => (each.id === changed.id ? changed : each)),
+						);
 				}, report),
 			// Text that is no longer drawn cannot stay picked.
 			selectedTextId: annotations.some((each) => each.id === selectedTextId)
@@ -208,7 +228,18 @@ export function CadToolProvider({
 			textPreview,
 			setTextPreview,
 		};
-	}, [onAdd, tool, annotations, error, placed, placing, selectedTextId, textPreview]);
+	}, [
+		onAdd,
+		tool,
+		annotations,
+		error,
+		placed,
+		placing,
+		selectedTextId,
+		textPreview,
+	]);
 
-	return <CadToolContext.Provider value={value}>{children}</CadToolContext.Provider>;
+	return (
+		<CadToolContext.Provider value={value}>{children}</CadToolContext.Provider>
+	);
 }

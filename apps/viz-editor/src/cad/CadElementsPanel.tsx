@@ -1,5 +1,3 @@
-import { formatErrorDetails } from "@tosklight/ui";
-import { ErrorAlert } from "@tosklight/ui";
 /**
  * The CAD window's Elements panel: what the venue is made of, apart from the lamps.
  *
@@ -9,21 +7,27 @@ import { ErrorAlert } from "@tosklight/ui";
  * this panel receives which tab is open and each add as a request.
  */
 import type { TitleDropdownItem } from "@tosklight/ui";
+import { ErrorAlert, formatErrorDetails } from "@tosklight/ui";
 import { useEffect, useRef, useState } from "react";
-import type { CadAnnotation } from "./annotations";
 import { formatMeasurement, measurementLength } from "./annotationGeometry";
+import type { CadAnnotation } from "./annotations";
 import { CadDrawingTree } from "./CadDrawingTree";
 import { CAD_ADD_ACTIONS } from "./CadToolbar";
 import { CadUnderlayPanel } from "./CadUnderlayPanel";
+import { chooseAndImportModel } from "./cadModelImport";
 import type { CadTools } from "./cadTools";
 import type { DrawingLeaf } from "./drawingTree";
-import { CAD_VIEW_LABELS, type CadEntity, type CadViewDirection } from "./types";
+import {
+	CAD_VIEW_LABELS,
+	type CadEntity,
+	type CadViewDirection,
+} from "./types";
 import type { CadUnderlay } from "./underlays";
-import type { CadUnderlays } from "./useCadUnderlays";
 import { useCadDrawingTree } from "./useCadDrawingTree";
+import type { CadUnderlays } from "./useCadUnderlays";
 import { useCadVenueGroups } from "./useCadVenueGroups";
 import { groupOf, type VenueGroup, venueGroupAction } from "./venueGroups";
-import { chooseAndImportModel } from "./cadModelImport";
+import { venueObjectLabel } from "./venueObjectLabel";
 import "./cadElements.css";
 
 export type ElementsTab = "drawings" | "objects";
@@ -51,14 +55,21 @@ export function elementsAddItems(
 				label: "Import drawing (DXF, SVG)…",
 				onPress: () => request("chooseDrawing"),
 			},
-			{ kind: "action", id: "new-folder", label: "New folder", onPress: () => request("newFolder") },
+			{
+				kind: "action",
+				id: "new-folder",
+				label: "New folder",
+				onPress: () => request("newFolder"),
+			},
 		];
 	return [
 		...CAD_ADD_ACTIONS.map(
 			({ kind, label }): TitleDropdownItem => ({
 				kind: "action",
 				id: `add-${kind}`,
-				label: label.replace(/^Add /u, "").replace(/^./u, (first) => first.toUpperCase()),
+				label: label
+					.replace(/^Add /u, "")
+					.replace(/^./u, (first) => first.toUpperCase()),
 				disabled: !tools.onAdd,
 				onPress: () => tools.onAdd?.(kind),
 			}),
@@ -118,7 +129,8 @@ function metres(millimetres: number) {
 function venueObjects(entities: readonly CadEntity[]) {
 	const seen = new Set<string>();
 	return entities.filter((entity) => {
-		if (entity.kind !== "venue" || seen.has(entity.logicalFixtureId)) return false;
+		if (entity.kind !== "venue" || seen.has(entity.logicalFixtureId))
+			return false;
 		seen.add(entity.logicalFixtureId);
 		return true;
 	});
@@ -148,7 +160,10 @@ function DrawingsTab({
 	requests: ElementsRequests;
 }) {
 	const { tree, change, error } = useCadDrawingTree(documentKey);
-	const [selected, setSelected] = useState<{ id: string; isFolder: boolean } | null>(null);
+	const [selected, setSelected] = useState<{
+		id: string;
+		isFolder: boolean;
+	} | null>(null);
 	const leaves = drawingLeaves(underlayState.underlays, tools.annotations);
 	const leaf =
 		selected && !selected.isFolder
@@ -163,7 +178,11 @@ function DrawingsTab({
 			onChange={change}
 			newFolderRequest={requests.newFolder}
 		>
-			{error ? <ErrorAlert as="output" className="cad-error">{error}</ErrorAlert> : null}
+			{error ? (
+				<ErrorAlert as="output" className="cad-error">
+					{error}
+				</ErrorAlert>
+			) : null}
 			<CadUnderlayPanel
 				state={underlayState}
 				defaultView={defaultView}
@@ -171,7 +190,10 @@ function DrawingsTab({
 				chooseRequest={requests.chooseDrawing}
 			/>
 			{leaf?.kind === "annotation" ? (
-				<section className="cad-elements-selected" aria-label="Selected drawing">
+				<section
+					className="cad-elements-selected"
+					aria-label="Selected drawing"
+				>
 					<strong>{leaf.name}</strong>
 					<small>{leaf.detail}</small>
 					<button
@@ -210,7 +232,9 @@ function ObjectRow({
 		>
 			<strong title={entity.name}>{entity.name}</strong>
 			<small className="cad-elements-object-kind">
-				{entity.scenery?.kind ?? entity.fixtureProfile ?? "model"}
+				{entity.scenery?.architecture
+					? venueObjectLabel(entity.scenery.architecture)
+					: (entity.scenery?.kind ?? entity.fixtureProfile ?? "model")}
 			</small>
 			<small className="cad-elements-object-size">
 				{width} × {depth} × {height} m
@@ -235,8 +259,14 @@ function GroupRows({
 		members.length > 0 &&
 		members.every((member) => selectedIds.includes(member.logicalFixtureId));
 	return (
-		<div className="cad-elements-venue-group" role="group" aria-label={group.name}>
-			<div className={`cad-elements-group-row ${selected ? "is-selected" : ""}`.trim()}>
+		<div
+			className="cad-elements-venue-group"
+			role="group"
+			aria-label={group.name}
+		>
+			<div
+				className={`cad-elements-group-row ${selected ? "is-selected" : ""}`.trim()}
+			>
 				<button
 					type="button"
 					className="cad-elements-group-toggle"
@@ -250,7 +280,9 @@ function GroupRows({
 					type="button"
 					className="cad-elements-object"
 					aria-pressed={selected}
-					onClick={() => onSelect(members.map((member) => member.logicalFixtureId))}
+					onClick={() =>
+						onSelect(members.map((member) => member.logicalFixtureId))
+					}
 				>
 					<strong title={group.name}>{group.name}</strong>
 					<small className="cad-elements-object-kind">Group</small>
@@ -305,7 +337,9 @@ function ObjectsTab({
 			members: group.memberIds.flatMap((id) => byId.get(id) ?? []),
 		}))
 		.filter(({ members }) => members.length);
-	const objects = all.filter((entity) => !groupOf(groups, entity.logicalFixtureId));
+	const objects = all.filter(
+		(entity) => !groupOf(groups, entity.logicalFixtureId),
+	);
 	const grouping = venueGroupAction(groups, entities, selectedIds, "group");
 	const ungrouping = venueGroupAction(groups, entities, selectedIds, "ungroup");
 
@@ -367,7 +401,11 @@ function ObjectsTab({
 					Ungroup
 				</button>
 			</div>
-			{venueGroups.error ? <ErrorAlert as="output" className="cad-error">{venueGroups.error}</ErrorAlert> : null}
+			{venueGroups.error ? (
+				<ErrorAlert as="output" className="cad-error">
+					{venueGroups.error}
+				</ErrorAlert>
+			) : null}
 			{shownGroups.length ? (
 				<section className="cad-elements-group" aria-label="Groups">
 					<h3>Groups</h3>

@@ -14,6 +14,7 @@ mod profile_drawing;
 mod profile_lookup;
 mod scenery;
 mod transform;
+mod venue_geometry;
 
 use crate::contract::{FixtureDto, MutationDto};
 use crate::session::Session;
@@ -101,6 +102,8 @@ pub struct CadEntity {
     pub aim: CadAim,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scenery: Option<CadScenery>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub venue_geometry: Option<venue_geometry::CadVenueGeometry>,
     /// The clip this fixture hangs by, at the size it is drawn: what a pipe has to reach to rig it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mounting: Option<CadMounting>,
@@ -389,10 +392,10 @@ fn visible_entities(
     hidden_layers: &BTreeSet<String>,
     notes: &HashMap<Uuid, String>,
 ) -> Vec<CadEntity> {
-    aim_lamps(
+    venue_geometry::with_ceilings(aim_lamps(
         connect_chains(entities(snapshot, locked_layers, notes)),
         snapshot,
-    )
+    ))
     .into_iter()
     .filter(|entity| {
         !hidden_fixtures.contains(&entity.logical_fixture_id)
@@ -477,7 +480,15 @@ fn entities(
                 output_direction: output_direction(rotation),
                 aim: CadAim::default(),
                 scenery: cad_scenery(snapshot, &fixture.patch.scenery_options),
-                mounting: cad_mounting(snapshot, entity_size(snapshot, &fixture.patch, id)),
+                venue_geometry: venue_geometry::for_fixture(
+                    &fixture.patch,
+                    entity_size(snapshot, &fixture.patch, id),
+                ),
+                mounting: if fixture.patch.scenery_options.architecture.is_some() {
+                    None
+                } else {
+                    cad_mounting(snapshot, entity_size(snapshot, &fixture.patch, id))
+                },
                 imported_model: snapshot.is_some_and(profile_lookup::imported_model),
                 position_reference: profile_lookup::position_reference(&points, &fixture.patch),
             };

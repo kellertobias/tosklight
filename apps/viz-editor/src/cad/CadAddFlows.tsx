@@ -14,13 +14,29 @@ import { formatErrorDetails } from "@tosklight/ui";
  */
 import { useEffect, useRef, useState } from "react";
 import type { PlanPlacement } from "./bulkPlacement";
-import { type BulkShape, CadBulkAddModal, type TrussSize } from "./CadBulkAddModal";
+import { CadArchitectureModal } from "./CadArchitectureModal";
+import {
+	type BulkShape,
+	CadBulkAddModal,
+	type TrussSize,
+} from "./CadBulkAddModal";
 import { CadVenueElementModal } from "./CadVenueElementModal";
 import { chosenPart, rememberPart } from "./cadAddChoice";
-import { type FixtureLibrary, placedWith, placeProfile, readLibrary } from "./cadPlacement";
 import { chooseAndImportModel, LOAD_MODEL } from "./cadModelImport";
+import {
+	type FixtureLibrary,
+	placedWith,
+	placeProfile,
+	readLibrary,
+} from "./cadPlacement";
 import { type CadAddKind, useCadTools } from "./cadTools";
-import { definitionForProfile, findPart, partKey, partLabel, type VenuePart } from "./venueParts";
+import {
+	definitionForProfile,
+	findPart,
+	partKey,
+	partLabel,
+	type VenuePart,
+} from "./venueParts";
 
 /** One press of an add button: what it adds, the part it names, and how many presses there have been. */
 export interface CadAddRequest {
@@ -48,6 +64,7 @@ export function CadAddFlows({
 	onError(reason: unknown): void;
 }) {
 	const tools = useCadTools();
+	const [architectureOpen, setArchitectureOpen] = useState(false);
 	const [venueOpen, setVenueOpen] = useState(false);
 	const [bulk, setBulk] = useState<BulkFlow | null>(null);
 	const [placing, setPlacing] = useState(false);
@@ -74,7 +91,13 @@ export function CadAddFlows({
 		part?: VenuePart,
 	) {
 		setPlacing(true);
-		const result = await placeProfile(profileId, label, known, placements, placedWith(part));
+		const result = await placeProfile(
+			profileId,
+			label,
+			known,
+			placements,
+			placedWith(part),
+		);
 		setPlacing(false);
 		if (!result.ok) {
 			onError(result.reason);
@@ -89,7 +112,8 @@ export function CadAddFlows({
 		const library = await readLibrary();
 		const scenery =
 			library.state === "ready"
-				? definitionForProfile(library.definitions, part.profileId)?.profile_snapshot?.scenery
+				? definitionForProfile(library.definitions, part.profileId)
+						?.profile_snapshot?.scenery
 				: undefined;
 		const size = scenery?.default_size_metres;
 		setBulk({
@@ -118,6 +142,10 @@ export function CadAddFlows({
 			void loadModel();
 			return;
 		}
+		if (add.kind === "architecture") {
+			setArchitectureOpen(true);
+			return;
+		}
 		if (add.kind === "venue") {
 			if (add.profileId) void place(add.profileId, "venue element");
 			else setVenueOpen(true);
@@ -130,31 +158,27 @@ export function CadAddFlows({
 			void openBulk(add.kind, found.part, partLabel(found));
 			return;
 		}
-		void place(found.part.profileId, partLabel(found), undefined, undefined, found.part);
+		void place(
+			found.part.profileId,
+			partLabel(found),
+			undefined,
+			undefined,
+			found.part,
+		);
 	});
 
-	if (bulk)
+	if (architectureOpen)
 		return (
-			<CadBulkAddModal
-				shape={bulk.shape}
-				partLabel={bulk.label}
-				footprint={bulk.footprint}
-				truss={bulk.truss}
-				placing={placing}
-				onClose={() => setBulk(null)}
-				onPlace={(placements, size) =>
-					void place(
-						bulk.part.profileId,
-						bulk.label,
-						undefined,
-						placements,
-						size ? { ...bulk.part, sizeMetres: size } : bulk.part,
-					).then((placed) => {
-						if (placed) setBulk(null);
-					})
-				}
+			<CadArchitectureModal
+				onClose={() => setArchitectureOpen(false)}
+				onPlaced={(ids) => {
+					tools.announcePlaced(ids);
+					setArchitectureOpen(false);
+				}}
 			/>
 		);
+
+	if (bulk) return renderBulk(bulk, placing, place, () => setBulk(null));
 
 	if (importing)
 		return (
@@ -177,4 +201,39 @@ export function CadAddFlows({
 			}}
 		/>
 	) : null;
+}
+
+function renderBulk(
+	bulk: BulkFlow,
+	placing: boolean,
+	place: (
+		profileId: string,
+		label: string,
+		known?: FixtureLibrary,
+		placements?: readonly PlanPlacement[],
+		part?: VenuePart,
+	) => Promise<boolean>,
+	close: () => void,
+) {
+	return (
+		<CadBulkAddModal
+			shape={bulk.shape}
+			partLabel={bulk.label}
+			footprint={bulk.footprint}
+			truss={bulk.truss}
+			placing={placing}
+			onClose={() => close()}
+			onPlace={(placements, size) =>
+				void place(
+					bulk.part.profileId,
+					bulk.label,
+					undefined,
+					placements,
+					size ? { ...bulk.part, sizeMetres: size } : bulk.part,
+				).then((placed) => {
+					if (placed) close();
+				})
+			}
+		/>
+	);
 }

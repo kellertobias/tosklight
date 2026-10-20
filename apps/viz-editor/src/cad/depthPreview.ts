@@ -1,5 +1,6 @@
 import { viewDepth } from "./cutPlanes";
 import type { CadEntity, CadViewDirection } from "./types";
+import { venueWorldCentre } from "./venueGeometryPoints";
 
 /**
  * The axis that runs across the depth preview.
@@ -42,11 +43,14 @@ export function previewMarks(
 	entities: readonly CadEntity[],
 	view: CadViewDirection,
 ): PreviewMark[] {
-	return entities.map((entity) => ({
-		id: entity.id,
-		depth: viewDepth(entity.positionMillimetres, view),
-		lateral: previewLateral(entity.positionMillimetres, view),
-	}));
+	return entities.map((entity) => {
+		const centre = venueWorldCentre(entity) ?? entity.positionMillimetres;
+		return {
+			id: entity.id,
+			depth: viewDepth(centre, view),
+			lateral: previewLateral(centre, view),
+		};
+	});
 }
 
 export interface PreviewBounds {

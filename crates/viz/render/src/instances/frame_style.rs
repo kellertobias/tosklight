@@ -5,6 +5,7 @@ use glam::Vec3;
 /// How one frame should be drawn.
 #[derive(Clone, Debug)]
 pub struct FrameStyle {
+    pub camera_position: Option<Vec3>,
     pub quality: viz_scene::RenderQuality,
     pub draw_beams: bool,
     pub draw_aim_lines: bool,
@@ -67,6 +68,7 @@ pub struct MediaAppearance {
 impl Default for FrameStyle {
     fn default() -> Self {
         Self {
+            camera_position: None,
             quality: viz_scene::RenderQuality::High,
             draw_beams: true,
             draw_aim_lines: false,

@@ -12,10 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Scene emitters now carry separate visible lens cells, and calibrated default bodies carry
-// their model-lens rest frames. These change the postcard scene shape, so stale helpers must
-// be refused before decoding a scene from this build.
-pub const PROTOCOL_MAJOR: u16 = 6;
+// Scene scenery now carries portable parametric venue construction. This changes the
+// postcard scene shape, so stale helpers must be refused before decoding this build's scene.
+pub const PROTOCOL_MAJOR: u16 = 7;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 

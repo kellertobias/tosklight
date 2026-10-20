@@ -31,6 +31,7 @@ import {
 	trussPipeRadius,
 	trussPipes,
 	type Vec3,
+	wallEndpoints,
 } from "./venueShapes";
 
 /** How close, in screen pixels, a feature must come to a target to snap onto it. */
@@ -105,12 +106,17 @@ function nearestFit(
 ): Candidate | null {
 	let best: Candidate | null = null;
 	const consider = (candidate: Candidate | null) => {
-		if (candidate && (!best || candidate.distance < best.distance)) best = candidate;
+		if (candidate && (!best || candidate.distance < best.distance))
+			best = candidate;
 	};
 	const moved = (point: readonly number[]) => addVec(point, delta);
 	const connectors = still.flatMap((entity) =>
-		trussConnectors(entity).map((point) => ({ point, chords: trussChords(entity) })),
+		trussConnectors(entity).map((point) => ({
+			point,
+			chords: trussChords(entity),
+		})),
 	);
+	const wallEnds = still.flatMap(wallEndpoints);
 	const corners = still.filter(isStageElement).flatMap(stageCorners);
 	const railEnds = still.flatMap((entity) => curtainRail(entity)?.ends ?? []);
 	const edges = still.filter(isStageElement).flatMap(stageEdges);
@@ -118,16 +124,35 @@ function nearestFit(
 	const axes = still.flatMap((entity) => trussAxis(entity) ?? []);
 	const reach = SNAP_REACH_MILLIMETRES;
 	for (const mover of movers) {
+		for (const endpoint of wallEndpoints(mover))
+			for (const target of wallEnds)
+				consider(
+					pointCandidate(moved(endpoint), target, free, threshold, reach),
+				);
 		// A connector couples only to one of the same truss system: three chords to three, four to four.
 		const chords = trussChords(mover);
 		for (const connector of trussConnectors(mover))
 			for (const target of connectors)
 				if (!chords || !target.chords || chords === target.chords)
-					consider(pointCandidate(moved(connector), target.point, free, threshold, reach));
+					consider(
+						pointCandidate(
+							moved(connector),
+							target.point,
+							free,
+							threshold,
+							reach,
+						),
+					);
 		if (isStageElement(mover))
 			for (const corner of stageCorners(mover))
 				for (const target of corners) {
-					const candidate = pointCandidate(moved(corner), target, free, threshold, null);
+					const candidate = pointCandidate(
+						moved(corner),
+						target,
+						free,
+						threshold,
+						null,
+					);
 					consider(candidate && { ...candidate, corner: true });
 				}
 		// A handrail guards a deck's edge: its foot line lands on the top perimeter of a stage
@@ -136,11 +161,21 @@ function nearestFit(
 		if (foot) {
 			const centre = moved(foot.centre);
 			for (const edge of edges)
-				consider(pointCandidate(centre, closestOnSegment(centre, edge), free, threshold, reach));
+				consider(
+					pointCandidate(
+						centre,
+						closestOnSegment(centre, edge),
+						free,
+						threshold,
+						reach,
+					),
+				);
 			for (const end of foot.ends)
 				for (const edge of edges)
 					for (const corner of [edge.start, edge.end])
-						consider(pointCandidate(moved(end), corner, free, threshold, reach));
+						consider(
+							pointCandidate(moved(end), corner, free, threshold, reach),
+						);
 		}
 		const rail = curtainRail(mover);
 		if (rail) {
@@ -151,7 +186,13 @@ function nearestFit(
 			for (const axis of axes) {
 				const on = closestOnSegment(centre, axis);
 				consider(
-					pointCandidate(centre, [on[0], on[1], on[2] - axis.halfSection], free, threshold, reach),
+					pointCandidate(
+						centre,
+						[on[0], on[1], on[2] - axis.halfSection],
+						free,
+						threshold,
+						reach,
+					),
 				);
 			}
 		}
@@ -188,16 +229,21 @@ function nearestMount(
 		// How far the clamp reaches across the page, taking its widest side: a lamp turned on the
 		// plan must not lose its grip because its narrow side happens to face the pipe.
 		const reach = Math.max(
-			...([0, 1, 2] as const).filter((axis) => free[axis]).map((axis) => mount.halfExtent[axis]),
+			...([0, 1, 2] as const)
+				.filter((axis) => free[axis])
+				.map((axis) => mount.halfExtent[axis]),
 			0,
 		);
 		for (const { segment, radius } of pipes) {
 			const on = closestOnSegment(centre, segment);
 			if (
 				[0, 1, 2].some(
-					(axis) => !free[axis] && Math.abs(on[axis] - top[axis]) > SNAP_REACH_MILLIMETRES,
+					(axis) =>
+						!free[axis] &&
+						Math.abs(on[axis] - top[axis]) > SNAP_REACH_MILLIMETRES,
 				)
-			) continue;
+			)
+				continue;
 			let squared = 0;
 			for (const axis of [0, 1, 2] as const)
 				if (free[axis]) squared += (on[axis] - centre[axis]) ** 2;
@@ -226,9 +272,13 @@ function nearestLanding(
 	threshold: number,
 ): Candidate | null {
 	let best: Candidate | null = null;
-	const decks = still.filter(isStageElement).map((entity) => footprint(stageCorners(entity)));
+	const decks = still
+		.filter(isStageElement)
+		.map((entity) => footprint(stageCorners(entity)));
 	for (const mover of movers.filter(isStageElement)) {
-		const own = footprint(stageCorners(mover).map((corner) => addVec(corner, delta)));
+		const own = footprint(
+			stageCorners(mover).map((corner) => addVec(corner, delta)),
+		);
 		for (const deck of decks) {
 			const overlaps =
 				own.min[0] < deck.max[0] &&
@@ -236,14 +286,22 @@ function nearestLanding(
 				own.min[1] < deck.max[1] &&
 				own.max[1] > deck.min[1];
 			const gap = deck.top - own.bottom;
-			if (!overlaps || Math.abs(gap) > threshold || (best && Math.abs(gap) >= best.distance))
+			if (
+				!overlaps ||
+				Math.abs(gap) > threshold ||
+				(best && Math.abs(gap) >= best.distance)
+			)
 				continue;
 			best = {
 				correction: [0, 0, gap],
 				distance: Math.abs(gap),
 				target: [
-					(Math.max(own.min[0], deck.min[0]) + Math.min(own.max[0], deck.max[0])) / 2,
-					(Math.max(own.min[1], deck.min[1]) + Math.min(own.max[1], deck.max[1])) / 2,
+					(Math.max(own.min[0], deck.min[0]) +
+						Math.min(own.max[0], deck.max[0])) /
+						2,
+					(Math.max(own.min[1], deck.min[1]) +
+						Math.min(own.max[1], deck.max[1])) /
+						2,
 					deck.top,
 				],
 			};
@@ -264,8 +322,12 @@ export function snapMove(
 	threshold: number,
 ): MoveSnap {
 	const moving = new Set(movingIds);
-	const movers = entities.filter((entity) => moving.has(entity.logicalFixtureId));
-	const still = entities.filter((entity) => !moving.has(entity.logicalFixtureId));
+	const movers = entities.filter((entity) =>
+		moving.has(entity.logicalFixtureId),
+	);
+	const still = entities.filter(
+		(entity) => !moving.has(entity.logicalFixtureId),
+	);
 	const start: Vec3 = [...delta];
 	// Fitting the declared clamp to a reachable pipe takes precedence, within the drag's axes.
 	const mount = nearestMount(movers, still, start, free);
@@ -288,28 +350,41 @@ export function snapMove(
 		distance: Math.hypot(...alignment.correction),
 		target: midpoint(alignment.guides[0]),
 	};
-	const landing = free[2] ? nearestLanding(movers, still, start, threshold) : null;
-	const chosen = [fit ?? aligned, landing].filter((candidate): candidate is Candidate =>
-		Boolean(candidate),
+	const landing = free[2]
+		? nearestLanding(movers, still, start, threshold)
+		: null;
+	const chosen = [fit ?? aligned, landing].filter(
+		(candidate): candidate is Candidate => Boolean(candidate),
 	);
 	// A landing only adds height, so it joins a fit that left the height alone.
 	const applied =
 		fit && landing && Math.abs(fit.correction[2]) > 0.5 ? [fit] : chosen;
 	return {
-		delta: applied.reduce((sum, candidate) => addVec(sum, candidate.correction), start),
+		delta: applied.reduce(
+			(sum, candidate) => addVec(sum, candidate.correction),
+			start,
+		),
 		targets: applied.map((candidate) => candidate.target),
-		guides: alignment && applied.includes(aligned as Candidate) ? alignment.guides : [],
+		guides:
+			alignment && applied.includes(aligned as Candidate)
+				? alignment.guides
+				: [],
 	};
 }
 
 function midpoint([start, end]: [Vec3, Vec3]): Vec3 {
-	return [(start[0] + end[0]) / 2, (start[1] + end[1]) / 2, (start[2] + end[2]) / 2];
+	return [
+		(start[0] + end[0]) / 2,
+		(start[1] + end[1]) / 2,
+		(start[2] + end[2]) / 2,
+	];
 }
 
 /** The points a measurement can snap to: connectors, stage corners, rail ends and every object's centre. */
 function measurePoints(entities: readonly CadEntity[]): Vec3[] {
 	return entities.flatMap((entity) => [
 		...trussConnectors(entity),
+		...wallEndpoints(entity),
 		...(isStageElement(entity) ? stageCorners(entity) : []),
 		...(curtainRail(entity)?.ends ?? []),
 		boxCentre(entity),
@@ -327,7 +402,10 @@ export function snapPlanPoint(
 	let best: { point: PlanPoint; distance: number } | null = null;
 	for (const candidate of measurePoints(entities)) {
 		const projected = projectPoint(candidate, view, rotationQuarterTurns);
-		const distance = Math.hypot(projected[0] - point[0], projected[1] - point[1]);
+		const distance = Math.hypot(
+			projected[0] - point[0],
+			projected[1] - point[1],
+		);
 		if (distance <= threshold && (!best || distance < best.distance))
 			best = { point: projected, distance };
 	}

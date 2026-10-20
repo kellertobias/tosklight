@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+	fireEvent,
+	render,
+	screen,
+	waitFor,
+	within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CadElementsPanel } from "./CadElementsPanel";
 import type { CadTools } from "./cadTools";
@@ -20,14 +26,21 @@ vi.mock("../document/session", () => ({ documentSession: {} }));
 
 beforeEach(() => {
 	tauri.stored = { groups: [] };
-	tauri.invoke.mockReset().mockImplementation((command: string, args?: { groups: VenueGroups }) => {
-		if (command === "cad_venue_groups") return Promise.resolve(tauri.stored);
-		if (command === "save_cad_venue_groups") return Promise.resolve(args?.groups);
-		return Promise.resolve({ folders: [], items: {} });
-	});
+	tauri.invoke
+		.mockReset()
+		.mockImplementation((command: string, args?: { groups: VenueGroups }) => {
+			if (command === "cad_venue_groups") return Promise.resolve(tauri.stored);
+			if (command === "save_cad_venue_groups")
+				return Promise.resolve(args?.groups);
+			return Promise.resolve({ folders: [], items: {} });
+		});
 });
 
-function venue(id: string, name: string, extra: Partial<CadEntity> = {}): CadEntity {
+function venue(
+	id: string,
+	name: string,
+	extra: Partial<CadEntity> = {},
+): CadEntity {
 	return {
 		id,
 		logicalFixtureId: id,
@@ -84,7 +97,10 @@ describe("Elements › Objects", () => {
 			// A deck from a show made before the decks were generated: no scenery, still a Venue item.
 			venue("3", "Stage Deck 2 × 1 m, Legs 0.4 m"),
 			venue("4", "Disco Ball 50 cm"),
-			venue("5", "Hall", { fixtureProfile: "Imported models Hall", importedModel: true }),
+			venue("5", "Hall", {
+				fixtureProfile: "Imported models Hall",
+				importedModel: true,
+			}),
 		]);
 		expect(names(screen.getByRole("region", { name: "Venue items" }))).toEqual([
 			"Four-Point Truss",
@@ -92,7 +108,9 @@ describe("Elements › Objects", () => {
 			"Stage Deck 2 × 1 m, Legs 0.4 m",
 			"Disco Ball 50 cm",
 		]);
-		expect(names(screen.getByRole("region", { name: "3D models" }))).toEqual(["Hall"]);
+		expect(names(screen.getByRole("region", { name: "3D models" }))).toEqual([
+			"Hall",
+		]);
 	});
 
 	it("shows each object on one compact row with its name, kind and size but no fixture ID", () => {
@@ -102,18 +120,62 @@ describe("Elements › Objects", () => {
 				sizeMillimetres: [3000, 290, 290],
 			}),
 		]);
-		const row = within(screen.getByRole("region", { name: "Venue items" })).getByRole(
-			"button",
-			{ name: /Four-Point Truss/ },
-		);
+		const row = within(
+			screen.getByRole("region", { name: "Venue items" }),
+		).getByRole("button", { name: /Four-Point Truss/ });
 		expect(row).toHaveClass("cad-elements-object");
 		expect(row.querySelector("strong")).toHaveTextContent("Four-Point Truss");
-		expect(row.querySelector(".cad-elements-object-kind")).toHaveTextContent("truss");
+		expect(row.querySelector(".cad-elements-object-kind")).toHaveTextContent(
+			"truss",
+		);
 		expect(row.querySelector(".cad-elements-object-size")).toHaveTextContent(
 			"3 × 0.29 × 0.29 m",
 		);
 		expect(row).not.toHaveTextContent("0.7");
 		expect(row.textContent).not.toContain("·");
+	});
+
+	it("names venue constructions by their authored kind rather than their carrier box profile", () => {
+		renderObjects([
+			venue("9", "Back wall", {
+				scenery: {
+					kind: "box",
+					chords: 0,
+					pattern: "standard",
+					architecture: { kind: "wall", openings: [] },
+				},
+			}),
+			venue("10", "Upper level", {
+				scenery: {
+					kind: "box",
+					chords: 0,
+					pattern: "standard",
+					architecture: {
+						kind: "slab",
+						purpose: "balcony",
+						outline_millimetres: [
+							{ x: 0, y: 0 },
+							{ x: 1000, y: 0 },
+							{ x: 0, y: 1000 },
+						],
+						elevation_millimetres: 4000,
+						thickness_millimetres: 200,
+					},
+				},
+			}),
+		]);
+		const region = screen.getByRole("region", { name: "Venue items" });
+		expect(
+			within(region)
+				.getByRole("button", { name: /Back wall/ })
+				.querySelector(".cad-elements-object-kind"),
+		).toHaveTextContent("Wall");
+		expect(
+			within(region)
+				.getByRole("button", { name: /Upper level/ })
+				.querySelector(".cad-elements-object-kind"),
+		).toHaveTextContent("Balcony");
+		expect(region).not.toHaveTextContent("box");
 	});
 
 	it("says there are no 3D models when only shipped Venue objects are placed", () => {
@@ -127,19 +189,31 @@ describe("Elements › Objects", () => {
 });
 
 describe("Elements › Objects groups", () => {
-	const entities = [venue("1", "Truss A"), venue("2", "Truss B"), venue("3", "Deck")];
+	const entities = [
+		venue("1", "Truss A"),
+		venue("2", "Truss B"),
+		venue("3", "Deck"),
+	];
 
 	it("lists a group with its members; a member picks the whole group, Shift the member alone", async () => {
-		tauri.stored = { groups: [{ id: "g1", name: "Upstage truss", memberIds: ["1", "2"] }] };
+		tauri.stored = {
+			groups: [{ id: "g1", name: "Upstage truss", memberIds: ["1", "2"] }],
+		};
 		const onSelect = renderObjects(entities);
 		const group = await screen.findByRole("group", { name: "Upstage truss" });
 		// A grouped element is listed in its group, not again among the loose Venue items.
-		expect(names(screen.getByRole("region", { name: "Venue items" }))).toEqual(["Deck"]);
+		expect(names(screen.getByRole("region", { name: "Venue items" }))).toEqual([
+			"Deck",
+		]);
 
-		fireEvent.click(within(group).getByRole("button", { name: /^Upstage truss/u }));
+		fireEvent.click(
+			within(group).getByRole("button", { name: /^Upstage truss/u }),
+		);
 		expect(onSelect).toHaveBeenLastCalledWith(["1", "2"]);
 
-		fireEvent.click(within(group).getByRole("button", { name: "Expand Upstage truss" }));
+		fireEvent.click(
+			within(group).getByRole("button", { name: "Expand Upstage truss" }),
+		);
 		const member = within(group).getByRole("button", { name: /Truss B/u });
 		fireEvent.click(member);
 		expect(onSelect).toHaveBeenLastCalledWith(["1", "2"]);
@@ -156,7 +230,9 @@ describe("Elements › Objects groups", () => {
 		await waitFor(() =>
 			expect(tauri.invoke).toHaveBeenCalledWith("save_cad_venue_groups", {
 				groups: {
-					groups: [{ id: expect.any(String), name: "Group 1", memberIds: ["1", "3"] }],
+					groups: [
+						{ id: expect.any(String), name: "Group 1", memberIds: ["1", "3"] },
+					],
 				},
 			}),
 		);

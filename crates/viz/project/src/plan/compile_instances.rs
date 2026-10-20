@@ -227,6 +227,7 @@ fn push_physics_scenery(
             chords: 1,
             detail: Default::default(),
             position_master: None,
+            architecture: None,
         },
         program: physics.clone().unwrap_or_default(),
         body: PhysicsBody {
@@ -470,11 +471,25 @@ fn generated_scenery(
         .scenery_size_metres
         .unwrap_or_else(|| vector(declared.default_size_metres));
     // Held to what the object can be built at first, then drawn at its model scale.
-    let size = clamp_scenery_size(size, declared) * instance.model_scale;
+    let size = if instance.scenery_options.architecture.is_some() {
+        size
+    } else {
+        clamp_scenery_size(size, declared)
+    } * instance.model_scale;
     Some(SceneryObject {
         id: instance.instance_id,
         name: instance.name.clone(),
-        position: scenery_centre(instance, declared.kind, size),
+        position: if matches!(
+            instance.scenery_options.architecture,
+            Some(light_fixture::VenueArchitecture::Slab { .. })
+        ) {
+            instance.position
+        } else if instance.scenery_options.architecture.is_some() {
+            instance.position
+                + viz_scene::euler_degrees(instance.rotation_degrees) * Vec3::Y * (size.y * 0.5)
+        } else {
+            scenery_centre(instance, declared.kind, size)
+        },
         rotation_degrees: instance.rotation_degrees,
         size,
         // The colour the operator chose for this one, when they chose one; the kind's own
@@ -488,6 +503,7 @@ fn generated_scenery(
         chords: declared.chords,
         detail: scenery_detail(declared, &instance.scenery_options),
         position_master: None,
+        architecture: instance.scenery_options.architecture.clone(),
     })
 }
 

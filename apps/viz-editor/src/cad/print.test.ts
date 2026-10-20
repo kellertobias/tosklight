@@ -137,7 +137,11 @@ describe("CAD PDF export", () => {
 			// Only the downstage half of the drawing, measured along the view.
 			cutPlanes: { nearMillimetres: -1_000, farMillimetres: 1_000 },
 		};
-		const whole: CadPrintPage = { ...sliced, id: "Whole", cutPlanes: undefined };
+		const whole: CadPrintPage = {
+			...sliced,
+			id: "Whole",
+			cutPlanes: undefined,
+		};
 		const slicedPdf = new TextDecoder().decode(buildCadPdf(both, [sliced]));
 		const wholePdf = new TextDecoder().decode(buildCadPdf(both, [whole]));
 		expect(wholePdf).toContain("ID 7");
@@ -175,6 +179,37 @@ describe("CAD PDF export", () => {
 		expect(pdf).toContain("/BaseFont /Helvetica-Bold");
 		expect(pdf).toMatch(/\d+(?:\.\d+)? \d+(?:\.\d+)? m .* l/);
 		expect(pdf.endsWith("%%EOF\n")).toBe(true);
+	});
+
+	it("restores dark title text after the white title background and fits long details inside their column", () => {
+		const project = "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW";
+		const pdf = new TextDecoder().decode(
+			buildCadPdf(scene, [page("Venue")], {
+				showVersion: "",
+				venue: "",
+				contactEmail: "",
+				contactPhone: "",
+				showDate: "",
+				lastSavedAt: 0,
+				fixtureCount: 1,
+				universeCount: 1,
+				project,
+				showName: "Venue show",
+				lightingDesigner: "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+			}),
+		);
+		expect(pdf).toMatch(
+			/0\.08 0\.08 0\.08 rg\nBT \/F2 10 Tf [^\n]+ToskLight Architect/,
+		);
+		expect(pdf).toContain("0 0.71 0.92 rg");
+		const field = pdf.match(
+			/BT \/F2 ([\d.]+) Tf [^\n]+\(Project {2}WWWW[^\n]+/,
+		);
+		expect(field).not.toBeNull();
+		expect(Number(field?.[1])).toBeLessThan(6.5);
+		// Even the forty broad W glyphs alone must stay inside the left detail column.
+		expect(Number(field?.[1]) * 40 * 0.944).toBeLessThan(108);
+		expect(pdf).toContain(project);
 	});
 
 	it("rotates an A4 page while retaining its drawing scale", () => {

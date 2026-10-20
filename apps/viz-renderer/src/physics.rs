@@ -369,6 +369,7 @@ mod tests {
                     chords: 1,
                     detail: Default::default(),
                     position_master: None,
+                    architecture: None,
                 },
                 program: PhysicsProgram {
                     script: Some(Arc::from(

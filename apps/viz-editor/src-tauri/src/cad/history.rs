@@ -17,6 +17,7 @@ use std::collections::BTreeSet;
 use uuid::Uuid;
 
 mod annotations;
+pub mod venue;
 pub(crate) use annotations::{erase_annotation, save_annotation};
 
 #[derive(Default)]
@@ -34,6 +35,7 @@ enum Step {
     Add(DeleteRecord),
     /// A drawn item changed — text moved or reworded: Undo writes it back as it was.
     Annotation(Box<AnnotationChange>),
+    Venue(venue::VenueRecord),
 }
 
 #[derive(Clone)]
@@ -396,6 +398,14 @@ fn apply_step(
     direction: Direction,
 ) -> Result<TransformOutcome, String> {
     match step {
+        Step::Venue(record) => venue::restore(
+            app,
+            session,
+            cad,
+            expected_scene_revision,
+            record,
+            matches!(direction, Direction::Forward),
+        ),
         Step::Annotation(change) => {
             let scene_revision = current_revision(session)?;
             let attachments = attachments(session)?;

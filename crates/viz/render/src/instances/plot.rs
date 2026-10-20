@@ -13,27 +13,7 @@ pub(super) fn push_plot(
     head_angles: &[(f32, f32)],
     style: &FrameStyle,
 ) {
-    for object in &scene.scenery {
-        let object = object.posed_by(&values.position_points);
-        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-            Mat4::from_rotation_translation(
-                euler_degrees(object.rotation_degrees),
-                object.position,
-            ) * Mat4::from_scale(object.size),
-            Vec3::ZERO,
-            1.0,
-            style.faint_ink * 0.12,
-            0.0,
-        ));
-        push_box_outline(
-            frame,
-            object.position,
-            object.size,
-            euler_degrees(object.rotation_degrees),
-            style.faint_ink,
-            1.0,
-        );
-    }
+    push_plan_scenery(frame, scene, values, style);
 
     // Crowd Areas remain rectangular authored footprints on every plan. Individual people are a
     // quality-dependent 3D presentation and would make a plot unstable; the footprint is the
@@ -368,5 +348,48 @@ mod tests {
             "the twelve rectangle edges are retained"
         );
         assert_eq!(frame.crowd_drawn, 0, "plots never expand people");
+    }
+}
+
+fn push_plan_scenery(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    values: &SceneValues,
+    style: &FrameStyle,
+) {
+    let posed: Vec<_> = scene
+        .scenery
+        .iter()
+        .map(|o| o.posed_by(&values.position_points))
+        .collect();
+    let outline_style = FrameStyle {
+        scenery_surfaces: false,
+        camera_position: None,
+        ..style.clone()
+    };
+    scenery::architecture::push_all(frame, &posed, &outline_style);
+    for object in &scene.scenery {
+        if object.architecture.is_some() {
+            continue;
+        }
+        let object = object.posed_by(&values.position_points);
+        frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+            Mat4::from_rotation_translation(
+                euler_degrees(object.rotation_degrees),
+                object.position,
+            ) * Mat4::from_scale(object.size),
+            Vec3::ZERO,
+            1.0,
+            style.faint_ink * 0.12,
+            0.0,
+        ));
+        push_box_outline(
+            frame,
+            object.position,
+            object.size,
+            euler_degrees(object.rotation_degrees),
+            style.faint_ink,
+            1.0,
+        );
     }
 }

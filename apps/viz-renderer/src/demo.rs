@@ -165,6 +165,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -178,6 +179,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::nil(),
@@ -191,6 +193,7 @@ fn push_demo_scenery(scene: &mut Scene) {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
 }
 

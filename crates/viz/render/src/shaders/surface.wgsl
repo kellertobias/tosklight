@@ -191,6 +191,8 @@ fn vertex_main(input: VertexInput) -> VertexOutput {
 
 @fragment
 fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    // Cutaway affects visibility only: the shadow pass retains the complete physical mesh.
+    if (input.surface.y > 0.5) { discard; }
     let view_direction = normalize(globals.camera_position.xyz - input.world_position);
     let surface = finish(input, normalize(input.world_normal));
     let normal = surface.normal;

@@ -25,6 +25,8 @@ pub const MAX_OPTICAL_WHEELS: usize = 8;
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum MeshKind {
     Cube,
+    /// Shared parametric venue triangle, transformed from its unit basis.
+    Triangle,
     Cylinder,
     Sphere,
     /// The face light leaves through: a lamp's lens, drawn thin and domed rather than round.
@@ -44,8 +46,9 @@ pub enum MeshKind {
 }
 
 impl MeshKind {
-    pub const PROCEDURAL: [Self; 7] = [
+    pub const PROCEDURAL: [Self; 8] = [
         Self::Cube,
+        Self::Triangle,
         Self::Cylinder,
         Self::Sphere,
         Self::Lens,
@@ -231,7 +234,8 @@ pub struct EmitterPose {
 }
 
 /// A posed fabric rectangle that blocks light independently of the shadow-map budget.
-/// The transform is rigid: local X/Y are the curtain width/height and local Z its normal.
+/// Ordinary rectangles use local X/Y width/height. half_size.z=1 denotes a unit triangle
+/// in the affine local basis; =2 stores a convex world-space quad in the matrix columns.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct GpuCurtainBlocker {

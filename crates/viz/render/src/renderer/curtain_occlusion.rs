@@ -71,7 +71,14 @@ impl Frustum {
 }
 
 fn world_corners(blocker: &GpuCurtainBlocker) -> [Vec3; 4] {
+    if blocker.half_size[2] > 1.5 {
+        return blocker.world_to_local.map(|p| Vec3::from_slice(&p[..3]));
+    }
     let local_to_world = Mat4::from_cols_array_2d(&blocker.world_to_local).inverse();
+    if blocker.half_size[2] > 0.5 {
+        return [Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::ZERO]
+            .map(|p| local_to_world.transform_point3(p));
+    }
     let [half_width, half_height, ..] = blocker.half_size;
     [
         Vec3::new(-half_width, -half_height, 0.0),
@@ -86,6 +93,9 @@ fn world_corners(blocker: &GpuCurtainBlocker) -> [Vec3; 4] {
 /// Constructing the planes in cloth-local space avoids subtracting large world positions when
 /// the lamp sits close to an edge. A lamp exactly on the cloth plane cannot cross that plane.
 fn shadow_volume(light: &GpuLight, blocker: &GpuCurtainBlocker) -> Option<GpuCurtainShadow> {
+    if blocker.half_size[2] > 0.5 {
+        return triangle_shadow_volume(light, blocker);
+    }
     let transform = Mat4::from_cols_array_2d(&blocker.world_to_local);
     let origin = transform.transform_point3(Vec3::from_slice(&light.position_range[..3]));
     let [width, height, ..] = blocker.half_size;
@@ -122,10 +132,60 @@ fn shadow_volume(light: &GpuLight, blocker: &GpuCurtainBlocker) -> Option<GpuCur
     Some(GpuCurtainShadow { planes })
 }
 
+/// Triangle shadows reuse the convex five-plane storage without approximating an aperture.
+fn triangle_shadow_volume(
+    light: &GpuLight,
+    blocker: &GpuCurtainBlocker,
+) -> Option<GpuCurtainShadow> {
+    let corners = world_corners(blocker);
+    let [a, b, c, d] = corners;
+    let origin = Vec3::from_slice(&light.position_range[..3]);
+    let first = (b - a).cross(c - a);
+    let second = if blocker.half_size[2] > 1.5 {
+        (c - a).cross(d - a)
+    } else {
+        Vec3::ZERO
+    };
+    let normal = if first.length_squared() > second.length_squared() {
+        first
+    } else {
+        second
+    }
+    .normalize_or_zero();
+    let side = normal.dot(origin - a);
+    if side.abs() < 1e-7 {
+        return None;
+    }
+    let centre = if blocker.half_size[2] > 1.5 {
+        (a + b + c + d) / 4.0
+    } else {
+        (a + b + c) / 3.0
+    };
+    // An interior shadow point follows the lamp-to-surface ray. Moving only along the
+    // surface normal can leave the shadow of a small off-axis opening reveal.
+    let behind = centre + (centre - origin);
+    let mut planes = [[0.0; 4]; 5];
+    let edges = if blocker.half_size[2] > 1.5 {
+        vec![(a, b), (b, c), (c, d), (d, a)]
+    } else {
+        vec![(a, b), (b, c), (c, a)]
+    };
+    for (index, (u, v)) in edges.into_iter().enumerate() {
+        let mut n = (u - origin).cross(v - origin).normalize_or_zero();
+        if n.dot(behind - origin) < 0.0 {
+            n = -n;
+        }
+        planes[index] = n.extend(-n.dot(origin)).to_array();
+    }
+    let n = -normal * side.signum();
+    planes[4] = n.extend(-n.dot(a)).to_array();
+    Some(GpuCurtainShadow { planes })
+}
+
 /// Each light's gate.w addresses one header followed by its projected shadow volumes.
 /// The header has planes[4][2] = candidate count. A gate of -1 means none.
 /// Offsets count 80-byte records, matching the shader's storage array indexing.
-pub(super) fn pack(
+pub(crate) fn pack(
     lights: &mut [GpuLight],
     blockers: &[GpuCurtainBlocker],
 ) -> Vec<GpuCurtainShadow> {
@@ -262,6 +322,37 @@ mod tests {
             && shadow.planes[..4]
                 .iter()
                 .all(|plane| Vec4::from_array(*plane).dot(point) >= 0.0)
+    }
+
+    #[test]
+    fn triangle_blockers_keep_exact_apertures_and_work_from_both_sides() {
+        let transform = Mat4::from_cols(
+            Vec3::X.extend(0.0),
+            Vec3::Y.extend(0.0),
+            Vec3::Z.extend(0.0),
+            Vec3::new(0.0, 0.0, 4.0).extend(1.0),
+        );
+        let blocker = GpuCurtainBlocker {
+            world_to_local: transform.inverse().to_cols_array_2d(),
+            half_size: [1.0, 1.0, 1.0, 0.0],
+        };
+        for (lamp_z, destination_z) in [(0.0, 8.0), (8.0, 0.0)] {
+            let mut source = light();
+            source.position_range = [0.0, 0.0, lamp_z, 20.0];
+            let shadow = shadow_volume(&source, &blocker).unwrap();
+            assert!(projected_blocks(
+                &shadow,
+                Vec3::new(0.4, 0.4, destination_z)
+            ));
+            assert!(!projected_blocks(
+                &shadow,
+                Vec3::new(1.8, 1.8, destination_z)
+            ));
+            assert!(!projected_blocks(
+                &shadow,
+                Vec3::new(-0.1, 0.4, destination_z)
+            ));
+        }
     }
 
     fn reference_blocks(light: &GpuLight, blocker: &GpuCurtainBlocker, destination: Vec3) -> bool {

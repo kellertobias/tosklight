@@ -196,6 +196,7 @@ mod tests {
             chords: 0,
             detail: Default::default(),
             position_master: None,
+            architecture: None,
         });
         scene.recompute_bounds();
         scene

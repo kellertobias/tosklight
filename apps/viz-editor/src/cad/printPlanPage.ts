@@ -1,3 +1,10 @@
+import { parseCompanyLogo } from "../document/companyLogo";
+import {
+	annotationLabels,
+	annotationRuns,
+	annotationsForView,
+} from "./annotationGeometry";
+import type { CadAnnotation } from "./annotations";
 /**
  * One plan page of the printed PDF: the sheet's grid, the slice of the rig it shows, and the
  * border and title block around it.
@@ -6,6 +13,8 @@
  * clip — fixtures today, placed drawings next — lands at the page's scale.
  */
 import { visibleEntities } from "./cutPlanes";
+import { planTransform } from "./planGeometry";
+import type { PrintFontSet } from "./printFonts";
 import {
 	BORDER,
 	type CadPrintDocumentInfo,
@@ -15,26 +24,13 @@ import {
 	TITLE_H,
 	TITLE_W,
 } from "./printLayout";
+import { distance, n, path, saved, text, titleMark } from "./printPdfOps";
+import { titleText } from "./printTitleText";
 import {
-	distance,
-	n,
-	path,
-	saved,
-	text,
-	titleMark,
-} from "./printPdfOps";
-import { parseCompanyLogo } from "../document/companyLogo";
-import { entityPlanGeometry, isPositionPoint, type PlanPoint } from "./projection";
-import {
-	annotationLabels,
-	annotationRuns,
-	annotationsForView,
-} from "./annotationGeometry";
-import type { CadAnnotation } from "./annotations";
-import type { PrintFontSet } from "./printFonts";
-import { planTransform } from "./planGeometry";
-import { placedPolylines, underlaysForPage } from "./underlayGeometry";
-import type { CadUnderlay } from "./underlays";
+	entityPlanGeometry,
+	isPositionPoint,
+	type PlanPoint,
+} from "./projection";
 import {
 	type CadDrawing,
 	type CadEntity,
@@ -42,8 +38,9 @@ import {
 	type CadSceneSnapshot,
 	directionIndicator,
 	printPageHeight,
-	projectPoint,
 } from "./types";
+import { placedPolylines, underlaysForPage } from "./underlayGeometry";
+import type { CadUnderlay } from "./underlays";
 
 export interface PrintPageStream {
 	content: string;
@@ -169,7 +166,10 @@ function annotationCommands(
 			? label.heightMillimetres * frame.scale
 			: 7;
 		// Text in a CAD typeface is set in that font, embedded; the rest in the page's Helvetica.
-		const lettered = label.kind === "text" ? fonts?.text(label.text, label.font, x, y, size) : null;
+		const lettered =
+			label.kind === "text"
+				? fonts?.text(label.text, label.font, x, y, size)
+				: null;
 		commands.push(
 			lettered ??
 				(label.kind === "measure"
@@ -280,34 +280,44 @@ function furnitureCommands(
 		`${n(tx + 70)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
 		`${n(tx + 70)} ${n(BORDER + TITLE_H / 2)} ${n(TITLE_W - 70)} 0 re S`,
 		...titleMark(parseCompanyLogo(info.companyLogo), tx + 12, BORDER + 18),
+		"0.08 0.08 0.08 rg",
 		text("ToskLight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
 		...details
 			.slice(0, 4)
 			.map(([label, value], index) =>
-				text(
+				titleText(
 					`${label}  ${value}`,
 					tx + 76,
 					BORDER + TITLE_H - 29 - index * 10,
 					6.5,
+					108,
 					index === 0,
 				),
 			),
 		...details
 			.slice(4)
 			.map(([label, value], index) =>
-				text(
+				titleText(
 					`${label}  ${value}`,
 					tx + 190,
 					BORDER + TITLE_H - 29 - index * 10,
 					6.5,
+					TITLE_W - 196,
 				),
 			),
-		text(`Saved  ${saved(info.lastSavedAt)}`, tx + 190, BORDER + 29, 7),
-		text(
+		titleText(
+			`Saved  ${saved(info.lastSavedAt)}`,
+			tx + 190,
+			BORDER + 29,
+			7,
+			TITLE_W - 196,
+		),
+		titleText(
 			`${info.fixtureCount} fixtures / ${info.universeCount} universes`,
 			tx + 190,
 			BORDER + 17,
 			7,
+			TITLE_W - 196,
 		),
 		text(
 			`Scale 1:${printScaleDenominator(page)} / Grid ${distance(frame.grid)}`,

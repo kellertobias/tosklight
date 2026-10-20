@@ -1,5 +1,6 @@
 import { rotateDeskPoint } from "./projection";
 import { type CadEntity, type CadViewDirection, projectPoint } from "./types";
+import { venueWorldPoints } from "./venueGeometryPoints";
 import { boxCentre } from "./venueShapes";
 
 export interface PlaneBounds {
@@ -44,10 +45,26 @@ export function entityBounds(
 		CadEntity,
 		"positionMillimetres" | "rotationDegrees" | "sizeMillimetres"
 	> &
-		Partial<Pick<CadEntity, "scenery" | "fixtureProfile">>,
+		Partial<Pick<CadEntity, "scenery" | "fixtureProfile" | "venueGeometry">>,
 	view: CadViewDirection,
 	rotationQuarterTurns = 0,
 ): PlaneBounds {
+	const points = venueWorldPoints(entity, view === "top_down");
+	if (points.length) {
+		const projected = points.map((point) =>
+			projectPoint(point, view, rotationQuarterTurns),
+		);
+		return {
+			minimum: [
+				Math.min(...projected.map((point) => point[0])),
+				Math.min(...projected.map((point) => point[1])),
+			],
+			maximum: [
+				Math.max(...projected.map((point) => point[0])),
+				Math.max(...projected.map((point) => point[1])),
+			],
+		};
+	}
 	const [width, depth, height] = entity.sizeMillimetres;
 	// A stage element stands on its position, so its box is centred half its height above it.
 	const centre = boxCentre(entity);

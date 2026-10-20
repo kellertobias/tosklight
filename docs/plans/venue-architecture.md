@@ -35,9 +35,10 @@ A local planar outline and explicit elevation support independent, stackable bal
 
 Geometry must travel through show persistence, Architect undo/redo, show-sync transactions, typed
 wire projections and the Control renderer. Architect-only metadata is not an alternate geometry
-store: it does not reach the Control scene compiler. Retain old show loading without a SQLite
-schema bump for these additive optional fields. New semantic kinds require an explicit compatibility
-policy before enabling authoring; an old reader must not silently rewrite away authored details.
+store: it does not reach the Control scene compiler. Retain old show loading and schema 10 for shows without authored venue construction. The first
+architecture write atomically raises its reader capability floor to schema 11 without changing
+SQL tables. Older schema-10 binaries refuse it before writable use; deletion and Undo never lower
+this floor. This prevents older readers from silently rewriting away authored details.
 
 ## Camera-aware cutaway
 
@@ -64,6 +65,11 @@ all 3D rendering qualities. CAD and exported plans retain the complete venue dra
 6. Verify actual native interaction, export a representative plan and take bounded native render
    captures. Leave the renderer off outside testing. Update operator help only for available UI.
 
-The first implementation slice is the shared typed geometry foundation. This does not constitute
-completion of the authoring, plan export or renderer acceptance criteria; TL-843 remains open until
-those paths are implemented and verified. Human acceptance is separate from source/test completion.
+The typed transports, protected portable reader floor, shared solids/plan symbols, Architect authoring,
+whole-assembly undo/redo and camera-aware native cutaway are implemented. Exact geometry drives
+picking, marquee bounds, slab depth slices and PDF plans. Focused persistence/sync/startup recovery,
+geometry, authoring and native GPU tests cover these paths. Native authoring/edit/undo/redo and a
+representative exported venue plan have been exercised with a separate Showcase copy; exterior
+captures cover all four qualities and an interior capture retains the enclosure. CI and final
+integration evidence are recorded in TL-843's Working Log. Human acceptance remains separate from
+source/test completion.

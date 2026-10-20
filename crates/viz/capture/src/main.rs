@@ -27,6 +27,8 @@ const USAGE: &str = "viz-capture --show FILE --output DIR [options]
   --haze PERCENT    Haze the beams are drawn through (default 50).
   --quality NAME    draft | standard | high | ultra (default high).
   --fixture NAME    Frame close on fixtures whose name starts with NAME.
+  --camera X,Y,Z    Explicit camera position in renderer metres (Y up, Z audience).
+  --target X,Y,Z    Explicit camera target, paired with --camera.
   --view NAME       full3d | simple3d | lines3d | top-down | left-to-right |
                     right-to-left | front-to-back | back-to-front (default full3d).";
 
@@ -41,6 +43,8 @@ struct Options {
     view: ViewMode,
     quality: RenderQuality,
     fixture: Option<String>,
+    camera: Option<viz_scene::glam::Vec3>,
+    target: Option<viz_scene::glam::Vec3>,
     /// Haze, `0..=1`. Renderer-local by design — a hazer's DMX says how hard the machine is
     /// working, not what the room ends up like — so the capture states it rather than reading it
     /// from the show.
@@ -62,6 +66,8 @@ impl Default for Options {
             view: ViewMode::Full3d,
             quality: RenderQuality::High,
             fixture: None,
+            camera: None,
+            target: None,
             haze: viz_scene::DEFAULT_DENSITY,
         }
     }
@@ -129,6 +135,11 @@ fn run(options: &Options) -> Result<u32, String> {
         view.camera.target = centre;
         view.camera.up = viz_scene::glam::Vec3::Y;
         view.camera.fov_degrees = 35.0;
+    }
+    if let (Some(camera), Some(target)) = (options.camera, options.target) {
+        view.camera.position = camera;
+        view.camera.target = target;
+        view.camera.up = viz_scene::glam::Vec3::Y;
     }
     let overlay = viz_render::Overlay::default();
     let mut values = SceneValues::default();
@@ -406,6 +417,8 @@ fn parse(arguments: impl Iterator<Item = String>) -> Result<Option<Options>, Str
             "--width" => options.width = number(&mut arguments, "--width")?,
             "--height" => options.height = number(&mut arguments, "--height")?,
             "--frames" => options.frames = number(&mut arguments, "--frames")?,
+            "--camera" => options.camera = Some(vector(&mut arguments, "--camera")?),
+            "--target" => options.target = Some(vector(&mut arguments, "--target")?),
             "--fixture" => options.fixture = Some(required(&mut arguments, "--fixture")?),
             "--settle" => options.settle = number(&mut arguments, "--settle")?,
             "--haze" => {
@@ -448,7 +461,35 @@ fn parse(arguments: impl Iterator<Item = String>) -> Result<Option<Options>, Str
     if options.output.as_os_str().is_empty() {
         return Err("--output is required".to_owned());
     }
+    if options.camera.is_some() != options.target.is_some() {
+        return Err("--camera and --target must be supplied together".into());
+    }
+    if options
+        .camera
+        .zip(options.target)
+        .is_some_and(|(a, b)| a.distance_squared(b) < 1e-8)
+    {
+        return Err("camera and target must differ".into());
+    }
     Ok(Some(options))
+}
+
+fn vector(
+    arguments: &mut impl Iterator<Item = String>,
+    flag: &str,
+) -> Result<viz_scene::glam::Vec3, String> {
+    let value = required(arguments, flag)?;
+    let parts = value
+        .split(',')
+        .map(str::parse::<f32>)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| format!("{flag} needs three finite comma-separated coordinates"))?;
+    if parts.len() != 3 || parts.iter().any(|v| !v.is_finite()) {
+        return Err(format!(
+            "{flag} needs three finite comma-separated coordinates"
+        ));
+    }
+    Ok(viz_scene::glam::Vec3::new(parts[0], parts[1], parts[2]))
 }
 
 fn required(arguments: &mut impl Iterator<Item = String>, flag: &str) -> Result<String, String> {

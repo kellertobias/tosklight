@@ -11,8 +11,8 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { ShowScreen } from "./ShowScreen";
 import type { DocumentSummary } from "./document/session";
+import { ShowScreen } from "./ShowScreen";
 import "./styles.css";
 
 /** One profile, shaped as the document core returns it. */
@@ -207,7 +207,7 @@ beforeEach(() => {
 	invoke.mockImplementation((command: string) => {
 		switch (command) {
 			case "startup_recovery":
-                return Promise.resolve(null);
+				return Promise.resolve(null);
 			case "document_summary":
 				return Promise.resolve(document);
 			case "library_profiles":
@@ -282,10 +282,12 @@ describe("the Viz editor window", () => {
 
 	it("reaches the fixture library with no show open, because it is the machine's own", async () => {
 		const base = invoke.getMockImplementation();
-		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "attribute_registry") return Promise.resolve([]);
-			return base?.(command, args);
-		});
+		invoke.mockImplementation(
+			(command: string, args?: Record<string, unknown>) => {
+				if (command === "attribute_registry") return Promise.resolve([]);
+				return base?.(command, args);
+			},
+		);
 		renderApp();
 
 		// The fixture library belongs to the machine, not to the show, so it is a page of Settings
@@ -294,9 +296,7 @@ describe("the Viz editor window", () => {
 			screen.queryByRole("button", { name: "Fixtures" }),
 		).not.toBeInTheDocument();
 		await openSettingsPage("Library");
-		expect(
-			await screen.findByRole("button", { name: /^Acme/ }),
-		).toBeVisible();
+		expect(await screen.findByRole("button", { name: /^Acme/ })).toBeVisible();
 		const title = document_root()?.querySelector<HTMLElement>(
 			".viz-fixture-library-workspace > .ui-window-header",
 		);
@@ -306,8 +306,9 @@ describe("the Viz editor window", () => {
 		expect(
 			within(title)
 				.getByRole("button", { name: "Create Fixture" })
-				.compareDocumentPosition(within(title).getByRole("tab", { name: "Visualizer" })) &
-				Node.DOCUMENT_POSITION_FOLLOWING,
+				.compareDocumentPosition(
+					within(title).getByRole("tab", { name: "Visualizer" }),
+				) & Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
 		// The action carries a plus icon beside its label.
 		expect(
@@ -339,7 +340,9 @@ describe("the Viz editor window", () => {
 		const escaped = screen.getByRole("textbox", { name: "Show name" });
 		fireEvent.change(escaped, { target: { value: "Discarded" } });
 		fireEvent.keyDown(escaped, { key: "Escape" });
-		expect(screen.getByText("Planning show", { selector: "strong" })).toBeVisible();
+		expect(
+			screen.getByText("Planning show", { selector: "strong" }),
+		).toBeVisible();
 
 		fireEvent.click(screen.getByRole("button", { name: "Rename show" }));
 		const field = screen.getByRole("textbox", { name: "Show name" });
@@ -393,7 +396,9 @@ describe("the Viz editor window", () => {
 		nativeWindow.startResizeDragging.mockClear();
 		fireEvent.pointerDown(grip, { button: 0 });
 		await waitFor(() =>
-			expect(nativeWindow.startResizeDragging).toHaveBeenCalledWith("SouthEast"),
+			expect(nativeWindow.startResizeDragging).toHaveBeenCalledWith(
+				"SouthEast",
+			),
 		);
 		// A right-click is not a resize, and the grip never starts a window move.
 		fireEvent.pointerDown(grip, { button: 2 });
@@ -447,12 +452,13 @@ describe("the Viz editor window", () => {
 		// The fixture library and DMX are pages of Settings; Effects is part of Patch.
 		for (const label of ["Effects", "Fixtures", "Library", "DMX"])
 			expect(
-				within(screen.getByRole("navigation", { name: "Visualizer screens" })).queryByRole(
-					"button",
-					{ name: label },
-				),
+				within(
+					screen.getByRole("navigation", { name: "Visualizer screens" }),
+				).queryByRole("button", { name: label }),
 			).toBeNull();
-		expect(screen.queryByRole("button", { name: "Effects" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Effects" }),
+		).not.toBeInTheDocument();
 		const openWindow = screen.getByRole("button", { name: "Open Window" });
 		const openViz = screen.getByRole("button", { name: "Open Viz" });
 		expect(openWindow).toBeEnabled();
@@ -483,25 +489,51 @@ describe("the Viz editor window", () => {
 
 	it("opens a selected recent show", async () => {
 		const base = invoke.getMockImplementation();
-		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "recent_document_details") return Promise.resolve([{path: "/shows/recent.show", lastSavedAt: 1700000000}, {path: "/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show", lastSavedAt: 1700000000}]);
-			if (command === "open_document") return Promise.resolve({ ...document, name: "Recent rig" });
-			return base?.(command, args);
-		});
+		invoke.mockImplementation(
+			(command: string, args?: Record<string, unknown>) => {
+				if (command === "recent_document_details")
+					return Promise.resolve([
+						{ path: "/shows/recent.show", lastSavedAt: 1700000000 },
+						{
+							path: "/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show",
+							lastSavedAt: 1700000000,
+						},
+					]);
+				if (command === "open_document")
+					return Promise.resolve({ ...document, name: "Recent rig" });
+				return base?.(command, args);
+			},
+		);
 		renderApp();
 		fireEvent.click(screen.getByRole("button", { name: "Load Recent Shows" }));
 		const modal = await screen.findByRole("dialog", { name: "Recent shows" });
-        expect(within(modal).getByRole("table")).toBeInTheDocument();
-        expect(within(modal).getByText("Internal")).toBeInTheDocument();
-        expect(within(modal).getByText("Internal rig.show")).toBeInTheDocument();
-        expect(within(modal).getByText("Internal rig")).toBeInTheDocument();
-        expect(within(modal).getByRole("columnheader", { name: "Last saved" })).toBeInTheDocument();
-        expect(within(modal).queryByText("/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show")).not.toBeInTheDocument();
-        fireEvent.click(within(modal).getByRole("button", { name: "Close Recent shows" }));
-        expect(screen.queryByRole("dialog", { name: "Recent shows" })).not.toBeInTheDocument();
-        fireEvent.click(screen.getByRole("button", { name: "Load Recent Shows" }));
-        fireEvent.click(await screen.findByRole("button", { name: "Open /shows/recent.show" }));
-		await waitFor(() => expect(invoke).toHaveBeenCalledWith("open_document", { path: "/shows/recent.show" }));
+		expect(within(modal).getByRole("table")).toBeInTheDocument();
+		expect(within(modal).getByText("Internal")).toBeInTheDocument();
+		expect(within(modal).getByText("Internal rig.show")).toBeInTheDocument();
+		expect(within(modal).getByText("Internal rig")).toBeInTheDocument();
+		expect(
+			within(modal).getByRole("columnheader", { name: "Last saved" }),
+		).toBeInTheDocument();
+		expect(
+			within(modal).queryByText(
+				"/Users/operator/Library/Application Support/de.tokenet.tosklight.visualizer/shows/Internal rig.show",
+			),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			within(modal).getByRole("button", { name: "Close Recent shows" }),
+		);
+		expect(
+			screen.queryByRole("dialog", { name: "Recent shows" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(screen.getByRole("button", { name: "Load Recent Shows" }));
+		fireEvent.click(
+			await screen.findByRole("button", { name: "Open /shows/recent.show" }),
+		);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("open_document", {
+				path: "/shows/recent.show",
+			}),
+		);
 		expect(await screen.findByText("Opened Recent rig")).toBeInTheDocument();
 	});
 
@@ -522,12 +554,18 @@ describe("the Viz editor window", () => {
 		// Open is only for existing shows: the disk, then a running Control. The demo is a way to
 		// start a show, so it sits with New Show.
 		const section = (heading: string) =>
-			screen.getByRole("heading", { name: heading }).closest("section") as HTMLElement;
+			screen
+				.getByRole("heading", { name: heading })
+				.closest("section") as HTMLElement;
 		expect(
 			within(section("Open"))
 				.getAllByRole("button")
 				.map((button) => button.textContent),
-		).toEqual(["Load Show from Disk", "Load Recent Shows", "Load from ToskLight Control"]);
+		).toEqual([
+			"Load Show from Disk",
+			"Load Recent Shows",
+			"Load from ToskLight Control",
+		]);
 		expect(
 			within(section("New Show"))
 				.getAllByRole("button")
@@ -537,20 +575,24 @@ describe("the Viz editor window", () => {
 
 	it("describes the show beside its rig, under the file actions, on the Show screen", async () => {
 		const base = invoke.getMockImplementation();
-		invoke.mockImplementation((command: string, args?: Record<string, unknown>) => {
-			if (command === "save_document_paperwork")
-				return Promise.resolve({
-					...document,
-					...(args?.paperwork as Record<string, string>),
-					lastSavedAt: 1_787_000_001,
-				});
-			return base?.(command, args);
-		});
+		invoke.mockImplementation(
+			(command: string, args?: Record<string, unknown>) => {
+				if (command === "save_document_paperwork")
+					return Promise.resolve({
+						...document,
+						...(args?.paperwork as Record<string, string>),
+						lastSavedAt: 1_787_000_001,
+					});
+				return base?.(command, args);
+			},
+		);
 		renderApp();
 		const overview = await screen.findByRole("img", {
 			name: "Read-only rig overview for Planning show",
 		});
-		const information = screen.getByRole("region", { name: "Show information" });
+		const information = screen.getByRole("region", {
+			name: "Show information",
+		});
 		// One half draws the rig, the other describes it, and the file actions run above both.
 		const halves = overview.closest(".viz-show-halves");
 		expect(halves).not.toBeNull();
@@ -579,11 +621,15 @@ describe("the Viz editor window", () => {
 						{ target: { value: "Tobias Keller" } },
 					);
 					fireEvent.click(
-						within(information).getByRole("button", { name: "Save project info" }),
+						within(information).getByRole("button", {
+							name: "Save project info",
+						}),
 					);
 				}
 				expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
-					paperwork: expect.objectContaining({ lightingDesigner: "Tobias Keller" }),
+					paperwork: expect.objectContaining({
+						lightingDesigner: "Tobias Keller",
+					}),
 				});
 			},
 			{ timeout: 5_000 },
@@ -631,14 +677,19 @@ describe("the Viz editor window", () => {
 
 	it("offers the desk it finds on the network, and opens what that desk sends", async () => {
 		const found = [
-            { instance: "idle-desk", name: "Idle desk", show: null, address: "10.0.0.8:5000" },
+			{
+				instance: "idle-desk",
+				name: "Idle desk",
+				show: null,
+				address: "10.0.0.8:5000",
+			},
 			{
 				instance: "desk-foh",
 				name: "front-of-house",
 				show: "Summer Tour",
 				address: "10.0.0.4:5000",
-                operatingSystem: "macos",
-                showLastLoadedAt: "2026-09-27T10:00:00Z",
+				operatingSystem: "macos",
+				showLastLoadedAt: "2026-09-27T10:00:00Z",
 			},
 		];
 		const loaded = {
@@ -651,7 +702,9 @@ describe("the Viz editor window", () => {
 				case "discovered_desks":
 					return Promise.resolve(found);
 				case "desk_shows":
-					return Promise.resolve([{ id: "summer", name: "Summer Tour", updated_at: "2026-09-26" }]);
+					return Promise.resolve([
+						{ id: "summer", name: "Summer Tour", updated_at: "2026-09-26" },
+					]);
 				case "load_from_desk":
 					return Promise.resolve(loaded);
 				case "document_summary":
@@ -665,20 +718,38 @@ describe("the Viz editor window", () => {
 			}
 		});
 		renderApp();
-		await waitFor(() => expect(invoke).toHaveBeenCalledWith("discovered_desks"));
-		fireEvent.click(screen.getByRole("button", { name: "Load from ToskLight Control" }));
-		const load = await screen.findByRole("button", { name: "Load Summer Tour from front-of-house" });
-        expect(screen.getByText("10.0.0.4:5000 · macOS")).toBeInTheDocument();
-        expect(screen.getByRole("columnheader", {name:"Active Show"})).toBeInTheDocument();
-        expect(screen.getByText(`Last loaded: ${new Date("2026-09-27T10:00:00Z").toLocaleString()}`)).toBeInTheDocument();
-        expect(screen.queryByText("Idle desk")).not.toBeInTheDocument();
-        expect(screen.queryByLabelText("Desk host and port")).not.toBeInTheDocument();
-        expect(screen.queryByRole("button", { name: "Add Desk" })).not.toBeInTheDocument();
-        expect(invoke).not.toHaveBeenCalledWith("desk_shows", expect.anything());
-        fireEvent.click(load);
-		await waitFor(() => expect(invoke).toHaveBeenCalledWith("load_from_desk", {
-			instance: "desk-foh",
-		}));
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("discovered_desks"),
+		);
+		fireEvent.click(
+			screen.getByRole("button", { name: "Load from ToskLight Control" }),
+		);
+		const load = await screen.findByRole("button", {
+			name: "Load Summer Tour from front-of-house",
+		});
+		expect(screen.getByText("10.0.0.4:5000 · macOS")).toBeInTheDocument();
+		expect(
+			screen.getByRole("columnheader", { name: "Active Show" }),
+		).toBeInTheDocument();
+		expect(
+			screen.getByText(
+				`Last loaded: ${new Date("2026-09-27T10:00:00Z").toLocaleString()}`,
+			),
+		).toBeInTheDocument();
+		expect(screen.queryByText("Idle desk")).not.toBeInTheDocument();
+		expect(
+			screen.queryByLabelText("Desk host and port"),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Add Desk" }),
+		).not.toBeInTheDocument();
+		expect(invoke).not.toHaveBeenCalledWith("desk_shows", expect.anything());
+		fireEvent.click(load);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("load_from_desk", {
+				instance: "desk-foh",
+			}),
+		);
 		expect(
 			await screen.findByText("Loaded Summer Tour from front-of-house"),
 		).toBeInTheDocument();
@@ -686,9 +757,18 @@ describe("the Viz editor window", () => {
 
 	it("publishes a show to a desk, including a desk with no show open, and continues bound to it", async () => {
 		const found = [
-			{ instance: "desk-idle", name: "Idle desk", show: null, address: "10.0.0.5:5000" },
+			{
+				instance: "desk-idle",
+				name: "Idle desk",
+				show: null,
+				address: "10.0.0.5:5000",
+			},
 		];
-		const published = { ...document, name: "Planning show", path: "/downloads/Planning show.show" };
+		const published = {
+			...document,
+			name: "Planning show",
+			path: "/downloads/Planning show.show",
+		};
 		invoke.mockImplementation((command: string) => {
 			switch (command) {
 				case "discovered_desks":
@@ -706,15 +786,29 @@ describe("the Viz editor window", () => {
 			}
 		});
 		renderApp();
-		await waitFor(() => expect(invoke).toHaveBeenCalledWith("discovered_desks"));
-		fireEvent.click(await screen.findByRole("button", { name: "Publish to ToskLight Control" }));
-		const dialog = await screen.findByRole("dialog", { name: "Publish to ToskLight Control" });
-		fireEvent.click(within(dialog).getByRole("button", { name: "Publish to Idle desk" }));
 		await waitFor(() =>
-			expect(invoke).toHaveBeenCalledWith("publish_to_desk", { instance: "desk-idle" }),
+			expect(invoke).toHaveBeenCalledWith("discovered_desks"),
+		);
+		fireEvent.click(
+			await screen.findByRole("button", {
+				name: "Publish to ToskLight Control",
+			}),
+		);
+		const dialog = await screen.findByRole("dialog", {
+			name: "Publish to ToskLight Control",
+		});
+		fireEvent.click(
+			within(dialog).getByRole("button", { name: "Publish to Idle desk" }),
+		);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("publish_to_desk", {
+				instance: "desk-idle",
+			}),
 		);
 		expect(
-			await screen.findByText("Published Planning show to Idle desk; it now stays in step with the desk's show"),
+			await screen.findByText(
+				"Published Planning show to Idle desk; it now stays in step with the desk's show",
+			),
 		).toBeInTheDocument();
 	});
 
@@ -775,18 +869,32 @@ describe("the Viz editor window", () => {
 				"Opened Demo Show 2, a copy of the packaged Demo Show, at /data/shows/demo-show-2.show",
 			),
 		).toBeInTheDocument();
-		expect(await screen.findByText("Demo Show 2", { selector: "strong" })).toBeInTheDocument();
+		expect(
+			await screen.findByText("Demo Show 2", { selector: "strong" }),
+		).toBeInTheDocument();
 		expect(cadReads).toBeGreaterThanOrEqual(2);
 	});
 
 	it("offers no desk when there is none on the network", async () => {
 		renderApp();
-		const get = screen.getByRole("button", { name: "Load from ToskLight Control" });
+		const get = screen.getByRole("button", {
+			name: "Load from ToskLight Control",
+		});
 		expect(get).toBeEnabled();
 		fireEvent.click(get);
-		expect(await screen.findByText("No announced control desks have an active show.")).toBeInTheDocument();
-        expect(within(screen.getByRole("dialog", {name:"Control desk shows"})).queryByRole("table")).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Control desk shows" }));
+		expect(
+			await screen.findByText(
+				"No announced control desks have an active show.",
+			),
+		).toBeInTheDocument();
+		expect(
+			within(
+				screen.getByRole("dialog", { name: "Control desk shows" }),
+			).queryByRole("table"),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close Control desk shows" }),
+		);
 		await openSettingsPage("DMX");
 		await screen.findByRole("heading", { name: "Live DMX Inputs" });
 		expect(
@@ -1014,7 +1122,11 @@ describe("the Viz editor window", () => {
 					fixtureType: "wash",
 					patchPolicy: "dmx",
 					referencedModes: [
-						{ modeId: MODE_ID, name: "Default", splits: [{ split: 1, footprint: 3 }] },
+						{
+							modeId: MODE_ID,
+							name: "Default",
+							splits: [{ split: 1, footprint: 3 }],
+						},
 					],
 					profileSnapshot: null,
 				},
@@ -1070,9 +1182,15 @@ describe("the Viz editor window", () => {
 					report: "#0001 [0042] Power On Tests successful",
 					mac: "00:11:22:33:44:55",
 					protocols: ["artnet"],
-					inputs: [{ label: "Port 1", universe: 7, kind: "DMX512", active: true }],
-					outputs: [{ label: "Port 2", universe: 2, kind: "DMX512", active: false }],
-					sends: [{ protocol: "artnet", universe: 7, announced: true, live: true }],
+					inputs: [
+						{ label: "Port 1", universe: 7, kind: "DMX512", active: true },
+					],
+					outputs: [
+						{ label: "Port 2", universe: 2, kind: "DMX512", active: false },
+					],
+					sends: [
+						{ protocol: "artnet", universe: 7, announced: true, live: true },
+					],
 					lastSeenMillis: 800,
 				},
 			],
@@ -1081,8 +1199,18 @@ describe("the Viz editor window", () => {
 		};
 
 		const networkInterfaces = [
-			{ name: "en0", address: "10.0.0.5", netmask: "255.255.255.0", loopback: false },
-			{ name: "lo0", address: "127.0.0.1", netmask: "255.0.0.0", loopback: true },
+			{
+				name: "en0",
+				address: "10.0.0.5",
+				netmask: "255.255.255.0",
+				loopback: false,
+			},
+			{
+				name: "lo0",
+				address: "127.0.0.1",
+				netmask: "255.0.0.0",
+				loopback: true,
+			},
 		];
 		let interfaceSettings = {
 			...rendererSettings,
@@ -1139,7 +1267,9 @@ describe("the Viz editor window", () => {
 			renderApp();
 			await screen.findByRole("button", { name: "Settings" });
 			// It is no screen of the dock.
-			expect(screen.queryByRole("button", { name: "DMX" })).not.toBeInTheDocument();
+			expect(
+				screen.queryByRole("button", { name: "DMX" }),
+			).not.toBeInTheDocument();
 			await openSettingsPage("DMX");
 			await screen.findByRole("heading", { name: "Live DMX Inputs" });
 			expect(dmxHeader()).toHaveTextContent("Settings");
@@ -1193,7 +1323,9 @@ describe("the Viz editor window", () => {
 				await screen.findByRole("listbox", { name: "Art-Net interface" }),
 			);
 			expect(
-				options.getByRole("option", { name: "lo0 · 127.0.0.1 (this computer only)" }),
+				options.getByRole("option", {
+					name: "lo0 · 127.0.0.1 (this computer only)",
+				}),
 			).toBeInTheDocument();
 			fireEvent.click(options.getByRole("option", { name: "en0 · 10.0.0.5" }));
 			await waitFor(() =>
@@ -1218,7 +1350,9 @@ describe("the Viz editor window", () => {
 			fireEvent.click(await screen.findByRole("button", { name: "Patch" }));
 			fireEvent.click(await screen.findByRole("tab", { name: "DMX" }));
 			expect(
-				document_root()?.querySelector(".viz-dmx-patch-screen > .ui-window-header"),
+				document_root()?.querySelector(
+					".viz-dmx-patch-screen > .ui-window-header",
+				),
 			).toHaveTextContent("Patch");
 			const universe = await screen.findByRole("region", {
 				name: "Universe 2 patch",
@@ -1241,7 +1375,9 @@ describe("the Viz editor window", () => {
 			expect(cell(11)).toHaveClass("joins-prev", "joins-next");
 			expect(cell(12)).toHaveClass("joins-prev");
 			expect(cell(12)).not.toHaveClass("joins-next");
-			expect(cell(13)).toHaveAccessibleName("Universe 2, address 13, not patched");
+			expect(cell(13)).toHaveAccessibleName(
+				"Universe 2, address 13, not patched",
+			);
 			fireEvent.click(cell(11));
 			const info = document_root()?.querySelector(".viz-dmx-info");
 			expect(info).toHaveTextContent("Universe 2 · Channel 11");
@@ -1301,8 +1437,13 @@ describe("the Viz editor window", () => {
 			expect(pending).toHaveTextContent("101 · Wash Left");
 			expect(pending).toHaveTextContent("2.10 → 2.20");
 			// Nothing is written until Apply Patch.
-			expect(invoke).not.toHaveBeenCalledWith("patch_fixtures", expect.anything());
-			fireEvent.click(within(pending).getByRole("button", { name: "Apply Patch" }));
+			expect(invoke).not.toHaveBeenCalledWith(
+				"patch_fixtures",
+				expect.anything(),
+			);
+			fireEvent.click(
+				within(pending).getByRole("button", { name: "Apply Patch" }),
+			);
 			await waitFor(() =>
 				expect(invoke).toHaveBeenCalledWith("patch_fixtures", {
 					mutation: expect.objectContaining({
@@ -1353,15 +1494,21 @@ describe("the Viz editor window", () => {
 			fireEvent.pointerUp(window);
 			expect(cell(10)).toHaveClass("is-patched", "is-start");
 			expect(cell(30)).not.toHaveClass("is-patched");
-			expect(localStore.get("tosklight.architect.dmx-patch-sidebar")).toBe("false");
+			expect(localStore.get("tosklight.architect.dmx-patch-sidebar")).toBe(
+				"false",
+			);
 		}, 20_000);
 
 		it("lists every Art-Net node and sACN source with its universes, and stops polling when left", async () => {
 			mockDmx();
 			renderApp();
 			await openSettingsPage("DMX");
-			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Sources" }));
-			const table = await screen.findByRole("table", { name: "Network sources" });
+			fireEvent.click(
+				within(dmxHeader()).getByRole("tab", { name: "Sources" }),
+			);
+			const table = await screen.findByRole("table", {
+				name: "Network sources",
+			});
 			const [, desk, node] = within(table).getAllByRole("row");
 			expect(desk).toHaveTextContent("Desk");
 			expect(desk).toHaveTextContent("10.0.0.4");
@@ -1378,7 +1525,9 @@ describe("the Viz editor window", () => {
 			fireEvent.click(within(node).getByRole("button", { name: "Node 4" }));
 			expect(info).toHaveTextContent("MAC address00:11:22:33:44:55");
 			expect(info).toHaveTextContent("Power On Tests successful");
-			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Network" }));
+			fireEvent.click(
+				within(dmxHeader()).getByRole("tab", { name: "Network" }),
+			);
 			await waitFor(() =>
 				expect(invoke).toHaveBeenCalledWith("stop_network_sources"),
 			);
@@ -1417,7 +1566,9 @@ describe("the Viz editor window", () => {
 			).not.toHaveClass("is-patched");
 			const info = document_root()?.querySelector(".viz-dmx-info");
 			expect(info).toHaveTextContent("Art-Net 2 → Universe 2");
-			expect(info).toHaveTextContent("Healthy · Desk · 10.0.0.4:6454 · 88 packets");
+			expect(info).toHaveTextContent(
+				"Healthy · Desk · 10.0.0.4:6454 · 88 packets",
+			);
 			fireEvent.click(full);
 			expect(info).toHaveTextContent("Received value255");
 			expect(info).toHaveTextContent("101 · Wash Left");
@@ -1425,7 +1576,9 @@ describe("the Viz editor window", () => {
 			expect(
 				screen.queryByRole("button", { name: "Release override" }),
 			).not.toBeInTheDocument();
-			fireEvent.click(within(dmxHeader()).getByRole("tab", { name: "Network" }));
+			fireEvent.click(
+				within(dmxHeader()).getByRole("tab", { name: "Network" }),
+			);
 			await waitFor(() =>
 				expect(invoke).toHaveBeenCalledWith("stop_received_dmx"),
 			);
@@ -1501,9 +1654,7 @@ describe("the Viz editor window", () => {
 		expect(invoke).not.toHaveBeenCalledWith("open_editor_window");
 		// The sidebar stays put: CAD is a screen of this window, so the window's own destinations
 		// remain reachable beside the drawing.
-		expect(
-			screen.getByRole("button", { name: "Patch" }),
-		).toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "Patch" })).toBeInTheDocument();
 	});
 
 	it("applies renderer Settings directly above Open Viz", async () => {
@@ -1605,9 +1756,9 @@ describe("the Viz editor window", () => {
 		if (!showTitle) throw new Error("Show title was not rendered");
 		const mcpButton = within(showTitle).getByRole("button", { name: "MCP" });
 		fireEvent.click(mcpButton);
-		expect(
-			within(showTitle).getByRole("button", { name: "MCP" }),
-		).toHaveClass("is-active");
+		expect(within(showTitle).getByRole("button", { name: "MCP" })).toHaveClass(
+			"is-active",
+		);
 		expect(
 			screen.getByRole("heading", { name: "MCP integration" }),
 		).toBeInTheDocument();
@@ -1661,11 +1812,23 @@ describe("the Viz editor window", () => {
 		const fog = await screen.findByRole("slider", { name: "Fog amount" });
 		expect(fog).toHaveValue("0.15");
 		// Lamp and laser atmosphere are set in their own boxes.
-		const lamp = screen.getByRole("heading", { name: "Lamp" }).closest("section");
-		const laser = screen.getByRole("heading", { name: "Laser" }).closest("section");
+		const lamp = screen
+			.getByRole("heading", { name: "Lamp" })
+			.closest("section");
+		const laser = screen
+			.getByRole("heading", { name: "Laser" })
+			.closest("section");
 		expect(lamp).not.toBe(laser);
-		expect(within(lamp as HTMLElement).getByRole("slider", { name: "Lamp fog turbulence" })).toBeInTheDocument();
-		expect(within(laser as HTMLElement).getByRole("slider", { name: "Laser brightness" })).toBeInTheDocument();
+		expect(
+			within(lamp as HTMLElement).getByRole("slider", {
+				name: "Lamp fog turbulence",
+			}),
+		).toBeInTheDocument();
+		expect(
+			within(laser as HTMLElement).getByRole("slider", {
+				name: "Laser brightness",
+			}),
+		).toBeInTheDocument();
 		await waitFor(() => expect(fog).toHaveValue("0.02"), { timeout: 1500 });
 		expect(screen.getByRole("button", { name: "Draft" })).toBeInTheDocument();
 	});
@@ -1675,7 +1838,11 @@ describe("the Viz editor window", () => {
 		const base = invoke.getMockImplementation();
 		invoke.mockImplementation((command: string, payload?: unknown) =>
 			command === "import_venue_model"
-				? Promise.resolve({ fixtureId: "5f0c1a5e-0000-4000-8000-000000000001", name: "Hall", triangles: 12 })
+				? Promise.resolve({
+						fixtureId: "5f0c1a5e-0000-4000-8000-000000000001",
+						name: "Hall",
+						triangles: 12,
+					})
 				: base?.(command, payload),
 		);
 		renderApp();
@@ -1685,7 +1852,9 @@ describe("the Viz editor window", () => {
 			screen.queryByRole("button", { name: "+ Import 3D model" }),
 		).not.toBeInTheDocument();
 
-		expect(screen.queryByRole("button", { name: "Venue" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Venue" }),
+		).not.toBeInTheDocument();
 		fireEvent.click(screen.getByRole("switch", { name: "Show all layers" }));
 		fireEvent.click(
 			await screen.findByRole("button", { name: "+ Import 3D model" }),
@@ -1699,7 +1868,9 @@ describe("the Viz editor window", () => {
 		expect(dialog.open).toHaveBeenCalledWith(
 			expect.objectContaining({
 				filters: [
-					expect.objectContaining({ extensions: ["glb", "gltf", "3mf", "obj"] }),
+					expect.objectContaining({
+						extensions: ["glb", "gltf", "3mf", "obj"],
+					}),
 				],
 			}),
 		);
@@ -1711,8 +1882,12 @@ describe("the Viz editor window", () => {
 	it("presents Patch, with its effects, and no separate Venue screen", async () => {
 		renderApp();
 		await screen.findByRole("button", { name: "Patch" });
-		expect(screen.queryByRole("button", { name: "Effects" })).not.toBeInTheDocument();
-		expect(screen.queryByRole("button", { name: "Venue" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Effects" }),
+		).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("button", { name: "Venue" }),
+		).not.toBeInTheDocument();
 		for (const screenName of ["Patch"] as const) {
 			fireEvent.click(screen.getByRole("button", { name: screenName }));
 			const title = await waitFor(() => {
@@ -1751,7 +1926,9 @@ describe("the Viz editor window", () => {
 			return header;
 		});
 		// No separate row under the title: the tools are the title's own buttons.
-		expect(screen.queryByRole("toolbar", { name: "CAD tools" })).not.toBeInTheDocument();
+		expect(
+			screen.queryByRole("toolbar", { name: "CAD tools" }),
+		).not.toBeInTheDocument();
 		const named = (button: Element) =>
 			button.getAttribute("aria-label") ?? button.textContent ?? "";
 		const buttons = within(toolbar).getAllByRole("button");
@@ -1766,6 +1943,7 @@ describe("the Viz editor window", () => {
 			"Add scenery options",
 			"Add primitive",
 			"Add primitive options",
+			"Venue tools",
 			"Add venue element",
 			"Select",
 			"Draw line",
@@ -1785,14 +1963,17 @@ describe("the Viz editor window", () => {
 		}
 		// The tooltip names the key that picks a drawing tool; tools without a handled key show none.
 		const shortcutOf = (name: string) =>
-			within(toolbar).getByRole("button", { name }).getAttribute("aria-keyshortcuts");
+			within(toolbar)
+				.getByRole("button", { name })
+				.getAttribute("aria-keyshortcuts");
 		expect(
-			["Select", "Draw line", "Draw box", "Place text", "Measure", "Erase"].map(shortcutOf),
+			["Select", "Draw line", "Draw box", "Place text", "Measure", "Erase"].map(
+				shortcutOf,
+			),
 		).toEqual(["V", "L", "P", "T", "M", "R"]);
-		expect(within(toolbar).getByRole("button", { name: "Draw line" })).toHaveAttribute(
-			"data-shortcut",
-			"L",
-		);
+		expect(
+			within(toolbar).getByRole("button", { name: "Draw line" }),
+		).toHaveAttribute("data-shortcut", "L");
 		expect(shortcutOf("Undo")).toBeNull();
 		expect(shortcutOf("Add truss")).toBeNull();
 
@@ -1801,13 +1982,17 @@ describe("the Viz editor window", () => {
 			within(toolbar)
 				.getByRole("button", { name: "Add truss options" })
 				.closest(".has-corner-dropdown"),
-		).toContainElement(within(toolbar).getByRole("button", { name: "Add truss" }));
+		).toContainElement(
+			within(toolbar).getByRole("button", { name: "Add truss" }),
+		);
 		expect(
 			within(toolbar)
 				.getByRole("button", { name: "Add venue element" })
 				.closest(".has-corner-dropdown"),
 		).toBeNull();
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add truss options" }));
+		fireEvent.click(
+			within(toolbar).getByRole("button", { name: "Add truss options" }),
+		);
 		const trussMenu = await screen.findByRole("menu", { name: "Choose truss" });
 		expect(
 			within(trussMenu)
@@ -1816,36 +2001,62 @@ describe("the Viz editor window", () => {
 		).toEqual(["3-point regular", "4-point"]);
 		// This library holds no truss, so every part is listed but none can be chosen.
 		await waitFor(() =>
-			expect(within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u })).toHaveTextContent(
-				"Not in this library",
-			),
+			expect(
+				within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u }),
+			).toHaveTextContent("Not in this library"),
 		);
-		expect(within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u })).toBeDisabled();
-		fireEvent.keyDown(window, { key: "Escape" });
-		await waitFor(() => expect(screen.queryByRole("menu")).not.toBeInTheDocument());
-		// Pressing the button places its part at once, so no dialog opens; a missing part says so.
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add scenery" }));
 		expect(
-			await screen.findByText("The curtain is not in this computer's fixture library."),
+			within(trussMenu).getByRole("menuitemradio", { name: /^Pipe/u }),
+		).toBeDisabled();
+		fireEvent.keyDown(window, { key: "Escape" });
+		await waitFor(() =>
+			expect(screen.queryByRole("menu")).not.toBeInTheDocument(),
+		);
+		// Pressing the button places its part at once, so no dialog opens; a missing part says so.
+		fireEvent.click(
+			within(toolbar).getByRole("button", { name: "Add scenery" }),
+		);
+		expect(
+			await screen.findByText(
+				"The curtain is not in this computer's fixture library.",
+			),
 		).toBeInTheDocument();
 		expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
 		// Any other Venue object is chosen from its picture list, not the fixture library browser.
-		fireEvent.click(within(toolbar).getByRole("button", { name: "Add venue element" }));
-		const venueDialog = await screen.findByRole("dialog", { name: "Add venue element" });
+		fireEvent.click(
+			within(toolbar).getByRole("button", { name: "Add venue element" }),
+		);
+		const venueDialog = await screen.findByRole("dialog", {
+			name: "Add venue element",
+		});
 		expect(
-			await within(venueDialog).findByText("This computer's fixture library holds no venue elements."),
+			await within(venueDialog).findByText(
+				"This computer's fixture library holds no venue elements.",
+			),
 		).toBeInTheDocument();
-		expect(screen.queryByRole("dialog", { name: "Add fixture" })).not.toBeInTheDocument();
-		fireEvent.click(screen.getByRole("button", { name: "Close Add venue element" }));
+		expect(
+			screen.queryByRole("dialog", { name: "Add fixture" }),
+		).not.toBeInTheDocument();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Close Add venue element" }),
+		);
 		await waitFor(() =>
-			expect(screen.queryByRole("dialog", { name: "Add venue element" })).not.toBeInTheDocument(),
+			expect(
+				screen.queryByRole("dialog", { name: "Add venue element" }),
+			).not.toBeInTheDocument(),
 		);
 
-		expect(within(toolbar).getByRole("button", { name: "Select" })).toHaveClass("is-active");
+		expect(within(toolbar).getByRole("button", { name: "Select" })).toHaveClass(
+			"is-active",
+		);
 		fireEvent.click(within(toolbar).getByRole("button", { name: "Measure" }));
-		expect(within(toolbar).getByRole("button", { name: "Measure" })).toHaveClass("is-active");
-		expect(within(toolbar).getByRole("button", { name: "Select" })).not.toHaveClass("is-active");
+		expect(
+			within(toolbar).getByRole("button", { name: "Measure" }),
+		).toHaveClass("is-active");
+		expect(
+			within(toolbar).getByRole("button", { name: "Select" }),
+		).not.toHaveClass("is-active");
 	});
 
 	it("keeps Media tabs and the contextual add action in one title row", async () => {
@@ -2093,7 +2304,9 @@ describe("the Viz editor window", () => {
 			await screen.findByRole("heading", { name: "No media servers patched" }),
 		).toBeInTheDocument();
 		expect(
-			screen.queryByRole("complementary", { name: "Media server configuration" }),
+			screen.queryByRole("complementary", {
+				name: "Media server configuration",
+			}),
 		).not.toBeInTheDocument();
 	});
 
@@ -2236,46 +2449,94 @@ function document_root() {
 	return globalThis.document.body;
 }
 
-
 describe("startup recovery visibility", () => {
- it("shows a retained recent-show refusal after the frontend mounts and keeps safe file actions available", async () => {
-  const normal = invoke.getMockImplementation();
-  invoke.mockImplementation((command: string, args?: unknown) => command === "startup_recovery"
-   ? Promise.resolve({path: "/shows/Older rig.show", reason: "legacy semantic programming is unsupported", fallback: {name: "Demo Show", path: "/shows/Demo Show2.show"}, fallbackError: null})
-   : normal?.(command, args));
-  render(<ModalProvider><App /></ModalProvider>);
-  const notice = await screen.findByRole("alert", {name: "Recent show could not be opened"});
-  expect(notice.textContent).toContain("/shows/Older rig.show");
-  expect(notice.textContent).toContain("legacy semantic programming is unsupported");
-  expect(notice.textContent).toContain("Demo Show2.show");
-  expect(within(notice).getByRole("button", {name: "Open Show"})).toBeTruthy();
-  expect(within(notice).getByRole("button", {name: "New Show"})).toBeTruthy();
-  expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
- });
- it("does not show a recovery notice on a healthy or no-recent startup", async () => {
-  const normal = invoke.getMockImplementation();
-  invoke.mockImplementation((command: string, args?: unknown) => command === "startup_recovery" ? Promise.resolve(null) : normal?.(command, args));
-  render(<ModalProvider><App /></ModalProvider>);
-  await waitFor(() => expect(invoke).toHaveBeenCalledWith("startup_recovery"));
-  expect(screen.queryByRole("alert", {name: "Recent show could not be opened"})).toBeNull();
- });
+	it("shows a retained recent-show refusal after the frontend mounts and keeps safe file actions available", async () => {
+		const normal = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: unknown) =>
+			command === "startup_recovery"
+				? Promise.resolve({
+						path: "/shows/Older rig.show",
+						reason: "legacy semantic programming is unsupported",
+						fallback: { name: "Demo Show", path: "/shows/Demo Show2.show" },
+						fallbackError: null,
+					})
+				: normal?.(command, args),
+		);
+		render(
+			<ModalProvider>
+				<App />
+			</ModalProvider>,
+		);
+		const notice = await screen.findByRole("alert", {
+			name: "Recent show could not be opened",
+		});
+		expect(notice.textContent).toContain("/shows/Older rig.show");
+		expect(notice.textContent).toContain(
+			"legacy semantic programming is unsupported",
+		);
+		expect(notice.textContent).toContain("Demo Show2.show");
+		expect(
+			within(notice).getByRole("button", { name: "Open Show" }),
+		).toBeTruthy();
+		expect(
+			within(notice).getByRole("button", { name: "New Show" }),
+		).toBeTruthy();
+		expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
+	});
+	it("does not show a recovery notice on a healthy or no-recent startup", async () => {
+		const normal = invoke.getMockImplementation();
+		invoke.mockImplementation((command: string, args?: unknown) =>
+			command === "startup_recovery"
+				? Promise.resolve(null)
+				: normal?.(command, args),
+		);
+		render(
+			<ModalProvider>
+				<App />
+			</ModalProvider>,
+		);
+		await waitFor(() =>
+			expect(invoke).toHaveBeenCalledWith("startup_recovery"),
+		);
+		expect(
+			screen.queryByRole("alert", { name: "Recent show could not be opened" }),
+		).toBeNull();
+	});
 });
-
 
 describe("authoritative Show summary freshness", () => {
 	it("validates a late initial summary against the matching scene that arrived first", async () => {
 		const normal = invoke.getMockImplementation();
-		const old = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
-		const latest = { ...old, fixtureCount: 314, universeCount: 11, lastSavedAt: 2000 };
+		const old = {
+			...document,
+			fixtureCount: 313,
+			universeCount: 10,
+			lastSavedAt: 1000,
+		};
+		const latest = {
+			...old,
+			fixtureCount: 314,
+			universeCount: 11,
+			lastSavedAt: 2000,
+		};
 		let releaseSummary!: (summary: unknown) => void;
-		const initialSummary = new Promise((resolve) => { releaseSummary = resolve; });
+		const initialSummary = new Promise((resolve) => {
+			releaseSummary = resolve;
+		});
 		let reads = 0;
 		invoke.mockImplementation((command: string, args?: unknown) => {
-			if (command === "document_summary") return ++reads === 1 ? initialSummary : Promise.resolve(latest);
-			if (command === "cad_scene_snapshot") return Promise.resolve({
-				showId: SHOW_ID, sceneRevision: 2, selectionRevision: 0,
-				entities: [cadEntity], drawings: [], selectedIds: [], attachments: [],
-			});
+			if (command === "document_summary")
+				return ++reads === 1 ? initialSummary : Promise.resolve(latest);
+			if (command === "cad_scene_snapshot")
+				return Promise.resolve({
+					showId: SHOW_ID,
+					sceneRevision: 2,
+					selectionRevision: 0,
+					entities: [cadEntity],
+					drawings: [],
+					selectedIds: [],
+					attachments: [],
+				});
 			return normal?.(command, args);
 		});
 		renderApp();
@@ -2283,30 +2544,53 @@ describe("authoritative Show summary freshness", () => {
 		expect(invoke).toHaveBeenCalledWith("cad_scene_snapshot");
 		// Flush the already-resolved CAD read before releasing the independent old summary.
 		await act(async () => releaseSummary(old));
-		const info = await screen.findByRole("region", { name: "Show information" });
+		const info = await screen.findByRole("region", {
+			name: "Show information",
+		});
 		await waitFor(() => expect(within(info).getByText("314")).toBeVisible());
 		expect(within(info).getByText("11")).toBeVisible();
 	});
 
 	it("refreshes metadata when the deferred initial CAD snapshot first binds the visible show", async () => {
 		const normal = invoke.getMockImplementation();
-		let summary = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
+		let summary = {
+			...document,
+			fixtureCount: 313,
+			universeCount: 10,
+			lastSavedAt: 1000,
+		};
 		let releaseScene!: (scene: unknown) => void;
-		const initialScene = new Promise((resolve) => { releaseScene = resolve; });
+		const initialScene = new Promise((resolve) => {
+			releaseScene = resolve;
+		});
 		invoke.mockImplementation((command: string, args?: unknown) => {
 			if (command === "document_summary") return Promise.resolve(summary);
 			if (command === "cad_scene_snapshot") return initialScene;
 			return normal?.(command, args);
 		});
 		renderApp();
-		const info = await screen.findByRole("region", { name: "Show information" });
+		const info = await screen.findByRole("region", {
+			name: "Show information",
+		});
 		await waitFor(() => expect(within(info).getByText("313")).toBeVisible());
 		// A committed edit occurs after the summary read but before the first scene arrives.
-		summary = { ...summary, fixtureCount: 314, universeCount: 11, lastSavedAt: 2000 };
-		await act(async () => releaseScene({
-			showId: SHOW_ID, sceneRevision: 2, selectionRevision: 0,
-			entities: [cadEntity], drawings: [], selectedIds: [], attachments: [],
-		}));
+		summary = {
+			...summary,
+			fixtureCount: 314,
+			universeCount: 11,
+			lastSavedAt: 2000,
+		};
+		await act(async () =>
+			releaseScene({
+				showId: SHOW_ID,
+				sceneRevision: 2,
+				selectionRevision: 0,
+				entities: [cadEntity],
+				drawings: [],
+				selectedIds: [],
+				attachments: [],
+			}),
+		);
 		await waitFor(() => expect(within(info).getByText("314")).toBeVisible());
 		expect(within(info).getByText("11")).toBeVisible();
 		expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
@@ -2314,74 +2598,202 @@ describe("authoritative Show summary freshness", () => {
 
 	it("refreshes Show metadata after actual scene deltas without reopening the document", async () => {
 		const normal = invoke.getMockImplementation();
-		let summary = { ...document, fixtureCount: 313, universeCount: 10, lastSavedAt: 1000 };
-		invoke.mockImplementation((command: string, args?: unknown) => command === "document_summary"
-			? Promise.resolve(summary) : normal?.(command, args));
+		let summary = {
+			...document,
+			fixtureCount: 313,
+			universeCount: 10,
+			lastSavedAt: 1000,
+		};
+		invoke.mockImplementation((command: string, args?: unknown) =>
+			command === "document_summary"
+				? Promise.resolve(summary)
+				: normal?.(command, args),
+		);
 		renderApp();
-		const info = await screen.findByRole("region", { name: "Show information" });
+		const info = await screen.findByRole("region", {
+			name: "Show information",
+		});
 		await waitFor(() => expect(within(info).getByText("313")).toBeVisible());
-		const libraryReads = invoke.mock.calls.filter(([command]) => command === "library_profiles").length;
-		const cases = [[314, 11], [314, 10], [314, 11], [313, 10], [314, 11]];
+		const libraryReads = invoke.mock.calls.filter(
+			([command]) => command === "library_profiles",
+		).length;
+		const cases = [
+			[314, 11],
+			[314, 10],
+			[314, 11],
+			[313, 10],
+			[314, 11],
+		];
 		for (const [index, [fixtureCount, universeCount]] of cases.entries()) {
-			summary = { ...summary, fixtureCount, universeCount, lastSavedAt: 2000 + index };
-			await act(async () => eventHandlers.get("cad-scene-delta")?.({ payload: {
-				sceneRevision: index + 2, upserted: [], removedIds: [], drawings: [], attachments: [],
-			} }));
-			await waitFor(() => expect(within(info).getByText(String(fixtureCount))).toBeVisible());
+			summary = {
+				...summary,
+				fixtureCount,
+				universeCount,
+				lastSavedAt: 2000 + index,
+			};
+			await act(async () =>
+				eventHandlers.get("cad-scene-delta")?.({
+					payload: {
+						sceneRevision: index + 2,
+						upserted: [],
+						removedIds: [],
+						drawings: [],
+						attachments: [],
+					},
+				}),
+			);
+			await waitFor(() =>
+				expect(within(info).getByText(String(fixtureCount))).toBeVisible(),
+			);
 			expect(within(info).getByText(String(universeCount))).toBeVisible();
 		}
-		expect(invoke.mock.calls.filter(([command]) => command === "library_profiles")).toHaveLength(libraryReads);
+		expect(
+			invoke.mock.calls.filter(([command]) => command === "library_profiles"),
+		).toHaveLength(libraryReads);
 		expect(invoke).not.toHaveBeenCalledWith("open_document", expect.anything());
-		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+		expect(invoke).not.toHaveBeenCalledWith(
+			"save_document_paperwork",
+			expect.anything(),
+		);
 	});
 
 	it("preserves dirty Show paperwork while authoritative saved time changes", async () => {
-		const summary = { ...document, project: "Stored project", lastSavedAt: 1000 } as DocumentSummary;
-		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
-			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		const summary = {
+			...document,
+			project: "Stored project",
+			lastSavedAt: 1000,
+		} as DocumentSummary;
+		const props = {
+			document: summary,
+			cadScene: null,
+			onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(),
+			onReloadDocument: vi.fn(),
+			onError: vi.fn(),
+		};
 		const view = renderApp(<ShowScreen {...props} />);
 		const project = screen.getByRole("textbox", { name: "Project" });
 		fireEvent.change(project, { target: { value: "Unsaved project draft" } });
-		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }} /></ModalProvider>);
+		view.rerender(
+			<ModalProvider>
+				<ShowScreen
+					{...props}
+					document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }}
+				/>
+			</ModalProvider>,
+		);
 		expect(project).toHaveValue("Unsaved project draft");
 		expect(props.onDocument).not.toHaveBeenCalled();
-		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+		expect(invoke).not.toHaveBeenCalledWith(
+			"save_document_paperwork",
+			expect.anything(),
+		);
 	});
 });
-
 
 describe("Show paperwork draft reconciliation", () => {
 	it("keeps project, venue, designer and uploaded logo drafts across rig summary updates", async () => {
 		const normal = invoke.getMockImplementation();
-		const logo = { mediaType: "image/jpeg", width: 1, height: 1, data: "/9j/2Q==" };
+		const logo = {
+			mediaType: "image/jpeg",
+			width: 1,
+			height: 1,
+			data: "/9j/2Q==",
+		};
 		vi.mocked(dialog.open).mockResolvedValueOnce("/chosen/logo.jpg");
-		invoke.mockImplementation((command: string, args?: unknown) => command === "read_company_logo"
-			? Promise.resolve(logo) : normal?.(command, args));
-		const summary = { ...document, project: "Stored", venue: "Stored venue", lightingDesigner: "Stored designer", lastSavedAt: 1000 } as DocumentSummary;
-		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
-			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		invoke.mockImplementation((command: string, args?: unknown) =>
+			command === "read_company_logo"
+				? Promise.resolve(logo)
+				: normal?.(command, args),
+		);
+		const summary = {
+			...document,
+			project: "Stored",
+			venue: "Stored venue",
+			lightingDesigner: "Stored designer",
+			lastSavedAt: 1000,
+		} as DocumentSummary;
+		const props = {
+			document: summary,
+			cadScene: null,
+			onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(),
+			onReloadDocument: vi.fn(),
+			onError: vi.fn(),
+		};
 		const view = renderApp(<ShowScreen {...props} />);
 		for (const label of ["Project", "Venue", "Lighting designer name"])
-			fireEvent.change(screen.getByRole("textbox", { name: label }), { target: { value: `Draft ${label}` } });
+			fireEvent.change(screen.getByRole("textbox", { name: label }), {
+				target: { value: `Draft ${label}` },
+			});
 		fireEvent.click(screen.getByRole("button", { name: "Upload logo" }));
 		await screen.findByRole("img", { name: "Company logo" });
-		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }} /></ModalProvider>);
+		view.rerender(
+			<ModalProvider>
+				<ShowScreen
+					{...props}
+					document={{ ...summary, lastSavedAt: 2000, fixtureCount: 314 }}
+				/>
+			</ModalProvider>,
+		);
 		for (const label of ["Project", "Venue", "Lighting designer name"])
-			expect(screen.getByRole("textbox", { name: label })).toHaveValue(`Draft ${label}`);
-		expect(screen.getByRole("img", { name: "Company logo" })).toHaveAttribute("src", "data:image/jpeg;base64,/9j/2Q==");
+			expect(screen.getByRole("textbox", { name: label })).toHaveValue(
+				`Draft ${label}`,
+			);
+		expect(screen.getByRole("img", { name: "Company logo" })).toHaveAttribute(
+			"src",
+			"data:image/jpeg;base64,/9j/2Q==",
+		);
 		expect(props.onDocument).not.toHaveBeenCalled();
-		expect(invoke).not.toHaveBeenCalledWith("save_document_paperwork", expect.anything());
+		expect(invoke).not.toHaveBeenCalledWith(
+			"save_document_paperwork",
+			expect.anything(),
+		);
 	});
 
 	it("adopts changed authoritative paperwork when clean and resets drafts for a different show", () => {
-		const summary = { ...document, project: "Stored", lastSavedAt: 1000 } as DocumentSummary;
-		const props = { document: summary, cadScene: null, onDocument: vi.fn(),
-			onReloadProfiles: vi.fn(), onReloadDocument: vi.fn(), onError: vi.fn() };
+		const summary = {
+			...document,
+			project: "Stored",
+			lastSavedAt: 1000,
+		} as DocumentSummary;
+		const props = {
+			document: summary,
+			cadScene: null,
+			onDocument: vi.fn(),
+			onReloadProfiles: vi.fn(),
+			onReloadDocument: vi.fn(),
+			onError: vi.fn(),
+		};
 		const view = renderApp(<ShowScreen {...props} />);
-		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, project: "Other window saved" }} /></ModalProvider>);
-		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue("Other window saved");
-		fireEvent.change(screen.getByRole("textbox", { name: "Project" }), { target: { value: "Draft" } });
-		view.rerender(<ModalProvider><ShowScreen {...props} document={{ ...summary, showId: "different-show", project: "New show" }} /></ModalProvider>);
-		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue("New show");
+		view.rerender(
+			<ModalProvider>
+				<ShowScreen
+					{...props}
+					document={{ ...summary, project: "Other window saved" }}
+				/>
+			</ModalProvider>,
+		);
+		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue(
+			"Other window saved",
+		);
+		fireEvent.change(screen.getByRole("textbox", { name: "Project" }), {
+			target: { value: "Draft" },
+		});
+		view.rerender(
+			<ModalProvider>
+				<ShowScreen
+					{...props}
+					document={{
+						...summary,
+						showId: "different-show",
+						project: "New show",
+					}}
+				/>
+			</ModalProvider>,
+		);
+		expect(screen.getByRole("textbox", { name: "Project" })).toHaveValue(
+			"New show",
+		);
 	});
 });

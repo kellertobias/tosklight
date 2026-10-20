@@ -24,17 +24,34 @@ import type {
 import { type ReactNode, useEffect, useState } from "react";
 import { documentSession, type ProfileUpdate } from "../document/session";
 import { TauriPatchTransport } from "../document/transport";
-import { cadSession } from "./session";
+import { CadArchitectureModal } from "./CadArchitectureModal";
+import {
+	MountingFields,
+	PatchFields,
+	SceneryParameters,
+} from "./CadInfoFields";
 import { CommitNumber, CommitText, CommitTextArea } from "./cadFields";
-import { MountingFields, PatchFields, SceneryParameters } from "./CadInfoFields";
-import { hasAdjustableSize, placedSize, sizedScenery, sizeMeasures, storedSize } from "./sceneryAxes";
+import {
+	hasAdjustableSize,
+	placedSize,
+	sizedScenery,
+	sizeMeasures,
+	storedSize,
+} from "./sceneryAxes";
+import { cadSession } from "./session";
 import type { CadEntity } from "./types";
+import { venueObjectLabel } from "./venueObjectLabel";
 
 export type InfoTab = "generic" | "placement";
 
 type Axis = "x" | "y" | "z";
 const AXES: readonly Axis[] = ["x", "y", "z"];
 
+function VenueType({ entity }: { entity: CadEntity }) {
+	return entity.scenery?.architecture ? (
+		<p>Type: {venueObjectLabel(entity.scenery.architecture)}</p>
+	) : null;
+}
 
 /** Whether an element can be drawn at another size: placed Venue objects, except crowd areas. */
 export function supportsScale(entity: CadEntity): boolean {
@@ -43,7 +60,12 @@ export function supportsScale(entity: CadEntity): boolean {
 
 type Placement = Pick<
 	PatchMultiPatch,
-	"name" | "location" | "rotation" | "splitPatches" | "bracketAngle" | "shaperAngle"
+	| "name"
+	| "location"
+	| "rotation"
+	| "splitPatches"
+	| "bracketAngle"
+	| "shaperAngle"
 >;
 
 /** The fixture with one placement changed: its own when `copyId` is null, else that copy's. */
@@ -79,11 +101,16 @@ function useInfoFixture(fixtureId: string | null, sceneRevision: number) {
 		}
 		Promise.resolve()
 			.then(() =>
-				Promise.all([documentSession.patchSnapshot(), documentSession.fixtureNotes()]),
+				Promise.all([
+					documentSession.patchSnapshot(),
+					documentSession.fixtureNotes(),
+				]),
 			)
 			.then(([snapshot, notes]) => {
 				if (!current) return;
-				const found = snapshot.fixtures.find((each) => each.fixtureId === fixtureId) ?? null;
+				const found =
+					snapshot.fixtures.find((each) => each.fixtureId === fixtureId) ??
+					null;
 				setFixture(found);
 				const revision = snapshot.profileRevisions?.find(
 					(each) =>
@@ -123,7 +150,8 @@ function PlacementChooser({
 			>
 				{placements.map((placement, index) => (
 					<option key={placement.id} value={placement.id}>
-						{index === 0 ? "Original" : `Copy ${index}`} · {placement.dmxAddress}
+						{index === 0 ? "Original" : `Copy ${index}`} ·{" "}
+						{placement.dmxAddress}
 					</option>
 				))}
 			</select>
@@ -181,9 +209,13 @@ function SizeFields({
 	onWrite(next: PatchFixtureProjection): void;
 }) {
 	const size = placedSize(fixture, scenery);
-	const store = (next: typeof size) => onWrite({ ...fixture, scenerySizeMetres: storedSize(next) });
+	const store = (next: typeof size) =>
+		onWrite({ ...fixture, scenerySizeMetres: storedSize(next) });
 	const measures = sizeMeasures(scenery);
-	const pole = scenery.kind === "pa_top" ? measures.find((measure) => measure.id === "size-y") : null;
+	const pole =
+		scenery.kind === "pa_top"
+			? measures.find((measure) => measure.id === "size-y")
+			: null;
 	return (
 		<div className="cad-info-vector" role="group" aria-label="Size">
 			<span>Size{shared}</span>
@@ -195,7 +227,12 @@ function SizeFields({
 						checked={pole.read(size) > 0}
 						// A stand is put up at 1.2 m of pole, or as long as the speaker allows.
 						onChange={(event) =>
-							store(pole.write(size, event.currentTarget.checked ? Math.min(1.2, pole.max) : 0))
+							store(
+								pole.write(
+									size,
+									event.currentTarget.checked ? Math.min(1.2, pole.max) : 0,
+								),
+							)
 						}
 					/>
 					<span>Pole stand</span>
@@ -231,7 +268,6 @@ export function CadInfoPanel({
 	several,
 	tab = "generic",
 }: {
-	/** Which of Info's tabs is open. */
 	tab?: InfoTab;
 	/** The one selected placement, or null when several fixtures or none are selected. */
 	entity: CadEntity | null;
@@ -239,7 +275,6 @@ export function CadInfoPanel({
 	placements?: readonly CadEntity[];
 	onChoosePlacement?(entityId: string): void;
 	selectionCount: number;
-	/** Bumped whenever the drawing changes, so the panel reads the element again. */
 	sceneRevision: number;
 	onError(reason: unknown): void;
 	/** A button beside the heading, such as delete. */
@@ -247,17 +282,14 @@ export function CadInfoPanel({
 	/** What Info shows while several elements are selected; a count when absent. */
 	several?: ReactNode;
 }) {
-	const { fixture, setFixture, scenery, sizing, note, setNote } = useInfoFixture(
-		entity?.logicalFixtureId ?? null,
-		sceneRevision,
-	);
+	const { fixture, setFixture, scenery, sizing, note, setNote } =
+		useInfoFixture(entity?.logicalFixtureId ?? null, sceneRevision);
 	const heading = (
 		<header className="cad-info-header">
 			<h3>Info</h3>
 			{action}
 		</header>
 	);
-
 	if (!entity)
 		return (
 			<section className="cad-info" aria-label="Info">
@@ -265,7 +297,6 @@ export function CadInfoPanel({
 				{several ?? <p>{selectionCount} elements selected.</p>}
 			</section>
 		);
-
 	const editedEntityId = entity.id;
 	async function write(next: PatchFixtureProjection, numeric = false) {
 		if (!fixture) return;
@@ -273,13 +304,24 @@ export function CadInfoPanel({
 		setFixture(next);
 		try {
 			if (numeric) {
-				const pose = editedEntityId === next.fixtureId ? next : next.multipatch.find((copy) => copy.id === editedEntityId);
+				const pose =
+					editedEntityId === next.fixtureId
+						? next
+						: next.multipatch.find((copy) => copy.id === editedEntityId);
 				if (!pose) throw new Error("The selected placement no longer exists");
 				await cadSession.setNumericTransforms(sceneRevision, [
 					{
 						id: editedEntityId,
-						positionMillimetres: [pose.location.x, pose.location.y, pose.location.z],
-						rotationDegrees: [pose.rotation.x, pose.rotation.y, pose.rotation.z],
+						positionMillimetres: [
+							pose.location.x,
+							pose.location.y,
+							pose.location.z,
+						],
+						rotationDegrees: [
+							pose.rotation.x,
+							pose.rotation.y,
+							pose.rotation.z,
+						],
 					},
 				]);
 			} else
@@ -293,32 +335,51 @@ export function CadInfoPanel({
 			onError(reason);
 		}
 	}
-
 	const copyId = entity.id === entity.logicalFixtureId ? null : entity.id;
-	const copy = copyId ? fixture?.multipatch?.find((each) => each.id === copyId) : undefined;
-	const placement: Placement | null = fixture ? (copyId ? (copy ?? null) : fixture) : null;
+	const copy = copyId
+		? fixture?.multipatch?.find((each) => each.id === copyId)
+		: undefined;
+	const placement: Placement | null = fixture
+		? copyId
+			? (copy ?? null)
+			: fixture
+		: null;
 	const place = (change: Partial<Placement>) => {
-		if (fixture && placement) void write(withPlacement(fixture, copyId, change), !!(change.location || change.rotation));
+		if (fixture && placement)
+			void write(
+				withPlacement(fixture, copyId, change),
+				!!(change.location || change.rotation),
+			);
 	};
 	const shared = placements.length > 1 ? " (all copies)" : "";
-	// A copy with no name of its own is shown under the fixture's name.
 	const fixtureName = fixture?.name ?? entity.name;
 	const name = copyId ? copy?.name.trim() || fixtureName : fixtureName;
-
 	return (
 		<section className="cad-info" aria-label="Info">
 			{heading}
-			<PlacementChooser entity={entity} placements={placements} onChoose={(id) => onChoosePlacement?.(id)} />
+			<PlacementChooser
+				entity={entity}
+				placements={placements}
+				onChoose={(id) => onChoosePlacement?.(id)}
+			/>
 			{tab === "generic" ? (
 				<fieldset disabled={!placement}>
-					<CommitText label="Name" value={name} onCommit={(next) => next.trim() && place({ name: next.trim() })} />
+					<VenueType entity={entity} />
+					<CommitText
+						label="Name"
+						value={name}
+						onCommit={(next) => next.trim() && place({ name: next.trim() })}
+					/>
 					<CommitTextArea
 						label={`Notes${shared}`}
 						value={note}
 						onCommit={(next) => {
 							setNote(next);
 							documentSession
-								.saveFixtureNote({ fixtureId: entity.logicalFixtureId, note: next })
+								.saveFixtureNote({
+									fixtureId: entity.logicalFixtureId,
+									note: next,
+								})
 								.catch(onError);
 						}}
 					/>
@@ -346,7 +407,6 @@ export function CadInfoPanel({
 		</section>
 	);
 }
-
 
 /**
  * The offer to bring an element up to this computer's copy of its profile.
@@ -383,8 +443,8 @@ function ProfileUpdateOffer({
 	return (
 		<div className="cad-info-upgrade">
 			<p>
-				Built from version {update.fromRevision} of its profile; this computer's library holds a
-				newer one.
+				Built from version {update.fromRevision} of its profile; this computer's
+				library holds a newer one.
 			</p>
 			<button
 				type="button"
@@ -430,6 +490,8 @@ function PlacementFields({
 	place(change: Partial<Placement>): void;
 	write(next: PatchFixtureProjection): void;
 }) {
+	const [editingVenue, setEditingVenue] = useState(false);
+	const architecture = fixture?.sceneryOptions?.architecture;
 	const position = placement?.location ?? {
 		x: entity.positionMillimetres[0],
 		y: entity.positionMillimetres[1],
@@ -442,10 +504,27 @@ function PlacementFields({
 	};
 	return (
 		<fieldset disabled={!placement}>
+			{architecture && fixture ? (
+				<>
+					<button
+						type="button"
+						className="ui-button"
+						onClick={() => setEditingVenue(true)}
+					>
+						Edit venue element
+					</button>
+					{editingVenue ? (
+						<CadArchitectureModal
+							fixture={fixture}
+							onClose={() => setEditingVenue(false)}
+						/>
+					) : null}
+				</>
+			) : null}
 			{entity.positionReference ? (
 				<p className="cad-info-reference" role="note">
-					Follows 3D Point {entity.positionReference}. The plan shows where this is
-					rigged; the Visualizer moves it with the point.
+					Follows 3D Point {entity.positionReference}. The plan shows where this
+					is rigged; the Visualizer moves it with the point.
 				</p>
 			) : null}
 			<VectorFields
@@ -454,7 +533,9 @@ function PlacementFields({
 				value={position}
 				show={(millimetres) => millimetres / 1000}
 				onCommit={(axis, metres) =>
-					place({ location: { ...position, [axis]: Math.round(metres * 1000) } })
+					place({
+						location: { ...position, [axis]: Math.round(metres * 1000) },
+					})
 				}
 			/>
 			<VectorFields
@@ -463,11 +544,18 @@ function PlacementFields({
 				digits={1}
 				value={rotation}
 				show={(degrees) => degrees}
-				onCommit={(axis, degrees) => place({ rotation: { ...rotation, [axis]: degrees } })}
+				onCommit={(axis, degrees) =>
+					place({ rotation: { ...rotation, [axis]: degrees } })
+				}
 			/>
-			{fixture && sizing && hasAdjustableSize(sizing) ? (
-				<SizeFields fixture={fixture} scenery={sizing} shared={shared} onWrite={write} />
-			) : supportsScale(entity) ? (
+			{!architecture && fixture && sizing && hasAdjustableSize(sizing) ? (
+				<SizeFields
+					fixture={fixture}
+					scenery={sizing}
+					shared={shared}
+					onWrite={write}
+				/>
+			) : !architecture && supportsScale(entity) ? (
 				<CommitNumber
 					label={`Scale${shared}`}
 					ariaLabel="Scale"
@@ -476,7 +564,8 @@ function PlacementFields({
 					min={0.01}
 					max={100}
 					onCommit={(scale) =>
-						fixture && write({ ...fixture, modelScale: scale === 1 ? null : scale })
+						fixture &&
+						write({ ...fixture, modelScale: scale === 1 ? null : scale })
 					}
 				/>
 			) : null}

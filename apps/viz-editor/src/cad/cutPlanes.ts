@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { rotateDeskPoint } from "./projection";
 import type { CadEntity, CadViewDirection } from "./types";
+import { venueWorldPoints } from "./venueGeometryPoints";
 import { boxCentre } from "./venueShapes";
 
 /**
@@ -45,9 +46,14 @@ export function entityDepthRange(
 		CadEntity,
 		"positionMillimetres" | "rotationDegrees" | "sizeMillimetres"
 	> &
-		Partial<Pick<CadEntity, "scenery" | "fixtureProfile">>,
+		Partial<Pick<CadEntity, "scenery" | "fixtureProfile" | "venueGeometry">>,
 	view: CadViewDirection,
 ): DepthRange {
+	const points = venueWorldPoints(entity);
+	if (points.length) {
+		const depths = points.map((point) => viewDepth(point, view));
+		return { near: Math.min(...depths), far: Math.max(...depths) };
+	}
 	const [width, depth, height] = entity.sizeMillimetres;
 	// A stage element stands on its position, so its box is centred half its height above it.
 	const centre = viewDepth(boxCentre(entity), view);
@@ -57,7 +63,9 @@ export function entityDepthRange(
 			for (const z of [-height / 2, height / 2])
 				half = Math.max(
 					half,
-					Math.abs(viewDepth(rotateDeskPoint([x, y, z], entity.rotationDegrees), view)),
+					Math.abs(
+						viewDepth(rotateDeskPoint([x, y, z], entity.rotationDegrees), view),
+					),
 				);
 	return { near: centre - half, far: centre + half };
 }

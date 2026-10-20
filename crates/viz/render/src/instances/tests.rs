@@ -978,6 +978,7 @@ mod lines_view {
             chords: 4,
             detail: Default::default(),
             position_master: None,
+            architecture: None,
         }
     }
 

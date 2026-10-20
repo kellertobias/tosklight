@@ -18,7 +18,10 @@ export interface Segment {
 	end: Vec3;
 }
 
-type Shape = Pick<CadEntity, "positionMillimetres" | "rotationDegrees" | "sizeMillimetres"> &
+type Shape = Pick<
+	CadEntity,
+	"positionMillimetres" | "rotationDegrees" | "sizeMillimetres"
+> &
 	Partial<Pick<CadEntity, "scenery" | "fixtureProfile" | "mounting">>;
 
 /**
@@ -29,7 +32,11 @@ type Shape = Pick<CadEntity, "positionMillimetres" | "rotationDegrees" | "sizeMi
  * the arms that turn away from it behind. Reading it from the placed size rather than from a
  * constant keeps it right for the blocks in older shows, which were built larger.
  */
-export function trussCornerArmReach(size: Vec3, arms: readonly Vec3[], arm: Vec3): number {
+export function trussCornerArmReach(
+	size: Vec3,
+	arms: readonly Vec3[],
+	arm: Vec3,
+): number {
 	const axis = arm.findIndex((value) => value !== 0);
 	if (axis < 0) return 0;
 	if (arms.some((other) => other[axis] === -arm[axis])) return size[axis] / 2;
@@ -57,6 +64,7 @@ export function isRailing(entity: Shape): boolean {
 /** Whether the object's position is the floor under it rather than the centre of its box. */
 export function standsOnItsFeet(entity: Shape): boolean {
 	return (
+		!!entity.scenery?.architecture ||
 		isStageElement(entity) ||
 		isRailing(entity) ||
 		// A flight rack and a PA speaker grow upwards from where they stand, as they are built.
@@ -79,7 +87,10 @@ export function addVec(a: readonly number[], b: readonly number[]): Vec3 {
 
 /** A point in the object's own axes (x across, y deep, z up) turned and moved into the plan. */
 export function placedPoint(entity: Shape, local: Vec3): Vec3 {
-	return addVec(entity.positionMillimetres, rotateDeskPoint(local, entity.rotationDegrees));
+	return addVec(
+		entity.positionMillimetres,
+		rotateDeskPoint(local, entity.rotationDegrees),
+	);
 }
 
 /** The centre of the object's box in plan axes. */
@@ -109,7 +120,9 @@ const ARMS: Readonly<Record<string, readonly Vec3[]>> = (() => {
 
 /** The arm directions of a shipped three- or four-point truss corner piece, in its own axes. */
 export function trussCornerArms(entity: Shape): readonly Vec3[] | null {
-	const match = /^Venue (?:Three|Four)-Point Truss (.+)$/iu.exec(entity.fixtureProfile ?? "");
+	const match = /^Venue (?:Three|Four)-Point Truss (.+)$/iu.exec(
+		entity.fixtureProfile ?? "",
+	);
 	return match ? (ARMS[match[1].trim().toLowerCase()] ?? null) : null;
 }
 
@@ -118,7 +131,9 @@ export function trussCornerArms(entity: Shape): readonly Vec3[] | null {
  * couples to anything: a straight run says it in its scenery, a corner piece in its profile's name.
  */
 export function trussChords(entity: Shape): number {
-	const corner = /^Venue (Three|Four)-Point Truss /iu.exec(entity.fixtureProfile ?? "");
+	const corner = /^Venue (Three|Four)-Point Truss /iu.exec(
+		entity.fixtureProfile ?? "",
+	);
 	if (corner) return corner[1].toLowerCase() === "three" ? 3 : 4;
 	return isTruss(entity) ? (entity.scenery?.chords ?? 0) : 0;
 }
@@ -128,7 +143,13 @@ function trussRun(entity: Shape) {
 	const size = entity.sizeMillimetres;
 	const run = size.indexOf(Math.max(...size));
 	const [across, up] = run === 0 ? [1, 2] : run === 1 ? [0, 2] : [0, 1];
-	return { run, across, up, length: size[run], section: Math.max(size[across], size[up]) };
+	return {
+		run,
+		across,
+		up,
+		length: size[run],
+		section: Math.max(size[across], size[up]),
+	};
 }
 
 /**
@@ -197,7 +218,9 @@ export function mountingVolume(
 }
 
 /** A straight truss's centre line and half its outside section: a curtain's rail hangs just under it. */
-export function trussAxis(entity: Shape): (Segment & { halfSection: number }) | null {
+export function trussAxis(
+	entity: Shape,
+): (Segment & { halfSection: number }) | null {
 	if (!isTruss(entity)) return null;
 	const { run, length, section } = trussRun(entity);
 	const at = (along: number) => {
@@ -205,7 +228,11 @@ export function trussAxis(entity: Shape): (Segment & { halfSection: number }) | 
 		local[run] = along;
 		return placedPoint(entity, local);
 	};
-	return { start: at(-length / 2), end: at(length / 2), halfSection: section / 2 };
+	return {
+		start: at(-length / 2),
+		end: at(length / 2),
+		halfSection: section / 2,
+	};
 }
 
 /** The eight corners of a stage element's box, from the floor it stands on to its top. */
@@ -215,7 +242,8 @@ export function stageCorners(entity: Shape): Vec3[] {
 	const corners: Vec3[] = [];
 	for (const z of [bottom, bottom + height])
 		for (const x of [-width / 2, width / 2])
-			for (const y of [-depth / 2, depth / 2]) corners.push(placedPoint(entity, [x, y, z]));
+			for (const y of [-depth / 2, depth / 2])
+				corners.push(placedPoint(entity, [x, y, z]));
 	return corners;
 }
 
@@ -230,7 +258,12 @@ export function stageEdges(entity: Shape): Segment[] {
 	const [width, depth, height] = entity.sizeMillimetres;
 	const top = standsOnItsFeet(entity) ? height : height / 2;
 	const at = (x: number, y: number) => placedPoint(entity, [x, y, top]);
-	const [left, right, front, back] = [-width / 2, width / 2, -depth / 2, depth / 2];
+	const [left, right, front, back] = [
+		-width / 2,
+		width / 2,
+		-depth / 2,
+		depth / 2,
+	];
 	return [
 		{ start: at(left, front), end: at(right, front) },
 		{ start: at(right, front), end: at(right, back) },
@@ -240,29 +273,47 @@ export function stageEdges(entity: Shape): Segment[] {
 }
 
 /** A handrail's foot line along the bottom of its run: the middle of it and both ends. */
-export function railingFoot(entity: Shape): { centre: Vec3; ends: [Vec3, Vec3] } | null {
+export function railingFoot(
+	entity: Shape,
+): { centre: Vec3; ends: [Vec3, Vec3] } | null {
 	if (!isRailing(entity)) return null;
 	const [width] = entity.sizeMillimetres;
 	return {
 		centre: placedPoint(entity, [0, 0, 0]),
-		ends: [placedPoint(entity, [-width / 2, 0, 0]), placedPoint(entity, [width / 2, 0, 0])],
+		ends: [
+			placedPoint(entity, [-width / 2, 0, 0]),
+			placedPoint(entity, [width / 2, 0, 0]),
+		],
 	};
 }
 
 /** A curtain's rail along its top edge: the middle of it and both ends. */
-export function curtainRail(entity: Shape): { centre: Vec3; ends: [Vec3, Vec3] } | null {
+export function curtainRail(
+	entity: Shape,
+): { centre: Vec3; ends: [Vec3, Vec3] } | null {
 	if (!isCurtain(entity)) return null;
 	const [width, , height] = entity.sizeMillimetres;
 	return {
 		centre: placedPoint(entity, [0, 0, height / 2]),
-		ends: [placedPoint(entity, [-width / 2, 0, height / 2]), placedPoint(entity, [width / 2, 0, height / 2])],
+		ends: [
+			placedPoint(entity, [-width / 2, 0, height / 2]),
+			placedPoint(entity, [width / 2, 0, height / 2]),
+		],
 	};
 }
 
 /** The nearest point to `point` on a segment. */
-export function closestOnSegment(point: readonly number[], segment: Segment): Vec3 {
-	const direction = [0, 1, 2].map((axis) => segment.end[axis] - segment.start[axis]);
-	const lengthSquared = direction.reduce((sum, value) => sum + value * value, 0);
+export function closestOnSegment(
+	point: readonly number[],
+	segment: Segment,
+): Vec3 {
+	const direction = [0, 1, 2].map(
+		(axis) => segment.end[axis] - segment.start[axis],
+	);
+	const lengthSquared = direction.reduce(
+		(sum, value) => sum + value * value,
+		0,
+	);
 	const t =
 		lengthSquared > 0
 			? Math.max(
@@ -270,11 +321,22 @@ export function closestOnSegment(point: readonly number[], segment: Segment): Ve
 					Math.min(
 						1,
 						[0, 1, 2].reduce(
-							(sum, axis) => sum + (point[axis] - segment.start[axis]) * direction[axis],
+							(sum, axis) =>
+								sum + (point[axis] - segment.start[axis]) * direction[axis],
 							0,
 						) / lengthSquared,
 					),
 				)
 			: 0;
-	return [0, 1, 2].map((axis) => segment.start[axis] + direction[axis] * t) as Vec3;
+	return [0, 1, 2].map(
+		(axis) => segment.start[axis] + direction[axis] * t,
+	) as Vec3;
+}
+
+/** Walls connect along their floor centerline, independent of their height and thickness. */
+export function wallEndpoints(entity: Shape): Vec3[] {
+	if (entity.scenery?.architecture?.kind !== "wall") return [];
+	return [-1, 1].map((side) =>
+		placedPoint(entity, [(side * entity.sizeMillimetres[0]) / 2, 0, 0]),
+	);
 }

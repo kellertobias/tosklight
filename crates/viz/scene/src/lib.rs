@@ -25,6 +25,7 @@ mod renderer_settings;
 mod scene;
 mod stair_rails;
 mod values;
+mod venue_bounds;
 mod view;
 
 pub use atmosphere::{Atmosphere, AtmospherePreference, DEFAULT_DENSITY};
@@ -70,7 +71,7 @@ pub use view::{
 };
 
 /// Wire/protocol version of the semantic scene contract understood by this render core.
-pub const SCENE_PROTOCOL_VERSION: u32 = 3;
+pub const SCENE_PROTOCOL_VERSION: u32 = 4;
 
 pub use values::{PhysicalColorState, PhysicalOpticsState};
 

@@ -85,6 +85,7 @@ fn rig() -> (Scene, SceneValues) {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     scene.scenery.push(SceneryObject {
         id: Uuid::new_v4(),
@@ -98,6 +99,7 @@ fn rig() -> (Scene, SceneValues) {
         chords: 4,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     scene.recompute_bounds();
 

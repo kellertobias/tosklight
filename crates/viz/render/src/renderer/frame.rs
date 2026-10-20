@@ -230,7 +230,7 @@ impl Renderer {
                 )
             })
             .collect();
-        let style = FrameStyle {
+        let mut style = FrameStyle {
             quality: view.quality,
             draw_beams: view.mode.renders_beams(),
             draw_aim_lines: view.mode.renders_aim_lines(),
@@ -277,11 +277,11 @@ impl Renderer {
                     (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
                 }
             },
+            camera_position: None,
             media_content: self.media_content_enabled,
             media_appearance,
         };
         let draw_beams = style.draw_beams && !plot;
-        self.frame = crate::instances::build(scene, values, &style);
 
         // One exposure, the operator's trim over it, and nothing that watches the rig and moves.
         let exposure = (super::BASE_EXPOSURE * view.exposure).clamp(0.02, 4.0);
@@ -294,6 +294,8 @@ impl Renderer {
             scene.bounds
         };
         let camera = ResolvedCamera::resolve(&view.camera, view.mode, self.gpu.aspect(), bounds);
+        style.camera_position = Some(camera.position);
+        self.frame = crate::instances::build(scene, values, &style);
         FramePlan {
             plot,
             draw_beams,

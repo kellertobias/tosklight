@@ -7,6 +7,7 @@ license-file.workspace = true
 [dependencies]
 bytemuck.workspace = true
 glam.workspace = true
+light-fixture = { path = "../../shared/fixture" }
 pollster.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -14,7 +15,6 @@ viz-scene.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
-light-fixture = { path = "../../shared/fixture" }
 naga = { version = "30", features = ["wgsl-in"] }
 uuid.workspace = true
 viz-project = { path = "../project" }

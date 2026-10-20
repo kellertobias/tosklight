@@ -34,7 +34,11 @@ pub(super) fn push_scenery(
         Vec::new()
     };
     let selected = selected_instances(scene, values, style);
+    architecture::push_all(frame, &posed, style);
     for object in &posed {
+        if object.architecture.is_some() {
+            continue;
+        }
         push_object(
             frame,
             object,
@@ -244,6 +248,7 @@ fn push_tube_of(
 
 // A box drawn where a truss hangs tells an operator nothing. What they read a rig by is the
 // number of chords, the bracing and where one piece couples to the next, so that is what is drawn.
+pub(crate) mod architecture;
 mod truss;
 use truss::push_truss;
 

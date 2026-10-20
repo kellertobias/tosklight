@@ -348,6 +348,7 @@ fn main() {
             cad::history::cad_undo,
             cad::history::cad_delete,
             cad::history::cad_add,
+            cad::history::venue::cad_patch_venue,
             cad::history::cad_change_annotation,
             cad::history::cad_set_transforms,
             cad::numeric_placement::cad_set_numeric_transforms,

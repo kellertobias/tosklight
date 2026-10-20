@@ -1,0 +1,35 @@
+.cad-architecture-modal {
+	display: flex;
+	flex-direction: column;
+	width: min(800px, calc(100vw - 32px));
+	max-height: calc(100vh - 32px);
+	overflow: hidden;
+	background: #0b0f14;
+	color: #edf1f5;
+}
+.cad-architecture-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+	margin-bottom: 12px;
+}
+.cad-architecture-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+}
+.cad-architecture-modal fieldset {
+	min-width: 0;
+	border: 0;
+	padding: 0;
+	margin: 0 0 16px;
+}
+.cad-architecture-modal input,
+.cad-architecture-modal select,
+.cad-architecture-modal button {
+	min-height: 44px;
+}
+.cad-architecture-modal input[type="checkbox"] {
+	min-height: 24px;
+	min-width: 24px;
+}

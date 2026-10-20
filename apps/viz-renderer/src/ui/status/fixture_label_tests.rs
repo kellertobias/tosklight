@@ -313,6 +313,7 @@ fn labels_skip_non_lamps_and_lamps_hidden_by_scenery() {
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     hidden.recompute_bounds();
     assert!(

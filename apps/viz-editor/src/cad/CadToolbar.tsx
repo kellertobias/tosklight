@@ -19,13 +19,13 @@ import primitiveSvg from "../../../../assets/icons/misc/primitive.svg?raw";
 import stageElementSvg from "../../../../assets/icons/misc/stage-element.svg?raw";
 import trussSvg from "../../../../assets/icons/misc/truss-segment.svg?raw";
 import venueObjectSvg from "../../../../assets/icons/misc/venue-object.svg?raw";
-import { CAD_TOOL_SHORTCUTS } from "./cadShortcuts";
-import type { CadAddKind, CadDrawTool, CadTools } from "./cadTools";
+import { ErrorMessage } from "../ErrorMessage";
 import { CadPartMenu } from "./CadPartMenu";
 import { rememberPart } from "./cadAddChoice";
 import { LOAD_MODEL } from "./cadModelImport";
 import { placedWith } from "./cadPlacement";
-import { ErrorMessage } from "../ErrorMessage";
+import { CAD_TOOL_SHORTCUTS } from "./cadShortcuts";
+import type { CadAddKind, CadDrawTool, CadTools } from "./cadTools";
 import { type CadPartKind, findPart, partLabel } from "./venueParts";
 import "./cadTitleTools.css";
 
@@ -38,17 +38,19 @@ export const CAD_ADD_ACTIONS: readonly {
 	{ kind: "stage", label: "Add stage element", svg: stageElementSvg },
 	{ kind: "curtain", label: "Add scenery", svg: curtainSvg },
 	{ kind: "primitive", label: "Add primitive", svg: primitiveSvg },
+	{ kind: "architecture", label: "Venue tools", svg: boxSvg },
 	{ kind: "venue", label: "Add venue element", svg: venueObjectSvg },
 ];
 
-const DRAW_TOOLS: readonly { tool: CadDrawTool; label: string; svg: string }[] = [
-	{ tool: "select", label: "Select", svg: selectSvg },
-	{ tool: "polyline", label: "Draw line", svg: polylineSvg },
-	{ tool: "box", label: "Draw box", svg: boxSvg },
-	{ tool: "text", label: "Place text", svg: textSvg },
-	{ tool: "measure", label: "Measure", svg: measureSvg },
-	{ tool: "erase", label: "Erase", svg: eraseSvg },
-];
+const DRAW_TOOLS: readonly { tool: CadDrawTool; label: string; svg: string }[] =
+	[
+		{ tool: "select", label: "Select", svg: selectSvg },
+		{ tool: "polyline", label: "Draw line", svg: polylineSvg },
+		{ tool: "box", label: "Draw box", svg: boxSvg },
+		{ tool: "text", label: "Place text", svg: textSvg },
+		{ tool: "measure", label: "Measure", svg: measureSvg },
+		{ tool: "erase", label: "Erase", svg: eraseSvg },
+	];
 
 /** A shared icon drawn inline, so it takes the button's colour; its title would only repeat the label. */
 export function ToolIcon({ svg }: { svg: string }) {
@@ -105,7 +107,7 @@ export function cadTitleGroups(
 								onPress: () => onAdd(kind),
 								// A part button's caret chooses the part it places; a Venue element is chosen from its
 								// own picture list on every press.
-								...(kind === "venue"
+								...(kind === "venue" || kind === "architecture"
 									? {}
 									: {
 											dropdownPlacement: "corner" as const,
@@ -180,6 +182,10 @@ export function holdPart(tools: CadTools, kind: CadPartKind, key: string) {
 /** Why the show refused the last drawn item, until the operator dismisses it. */
 export function CadToolError({ tools }: { tools: CadTools }) {
 	return tools.error ? (
-		<ErrorMessage className="cad-error" message={tools.error} onDismiss={tools.clearError} />
+		<ErrorMessage
+			className="cad-error"
+			message={tools.error}
+			onDismiss={tools.clearError}
+		/>
 	) : null;
 }

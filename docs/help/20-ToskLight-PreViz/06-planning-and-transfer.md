@@ -730,6 +730,53 @@ right of the drawing.
   **Measure** (**M**) and **Erase** (**R**) draw on the view you use them in.
 * **Plans** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
 
+## Rough venue tools
+
+**Venue tools** in the CAD title opens the venue builder. Choose **Wall**, **Pillar**,
+**Roof / balcony**, **Table**, **Chair** or **Bar**, give it a name and dimensions, then press
+**Place**. Dimensions and positions are in metres; **Angle** turns the object around the vertical
+axis. Position X/Y is the centre of a wall or furniture footprint, and Position Z is its floor
+height. Nothing is written until **Place**. A refused shape stays in the dialog with the reason.
+
+A **Wall** has length, height and thickness. Its centre, length and angle determine its endpoints.
+**Snap endpoints to nearby walls (25 cm)** is on initially: placing or applying a wall moves the
+nearest endpoint onto another endpoint within that distance, keeping its length and heading.
+Turn it off for a deliberate gap. **Room ceiling height** sets the height used when walls enclose
+a room. If enclosing walls request different ceiling heights, the lowest requested height is used.
+
+**Add window** and **Add door** add openings to that wall. Each opening has an offset from the
+wall's local start and a width and height. A window also has a sill height and a **rectangular**,
+**round** or **arched** shape; round windows keep width and height equal. A door starts at the
+floor: choose **single** or **double**, **inward** or **outward**, and the hinge side as viewed
+from the wall's local front. **Remove opening** removes only that opening. Openings belong to
+the wall, so moving, turning, duplicating or deleting the wall handles its openings too. Overlapping
+openings or openings extending past the wall are refused when applied.
+
+A **Pillar** has a round, square or rectangular footprint and custom dimensions. Round and square
+footprints keep width and depth equal. **Table** offers round and rectangular footprints with
+custom dimensions. **Chair** offers **Black with metal legs**, **Decorative white** and **Bar stool**.
+A **Bar** is a solid counter with adjustable width, height and depth.
+
+For **Roof / balcony**, choose **Roof** or **Balcony**, then set **Elevation above floor** and
+**Slab thickness**. The outline is an ordered list of local horizontal points: X is across the
+object and **Depth** is positive toward the front (audience). Edit each point in metres, use **Add outline point**
+to insert a point on the closing edge, or **Remove point** to simplify the outline. At least three
+points must remain. Crossing edges and zero-area outlines are refused. Position moves the whole
+outline; Angle turns it. Elevation is measured above the placement's floor datum, so a balcony can
+be duplicated and raised independently to form several stacked theatre levels.
+
+Select a venue construction and open **Info → Placement → Edit venue element** to change these
+choices later. **Apply** stores the complete assembly as one operation. The normal CAD selection,
+move, rotate, duplicate, delete, **Undo** and **Redo** tools also work on these objects. The show
+keeps their construction details when saved, reopened or synchronized with Control.
+
+Architect views and exported plan pages show the complete venue, including door swing symbols and
+all balcony levels. In 3D, a camera outside an enclosed room hides the near walls and ceiling that
+would obstruct the interior; a camera inside keeps the enclosing walls visible. Independent balcony
+levels remain visible. Hidden walls and ceilings still block light and cast shadows, so moving the
+camera does not change the venue's lighting. Windows and doors are genuine openings in both the
+visible surfaces and light-blocking geometry. This behavior applies across rendering qualities.
+
 ## The side panel
 
 **Plans**, **Elements** and **Info** share the side panel at the right of the drawing. Each panel's

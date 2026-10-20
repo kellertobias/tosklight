@@ -12,6 +12,8 @@ use uuid::Uuid;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CadScenery {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub architecture: Option<light_fixture::VenueArchitecture>,
     /// The generated kind: `truss`, `curtain`, `chain`, `riser` and so on.
     pub kind: String,
     /// Chords in a truss section: 1 a pipe, 2 a ladder, 3 a triangle, 4 a box.
@@ -220,6 +222,7 @@ pub fn cad_scenery(
         scenery.chain = Some(options.chain_mode());
     }
     scenery.handrails = options.stair_handrails(scenery.handrails.left());
+    scenery.architecture = options.architecture.clone();
     Some(scenery)
 }
 
@@ -234,6 +237,7 @@ fn profile_scenery(profile: &serde_json::Value) -> Option<CadScenery> {
             .to_owned()
     };
     Some(CadScenery {
+        architecture: None,
         kind: text("kind", "prop"),
         chords: scenery
             .get("chords")
@@ -341,6 +345,7 @@ mod tests {
         assert_eq!(
             profile_scenery(&deco),
             Some(CadScenery {
+                architecture: None,
                 kind: "truss".into(),
                 chords: 3,
                 pattern: "deco".into(),
@@ -478,7 +483,9 @@ mod tests {
             size_millimetres: size,
             output_direction: [0.0; 3],
             aim: Default::default(),
+            venue_geometry: None,
             scenery: Some(CadScenery {
+                architecture: None,
                 kind: kind.into(),
                 chords,
                 pattern: "standard".into(),

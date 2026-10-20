@@ -634,6 +634,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
         chords: 0,
         detail: Default::default(),
         position_master: None,
+        architecture: None,
     });
     // No backdrop is invented. A show that wants one places a `Venue` object; anything else
     // would put a surface in the picture that the operator never rigged.
@@ -680,6 +681,7 @@ fn build_scenery(scene: &viz_scene::Scene, venue: &[ObjectRecord]) -> Vec<Scener
             chords,
             detail: Default::default(),
             position_master: None,
+            architecture: None,
         });
     }
     scenery
