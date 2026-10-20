@@ -608,7 +608,7 @@ describe("Color family lanes and identities", () => {
 				},
 			],
 		});
-		expect(group(indexed.get("head")).members[0].text).toBe("Color");
+		expect(group(indexed.get("head")).members[0].text).toBe("<Black>");
 		expect(indexed.get("other")).toBeUndefined();
 	});
 });

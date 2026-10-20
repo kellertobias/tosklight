@@ -68,6 +68,8 @@ export interface Cue {
 export type { AttributeValue } from "@tosklight/patch/stage-geometry";
 
 export interface VisualizationSnapshot {
+	/** Explicit winning Preset provenance, supplied only for Fixture Sheet reads. */
+	color_preset_names?: Array<import("../generated/light-wire").FixtureSheetColorPresetName>;
 	scope?: { show_id: string | null };
 	revision: number;
 	generated_at: string;

@@ -237,6 +237,7 @@ fn visualization(config: &Config) -> Vec<String> {
         VisualizationScope::decl(config),
         VisualizationLane::decl(config),
         VisualizationClientMessage::decl(config),
+        FixtureSheetColorPresetName::decl(config),
         VisualizationValue::decl(config),
         VisualizationValueKey::decl(config),
         VisualizationStackEntryType::decl(config),

@@ -1,5 +1,6 @@
 use super::*;
 use light_wire::v2::runtime as wire;
+mod fixture_sheet_color_sources;
 
 pub(super) async fn operator_ui() -> Response {
     embedded_asset("index.html")
@@ -293,6 +294,7 @@ pub(super) async fn visualization_snapshot(
     let source = state.output.latest_visualization_frame();
     let projection_started = Instant::now();
     let mut snapshot = if query.dynamic_stack_only {
+        let (_, sources) = state.output.cached_visualization_ordinary_sources();
         let ordinary = fixture_sheet_ordinary_values(&state, &session, query.preload);
         let mut snapshot = resolved_visualization_content(
             &state,
@@ -305,6 +307,15 @@ pub(super) async fn visualization_snapshot(
         )?;
         let fixture_ids = requested_visualization_fixture_ids(query.fixture_ids.as_deref());
         project_fixture_sheet_snapshot(&mut snapshot, ordinary.as_ref(), fixture_ids.as_ref());
+        snapshot["color_preset_names"] =
+            serde_json::to_value(fixture_sheet_color_sources::color_preset_names(
+                &state,
+                &session,
+                query.preload,
+                &sources,
+                fixture_ids.as_ref(),
+            ))
+            .map_err(|error| ApiError::internal(error.to_string()))?;
         // TL-552: the sheet's Pan/Tilt read the commanded pose, as the encoders do.
         if !query.preload
             && let Some(ids) = &fixture_ids

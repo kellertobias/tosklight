@@ -168,6 +168,8 @@ function fixtureSheetRow({
 	attributeRegistry,
 	limitingGroups,
 	highlightBypassesGroupMaster,
+	colorPresetName,
+	preloadColorPresetName,
 }: {
 	target: FixtureSheetTarget;
 	programmerValues: ProgrammingValueIndex;
@@ -178,6 +180,8 @@ function fixtureSheetRow({
 	attributeRegistry: NonNullable<ReturnType<typeof useAttributeRegistry>>;
 	limitingGroups: readonly LimitingGroup[];
 	highlightBypassesGroupMaster: boolean;
+	colorPresetName?: string | null;
+	preloadColorPresetName?: string | null;
 }) {
 	const patched = target.fixture;
 	const {
@@ -197,6 +201,8 @@ function fixtureSheetRow({
 		programmerAttributes: new Set(targetValues?.keys() ?? []),
 		dynamicStack,
 		preloadDynamicStack,
+		colorPresetName,
+		preloadColorPresetName,
 	});
 	const intensityMember = groupValues.intensity.members.find(
 		(member) => member.attribute === "intensity",
@@ -489,6 +495,8 @@ export function useFixtureSheetRows({
 		);
 		const dynamicStack = indexDynamicStack(visualization);
 		const preloadDynamicStack = indexDynamicStack(preloadVisualization);
+		const colorPresetNames = new Map((visualization?.color_preset_names ?? []).map(item => [item.fixture_id, item.name]));
+		const preloadColorPresetNames = new Map((preloadVisualization?.color_preset_names ?? []).map(item => [item.fixture_id, item.name]));
 		const ordinaryValues = fixtureSheetValueIndex(visualization);
 		const preloadOrdinaryValues = fixtureSheetValueIndex(preloadVisualization);
 		const limitingGroups = indexLimitingGroups(
@@ -510,6 +518,8 @@ export function useFixtureSheetRows({
 				programmerValues: indexedProgrammerValues,
 				dynamicStack: dynamicStack.get(target.fixtureId) ?? [],
 				preloadDynamicStack: preloadDynamicStack.get(target.fixtureId) ?? [],
+				colorPresetName: colorPresetNames.get(target.fixtureId),
+				preloadColorPresetName: preloadColorPresetNames.get(target.fixtureId),
 				ordinaryValues: ordinaryValues.get(target.fixtureId),
 				preloadOrdinaryValues: preloadOrdinaryValues.get(target.fixtureId),
 				attributeRegistry,
@@ -681,6 +691,7 @@ function fixtureSheetSnapshotSignature(snapshot: VisualizationSnapshot) {
 		showId: snapshot.scope?.show_id ?? null,
 		preload: snapshot.preload ?? false,
 		values,
+		colorPresetNames: [...(snapshot.color_preset_names ?? [])].sort((a, b) => a.fixture_id.localeCompare(b.fixture_id)),
 		dynamics,
 	});
 }

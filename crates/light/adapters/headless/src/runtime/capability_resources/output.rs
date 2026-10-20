@@ -110,6 +110,7 @@ pub(in crate::runtime) struct OutputSemanticRenderTiming {
 }
 
 struct CachedVisualizationOrdinary {
+    sources: Option<light_engine::FrameValues>,
     snapshot: Arc<EngineSnapshot>,
     captured_at: std::time::Instant,
     values: Arc<light_engine::ResolvedValues>,
@@ -526,8 +527,33 @@ impl OutputResource {
             snapshot,
             captured_at: std::time::Instant::now(),
             values: Arc::clone(&values),
+            sources: None,
         });
         values
+    }
+
+    pub(in crate::runtime) fn cached_visualization_ordinary_sources(
+        &self,
+    ) -> (Arc<light_engine::ResolvedValues>, light_engine::FrameValues) {
+        let snapshot = self.engine.snapshot();
+        let mut cached = self.visualization_ordinary.lock();
+        if let Some(cached) = cached.as_ref()
+            && Arc::ptr_eq(&cached.snapshot, &snapshot)
+            && cached.captured_at.elapsed() < Duration::from_millis(250)
+        {
+            if let Some(sources) = &cached.sources {
+                return (Arc::clone(&cached.values), sources.clone());
+            }
+        }
+        let sources = self.engine.observe_held_parameter_values();
+        let values = Arc::new(sources.values().clone());
+        *cached = Some(CachedVisualizationOrdinary {
+            snapshot,
+            captured_at: std::time::Instant::now(),
+            values: Arc::clone(&values),
+            sources: Some(sources.clone()),
+        });
+        (values, sources)
     }
 
     #[cfg(test)]

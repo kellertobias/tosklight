@@ -201,6 +201,16 @@ impl Engine {
         self.resolve_attributes(generation, now, sampled, true)
     }
 
+    /// Explicit Fixture Sheet observer: keep exact winning-source evidence while reading held
+    /// ordinary values. This is never used on the output frame path or for value matching.
+    pub fn observe_held_parameter_values(&self) -> crate::FrameValues {
+        let generation = self.generation.load_full();
+        let mut resolved =
+            self.resolve_attributes_inner(&generation, self.clock.now(), &[], false, true);
+        crate::render::apply_fixture_freezes(&generation.snapshot().fixtures, &mut resolved);
+        resolved.named_values()
+    }
+
     /// Read the current projection without consuming an automatic transition before output can
     /// return it to the application boundary.
     pub(super) fn resolved_attributes_at(

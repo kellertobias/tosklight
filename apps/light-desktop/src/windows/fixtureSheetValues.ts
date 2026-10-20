@@ -2,6 +2,7 @@ import type { AttributeDescriptor, VisualizationSnapshot } from "../api/types";
 import type { AttributeValue } from "../api/types/playback";
 import { presentColorProgram } from "../components/control/parameterControls/familyValuePresentation";
 import type { ValueSource } from "../types";
+import { fixtureSheetColorLabel } from "./fixtureSheetColorLabel";
 import type { FixtureSheetTarget } from "./fixtureSheetTargets";
 import { targetDefault, targetHasAttribute } from "./fixtureSheetTargets";
 
@@ -164,6 +165,8 @@ export function fixtureSheetGroupValues({
 	programmerAttributes,
 	dynamicStack,
 	preloadDynamicStack,
+	colorPresetName,
+	preloadColorPresetName,
 }: {
 	target: FixtureSheetTarget;
 	registry: readonly AttributeDescriptor[];
@@ -172,6 +175,8 @@ export function fixtureSheetGroupValues({
 	programmerAttributes: ReadonlySet<string>;
 	dynamicStack: readonly FixtureSheetDynamicEntry[];
 	preloadDynamicStack: readonly FixtureSheetDynamicEntry[];
+	colorPresetName?: string | null;
+	preloadColorPresetName?: string | null;
 }): FixtureSheetGroupValues {
 	const known = new Set(registry.map((descriptor) => descriptor.id));
 	const fullRegistry = [
@@ -197,6 +202,8 @@ export function fixtureSheetGroupValues({
 						programmerAttributes,
 						dynamicStack,
 						preloadDynamicStack,
+						colorPresetName,
+						preloadColorPresetName,
 					),
 				];
 			}
@@ -340,6 +347,8 @@ function colorFamilyGroup(
 	programmerAttributes: ReadonlySet<string>,
 	normalDynamics: readonly FixtureSheetDynamicEntry[],
 	pendingDynamics: readonly FixtureSheetDynamicEntry[],
+	presetName?: string | null,
+	preloadPresetName?: string | null,
 ): FixtureSheetGroupValue {
 	const preloadValue =
 		pending && (!value || !fixtureSheetAttributeValuesEqual(pending, value))
@@ -350,8 +359,8 @@ function colorFamilyGroup(
 		: value
 			? "playback"
 			: "default";
-	const text = colorFamilyText(value);
-	const preloadText = preloadValue ? colorFamilyText(preloadValue) : null;
+	const text = colorFamilyText(value, presetName);
+	const preloadText = preloadValue ? colorFamilyText(preloadValue, preloadPresetName) : null;
 	const dynamics = [
 		...dynamicIdentities(normalDynamics, "color", "normal"),
 		...dynamicIdentities(pendingDynamics, "color", "preload"),
@@ -385,8 +394,10 @@ function colorFamilyProvenance(value: AttributeValue | undefined) {
 	return `; Direct source profile ${source.profile_id} revision ${source.profile_revision}, mode ${source.mode_id}, head ${source.head_id}, path ${source.path_id}`;
 }
 
-function colorFamilyText(value: AttributeValue | undefined) {
+function colorFamilyText(value: AttributeValue | undefined, presetName?: string | null) {
 	if (!value) return "Unavailable";
+	const label = fixtureSheetColorLabel(value, presetName);
+	if (label) return label;
 	if (value.kind === "color_xyz") return "Color";
 	if (value.kind !== "color_program") return "Unavailable";
 	const program = presentColorProgram(value.value, () => null, {

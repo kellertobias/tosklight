@@ -74,6 +74,14 @@ pub enum VisualizationClientMessage {
     },
 }
 
+/// Fixture Sheet readout of explicit winning Color Preset authorship.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureSheetColorPresetName {
+    pub fixture_id: Uuid,
+    pub preset_instance_id: Uuid,
+    pub name: String,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizationValue {
     pub fixture_id: Uuid,
