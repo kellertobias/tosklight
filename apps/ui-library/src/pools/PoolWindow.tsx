@@ -5,6 +5,7 @@ import {
 	isValidElement,
 	type ReactElement,
 	type ReactNode,
+	useCallback,
 	useLayoutEffect,
 	useState,
 } from "react";
@@ -17,6 +18,7 @@ import {
 	type WindowSettingsTab,
 } from "../window-kit";
 import { PoolCard, type PoolCardViewModel } from "./PoolCard";
+import { useFixedPoolRowHeight, usePoolTileLayout } from "./PoolTileLayout";
 
 export interface PoolSlotViewModel<SlotId extends string | number> {
 	id: SlotId;
@@ -100,9 +102,9 @@ function useMeasuredPoolGrid(
 	fallbackWidth: number,
 ) {
 	const [node, setNode] = useState<HTMLDivElement | null>(null);
-	const [layout, setLayout] = useState<{ columns?: number; narrow: boolean }>(
-		{ narrow: false },
-	);
+	const [layout, setLayout] = useState<{ columns?: number; narrow: boolean }>({
+		narrow: false,
+	});
 	const defaultWidth = sizing?.defaultWidth ?? fallbackWidth;
 	const minimumWidth = sizing?.minimumWidth;
 	useLayoutEffect(() => {
@@ -160,12 +162,22 @@ export function PoolGrid<SlotId extends string | number>({
 	className = "",
 	minimumCardWidth = DEFAULT_POOL_CARD_MINIMUM_WIDTH,
 	cardSizing,
-	columns: fixedColumns,
+	columns: legacyColumns,
 	appearance,
 	onSlotClick,
 	onSlotPressHold,
 	renderSlot,
 }: PoolGridProps<SlotId>) {
+	const tileLayout = usePoolTileLayout();
+	const fixed = tileLayout?.mode === "fixed" ? tileLayout : undefined;
+	const fixedColumns = fixed
+		? Math.max(1, Math.trunc(fixed.columns))
+		: tileLayout
+			? undefined
+			: legacyColumns;
+	const fixedRows = fixed ? Math.max(1, Math.trunc(fixed.rows)) : undefined;
+	const [gridNode, setGridNode] = useState<HTMLDivElement | null>(null);
+	const fixedRowHeight = useFixedPoolRowHeight(gridNode, fixedRows);
 	const resolvedAppearance = {
 		...DEFAULT_POOL_GRID_APPEARANCE,
 		...appearance,
@@ -175,21 +187,40 @@ export function PoolGrid<SlotId extends string | number>({
 		fixedColumns,
 		minimumCardWidth,
 	);
+	const setGrid = useCallback(
+		(node: HTMLDivElement | null) => {
+			measureGrid(node);
+			setGridNode(node);
+		},
+		[measureGrid],
+	);
 	const columns = fixedColumns ?? measured.columns;
 	const resolved = fillEmptySlots
-		? resolveFixedSlots(slots, slotCount, emptySlot)
+		? resolveFixedSlots(
+				slots,
+				slotCount,
+				emptySlot,
+				(fixedRows ?? 0) * (fixedColumns ?? 0),
+			)
 		: [...slots];
 
 	return (
 		<ButtonGrid
-			ref={measureGrid}
-			className={`card-pool pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${measured.narrow ? "pool-grid-narrow" : ""} ${className}`.trim()}
+			ref={setGrid}
+			square={!fixed}
+			className={`card-pool ${fixed ? "pool-fixed-grid" : ""} pool-window-grid pool-filled-${resolvedAppearance.filledStyle} ${measured.narrow ? "pool-grid-narrow" : ""} ${className}`.trim()}
 			minimum={cardSizing?.defaultWidth ?? minimumCardWidth}
 			style={
 				{
 					...(columns
 						? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }
 						: {}),
+					...(fixedRowHeight === undefined
+						? {}
+						: {
+								gridAutoRows: `${fixedRowHeight}px`,
+								"--pool-fixed-row-height": `${fixedRowHeight}px`,
+							}),
 					"--pool-card-uncolored-color": resolvedAppearance.uncoloredColor,
 					"--pool-record-color": resolvedAppearance.recordColor,
 					"--pool-update-color": resolvedAppearance.updateColor,
@@ -226,8 +257,9 @@ function resolveFixedSlots<SlotId extends string | number>(
 	slots: readonly PoolSlotViewModel<SlotId>[],
 	slotCount: number | undefined,
 	emptySlot: (index: number) => PoolSlotViewModel<SlotId>,
+	minimumVisibleSlots = 0,
 ) {
-	const count = Math.max(200, slotCount ?? 200);
+	const count = Math.max(200, slotCount ?? 200, minimumVisibleSlots);
 	const storedByPosition = new Map(
 		slots.map((slot) => [slot.position, slot] as const),
 	);

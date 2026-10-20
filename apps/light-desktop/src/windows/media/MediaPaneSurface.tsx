@@ -1,3 +1,4 @@
+import { MediaServerShortcuts } from "./MediaServerShortcuts";
 import { CopyErrorButton } from "@tosklight/ui";
 import {
 	Button,
@@ -8,7 +9,7 @@ import {
 	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
-import { PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
+import { PoolTileLayoutProvider, PoolGrid, type PoolSlotViewModel } from "@tosklight/ui/pools";
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import {
@@ -24,7 +25,6 @@ import type {
 	MediaLibraryItem,
 	MediaPaneLayer,
 	MediaPaneModel,
-	MediaPaneServer,
 	MediaPaneSurfaceProps,
 	MediaPreviewState,
 	MediaSecondaryControl,
@@ -73,10 +73,6 @@ export function MediaPaneSurface({
 	);
 	const patchedServers = model.servers.filter(
 		(server) => server.id.trim() !== "" && !server.disabled,
-	);
-	const serverPoolSlots = mediaServerPoolSlots(
-		patchedServers,
-		model.selectedServerId,
 	);
 	const mainShowsBrowser =
 		model.rightPaneVisible ||
@@ -234,31 +230,11 @@ export function MediaPaneSurface({
 					className={`media-pane-body ${patchedServers.length ? "has-server-shortcuts" : ""}`}
 				>
 					{patchedServers.length ? (
-						<section
-							className="media-server-shortcuts"
-							aria-label="Media servers"
-						>
-							<PoolGrid
-								className="media-server-pool"
-								columns={1}
-								fillEmptySlots={false}
-								minimumCardWidth={100}
-								slots={serverPoolSlots}
-								emptySlot={(position) => ({
-									id: `empty-${position}`,
-									position,
-									card: {
-										number: position + 1,
-										primary: "Empty",
-										states: ["empty"],
-									},
-								})}
-								onSlotClick={(serverId) => {
-									if (patchedServers.some((server) => server.id === serverId))
-										onSelectServer(serverId);
-								}}
-							/>
-						</section>
+						<MediaServerShortcuts
+							servers={patchedServers}
+							selectedServerId={model.selectedServerId}
+							onSelectServer={onSelectServer}
+						/>
 					) : null}
 					<section className="media-pane-overview" aria-label="Media output">
 						{!model.hasCitpEndpoint && model.preview.kind !== "audio" && (
@@ -322,40 +298,6 @@ export function MediaPaneSurface({
 // The server shortcuts keep a fixed six slots so the operator always sees the same
 // column of buttons and can tell at a glance how many servers the show still has room
 // for. Slots beyond the patched servers stay empty and unclickable.
-function mediaServerPoolSlots(
-	patchedServers: MediaPaneServer[],
-	selectedServerId: string,
-): PoolSlotViewModel<string>[] {
-	return [
-		...patchedServers.map<PoolSlotViewModel<string>>((server, position) => ({
-			id: server.id,
-			position,
-			card: {
-				number: server.fixtureLabel ?? "—",
-				primary: server.name,
-				kind: "preset" as const,
-				states: server.id === selectedServerId ? ["selected"] : [],
-			},
-		})),
-		...Array.from(
-			{ length: Math.max(0, 6 - patchedServers.length) },
-			(_, emptyIndex): PoolSlotViewModel<string> => {
-				const position = patchedServers.length + emptyIndex;
-				return {
-					id: `empty-server-${position}`,
-					position,
-					card: {
-						number: position + 1,
-						primary: "Empty",
-						kind: "preset" as const,
-						states: ["empty", "disabled"],
-					},
-				};
-			},
-		),
-	];
-}
-
 function validActiveId(activeId: string, ids: string[]) {
 	return ids.includes(activeId) ? activeId : (ids[0] ?? "");
 }
@@ -546,6 +488,7 @@ function MediaLibraryBrowser({
 			aria-label="Media library browser"
 			data-browser-mode={mode}
 		>
+			<PoolTileLayoutProvider>
 			<HorizontalMediaPool
 				label={`${mode === "mask" ? "Mask" : "Media"} folders`}
 				className="media-folder-pool"
@@ -562,6 +505,7 @@ function MediaLibraryBrowser({
 					}}
 				/>
 			</HorizontalMediaPool>
+			</PoolTileLayoutProvider>
 			<header className="media-library-title">
 				<strong>{mode === "mask" ? "Mask File" : "Media File"}</strong>
 			</header>

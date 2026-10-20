@@ -7,7 +7,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
-vi.mock("./PlaybackPaneTitleControls", () => ({ PlaybackPaneTitleControls: () => null }));
+
+vi.mock("./PlaybackPaneTitleControls", () => ({
+	PlaybackPaneTitleControls: () => null,
+}));
 const mocks = vi.hoisted(() => ({
 	dispatch: vi.fn(),
 	update: vi.fn(),
@@ -19,6 +22,10 @@ const mocks = vi.hoisted(() => ({
 		playbackViewMode: undefined as "screen" | "free-region" | undefined,
 		playbackScreenSurfaceId: undefined as string | undefined,
 		playbackShowControls: undefined as boolean | undefined,
+		poolTileLayout: undefined as
+			| { mode: "automatic" }
+			| { mode: "fixed"; rows: number; columns: number }
+			| undefined,
 	},
 }));
 vi.mock("../features/screens/ScreensContext", () => ({
@@ -35,8 +42,28 @@ vi.mock("../state/AppContext", () => ({
 	}),
 }));
 vi.mock("../components/control/PlaybackFaderBank", () => ({
-	PlaybackFaderBank: ({ surfaceId, layoutSourceSurfaceId, scrollable, tilePresentation }: { surfaceId: string; layoutSourceSurfaceId?: string; scrollable?: boolean; tilePresentation?: boolean }) => (
-		<div data-testid="shared-bank" data-tiles={Boolean(tilePresentation)} data-layout-source={layoutSourceSurfaceId} data-scrollable={Boolean(scrollable)}>{surfaceId}</div>
+	PlaybackFaderBank: ({
+		surfaceId,
+		layoutSourceSurfaceId,
+		scrollable,
+		tilePresentation,
+		tileLayout,
+	}: {
+		tileLayout?: unknown;
+		surfaceId: string;
+		layoutSourceSurfaceId?: string;
+		scrollable?: boolean;
+		tilePresentation?: boolean;
+	}) => (
+		<div
+			data-testid="shared-bank"
+			data-tile-layout={JSON.stringify(tileLayout)}
+			data-tiles={Boolean(tilePresentation)}
+			data-layout-source={layoutSourceSurfaceId}
+			data-scrollable={Boolean(scrollable)}
+		>
+			{surfaceId}
+		</div>
 	),
 }));
 afterEach(cleanup);
@@ -47,19 +74,54 @@ beforeEach(() => {
 	mocks.pane.surface_id = undefined;
 	mocks.pane.playbackViewMode = undefined;
 	mocks.pane.playbackShowControls = undefined;
+	mocks.pane.poolTileLayout = undefined;
 	mocks.pane.playbackScreenSurfaceId = undefined;
 });
 describe("unified Playback pane", () => {
-	it.each(["screen", "free-region"] as const)("defaults %s panes to tiles and permits explicit controls", (mode) => {
+	it.each([
+		"screen",
+		"free-region",
+	] as const)("defaults %s panes to tiles and permits explicit controls", (mode) => {
 		mocks.pane.surface_id = "pane:pane-1";
 		mocks.pane.playbackViewMode = mode;
 		mocks.registry = { "pane:pane-1": {}, main: {} };
 		const { rerender } = render(<VirtualPlaybacksWindow paneId="pane-1" />);
-		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "true");
-		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-scrollable", "false");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-tiles",
+			"true",
+		);
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-scrollable",
+			"false",
+		);
 		mocks.pane.playbackShowControls = true;
 		rerender(<VirtualPlaybacksWindow paneId="pane-1" />);
-		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-tiles", "false");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-tiles",
+			"false",
+		);
+	});
+	it("applies pane tile appearance only to single-button free-region panes", () => {
+		mocks.pane.surface_id = "pane:pane-1";
+		mocks.registry = { "pane:pane-1": {}, main: {} };
+		mocks.pane.poolTileLayout = { mode: "fixed", rows: 3, columns: 6 };
+		const { rerender } = render(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-tile-layout",
+			JSON.stringify(mocks.pane.poolTileLayout),
+		);
+		mocks.pane.playbackShowControls = true;
+		rerender(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).not.toHaveAttribute(
+			"data-tile-layout",
+		);
+		mocks.pane.playbackShowControls = false;
+		mocks.pane.playbackViewMode = "screen";
+		rerender(<VirtualPlaybacksWindow paneId="pane-1" />);
+		expect(screen.getByTestId("shared-bank")).not.toHaveAttribute(
+			"data-tile-layout",
+		);
+		expect(mocks.update).not.toHaveBeenCalled();
 	});
 	it("renders the existing central surface through the shared bank", () => {
 		mocks.pane.surface_id = "screen-linked";
@@ -77,8 +139,14 @@ describe("unified Playback pane", () => {
 		mocks.registry = { "pane:pane-1": {}, "screen:second": {} };
 		render(<VirtualPlaybacksWindow paneId="pane-1" />);
 		expect(screen.getByTestId("shared-bank")).toHaveTextContent("pane:pane-1");
-		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-layout-source", "screen:second");
-		expect(screen.getByTestId("shared-bank")).toHaveAttribute("data-scrollable", "false");
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-layout-source",
+			"screen:second",
+		);
+		expect(screen.getByTestId("shared-bank")).toHaveAttribute(
+			"data-scrollable",
+			"false",
+		);
 	});
 	it("reports a missing Screen reference instead of silently substituting Free region", () => {
 		mocks.pane.surface_id = "pane:pane-1";
@@ -86,7 +154,9 @@ describe("unified Playback pane", () => {
 		mocks.pane.playbackScreenSurfaceId = "screen:missing";
 		mocks.registry = { "pane:pane-1": {} };
 		render(<VirtualPlaybacksWindow paneId="pane-1" />);
-		expect(screen.getByRole("alert")).toHaveTextContent("selected screen layout is unavailable");
+		expect(screen.getByRole("alert")).toHaveTextContent(
+			"selected screen layout is unavailable",
+		);
 		expect(screen.queryByTestId("shared-bank")).not.toBeInTheDocument();
 	});
 	it("does no surface work while inactive", () => {

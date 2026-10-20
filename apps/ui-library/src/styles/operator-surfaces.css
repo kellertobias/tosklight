@@ -2447,3 +2447,13 @@
 .hardware-rotary .playback-rotary-feedback {
 	font-size: 11px;
 }
+
+/* Fixed layouts keep the complete numbered pool scrollable, with the requested
+ * number of rows fitting its viewport. Rectangular tiles may fill the pane. */
+.pool-fixed-grid > * {
+	aspect-ratio: auto;
+	width: 100%;
+	height: var(--pool-fixed-row-height);
+	min-width: 0;
+	min-height: 0;
+}

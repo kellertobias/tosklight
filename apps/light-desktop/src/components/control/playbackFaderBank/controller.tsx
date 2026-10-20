@@ -40,6 +40,8 @@ import type { PlaybackConfigurationState } from "./types";
 
 export interface PlaybackFaderBankProps {
 	surfaceId?: string;
+	/** Appearance only: authored Playback addresses and page ownership remain unchanged. */
+	tileLayout?: { mode: "automatic" } | { mode: "fixed"; rows: number; columns: number };
 	/** Single-action software pane tiles that fill their authored grid. */
 	tilePresentation?: boolean;
 	/** Live screen layout reference; page and control ownership stay on this pane. */

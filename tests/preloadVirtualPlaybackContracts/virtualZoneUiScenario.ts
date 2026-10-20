@@ -61,6 +61,8 @@ const virtualZoneUiSupplement = async ({
 		"NEW ACTIVATION WINS",
 		"Turn on cell 1, then cell 2. Cell 2 remains On and cell 1 is released by the server.",
 	);
+	await expect(paneCard(pane, { page: 1, position: 401 }).locator(".playback-tile-action"))
+		.toHaveAccessibleDescription(/^SOLO · GO \+(?: ·|$)/);
 	await activatePaneCard(pane, {page:1,position:401});
 	await activatePaneCard(pane, {page:1,position:402});
 	await expect

@@ -1,11 +1,11 @@
 import {
 	ErrorAlert,
-	SelectField,
 	MultiValueToggleField,
+	SelectField,
 	SwitchField,
 } from "@tosklight/ui";
-import { useState } from "react";
 import { gridPlaybackLayout } from "@tosklight/ui/playback";
+import { useState } from "react";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { useApp } from "../../state/AppContext";
 import type { PaneModel } from "../../types";
@@ -68,6 +68,12 @@ function usePlaybackPaneView(pane: PaneModel) {
 				mode: nextMode,
 				screenSurfaceId,
 			});
+			if (nextMode === "screen")
+				dispatch({
+					type: "SET_PANE_TILE_LAYOUT",
+					id: pane.id,
+					layout: undefined,
+				});
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : String(reason));
 		} finally {

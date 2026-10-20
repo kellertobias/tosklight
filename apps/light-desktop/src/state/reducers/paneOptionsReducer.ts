@@ -57,6 +57,25 @@ export function reducePaneOptions(
 				...pane,
 				patchHiddenColumns: normalizePatchHiddenColumns(action.columns),
 			}));
+		case "SET_PANE_TITLE":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				title: action.value.slice(0, 256),
+				titleIsCustom: true,
+			}));
+		case "SET_PANE_TILE_LAYOUT":
+			return updateActivePane(state, action.id, (pane) => ({
+				...pane,
+				poolTileLayout: action.layout === undefined
+					? undefined
+					: action.layout.mode === "automatic"
+						? { mode: "automatic" }
+						: {
+							mode: "fixed",
+							rows: clamp(Math.trunc(action.layout.rows) || 1, 1, 24),
+							columns: clamp(Math.trunc(action.layout.columns) || 1, 1, 24),
+						},
+			}));
 		case "SET_PANE_POOL_COLUMNS":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,

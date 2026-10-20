@@ -666,9 +666,10 @@ async function applyPaneConfiguration<T extends PaneType>(
 				.click();
 	}
 	if (type === "groups" && options.columns !== undefined) {
-		await dialog.getByRole("tab", { name: "Pool" }).click();
-		await dialog.getByLabel("Columns").fill(String(options.columns));
-		await dialog.getByLabel("Columns").blur();
+		await dialog.getByRole("tab", { name: "Pane Settings", exact: true }).click();
+		await dialog.getByRole("radio", { name: "Fixed grid", exact: true }).click();
+		await dialog.getByLabel("Tile columns").fill(String(options.columns));
+		await dialog.getByLabel("Tile columns").blur();
 	}
     if (type === "playbacks") {
         await dialog.getByRole("tab", { name: "Playbacks", exact: true }).click();

@@ -10,6 +10,7 @@ import { ScreensProvider } from "../../features/screens/ScreensContext";
 import type { ScreensContextValue } from "../../features/screens/types";
 import type { PaneModel } from "../../types";
 import { PlaybackPaneSettings } from "./PlaybackPaneSettings";
+
 const dispatch = vi.fn();
 vi.mock("../../state/AppContext", () => ({ useApp: () => ({ dispatch }) }));
 afterEach(() => {
@@ -94,7 +95,7 @@ describe("central pane playback configuration", () => {
 		expect(layout.rows[0].first_position).toBe(201);
 	});
 	it("saves only reviewed layout to the pane surface and preserves the source page context", async () => {
-		const { updatePlaybackSurface, registry, layout } = setup();
+		const { updatePlaybackSurface, layout } = setup();
 		fireEvent.click(
 			screen.getByRole("button", { name: "Choose a screen layout" }),
 		);
@@ -114,6 +115,11 @@ describe("central pane playback configuration", () => {
 			type: "SET_PANE_PLAYBACK_SURFACE",
 			id: "one",
 			surfaceId: "pane:one",
+		});
+		expect(dispatch).toHaveBeenCalledWith({
+			type: "SET_PANE_TILE_LAYOUT",
+			id: "one",
+			layout: undefined,
 		});
 		expect(layout.rows[0].first_position).toBe(201);
 	});

@@ -11,6 +11,8 @@ export enum PaneType {
 	PlaybackPool = "playback_pool",
 	CueList = "cue_list",
 	Dynamics = "dynamics",
+	Macros = "macros",
+	Timecode = "timecode",
 	Channels = "channels",
 	Dmx = "dmx",
 	Patch = "patch",
@@ -56,6 +58,8 @@ export type OperatorPaneType =
 	| PaneType.CuelistPool
 	| PaneType.Cues
 	| PaneType.Dynamics
+	| PaneType.Macros
+	| PaneType.Timecode
 	| PaneType.Channels
 	| PaneType.Dmx
 	| PaneType.Help
@@ -161,6 +165,8 @@ export const paneLabels: Readonly<Record<PaneType, string>> = {
 	[PaneType.PlaybackPool]: "Playback Pool",
 	[PaneType.CueList]: "Cuelist",
 	[PaneType.Dynamics]: "Dynamics",
+	[PaneType.Macros]: "Macro Pool",
+	[PaneType.Timecode]: "Timecode",
 	[PaneType.Channels]: "Channels",
 	[PaneType.Dmx]: "DMX output",
 	[PaneType.Patch]: "Patch",

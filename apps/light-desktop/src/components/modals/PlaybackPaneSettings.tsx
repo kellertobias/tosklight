@@ -1,12 +1,12 @@
-import { PlaybackPaneViewSettings } from "./PlaybackPaneViewSettings";
 import { Button, ErrorAlert, SelectField } from "@tosklight/ui";
+import { copyPlaybackLayout, gridPlaybackLayout } from "@tosklight/ui/playback";
 import { useState } from "react";
 import { playbackSurfacePatch } from "../../features/screens/playbackSurfacePatch";
 import { useScreens } from "../../features/screens/ScreensContext";
 import { useApp } from "../../state/AppContext";
 import type { PaneModel } from "../../types";
 import { PlaybackLayoutModal } from "../setup/PlaybackLayoutModal";
-import { copyPlaybackLayout, gridPlaybackLayout } from "@tosklight/ui/playback";
+import { PlaybackPaneViewSettings } from "./PlaybackPaneViewSettings";
 
 export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 	const screens = useScreens();
@@ -36,6 +36,11 @@ export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 				id: pane.id,
 				surfaceId: id,
 			});
+			dispatch({
+				type: "SET_PANE_TILE_LAYOUT",
+				id: pane.id,
+				layout: undefined,
+			});
 			setEditing(false);
 		} catch (reason) {
 			setError(reason instanceof Error ? reason.message : String(reason));
@@ -46,50 +51,52 @@ export function PlaybackPaneSettings({ pane }: { pane: PaneModel }) {
 	return (
 		<section aria-label="Playback surface settings">
 			<PlaybackPaneViewSettings pane={pane} />
-			{(pane.playbackViewMode ?? "free-region") === "free-region" && <>
-			<Button
-				disabled={saving || !screens.surfaces}
-				onClick={() => {
-					setDraft(configuration);
-					setEditing(true);
-				}}
-			>
-				Configure layout and page source
-			</Button>
-			<SelectField
-				label="Take from Screen"
-				value={source}
-				onChange={setSource}
-				options={[
-					{ value: "", label: "Choose a screen layout" },
-					...(screens.screens?.screens ?? [])
-						.filter((screen) => registry[screen.surface_id])
-						.map((screen) => ({
-							value: screen.surface_id,
-							label: screen.name,
-						})),
-				]}
-			/>
-			<Button
-				disabled={!source || saving}
-				onClick={() => {
-					const selected = registry[source];
-					if (selected) {
-						setDraft({
-							...configuration,
-							layout: copyPlaybackLayout(selected.layout),
-						});
-						setEditing(true);
-					}
-				}}
-			>
-				Review copied layout
-			</Button>
-			<p>
-				Take from Screen copies the layout for review; playback assignments stay
-				on their pages.
-			</p>
-			</>}
+			{(pane.playbackViewMode ?? "free-region") === "free-region" && (
+				<>
+					<Button
+						disabled={saving || !screens.surfaces}
+						onClick={() => {
+							setDraft(configuration);
+							setEditing(true);
+						}}
+					>
+						Configure layout and page source
+					</Button>
+					<SelectField
+						label="Take from Screen"
+						value={source}
+						onChange={setSource}
+						options={[
+							{ value: "", label: "Choose a screen layout" },
+							...(screens.screens?.screens ?? [])
+								.filter((screen) => registry[screen.surface_id])
+								.map((screen) => ({
+									value: screen.surface_id,
+									label: screen.name,
+								})),
+						]}
+					/>
+					<Button
+						disabled={!source || saving}
+						onClick={() => {
+							const selected = registry[source];
+							if (selected) {
+								setDraft({
+									...configuration,
+									layout: copyPlaybackLayout(selected.layout),
+								});
+								setEditing(true);
+							}
+						}}
+					>
+						Review copied layout
+					</Button>
+					<p>
+						Take from Screen copies the layout for review; playback assignments
+						stay on their pages.
+					</p>
+				</>
+			)}
 			{error && <ErrorAlert role="alert">{error}</ErrorAlert>}
 			{editing && (
 				<PlaybackLayoutModal

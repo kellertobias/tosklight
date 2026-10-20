@@ -550,6 +550,24 @@ describe("decodeVisualizationRuntimeSnapshot", () => {
 		expect(decoded.profile_output_values).toEqual(decoded.values);
 	});
 
+	it("retains explicit Fixture Sheet Preset names on both lanes and leaves older snapshots compatible", () => {
+		const name = { fixture_id: "fixture-1", preset_instance_id: "33333333-3333-4333-8333-333333333333", name: "Opening red" };
+		for (const preload of [false, true]) {
+			const lane = preload ? "preload" : "normal";
+			expect(decodeVisualizationRuntimeSnapshot({ ...snapshot(preload), color_preset_names: [name] }, lane).color_preset_names).toEqual([name]);
+			expect(decodeVisualizationRuntimeSnapshot({ ...snapshot(preload), color_preset_names: [] }, lane).color_preset_names).toEqual([]);
+			expect(decodeVisualizationRuntimeSnapshot(snapshot(preload), lane).color_preset_names).toBeUndefined();
+		}
+	});
+
+	it.each([
+		null,
+		[{ fixture_id: "fixture-1", preset_instance_id: "invalid", name: "Red" }],
+		[{ fixture_id: "fixture-1", preset_instance_id: "33333333-3333-4333-8333-333333333333", name: 123 }],
+	])("rejects malformed explicit Preset name metadata", (names) => {
+		expect(() => decodeVisualizationRuntimeSnapshot({ ...snapshot(false), color_preset_names: names }, "normal")).toThrow(/color_preset_names/);
+	});
+
 	it("decodes the Fixture Sheet's commanded Pan/Tilt rows and rejects a non-numeric angle", () => {
 		const row = { fixture_id: "fixture-1", pan_degrees: 1.06, tilt_degrees: 0.53 };
 		expect(

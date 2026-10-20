@@ -1,3 +1,4 @@
+import { PaneTitleSettings, PaneTileSettings } from "./PanePresentationSettings";
 import { PlaybackSoloSettings } from "./PlaybackSoloSettings";
 import { ErrorAlert } from "@tosklight/ui";
 import {
@@ -137,9 +138,8 @@ function PaneLayoutSettings({
 	const { dispatch } = useApp();
 	return (
 		<>
-			<p>
-				Selected pane: <b>{pane.title}</b>
-			</p>
+			<PaneTitleSettings pane={pane} />
+			<PaneTileSettings pane={pane} />
 			<div className="size-grid">
 				<TouchSelect
 					label="Grid column"
@@ -381,22 +381,8 @@ function PresetPoolPaneSettings({ pane }: { pane: PaneModel }) {
 }
 
 function GroupPoolPaneSettings({ pane }: { pane: PaneModel }) {
-	const { dispatch } = useApp();
 	return (
 		<>
-			<NumberField
-				label="Columns"
-				min="1"
-				max="24"
-				value={pane.poolColumns ?? 4}
-				onChange={(event) =>
-					dispatch({
-						type: "SET_PANE_POOL_COLUMNS",
-						id: pane.id,
-						value: Number(event.target.value),
-					})
-				}
-			/>
 			<PoolColorSettings objectType="group" paneId={pane.id} />
 		</>
 	);

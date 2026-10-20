@@ -1,3 +1,4 @@
+import type { PoolTileLayout } from "@tosklight/ui/pools";
 import type { PresetFamily } from "./presetFamilies";
 
 export const GRID_COLUMNS = 24;
@@ -119,6 +120,10 @@ export interface PaneModel extends GridRect {
 	id: string;
 	kind: BuiltInWindow;
 	title: string;
+	/** Authored title, protected from legacy default-title migrations. */
+	titleIsCustom?: boolean;
+	/** Omitted retains legacy presentation; new tiled panes default to automatic squares. */
+	poolTileLayout?: PoolTileLayout;
 	showGroupShortcuts?: boolean;
 	fixtureSheetActiveOnly?: boolean;
 	fixtureSheetCompactMode?: FixtureSheetCompactMode;

@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	type PoolSlotViewModel,
 	PoolWindow,
+	PoolGrid,
 	type PoolWindowProps,
 	resolvePoolGridColumns,
 } from "./PoolWindow";
+import { PoolTileLayoutProvider } from "./PoolTileLayout";
 
 afterEach(() => {
 	cleanup();
@@ -153,7 +155,12 @@ describe("PoolWindow", () => {
 		const action = vi.fn();
 		renderPool({
 			info: { primary: "4 stored", secondary: "Page 1" },
-			groups: [{ id: "record", actions: [{ id: "record", label: "Record", onPress: action }] }],
+			groups: [
+				{
+					id: "record",
+					actions: [{ id: "record", label: "Record", onPress: action }],
+				},
+			],
 			settingsTabs: [
 				{
 					id: "pool",
@@ -218,9 +225,9 @@ describe("resolvePoolGridColumns", () => {
 
 	it("adds a narrower column only once tiles would grow past 1.5 times", () => {
 		expect(resolvePoolGridColumns(160, 0, sizing)).toBe(2);
-		expect(resolvePoolGridColumns(160, 0, { ...sizing, minimumWidth: 90 })).toBe(
-			1,
-		);
+		expect(
+			resolvePoolGridColumns(160, 0, { ...sizing, minimumWidth: 90 }),
+		).toBe(1);
 	});
 
 	it("accounts for the gap and never goes below one column", () => {
@@ -232,5 +239,92 @@ describe("resolvePoolGridColumns", () => {
 		expect(
 			resolvePoolGridColumns(300, 0, { defaultWidth: 100, minimumWidth: 200 }),
 		).toBe(3);
+	});
+});
+
+describe("PoolTileLayoutProvider", () => {
+	it("fills large fixed layouts without losing stored addresses or a larger configured pool", () => {
+		const stored = {
+			id: "group-576",
+			position: 575,
+			card: { number: 576, primary: "Last visible group" },
+		};
+		const view = render(
+			<PoolTileLayoutProvider layout={{ mode: "fixed", columns: 24, rows: 24 }}>
+				<PoolGrid slots={[stored]} emptySlot={emptySlot} />
+			</PoolTileLayoutProvider>,
+		);
+		expect(document.querySelectorAll("[data-pool-position]")).toHaveLength(576);
+		expect(
+			document.querySelector('[data-pool-position="575"]'),
+		).toHaveTextContent("Last visible group");
+		view.rerender(
+			<PoolTileLayoutProvider layout={{ mode: "fixed", columns: 24, rows: 24 }}>
+				<PoolGrid slots={[stored]} slotCount={1000} emptySlot={emptySlot} />
+			</PoolTileLayoutProvider>,
+		);
+		expect(document.querySelectorAll("[data-pool-position]")).toHaveLength(
+			1000,
+		);
+		expect(
+			document.querySelector('[data-pool-position="575"]'),
+		).toHaveAttribute("data-pool-slot-id", "group-576");
+	});
+	it("does not invent navigation entries when a fixed grid disables empty slots", () => {
+		const stored = {
+			id: "media-4",
+			position: 3,
+			card: { number: 4, primary: "Actual media file" },
+		};
+		render(
+			<PoolTileLayoutProvider layout={{ mode: "fixed", columns: 24, rows: 24 }}>
+				<PoolGrid
+					slots={[stored]}
+					fillEmptySlots={false}
+					emptySlot={emptySlot}
+				/>
+			</PoolTileLayoutProvider>,
+		);
+		expect(document.querySelectorAll("[data-pool-position]")).toHaveLength(1);
+		expect(screen.getByText("Actual media file")).toBeInTheDocument();
+	});
+	it("preserves legacy fixed columns when no layout is provided", () => {
+		render(<PoolGrid slots={[]} columns={4} emptySlot={emptySlot} />);
+		const grid = document.querySelector(".pool-window-grid");
+		expect(grid).toHaveClass("square-grid");
+		expect(grid).toHaveStyle({
+			gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+		});
+	});
+	it("explicit automatic mode restores squares and ignores legacy fixed columns", () => {
+		render(
+			<PoolTileLayoutProvider layout={{ mode: "automatic" }}>
+				<PoolGrid slots={[]} columns={4} emptySlot={emptySlot} />
+			</PoolTileLayoutProvider>,
+		);
+		const grid = document.querySelector<HTMLElement>(".pool-window-grid")!;
+		expect(grid).toHaveClass("square-grid");
+		expect(grid.style.gridTemplateColumns).toBe("");
+	});
+	it("switches to viewport rows while retaining every numbered address and back to squares", () => {
+		const view = render(
+			<PoolTileLayoutProvider layout={{ mode: "fixed", columns: 6, rows: 3 }}>
+				<PoolGrid slots={[]} emptySlot={emptySlot} />
+			</PoolTileLayoutProvider>,
+		);
+		const grid = document.querySelector(".pool-window-grid");
+		expect(grid).toHaveClass("pool-fixed-grid", "compact-grid");
+		expect(grid).toHaveStyle({
+			gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+		});
+		expect(grid?.querySelectorAll("[data-pool-position]")).toHaveLength(200);
+		view.rerender(
+			<PoolTileLayoutProvider layout={{ mode: "automatic" }}>
+				<PoolGrid slots={[]} emptySlot={emptySlot} />
+			</PoolTileLayoutProvider>,
+		);
+		expect(grid).toHaveClass("square-grid");
+		expect(grid).not.toHaveClass("pool-fixed-grid");
+		expect(grid?.querySelectorAll("[data-pool-position]")).toHaveLength(200);
 	});
 });

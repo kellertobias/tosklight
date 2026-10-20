@@ -1,5 +1,6 @@
 import type {
 	AppState,
+	PaneModel,
 	BuiltInWindow,
 	FixtureSheetColumn,
 	GridRect,
@@ -45,6 +46,8 @@ export type Action =
 			id: string;
 			columns: AppState["patchHiddenColumns"];
 	  }
+	| { type: "SET_PANE_TITLE"; id: string; value: string }
+	| { type: "SET_PANE_TILE_LAYOUT"; id: string; layout: PaneModel["poolTileLayout"] }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
