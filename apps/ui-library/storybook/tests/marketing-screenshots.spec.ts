@@ -46,6 +46,21 @@ interface MarketingScreenshotManifest {
 	entries: MarketingScreenshotEntry[];
 }
 
+test("marketing timecode uses the production timeline rather than the historical discussion mock", async () => {
+	const manifest = JSON.parse(
+		await fs.readFile(MANIFEST_PATH, "utf8"),
+	) as MarketingScreenshotManifest;
+	const timeline = manifest.entries.find(
+		(entry) => entry.file === "timecode-timeline.png",
+	);
+	expect(timeline?.storyId).toBe(
+		"tosklight-windows-timecode--production-timeline-editor",
+	);
+	expect(manifest.entries.map((entry) => entry.storyId)).not.toContain(
+		"tosklight-marketing--timecode-view",
+	);
+});
+
 test("captures the reviewed Storybook marketing gallery and preserves static stills", async ({
 	page,
 	request,

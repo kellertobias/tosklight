@@ -39,7 +39,7 @@ const PRODUCT_GALLERIES = {
 	pixel: ["pixel-eight-layer-composite.png", "media-server-visualizers.png", "media-server-playback.png"],
 };
 const DETAIL_GALLERIES = {
-	control: [null, "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-stage.png", "control-output-engine.png", "dynamics.png", "control-media-pane.png"],
+	control: [null, "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-stage.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-text.png", "media-server-visualizers.png", "media-server-outputs.png"],
 	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-elevation.png", null, null],
 };
@@ -122,17 +122,39 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) 
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+// Reserve each screenshot's real aspect ratio before lazy loading completes. Otherwise
+// scrolling to a later section can move the link under the pointer while images arrive.
+const screenshotDimensions = new Map();
+function screenshotSize(file) {
+  if (screenshotDimensions.has(file)) return screenshotDimensions.get(file);
+  const bytes = readFileSync(resolve(SCREENSHOTS, file));
+  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature) ||
+      bytes.readUInt32BE(8) !== 13 || bytes.toString("ascii", 12, 16) !== "IHDR") {
+    throw new Error(`Invalid PNG header for marketing screenshot ${file}`);
+  }
+  const width = bytes.readUInt32BE(16);
+  const height = bytes.readUInt32BE(20);
+  if (!width || !height || width > 0x7fffffff || height > 0x7fffffff) {
+    throw new Error(`Invalid PNG dimensions for marketing screenshot ${file}`);
+  }
+  const dimensions = { width, height };
+  screenshotDimensions.set(file, dimensions);
+  return dimensions;
+}
+
 mkdirSync(resolve(siteRoot, "screenshots"), { recursive: true });
 const renderFigure = ({ file, title, caption, wide }) => {
   // Native inputs are restored and reviewed by the capture job. Pages must consume its artifact,
   // never replace it with an older tracked still from this checkout.
   const source = resolve(SCREENSHOTS, file);
   const name = file.replace(/\//g, "-");
+  const { width, height } = screenshotSize(file);
   copyFileSync(source, resolve(siteRoot, "screenshots", name));
   return (
     `<figure class="shot${wide ? " shot-wide" : ""}">` +
     `<button class="shot-image" type="button" aria-label="Enlarge ${escapeHtml(title)}">` +
-			`<img src="screenshots/${escapeHtml(name)}" alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
+			`<img src="screenshots/${escapeHtml(name)}" width="${width}" height="${height}" alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
     `<figcaption><strong>${escapeHtml(title)}</strong> ${escapeHtml(caption)}</figcaption>` +
     `</figure>`
   );
@@ -254,7 +276,7 @@ const productPages = [
 			["Tracking", "Full tracking, so a cue only stores what it changes.", "Each cue stores only what it changes and everything else tracks through from the cues before it. A cue list reads as a sequence of intentions rather than a series of complete stage states.", "That saves the afternoon when a lamp is missing from a look: add it once and it stays in every cue that follows, instead of being pasted into each of them."],
 			["Visualizer", "A stage view built in, not bolted on.", "A 3D view of the rig is built in. Because every fixture has a real position, those positions drive selection: grab what is on stage left instead of remembering fixture numbers.", "Confirm a look, point the moving lights, and see where beams land without standing in the venue or keeping a second copy of the rig in sync."],
 			["Output", "DMX over the network, on a fixed render deadline.", "Logical show universes map to Art-Net or sACN destinations as explicit routes, so a show file stays independent of the network layout it runs on tonight.", "Frames go out on a fixed schedule rather than whenever the engine finishes one, keeping the rate consistent whether the desk is idle or busy."],
-			["Dynamics", "Shape movement as editable curves.", "Build intensity, color, and position effects in the Dynamics editor, then spread them across your fixture selection.", "Adjust the curves and timing while keeping the effect visible in the editor."],
+			["Dynamics", "Shape movement. Keep it on the beat.", "Build intensity, color, and position effects as editable lanes, map them onto the rig, and spread their phase across your fixtures.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
 			["Media Server", "Keep Pixel close to the desk.", "Use the Media Server pane to browse media and control the picture from your Control workspace.", "Arrange the pane alongside your fixtures, presets, and playbacks to keep the live show together."],
 		],
 		coming: [["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"], ["Position / PSN support", "Public beta"]],
@@ -309,7 +331,7 @@ const productPages = [
 ];
 
 for (const product of productPages) {
-	const imageFiles = product.images.filter(Boolean);
+	const imageFiles = product.images.flat().filter(Boolean);
 	if (imageFiles.length !== new Set(imageFiles).size || product.images.length !== product.sections.length) {
 		throw new Error(`Detail page ${product.path} must map each section to a unique screenshot or no screenshot`);
 	}
@@ -320,12 +342,16 @@ for (const product of productPages) {
 		.map(([title, copy]) => `<article><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p></article>`)
 		.join("");
 	const sections = `<section class="product-detail-story shell">${product.sections.map(([label, title, first, second], index) => {
-		const file = product.images[index];
-		const entry = file ? galleryByFile.get(file) : null;
-		const image = file?.replace(/\//g, "-");
-		const figure = entry
-			? `<figure class="shot"><img src="../screenshots/${escapeHtml(image)}" alt="${escapeHtml(entry.title)}" loading="lazy"><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`
-			: "";
+		const sectionImages = product.images[index];
+		const files = Array.isArray(sectionImages) ? sectionImages : sectionImages ? [sectionImages] : [];
+		const figures = files.map((file) => {
+			const entry = galleryByFile.get(file);
+			const image = file.replace(/\//g, "-");
+			const url = `../screenshots/${escapeHtml(image)}`;
+			const { width, height } = screenshotSize(file);
+			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
+		}).join("");
+		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
 		return `<article><div class="product-detail-copy"><p class="eyebrow">${escapeHtml(label)}</p><h2>${escapeHtml(title)}</h2></div><div class="product-detail-text"><p>${escapeHtml(first)}</p><p>${escapeHtml(second)}</p></div>${figure}</article>`;
 	}).join("")}</section>`;
 	const coming = product.coming ? `<section class="product-detail-coming shell"><p class="eyebrow">What is coming</p><h2>Still moving forward.</h2><div>${product.coming.map(([title, status]) => `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(status)}</p></article>`).join("")}</div></section>` : "";
@@ -413,6 +439,12 @@ for (const [placeholder, replacement] of [
   }
   page = page.replaceAll(placeholder, replacement);
 }
+// The hero is authored directly in the landing-page template rather than renderFigure.
+page = page.replace(/<img\b(?=[^>]*\bsrc="screenshots\/([^"]+)")[^>]*>/gu, (image, file) => {
+  if (/\bwidth=/u.test(image) && /\bheight=/u.test(image)) return image;
+  const { width, height } = screenshotSize(file);
+  return image.replace("<img", `<img width="${width}" height="${height}"`);
+});
 writeFileSync(target, page);
 const assetCount =
   PORTABLE_ASSETS.length + PLATFORMS.length;

@@ -357,17 +357,24 @@
 		},
 		{
 			"file": "dynamics.png",
-			"title": "Movement with intent",
-			"caption": "Shape intensity, color, and position as editable curves, spread motion across a fixture selection, and preview the result before it reaches the stage.",
-			"storyId": "tosklight-marketing--dynamics-view",
-			"viewport": {
-				"width": 1600,
-				"height": 920
-			},
-			"captureSelector": "section.dynamic-full-discussion-editor",
-			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/dynamics-lanes.png",
+			"title": "Lanes and lamps",
+			"caption": "Edit the stored Spots Circle Dynamic against the selected stage fixtures in the live Control application.",
+			"theme": "dark"
+		},
+		{
+			"file": "dynamics-projection.png",
+			"sourceFile": "docs/marketing/assets/stills/dynamics-projection.png",
+			"title": "Shape the projection",
+			"caption": "Map the Dynamic onto the actual rig and adjust how the fixture positions shape the effect.",
+			"theme": "dark"
+		},
+		{
+			"file": "dynamics-phase.png",
+			"sourceFile": "docs/marketing/assets/stills/dynamics-phase.png",
+			"title": "Spread the phase",
+			"caption": "Set fixture ordering and phase spread to turn the same Dynamic into a coordinated stage picture.",
+			"theme": "dark"
 		},
 		{
 			"file": "control-media-pane.png",
@@ -387,7 +394,7 @@
 			"file": "timecode-timeline.png",
 			"title": "Timecode timeline",
 			"caption": "Arrange markers, audio, speed changes, and cue-list clips on a frame-addressed timeline for repeatable playback.",
-			"storyId": "tosklight-marketing--timecode-view",
+			"storyId": "tosklight-windows-timecode--production-timeline-editor",
 			"viewport": {
 				"width": 1600,
 				"height": 920
@@ -464,7 +471,7 @@
 		{
 			"file": "media-server-text.png",
 			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"caption": "The Library's Text filter expands through folders 200\u2013249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
 			"storyId": "tosklight-media-server--text",
 			"viewport": {
 				"width": 1440,

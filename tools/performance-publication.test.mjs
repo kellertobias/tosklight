@@ -489,8 +489,14 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 				"utf8",
 			),
 		);
+		const screenshotFixture = Buffer.alloc(33);
+		Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(screenshotFixture);
+		screenshotFixture.writeUInt32BE(13, 8);
+		screenshotFixture.write("IHDR", 12, "ascii");
+		screenshotFixture.writeUInt32BE(1552, 16);
+		screenshotFixture.writeUInt32BE(265, 20);
 		for (const entry of manifest.entries) {
-			writeFileSync(resolve(screenshots, entry.file), "fixture image");
+			writeFileSync(resolve(screenshots, entry.file), screenshotFixture);
 		}
 
 		const result = spawnSync(
@@ -543,19 +549,34 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(downloadsPage, /href="\.\.\/datenschutz\/"/u);
         // Pages must use the exact capture artifact, including native surfaces. The tracked
         // still may predate the reviewed capture restored by CI.
-        assert.equal(readFileSync(resolve(directory, "screenshots/architect-renderer-ultra.png"), "utf8"), "fixture image");
+        assert.deepEqual(readFileSync(resolve(directory, "screenshots/architect-renderer-ultra.png")), screenshotFixture);
         for (const product of ["control", "pixel", "architect"]) {
             const html = readFileSync(resolve(directory, product, "index.html"), "utf8");
             const shots = [...html.matchAll(/src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
             assert.equal(shots.length, new Set(shots).size, `${product} repeats a screenshot`);
             assert.ok(shots.length >= 3, `${product} needs representative screenshots`);
+            const screenshotTags = [...html.matchAll(/<img\b[^>]*src="\.\.\/screenshots\/[^"]+"[^>]*>/gu)].map(match => match[0]);
+            for (const image of screenshotTags) assert.match(image, /width="1552" height="265"/u, `${product} must reserve the screenshot's actual dimensions`);
         }
         const controlPage = readFileSync(resolve(directory, "control/index.html"), "utf8");
         assert.match(controlPage, /screenshots\/dynamics\.png/u);
+        const dynamicsSection = controlPage.split('<p class="eyebrow">Dynamics</p>')[1]?.split('</article>')[0];
+        assert.ok(dynamicsSection, "Control detail page needs its Dynamics section");
+        assert.match(dynamicsSection, /class="product-detail-section-gallery"/u);
+        assert.equal(dynamicsSection.match(/<figure class="shot">/gu)?.length, 3);
+        const dynamicsImages = [...dynamicsSection.matchAll(/<img src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
+        assert.deepEqual(dynamicsImages, ["../screenshots/dynamics.png", "../screenshots/dynamics-projection.png", "../screenshots/dynamics-phase.png"]);
+        for (const image of dynamicsImages) assert.ok(dynamicsSection.includes(`href="${image}"`), `${image} needs a full-size link`);
+        assert.match(dynamicsSection, /five Speed Groups/u);
+        assert.match(dynamicsSection, /joins the running sync phase/u);
+        assert.match(dynamicsSection, /next beat or four-beat bar/u);
         assert.match(controlPage, /screenshots\/control-media-pane\.png/u);
         assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
         assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
 		const landingPage = readFileSync(target, "utf8");
+        const landingImages = [...landingPage.matchAll(/<img\b[^>]*src="screenshots\/[^"]+"[^>]*>/gu)].map(match => match[0]);
+        assert.ok(landingImages.length > 3);
+        for (const image of landingImages) assert.match(image, /width="1552" height="265"/u, "landing screenshots including hero images need intrinsic dimensions");
 		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
 		assert.match(landingPage, /Open source lighting control desk/u);
 		assert.match(landingPage, /Open source live media server/u);
