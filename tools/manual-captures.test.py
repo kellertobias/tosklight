@@ -65,6 +65,26 @@ class CaptureTransferTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'manifest differs'):
             captures.transfer('restore', self.archive, 'a' * 40)
 
+    def test_native_inputs_can_be_reused_without_restoring_stale_browser_captures(self):
+        manifest = captures.ROOT / 'docs/help/screenshot-manifest.json'
+        data = json.loads(manifest.read_text())
+        native = 'docs/marketing/assets/stills/native.png'
+        data['entries'][0]['sourceFile'] = native
+        manifest.write_text(json.dumps(data))
+        target = captures.ROOT / native
+        target.parent.mkdir(parents=True)
+        target.write_bytes(self.content)
+        captures.transfer('pack', self.archive, 'a' * 40)
+        target.write_bytes(b'old native source')
+        browser = captures.ROOT / self.name
+        browser.write_bytes(b'current browser capture')
+        captures.restore_native(self.archive)
+        self.assertEqual(target.read_bytes(), self.content)
+        self.assertEqual(browser.read_bytes(), b'current browser capture')
+        # Whole galleries remain strictly bound to their original commit.
+        with self.assertRaisesRegex(ValueError, 'source commit'):
+            captures.transfer('restore', self.archive, 'b' * 40)
+
     def test_rejects_extra_or_traversal_entry(self):
         with zipfile.ZipFile(self.archive, 'a') as bundle:
             bundle.writestr('../outside.png', b'unexpected')

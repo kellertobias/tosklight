@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { artifactPaths } from "./artifact-paths.mjs";
 import "./stage-architect-resources.test.mjs";
+import "./release-help-assets.test.mjs";
 
 const repositoryRoot = path.resolve(
 	path.dirname(fileURLToPath(import.meta.url)),
@@ -183,7 +184,9 @@ test("every Tauri overlay names a frontend Tauri can embed", () => {
 				application,
 				output,
 			]);
-			const { frontendDist } = JSON.parse(fs.readFileSync(output, "utf8")).build;
+			const { frontendDist } = JSON.parse(
+				fs.readFileSync(output, "utf8"),
+			).build;
 			// An absolute Windows path is a URL — `D:\...` parses as the `d:` scheme — so Tauri
 			// embeds nothing and the packaged window opens white on Windows alone.
 			assert.doesNotMatch(
@@ -220,12 +223,7 @@ test("the Architect Tauri overlay follows a custom artifact root for its MCP bri
 			.resources;
 		assert.equal(
 			resources[
-				path.join(
-					artifactRoot,
-					"build",
-					"patch-mcp",
-					"tosklight-patch-mcp.mjs",
-				)
+				path.join(artifactRoot, "build", "patch-mcp", "tosklight-patch-mcp.mjs")
 			],
 			"tosklight-patch-mcp.mjs",
 		);
@@ -444,7 +442,10 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 		workflow,
 		/7z a -tzip[\s\\]*\n[\s\S]{0,120}tosklight-media-\$version-\$SLUG\.zip/u,
 	);
-	assert.match(assembler, /tosklight-media-\$VERSION-windows-amd64-setup\.exe/u);
+	assert.match(
+		assembler,
+		/tosklight-media-\$VERSION-windows-amd64-setup\.exe/u,
+	);
 	assert.doesNotMatch(assembler, /mv "\$media\/media-server\.exe"/u);
 	assert.match(launcher, /windows_subsystem = "windows"/u);
 	assert.match(launcher, /CREATE_NO_WINDOW/u);
@@ -463,10 +464,7 @@ test("the Windows Pixel release is a branded launcher installer", () => {
 		/File "\/oname=ToskLight Pixel\.exe" "\$\{SOURCE_DIR\}\\ToskLight Pixel\.exe"/u,
 		"NSIS requires the entire /oname parameter to be quoted when it contains spaces",
 	);
-	assert.match(
-		installer,
-		/CreateShortcut "\$DESKTOP\\ToskLight Pixel\.lnk"/u,
-	);
+	assert.match(installer, /CreateShortcut "\$DESKTOP\\ToskLight Pixel\.lnk"/u);
 });
 
 test("Windows ships a portable desk folder built against the static C runtime", () => {
@@ -492,10 +490,20 @@ test("Windows ships a portable desk folder built against the static C runtime", 
 	);
 	assert.match(assembler, /windows-first-start\.txt/u);
 	assert.match(assembler, /linux-first-start\.txt/u);
-	assert.match(read("docs/release/linux-first-start.txt"), /APPIMAGE_EXTRACT_AND_RUN=1/u);
-	assert.match(assembler, /tosklight-desk-\$asset_slug\.deb/u, "the .deb stays beside the AppImage");
+	assert.match(
+		read("docs/release/linux-first-start.txt"),
+		/APPIMAGE_EXTRACT_AND_RUN=1/u,
+	);
+	assert.match(
+		assembler,
+		/tosklight-desk-\$asset_slug\.deb/u,
+		"the .deb stays beside the AppImage",
+	);
 	// The documented libfuse2-free invocation is the one CI starts the release AppImage with.
-	assert.match(read("tools/ci-smoke-built-desktop.mjs"), /APPIMAGE_EXTRACT_AND_RUN: "1"/u);
+	assert.match(
+		read("tools/ci-smoke-built-desktop.mjs"),
+		/APPIMAGE_EXTRACT_AND_RUN: "1"/u,
+	);
 	// The unpacked portable folder is started from elsewhere with no data-directory override.
 	assert.match(
 		workflow,
@@ -798,11 +806,7 @@ test("non-main branch pushes run validation without release work", () => {
 	const workflow = read(".github/workflows/release.yml");
 
 	assert.match(workflow, /push:[\s\S]*?branches: \["\*\*"\]/u);
-	for (const job of [
-		"metadata",
-		"native-extension-draft",
-		"usb-dmx",
-	]) {
+	for (const job of ["metadata", "native-extension-draft", "usb-dmx"]) {
 		assert.match(
 			workflow,
 			new RegExp(
@@ -826,7 +830,7 @@ test("non-main branch pushes run validation without release work", () => {
 	);
 	assert.match(
 		workflow,
-		/build:[\s\S]*?needs: \[metadata, frontends\][\s\S]*?fail-fast: true/u,
+		/build:[\s\S]*?needs: \[metadata, frontends, help-assets\][\s\S]*?fail-fast: true/u,
 	);
 	assert.match(
 		workflow,
@@ -888,8 +892,13 @@ test("the release verification greps for product names the assembler writes", ()
 	const assembler = read("tools/assemble-release-bundle.sh");
 
 	const loops = [...workflow.matchAll(/for product in ([a-z ]+); do/gu)];
-	assert.ok(loops.length >= 2, "the release job verifies bundle contents by product");
-	const products = new Set(loops.flatMap((loop) => loop[1].trim().split(/\s+/)));
+	assert.ok(
+		loops.length >= 2,
+		"the release job verifies bundle contents by product",
+	);
+	const products = new Set(
+		loops.flatMap((loop) => loop[1].trim().split(/\s+/)),
+	);
 	assert.ok(products.has("architect"), "the Rig Editor ships as architect");
 	assert.ok(!products.has("previz"), "previz is the superseded product name");
 
@@ -900,62 +909,61 @@ test("the release verification greps for product names the assembler writes", ()
 			`the assembler writes no tosklight-${product}- asset, so the release check greps for something that cannot exist`,
 		);
 });
-test(
-	"Architect bundle contains its exact private show helper and missing input preserves existing bundle",
-	{ skip: process.platform !== "darwin" },
-	() => {
-		fs.mkdirSync(artifactPaths.tmp, { recursive: true });
-		const directory = fs.mkdtempSync(
-			path.join(artifactPaths.tmp, "architect-helper-bundle-"),
+test("Architect bundle contains its exact private show helper and missing input preserves existing bundle", {
+	skip: process.platform !== "darwin",
+}, () => {
+	fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+	const directory = fs.mkdtempSync(
+		path.join(artifactPaths.tmp, "architect-helper-bundle-"),
+	);
+	try {
+		const editor = path.join(directory, "editor");
+		const renderer = path.join(directory, "renderer");
+		const helper = path.join(directory, "headless");
+		const mcp = path.join(directory, "mcp.mjs");
+		for (const [file, contents] of [
+			[editor, "exact editor"],
+			[renderer, "exact renderer"],
+			[helper, "exact matching private helper"],
+			[mcp, "export {};"],
+		])
+			fs.writeFileSync(file, contents);
+		const output = path.join(directory, "output");
+		const app = path.join(output, "ToskLight Architect.app");
+		const bundledHelper = path.join(app, "Contents/MacOS/light-headless");
+		const argumentsFor = (namedHelper) => [
+			path.join(repositoryRoot, "tools/bundle-visualizer-macos.sh"),
+			editor,
+			renderer,
+			namedHelper,
+			mcp,
+			output,
+			"1.2.3",
+		];
+		const assembled = spawnSync("bash", argumentsFor(helper), {
+			encoding: "utf8",
+		});
+		assert.equal(assembled.status, 0, assembled.stderr);
+		assert.equal(
+			fs.readFileSync(bundledHelper, "utf8"),
+			fs.readFileSync(helper, "utf8"),
 		);
-		try {
-			const editor = path.join(directory, "editor");
-			const renderer = path.join(directory, "renderer");
-			const helper = path.join(directory, "headless");
-			const mcp = path.join(directory, "mcp.mjs");
-			for (const [file, contents] of [
-				[editor, "exact editor"],
-				[renderer, "exact renderer"],
-				[helper, "exact matching private helper"],
-				[mcp, "export {};"],
-			]) fs.writeFileSync(file, contents);
-			const output = path.join(directory, "output");
-			const app = path.join(output, "ToskLight Architect.app");
-			const bundledHelper = path.join(app, "Contents/MacOS/light-headless");
-			const argumentsFor = (namedHelper) => [
-				path.join(repositoryRoot, "tools/bundle-visualizer-macos.sh"),
-				editor,
-				renderer,
-				namedHelper,
-				mcp,
-				output,
-				"1.2.3",
-			];
-			const assembled = spawnSync("bash", argumentsFor(helper), {
-				encoding: "utf8",
-			});
-			assert.equal(assembled.status, 0, assembled.stderr);
-			assert.equal(
-				fs.readFileSync(bundledHelper, "utf8"),
-				fs.readFileSync(helper, "utf8"),
-			);
-			assert.equal(fs.statSync(bundledHelper).mode & 0o111, 0o111);
-			const marker = path.join(app, "keep-existing-bundle");
-			fs.writeFileSync(marker, "keep");
-			const failed = spawnSync(
-				"bash",
-				argumentsFor(path.join(directory, "missing-headless")),
-				{ encoding: "utf8" },
-			);
-			assert.notEqual(failed.status, 0);
-			assert.match(failed.stderr, /private show server/u);
-			assert.equal(fs.readFileSync(marker, "utf8"), "keep");
-			assert.equal(
-				fs.readFileSync(bundledHelper, "utf8"),
-				"exact matching private helper",
-			);
-		} finally {
-			fs.rmSync(directory, { recursive: true, force: true });
-		}
-	},
-);
+		assert.equal(fs.statSync(bundledHelper).mode & 0o111, 0o111);
+		const marker = path.join(app, "keep-existing-bundle");
+		fs.writeFileSync(marker, "keep");
+		const failed = spawnSync(
+			"bash",
+			argumentsFor(path.join(directory, "missing-headless")),
+			{ encoding: "utf8" },
+		);
+		assert.notEqual(failed.status, 0);
+		assert.match(failed.stderr, /private show server/u);
+		assert.equal(fs.readFileSync(marker, "utf8"), "keep");
+		assert.equal(
+			fs.readFileSync(bundledHelper, "utf8"),
+			"exact matching private helper",
+		);
+	} finally {
+		fs.rmSync(directory, { recursive: true, force: true });
+	}
+});

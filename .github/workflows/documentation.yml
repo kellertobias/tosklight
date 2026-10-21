@@ -327,6 +327,53 @@ jobs:
           done
           exit 1
 
+      - name: Restore reviewed native screenshot inputs for release documentation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELP_NATIVE_CAPTURE_RELEASE: ${{ vars.HELP_NATIVE_CAPTURE_RELEASE }}
+          HELP_NATIVE_CAPTURE_ASSET: ${{ vars.HELP_NATIVE_CAPTURE_ASSET }}
+          HELP_NATIVE_CAPTURE_SHA256: ${{ vars.HELP_NATIVE_CAPTURE_SHA256 }}
+        run: |
+          set -euo pipefail
+          : "${HELP_NATIVE_CAPTURE_RELEASE:?Set the reviewed native capture release}"
+          : "${HELP_NATIVE_CAPTURE_ASSET:?Set the reviewed native archive}"
+          : "${HELP_NATIVE_CAPTURE_SHA256:?Set its SHA256}"
+          [[ "$HELP_NATIVE_CAPTURE_ASSET" =~ ^manual-captures-[a-f0-9]{40}\.zip$ ]]
+          [[ "$HELP_NATIVE_CAPTURE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          mkdir -p .artifacts/tmp/documentation-native-inputs
+          archive=".artifacts/tmp/documentation-native-inputs/$HELP_NATIVE_CAPTURE_ASSET"
+          gh release download "$HELP_NATIVE_CAPTURE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "$HELP_NATIVE_CAPTURE_ASSET" --dir .artifacts/tmp/documentation-native-inputs
+          printf '%s  %s\n' "$HELP_NATIVE_CAPTURE_SHA256" "$archive" | sha256sum --check
+          # Older released sources predate the capture-transfer helper. Keep this small reader
+          # self-contained, validating only the current manifests' native source photographs.
+          python3 - "$archive" <<'PY_NATIVE'
+          import hashlib, json, sys, zipfile
+          from pathlib import Path
+          sources = set()
+          for gallery in ('help', 'marketing'):
+              manifest = json.loads(Path(f'docs/{gallery}/screenshot-manifest.json').read_text())
+              sources.update(entry['sourceFile'] for entry in manifest['entries'] if entry.get('sourceFile'))
+          if not sources:
+              raise ValueError('No native sources declared')
+          with zipfile.ZipFile(sys.argv[1]) as bundle:
+              if sum(info.file_size for info in bundle.infolist()) > 150_000_000:
+                  raise ValueError('Native archive exceeds 150 MB')
+              metadata = json.loads(bundle.read('captures.json'))
+              restored = {}
+              for name in sources:
+                  if not name.startswith('docs/marketing/assets/stills/') or '..' in Path(name).parts:
+                      raise ValueError('Native source outside permitted directory')
+                  content = bundle.read(name)
+                  expected = metadata['files'][name]
+                  if not content.startswith(bytes.fromhex('89504e470d0a1a0a')) or len(content) != expected['bytes'] or hashlib.sha256(content).hexdigest() != expected['sha256']:
+                      raise ValueError(f'Invalid native source: {name}')
+                  restored[name] = content
+              for name, content in restored.items():
+                  Path(name).parent.mkdir(parents=True, exist_ok=True)
+                  Path(name).write_bytes(content)
+          print(f'Restored {len(restored)} reviewed native sources from {metadata["sourceCommit"]}')
+          PY_NATIVE
+
       - name: Build Storybook once and refresh its screenshot candidates
         run: bash tools/test.sh documentation-screenshots
 

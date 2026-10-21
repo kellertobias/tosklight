@@ -140,11 +140,12 @@ The retained GDTF travels with exported `.toskfixture` packages and embedded sho
 
 ### Installed Color calibration
 
-Open a physical fixture's **Light source > Color calibration…** cell in Show Patch using **SET** or its context menu. Where no Stage emitter exists, **Color calibration…** can appear directly in the cell.
+In Show Patch, use **SET** or the context menu on a physical fixture's **Light source** cell. Open its calibration action; with no Stage geometry emitter, choose **Color calibration…** directly.
 
 Enter measured emitter output gains or whole-path color observations with their native recipe and evidence. These controls record observations; they do not send that recipe to the lamp. Gain 1.0 keeps profile output and 0.0 means no output, rather than an unknown value.
 
-Each physical instance has independent observations. Replacing a fixture or changing an incompatible profile retains old observations as inactive; review or clear them before recalibrating. New duplicates have no installed Color calibration. Compatible observations can change fitted native output while stored Preset and Cue intent remains unchanged.
+Each physical instance has independent observations. Replacing a fixture or changing an incompatible profile retains old observations as inactive; review or clear them before recalibrating. New duplicates have no installed Color calibration. Compatible observations are used for live Color fitting. Stored
+Preset and Cue Color intent stays unchanged.
 
 ## Physical geometry and individual axis calibration
 

@@ -65,10 +65,43 @@ def transfer(mode: str, archive: Path, commit: str) -> None:
     print(f'{mode}: {len(paths)} declared captures for {commit}; archive SHA256 {hashlib.sha256(archive.read_bytes()).hexdigest()}')
 
 
+def restore_native(archive: Path) -> None:
+    """Restore reviewed native-only source photographs; regenerate all browser captures."""
+    allowed = declared_files()
+    sources = set()
+    for gallery in ('help', 'marketing'):
+        manifest = json.loads((ROOT / f'docs/{gallery}/screenshot-manifest.json').read_text())
+        sources.update(entry['sourceFile'] for entry in manifest['entries'] if entry.get('sourceFile'))
+    if not sources or not sources.issubset(allowed):
+        raise ValueError('No valid native capture sources declared')
+    with zipfile.ZipFile(archive) as bundle:
+        if sum(info.file_size for info in bundle.infolist()) > 150_000_000:
+            raise ValueError('Capture archive exceeds 150 MB')
+        names = bundle.namelist()
+        if len(names) != len(set(names)):
+            raise ValueError('Duplicate capture archive entries')
+        metadata = json.loads(bundle.read('captures.json'))
+        for name in sorted(sources):
+            if name not in metadata['files']:
+                raise ValueError(f'Reviewed native source missing: {name}')
+            content = bundle.read(name)
+            expected = metadata['files'][name]
+            if not content.startswith(b'\x89PNG\r\n\x1a\n') or len(content) != expected['bytes'] or hashlib.sha256(content).hexdigest() != expected['sha256']:
+                raise ValueError(f'Invalid native capture or checksum: {name}')
+        for name in sorted(sources):
+            target = ROOT / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(bundle.read(name))
+    print(f'Restored {len(sources)} reviewed native inputs from capture source {metadata["sourceCommit"]}; browser captures must be regenerated for current HEAD')
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=('pack', 'restore'))
+    parser.add_argument('mode', choices=('pack', 'restore', 'restore-native'))
     parser.add_argument('archive', type=Path)
     args = parser.parse_args()
     sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    transfer(args.mode, args.archive, sha)
+    if args.mode == 'restore-native':
+        restore_native(args.archive)
+    else:
+        transfer(args.mode, args.archive, sha)

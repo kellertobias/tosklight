@@ -640,8 +640,108 @@ jobs:
           path: assets/demo.show
           if-no-files-found: error
 
+  help-assets:
+    name: Inputs / Complete generated in-app Help gallery
+    needs: e2e-build
+    runs-on: ubuntu-22.04
+    env:
+      LIGHT_REUSE_E2E_BUILD: "1"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - uses: ./.github/actions/package-mirror
+      - name: Install Chrome for bounded Help captures
+        timeout-minutes: 35
+        run: |
+          for attempt in 1 2; do
+            if timeout 900 npx playwright install --with-deps chrome; then exit 0; fi
+            echo "Chrome install attempt $attempt stalled; retrying."
+            echo "http://mirrors.edge.kernel.org/ubuntu/" | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+            sudo pkill -9 -x apt-get || true
+            sudo dpkg --configure -a || true
+          done
+          exit 1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: playwright-application-${{ github.sha }}
+          path: .artifacts/build/cargo/debug
+      - name: Restore reviewed native screenshot inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELP_NATIVE_CAPTURE_RELEASE: ${{ vars.HELP_NATIVE_CAPTURE_RELEASE }}
+          HELP_NATIVE_CAPTURE_ASSET: ${{ vars.HELP_NATIVE_CAPTURE_ASSET }}
+          HELP_NATIVE_CAPTURE_SHA256: ${{ vars.HELP_NATIVE_CAPTURE_SHA256 }}
+        run: |
+          set -euo pipefail
+          : "${HELP_NATIVE_CAPTURE_RELEASE:?Set repository variable HELP_NATIVE_CAPTURE_RELEASE to the reviewed native capture release}"
+          : "${HELP_NATIVE_CAPTURE_ASSET:?Set repository variable HELP_NATIVE_CAPTURE_ASSET to its source capture archive name}"
+          : "${HELP_NATIVE_CAPTURE_SHA256:?Set repository variable HELP_NATIVE_CAPTURE_SHA256 to the reviewed archive checksum}"
+          [[ "$HELP_NATIVE_CAPTURE_ASSET" =~ ^manual-captures-[a-f0-9]{40}\.zip$ ]]
+          [[ "$HELP_NATIVE_CAPTURE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          directory="$(npm run --silent artifact-path -- tmp)/reviewed-native-captures"
+          mkdir -p "$directory"
+          gh release download "$HELP_NATIVE_CAPTURE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "$HELP_NATIVE_CAPTURE_ASSET" --dir "$directory" --clobber
+          archive="$directory/$HELP_NATIVE_CAPTURE_ASSET"
+          printf '%s  %s\n' "$HELP_NATIVE_CAPTURE_SHA256" "$archive" | sha256sum --check
+          python3 tools/manual-captures.py restore-native "$archive"
+      - name: Capture every Help image from this source revision
+        run: |
+          chmod +x .artifacts/build/cargo/debug/light-headless .artifacts/build/cargo/debug/viz-sync-harness
+          # Neither tracked legacy images nor a partial capture may satisfy this release input.
+          rm -rf docs/help/assets/screenshots
+          bash tools/test.sh help-screenshots
+          bash tools/test.sh help-screenshots-live
+          node tools/check-help-screenshot-set.mjs
+      - name: Resolve generated Help gallery path
+        id: help-gallery
+        shell: bash
+        run: echo "directory=$(npm run --silent artifact-path -- tmp)/release-help-gallery" >> "$GITHUB_OUTPUT"
+
+      - name: Bind generated Help to its source and image checksums
+        env:
+          RELEASE_HELP_GALLERY_DIR: ${{ steps.help-gallery.outputs.directory }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          const stage = process.env.RELEASE_HELP_GALLERY_DIR;
+          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          const entries = JSON.parse(manifest).entries;
+          const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+          fs.rmSync(stage, { recursive: true, force: true });
+          fs.mkdirSync(stage, { recursive: true });
+          const files = {};
+          for (const entry of entries) {
+            const bytes = fs.readFileSync(path.join('docs/help/assets/screenshots', entry.file));
+            if (!bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex'))) throw new Error(`Invalid PNG: ${entry.file}`);
+            const target = path.join(stage, 'screenshots', entry.file);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, bytes);
+            files[entry.file] = { bytes: bytes.length, sha256: sha256(bytes) };
+          }
+          fs.writeFileSync(path.join(stage, 'screenshot-manifest.json'), manifest);
+          fs.writeFileSync(path.join(stage, 'source.json'), JSON.stringify({ sourceCommit: process.env.GITHUB_SHA, manifestSHA256: sha256(manifest), files }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-help-gallery-${{ github.sha }}
+          path: ${{ steps.help-gallery.outputs.directory }}
+          if-no-files-found: error
+
   documentation:
     name: Checks / Storybook and operator manual
+    needs: [frontends, help-assets]
+    # PRs/feature pushes do not build the E2E server. Keep their Storybook/manual checks;
+    # only main/dispatch jobs consume a complete, freshly captured release gallery.
+    if: always() && !cancelled() && needs.frontends.result == 'success' && (needs.help-assets.result == 'success' || needs.help-assets.result == 'skipped')
     # Every documentation input used to be validated only by the nightly workflow, which builds
     # the last published release. A story or help link broken here therefore surfaced after the
     # release that carried it, on a commit no longer fixable by a rerun. These are the two cheap
@@ -711,10 +811,54 @@ jobs:
           done
           exit 1
 
-      # Builds Storybook once, then runs the story contracts and both screenshot captures. The
-      # captures are judged, not published, here: the nightly workflow still owns the galleries.
+      # Builds Storybook once, then runs every story contract and both screenshot candidates.
+      # Restore the complete release input afterwards so the manual and embedded Help agree.
       - name: Render every Storybook story and screenshot candidate
         run: bash tools/test.sh storybook
+
+      - name: Resolve generated Help gallery path
+        if: needs.help-assets.result == 'success'
+        id: help-gallery
+        shell: bash
+        run: echo "directory=$(npm run --silent artifact-path -- tmp)/release-help-gallery" >> "$GITHUB_OUTPUT"
+
+      - name: Download exact-commit Help gallery
+        if: needs.help-assets.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-help-gallery-${{ github.sha }}
+          path: ${{ steps.help-gallery.outputs.directory }}
+
+      - name: Verify and install generated Help before compilation
+        if: needs.help-assets.result == 'success'
+        shell: bash
+        env:
+          RELEASE_HELP_GALLERY_DIR: ${{ steps.help-gallery.outputs.directory }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          const stage = process.env.RELEASE_HELP_GALLERY_DIR;
+          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          const source = JSON.parse(fs.readFileSync(path.join(stage, 'source.json')));
+          const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !fs.readFileSync(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
+          const files = JSON.parse(manifest).entries.map(entry => entry.file).sort();
+          if (JSON.stringify(Object.keys(source.files).sort()) !== JSON.stringify(files)) throw new Error('Help gallery does not contain the exact declared set');
+          for (const file of files) {
+            const bytes = fs.readFileSync(path.join(stage, 'screenshots', file));
+            const expected = source.files[file];
+            if (!bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) || bytes.length !== expected.bytes || sha256(bytes) !== expected.sha256) throw new Error(`Help capture differs: ${file}`);
+          }
+          fs.rmSync('docs/help/assets/screenshots', { recursive: true, force: true });
+          for (const file of files) {
+            const target = path.join('docs/help/assets/screenshots', file);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, fs.readFileSync(path.join(stage, 'screenshots', file)));
+          }
+          NODE
+          node tools/check-help-screenshot-set.mjs
 
       - name: Build and verify the operator manual
         # The manual generates its attribute reference with cargo, and this job installs no
@@ -735,9 +879,9 @@ jobs:
   build:
     name: Build / Platform bundle / ${{ matrix.label }}
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    # Start expensive platform work as soon as the shared web inputs exist. Validation runs in
-    # parallel and the release job remains the authority that requires every result.
-    needs: [metadata, frontends]
+    # Help is embedded into the server at compile time. Wait only for its bounded captures,
+    # while the comprehensive Storybook/manual checks continue beside the platform builds.
+    needs: [metadata, frontends, help-assets]
     runs-on: ${{ matrix.runner }}
     env:
       LIGHT_RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
@@ -875,6 +1019,47 @@ jobs:
       - name: Install workspace dependencies
         shell: bash
         run: npm ci
+
+      - name: Resolve generated Help gallery path
+        id: help-gallery
+        shell: bash
+        run: echo "directory=$(npm run --silent artifact-path -- tmp)/release-help-gallery" >> "$GITHUB_OUTPUT"
+
+      - name: Download exact-commit Help gallery
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-help-gallery-${{ github.sha }}
+          path: ${{ steps.help-gallery.outputs.directory }}
+
+      - name: Verify and install generated Help before compilation
+        shell: bash
+        env:
+          RELEASE_HELP_GALLERY_DIR: ${{ steps.help-gallery.outputs.directory }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { createHash } from 'node:crypto';
+          const stage = process.env.RELEASE_HELP_GALLERY_DIR;
+          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          const source = JSON.parse(fs.readFileSync(path.join(stage, 'source.json')));
+          const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !fs.readFileSync(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
+          const files = JSON.parse(manifest).entries.map(entry => entry.file).sort();
+          if (JSON.stringify(Object.keys(source.files).sort()) !== JSON.stringify(files)) throw new Error('Help gallery does not contain the exact declared set');
+          for (const file of files) {
+            const bytes = fs.readFileSync(path.join(stage, 'screenshots', file));
+            const expected = source.files[file];
+            if (!bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) || bytes.length !== expected.bytes || sha256(bytes) !== expected.sha256) throw new Error(`Help capture differs: ${file}`);
+          }
+          fs.rmSync('docs/help/assets/screenshots', { recursive: true, force: true });
+          for (const file of files) {
+            const target = path.join('docs/help/assets/screenshots', file);
+            fs.mkdirSync(path.dirname(target), { recursive: true });
+            fs.writeFileSync(target, fs.readFileSync(path.join(stage, 'screenshots', file)));
+          }
+          NODE
+          node tools/check-help-screenshot-set.mjs
 
       # The probe is light-headless without its default features, so it recompiles the whole
       # Desk runtime with a second feature set. Serially that added five minutes after the

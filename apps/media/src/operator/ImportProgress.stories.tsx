@@ -68,6 +68,7 @@ function installOfflineImports() {
 	};
 }
 const meta = {
+	tags: ["autodocs"],
 	title: "ToskLight/Media Server/Import Progress",
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;

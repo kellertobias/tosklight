@@ -22,6 +22,26 @@ The build rasterizes source SVG diagrams at2× under the manual artifact tree an
 PNGs into Help assets for the pinned PDF renderer. The manual hook selects those PNGs for PDF/HTML;
 in-app Help retains the authored SVG.
 
+## Native inputs and installed Help
+
+Native-only views use reviewed source photographs rather than starting a GPU renderer in CI.
+Pin their uploaded archive with repository variables **HELP_NATIVE_CAPTURE_RELEASE**,
+**HELP_NATIVE_CAPTURE_ASSET** and **HELP_NATIVE_CAPTURE_SHA256**. The archive is made by the packer
+below. Update these pins after reviewing replacement native frames; keep the immutable archive
+available on its release. Do not fall back to legacy tracked performance captures.
+
+The bounded **help-assets** CI job verifies the pinned archive, restores only native source
+photographs, then regenerates the full browser/live-desk Help gallery. Its artifact records the
+current source commit, manifest hash and every PNG hash. Native platform builds validate and install
+it before their first server compilation; Cargo also watches the Help directory to invalidate
+cached embedded assets. The manual check uses the same complete gallery after its Storybook tests.
+PRs and feature branches still run documentation checks when release-only capture jobs are skipped.
+
+`restore-native` deliberately permits reviewed native photographs from an earlier capture commit;
+it never restores browser captures from that archive. Whole-gallery `restore` remains bound to the
+exact current commit and manifest. The release documentation workflow hydrates the same pinned
+native inputs, including when its older checkout predates the transfer helper.
+
 ## Publish a current-main manual
 
 Release documentation remains tied to the released application. Its PDF job waits for the complete

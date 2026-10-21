@@ -19,6 +19,7 @@ import {
 } from "./SetupWindow.stories";
 
 const meta = {
+	tags: ["autodocs"],
 	title: "ToskLight/Windows/Configured Setup",
 	parameters: { layout: "fullscreen" },
 } satisfies Meta;
