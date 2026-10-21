@@ -346,3 +346,50 @@ test("the workflow refuses foreign, incomplete, and corrupt Help before changing
 		}
 	}
 });
+
+test("documentation restores reviewed native inputs before every Storybook capture", () => {
+	const native = byName(
+		documentation,
+		"Restore reviewed native screenshot inputs",
+	);
+	assert.ok(native, "a fresh checkout must hydrate untracked native stills");
+	const render = byName(
+		documentation,
+		"Render every Storybook story and screenshot candidate",
+	);
+	assert.ok(
+		documentation.steps.indexOf(native) < documentation.steps.indexOf(render),
+	);
+	assert.equal(
+		native.if,
+		undefined,
+		"feature and PR checks also need native screenshot inputs",
+	);
+	assert.equal(native.env.GH_TOKEN, "${{ github.token }}");
+	for (const name of [
+		"HELP_NATIVE_CAPTURE_RELEASE",
+		"HELP_NATIVE_CAPTURE_ASSET",
+		"HELP_NATIVE_CAPTURE_SHA256",
+	]) {
+		assert.equal(native.env[name], "${{ vars." + name + " }}");
+		assert.ok(
+			native.run.includes("${" + name + ":?"),
+			"missing review pins must fail visibly",
+		);
+	}
+	assert.equal(
+		native.run,
+		byName(producer, "Restore reviewed native screenshot inputs").run,
+	);
+	assert.match(native.run, /gh release download/);
+	assert.match(
+		native.run,
+		/sha256sum --check[\s\S]*manual-captures\.py restore-native/u,
+	);
+	assert.doesNotMatch(JSON.stringify(native), /AWS_|secrets\./u);
+	const syntax = spawnSync("bash", ["-n"], {
+		input: native.run,
+		encoding: "utf8",
+	});
+	assert.equal(syntax.status, 0, syntax.stderr);
+});

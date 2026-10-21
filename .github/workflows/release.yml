@@ -813,6 +813,26 @@ jobs:
           done
           exit 1
 
+      - name: Restore reviewed native screenshot inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HELP_NATIVE_CAPTURE_RELEASE: ${{ vars.HELP_NATIVE_CAPTURE_RELEASE }}
+          HELP_NATIVE_CAPTURE_ASSET: ${{ vars.HELP_NATIVE_CAPTURE_ASSET }}
+          HELP_NATIVE_CAPTURE_SHA256: ${{ vars.HELP_NATIVE_CAPTURE_SHA256 }}
+        run: |
+          set -euo pipefail
+          : "${HELP_NATIVE_CAPTURE_RELEASE:?Set repository variable HELP_NATIVE_CAPTURE_RELEASE to the reviewed native capture release}"
+          : "${HELP_NATIVE_CAPTURE_ASSET:?Set repository variable HELP_NATIVE_CAPTURE_ASSET to its source capture archive name}"
+          : "${HELP_NATIVE_CAPTURE_SHA256:?Set repository variable HELP_NATIVE_CAPTURE_SHA256 to the reviewed archive checksum}"
+          [[ "$HELP_NATIVE_CAPTURE_ASSET" =~ ^manual-captures-[a-f0-9]{40}\.zip$ ]]
+          [[ "$HELP_NATIVE_CAPTURE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          directory="$(npm run --silent artifact-path -- tmp)/reviewed-native-captures"
+          mkdir -p "$directory"
+          gh release download "$HELP_NATIVE_CAPTURE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "$HELP_NATIVE_CAPTURE_ASSET" --dir "$directory" --clobber
+          archive="$directory/$HELP_NATIVE_CAPTURE_ASSET"
+          printf '%s  %s\n' "$HELP_NATIVE_CAPTURE_SHA256" "$archive" | sha256sum --check
+          python3 tools/manual-captures.py restore-native "$archive"
+
       # Builds Storybook once, then runs every story contract and both screenshot candidates.
       # Restore the complete release input afterwards so the manual and embedded Help agree.
       - name: Render every Storybook story and screenshot candidate
