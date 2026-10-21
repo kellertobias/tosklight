@@ -252,6 +252,64 @@ test("the workflow transfer installs every declared PNG and replaces stale legac
 	}
 });
 
+test("the workflow binds manifest identity across LF and Windows CRLF checkouts", () => {
+	for (const [producerEnding, consumerEnding, artifactEnding] of [
+		["\n", "\r\n", "\n"],
+		["\r\n", "\n", "\n"],
+		["\n", "\r\n", "\r\n"],
+	]) {
+		const fixture = captureFixture();
+		try {
+			const manifestPath = path.join(
+				fixture.root,
+				"docs/help/screenshot-manifest.json",
+			);
+			const canonical =
+				JSON.stringify(
+					JSON.parse(fs.readFileSync(manifestPath, "utf8")),
+					null,
+					2,
+				) + "\n";
+			fs.writeFileSync(
+				manifestPath,
+				canonical.replaceAll("\n", producerEnding),
+			);
+			const staged = execute(stageSource, fixture);
+			assert.equal(staged.status, 0, staged.stderr);
+			const stagedManifest = path.join(
+				fixture.stage,
+				"screenshot-manifest.json",
+			);
+			assert.equal(
+				fs.readFileSync(stagedManifest, "utf8"),
+				canonical,
+				"the producer always hashes and uploads canonical LF bytes",
+			);
+			fs.writeFileSync(
+				manifestPath,
+				canonical.replaceAll("\n", consumerEnding),
+			);
+			fs.writeFileSync(
+				stagedManifest,
+				canonical.replaceAll("\n", artifactEnding),
+			);
+			fs.rmSync(fixture.source, { recursive: true });
+			const restored = execute(restoreSource, fixture);
+			assert.equal(restored.status, 0, restored.stderr);
+			assert.deepEqual(
+				fs.readFileSync(path.join(fixture.source, "overview.png")),
+				png,
+			);
+			assert.deepEqual(
+				fs.readFileSync(path.join(fixture.source, "panes/tile.png")),
+				png,
+			);
+		} finally {
+			fs.rmSync(fixture.root, { recursive: true, force: true });
+		}
+	}
+});
+
 test("the workflow refuses foreign, incomplete, and corrupt Help before changing embedded inputs", () => {
 	const mutations = [
 		(fixture) => {

@@ -713,7 +713,9 @@ jobs:
           import path from 'node:path';
           import { createHash } from 'node:crypto';
           const stage = process.env.RELEASE_HELP_GALLERY_DIR;
-          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          // Git may check out JSON with CRLF on Windows; bind its canonical LF bytes.
+          const readManifest = file => Buffer.from(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8');
+          const manifest = readManifest('docs/help/screenshot-manifest.json');
           const entries = JSON.parse(manifest).entries;
           const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
           fs.rmSync(stage, { recursive: true, force: true });
@@ -840,10 +842,12 @@ jobs:
           import path from 'node:path';
           import { createHash } from 'node:crypto';
           const stage = process.env.RELEASE_HELP_GALLERY_DIR;
-          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          // Git may check out JSON with CRLF on Windows; bind its canonical LF bytes.
+          const readManifest = file => Buffer.from(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8');
+          const manifest = readManifest('docs/help/screenshot-manifest.json');
           const source = JSON.parse(fs.readFileSync(path.join(stage, 'source.json')));
           const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !fs.readFileSync(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
+          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !readManifest(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
           const files = JSON.parse(manifest).entries.map(entry => entry.file).sort();
           if (JSON.stringify(Object.keys(source.files).sort()) !== JSON.stringify(files)) throw new Error('Help gallery does not contain the exact declared set');
           for (const file of files) {
@@ -1041,10 +1045,12 @@ jobs:
           import path from 'node:path';
           import { createHash } from 'node:crypto';
           const stage = process.env.RELEASE_HELP_GALLERY_DIR;
-          const manifest = fs.readFileSync('docs/help/screenshot-manifest.json');
+          // Git may check out JSON with CRLF on Windows; bind its canonical LF bytes.
+          const readManifest = file => Buffer.from(fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n'), 'utf8');
+          const manifest = readManifest('docs/help/screenshot-manifest.json');
           const source = JSON.parse(fs.readFileSync(path.join(stage, 'source.json')));
           const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
-          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !fs.readFileSync(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
+          if (source.sourceCommit !== process.env.GITHUB_SHA || source.manifestSHA256 !== sha256(manifest) || !readManifest(path.join(stage, 'screenshot-manifest.json')).equals(manifest)) throw new Error('Help gallery source commit or manifest differs');
           const files = JSON.parse(manifest).entries.map(entry => entry.file).sort();
           if (JSON.stringify(Object.keys(source.files).sort()) !== JSON.stringify(files)) throw new Error('Help gallery does not contain the exact declared set');
           for (const file of files) {
