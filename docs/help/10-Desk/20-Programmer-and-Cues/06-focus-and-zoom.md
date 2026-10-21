@@ -4,9 +4,6 @@ Focus and Zoom are programmed in units that mean the same thing on every fixture
 - **Zoom** is the full opening angle of the beam, in degrees.
 - **Focus** is the lens travel, from 0% to 100%.
 
-A show that still holds Zoom as a percentage of the fixture's channel is not opened. See
-[Shows programmed before fixture-independent programming](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming).
-
 ## Units
 
 - **Zoom** is always a full opening angle in degrees. The angle uses the convention the fixture

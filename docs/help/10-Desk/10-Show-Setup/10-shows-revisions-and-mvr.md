@@ -1,81 +1,89 @@
 # Shows, Revisions, and MVR
 
-## Quick summary
+Keep the native **.show** file for programming and recovery. MVR exchanges the rig with other applications; it does not replace the native show or transfer Cues, Presets, Playbacks, users, or desk layouts.
 
-- Keep the native **.show** file for programming and recovery. Use named revisions before important changes.
-- Create an independent show through **New Show > Load from MVR** and review its import decisions.
-- Export the active rig through **Save As > Export MVR**, then read the saved archive's warnings before handing it to another application.
-- MVR transfers the rig, not Cue programming, presets, playbacks, users, or desk layouts. Generated GDTF includes supported colour emitters, filters, and wheels, but omits native calibration provenance and detailed geometry.
-
-A `.show` file is the portable source for patch, stage layout, groups, presets, Cuelists, playbacks, and other show objects. Desk configuration and operator identity do not travel with it.
+A portable show contains patch, stage layout, Groups, Presets, Cuelists, Playbacks, and other show objects. Desk configuration remains on the installation.
 
 ## Create, load, and revise
 
-Use the Show menu to create a show, upload/open a show from the library, or save a copy under a new name. In **Load Show**, choose **Internal**, a listed **USB** drive, or **Network** from the **Source: Internal** button dropdown in the modal title. Folders appear before portable `.show` files; open a folder to browse it, use **Up one folder** to return. Each show row displays its last-saved time, **Load Latest**, and **…**. The ellipsis opens a separate revision table: **Latest Autosave** is the first row, followed by the named revisions. Each row has its own **Load** and **Partial Load** buttons. Network lists the shows offered by Architect instances and other desks; loading imports an independent local copy. Partial Load opens the dependency/conflict preview for the selected source, including named revisions, without activating it. Create a show from MVR through **New Show**, where **Load from MVR** belongs. Creating an empty show immediately creates, activates, and autosaves a real show named **New Empty Show** (with a number when needed); programming is protected before you choose a final name. The first **Save As** on that provisional show renames the same show, preserving its identity and current programming. The **Save as Template** toggle input marks the saved library show as a reusable starting point on this desk. **New Show** offers those bases and opens an independent copy; programming the copy leaves the base and its named revisions intact. Shows saved before base shows were introduced remain ordinary usable shows. **Save Show As** is for naming a copy and choosing its destination; revision actions remain separate. **Save Named Revision** creates an immutable numbered restore point. **Load Latest Autosave** always resumes that show's newest work. **Load Revision as Copy** creates and activates a separate show from the selected restore point; it never rewinds or replaces the original show's Latest Autosave.
+### Create a show
 
-The server always provisions **Default Stage Show** from the completed portable demo show and opens it when a new desk has no active show. That library entry is a normal autosaved working show, so operator changes remain there. Under **New Show**, **Load Clean Built-in Default** always generates and activates a new, separately named working copy from the untouched completed demo show. It does not copy changes from the working Default Stage Show, so the shipped rig remains recoverable after edits, fixture deletion, renaming, or show-data relocation. Release CI regenerates the source show directly through the desk API without browser choreography or artificial pacing, packages it into the desk, and attaches it to the release. Product-demo video capture remains an offline operator action run on an operator computer.
+Open **Show > New Show**:
 
-The generated copy name includes the source show, revision number, and copy date. The Show menu identifies it as a separate revision copy and keeps the source show name, revision number and name, and creation time visible. The left dock also labels the active show as a revision copy. All subsequent changes autosave to the copy, not the original. The copy remains in the show library after switching shows or restarting the desk, and it can have its own named revisions.
+- **Create Empty Show** starts and autosaves a show named **New Empty Show**. Its first **Save As** gives that same show its final name without losing programming.
+- **Load Clean Built-in Default** creates a fresh copy of the supplied demo rig. Changes to an existing Default Stage Show do not change this clean source.
+- **Start from a base show** creates an independent copy of a saved template. The base and its revisions remain unchanged.
+- **Load from MVR** imports a rig; see [Import MVR](#import-mvr).
 
-In **Save Show As**, the title-bar **Source: Internal**, **Source: USB**, or **Source: Network** dropdown selects **Internal**, any connected **USB** drive directly, or **Network**. USB needs no second drive dropdown. Folder-read failures replace the table with a centered error. Network excludes this desk and lists other desks and Architect instances; Architect shows are available through Load Show.
-The current show name is prefilled. Click the single **Location** line to expand the folder table inside its outline; folders load on expansion and previously visited folders are reused. opening a folder selects it as the save destination. Collapse the table to keep the selected destination visible above the show name. **Up one folder**
-returns to its parent. Network offers mounted network drives and discovered Control desks; choose
-one, then a writable folder. The save creates an independent portable copy in the selected folder
-and leaves the current show and named history intact. An existing destination file is refused
-instead of overwritten. The internal top-level naming flow keeps the identity behavior described above. **Export MVR** in the modal title bar writes the interchange file
-to the same selected folder. A visible status confirms the saved destination or explains a failure.
+To make a reusable base, enable **Save as Template** when saving. **Edit description** adds the description displayed in New Show.
+
+### Load a show
+
+1. Open **Show > Load Show**.
+2. Choose **Internal**, a connected **USB** drive, or **Network** from the title-bar Source menu.
+3. Browse folders and choose **Load Latest** beside the show. **Up one folder** returns to its parent.
+
+**Network** lists available shows from other desks and Architect instances. Loading creates an independent local copy; later changes on either side are not synchronized.
+
+Use the show's **…** action to open its revision table. **Latest Autosave** is the newest work; named revisions follow below. **Partial Load** previews dependencies and conflicts without activating the source show.
+
+![Show menu and primary show-management actions](../../assets/screenshots/workflows/show-menu.png)
+
+![Latest autosave and named revisions](../../assets/screenshots/workflows/show-load-revisions.png)
+
+### Save a copy
+
+In **Save Show As**, choose the destination with the Source menu. Click **Location** to browse folders, select a writable folder, and enter the name. USB drives appear directly in the Source menu; Network offers available destinations.
+
+Saving a portable copy leaves the active show and named history intact. An existing destination file is refused rather than silently overwritten. The first naming of a provisional **New Empty Show** keeps its identity, as described above.
+
+### Keep restore points
+
+Choose **Save Named Revision** before important changes. It creates an immutable, numbered restore point while normal work continues autosaving.
+
+**Load Revision as Copy** activates a separate show made from that revision. Its name identifies the source and date; the Show menu also shows its revision details. Later work autosaves to the copy, leaving the source's Latest Autosave and revisions unchanged. The copy remains in the library after restarting.
 
 ## Save a revision copy
 
-Because autosave already protects the active copy, **Save** asks where the copy should remain. Choose **Keep as Separate Show** to leave it independent, or **Overwrite Original Show** to replace the original show's mutable Latest Autosave. If the original was deleted, the overwrite-original choice is unavailable and the copy remains fully usable.
+Saving a revision copy offers **Keep as Separate Show** or **Overwrite Original Show**. Overwriting replaces the original's Latest Autosave after confirmation and a recovery backup; it keeps the original identity and named revisions. If the original was deleted, that choice is unavailable.
 
-For an established, named show, **Save As** can create another named show or select the original or another existing show as a destination. Choosing an existing destination opens a separate destructive confirmation; cancel is the safe default. A confirmed overwrite first creates an internal recovery backup, replaces only the destination's Latest Autosave, and preserves the destination identity and all of its named revisions. The revision copy and immutable source revision are retained until explicitly deleted.
+For an established show, selecting an existing show as the Save As destination also requires destructive confirmation. Cancel leaves both shows unchanged.
 
-> [!danger] Missing graphic
-> Add a show-history diagram distinguishing Latest Autosave, named revisions, Load Revision as Copy, Save As, and Overwrite Original Show.
-
-![Show menu and its primary show-management actions](../../assets/screenshots/workflows/show-menu.png)
-
-![Load the latest autosave or a named revision](../../assets/screenshots/workflows/show-load-revisions.png)
+![Autosaves, revisions, and independent show copies](../../assets/diagrams/show-history.svg)
 
 ## Load from a Visualizer on the network
 
-The PreViz Rig Editor plans a rig against the same patch sheet the desk uses, and a rig planned there is a show the desk can run. When a PreViz Rig Editor with a document open is on the same network, **Load Show** offers **Load from Visualizer** naming that editor and the document it is holding. Pressing it copies the document across, imports it into the show library like any other portable show, and opens it.
+A networked Architect/PreViz Rig Editor with a show open can offer it through **Load Show > Load from Visualizer**. Choose the named editor and document to import and activate a local copy.
 
-What arrives is a copy. Patching in the editor afterwards does not reach this desk, and programming here does not reach the editor. Two editors on the network are two separate offers, named after the machines they are running on.
-
-The offer only appears when there is something to load: an editor with nothing open, a network without discovery, or a firewall that blocks it costs the button, not the desk. Nothing else about the desk depends on it. The other direction — the editor loading this desk's show — is described in [Planning a Rig in the PreViz Rig Editor](../../20-ToskLight-PreViz/06-planning-and-transfer.md).
+The offer requires discovery and network access. If it is absent, check that the editor has a document open and the firewall allows discovery. The transfer is a copy, not a live link. See [Planning and Transfer](../../20-ToskLight-PreViz/06-planning-and-transfer.md) for the reverse direction.
 
 ## Import MVR
 
-Choose **New Show > Load from MVR** and review the preview before creating the show. The preview reports matched profiles, missing GDTF modes, address conflicts, and unsupported standalone scene geometry. Resolve each fixture conflict by choosing a safe address, importing unpatched, or skipping it. Standalone geometry is not imported; recreate required scenery with visual-only Venue fixtures in Show Patch. Apply only after checking the result. Merge-into-existing-show support exists internally but currently has no operator control and must not be relied on as an available workflow.
+1. Choose **New Show > Load from MVR** and select the archive.
+2. Review fixture profiles, selected modes, missing profiles, and address conflicts.
+3. For each conflict, choose a safe address, **Import unpatched**, or skip the fixture. Unpatched fixtures stay in the show but send no DMX.
+4. Apply only after checking the preview.
 
-![Preview of a new show from an MVR archive](../../assets/screenshots/workflows/mvr-new-show.png)
+![MVR import preview](../../assets/screenshots/workflows/mvr-new-show.png)
 
-Supported embedded GDTF files use the same precise importer as Fixture Library. Preview keeps each fixture tied to its source file and selected mode; a later library edit does not change that choice. Different source contents sharing one fixture identifier receive separate revisions. Native ToskLight fixture information is preferred when present; conflicting immutable native revisions must be resolved before import. Skipped fixtures do not add profiles to the library. The preview lists conflicting native profile revisions and their affected fixture counts. **Import conflicting profiles as new identities** explicitly copies the exact archive profiles under new identities; it never overwrites existing revisions or changes unrelated fixtures already using them. Imported fixtures are bound to the copied identities. The default blocks import until this choice is made. Address decisions remain separate. Profile-authored calibration and internal mode/head/channel identities are copied exactly. Per-fixture identity-bound calibration observations are retained with their original source identity and become inactive until revalidated for the new profile identity; they are never silently rebound. Retained original GDTF bytes and association evidence are kept; a changed identity may no longer match that association, so export generates GDTF unless the source is explicitly revalidated. If the destination show or the exact native profile slot changes after preview, inspect the archive again.
+Embedded GDTF profiles use the Fixture Library importer. If a native profile conflicts with an existing immutable revision, **Import conflicting profiles as new identities** keeps separate copies rather than overwriting the library. Review calibration again when a fixture's profile identity changes.
 
-Fixtures without a usable profile remain visible as unresolved import records, with their source archives retained for recovery. Unknown attributes need a verified mapping for the exact archive in Fixture Library. A fixture with multiple DMX breaks receives the available primary address; additional breaks remain explicitly unpatched and produce a warning. **Import unpatched** clears all outputs of that fixture, including secondary breaks and physical copies. Imported fixtures keep the layers the file puts them on: each lands on the patch layer with the same name, and a layer the show does not have yet is created under the file's name. Only layers that receive a fixture are created; the file's default layer, and fixtures on no layer, go to the show's default layer.
+Fixtures retain their named patch layers. Missing profiles remain unresolved and need attention before use; additional DMX breaks may remain unpatched. Standalone scene geometry is not imported: recreate required scenery with Venue fixtures. The supported operator workflow creates a new show rather than merging into an existing one.
 
 ## Export MVR
 
-Choose **Save As** and press **Export MVR** in the title bar. The active show is written as an `.mvr` archive under the name in the name field, into the location the dialog shows; there is no preview step. The dialog then summarizes the archive it just wrote: where it was saved, how many fixtures and scenery objects it carries, what MVR does not include (cues, presets, playbacks, users, and desk layouts), and every export warning in full. Read the warnings before handing the archive on: they say which fixture profiles were generated or left without a GDTF, and what the receiving application will miss. **Copy warnings** copies them for the receiving team; **Dismiss** clears the summary, which otherwise stays until you save or export again. If the export fails — for example because a file of that name already exists there — the dialog shows the error with a copy button instead, and nothing is overwritten.
+1. Open **Save As**, choose the destination folder, and enter the export name.
+2. Choose **Export MVR** in the title bar.
+3. Read the saved archive's summary and warnings. Use **Copy warnings** when handing the file to another team.
 
-The export includes fixture UUIDs, patch, transforms, and a GDTF file for each fixture type that can be represented, so another application — including the GDTF Share MVR viewer — can open the archive. A retained original GDTF is reused only when its recorded import snapshot matches the actual profile being exported. Edited profiles and older imports without that association receive a specific warning and are exported from their current embedded profile. Shipped fixtures and desk-authored profiles without source archives follow the same generated path: modes, exact channels, fine bytes, splits, supported function ranges and physical endpoints, defaults, Highlight values and one beam per logical head.
+![Saved MVR archive and warnings](../../assets/screenshots/workflows/mvr-export.png)
 
-Generated GDTF also preserves the supported physical colour model: additive emitters, continuous colour filters, colour wheels and their filters, and fixed sources. It does not carry native measurement provenance, Position calibration and axis geometry, the Zoom opening convention, scanner mirror kinematics, or a detailed 3D model. Native ToskLight metadata retains those details. Unsupported curves or units are reported with their reason; the exporter does not silently substitute an older archive. ToskLight-specific fixture metadata retains the complete authored profile even when standard GDTF cannot represent it; another application may read only the standard GDTF subset. See [Fixture Types and GDTF](11-fixture-types-and-gdtf.md#import-gdtf) for retained-source matching and generated-profile limits.
+MVR carries fixture identities, patch layers, positions, orientations, and supported fixture profiles. Visual-only Venue objects are included as fixtures. It does **not** carry Cue programming, Presets, Playbacks, users, or desk layouts.
 
-Fixtures are grouped into MVR layers named after the patch layers, in the order the patch lists them; a layer with no fixtures is exported too.
+Where possible, export reuses the original GDTF; otherwise it generates one from the current fixture profile. Generated profiles can omit detailed geometry, calibration information, or unsupported features. Another application may also interpret hanging brackets and models differently. Read the specific warnings and inspect the rig in the receiving application before relying on the transfer.
 
-Each fixture's position and rotation follow the MVR transform convention, so another application draws it facing the way the Stage does; the bracket angle is folded into the exported transform, because MVR has no separate bracket. A lamp that hangs in a frame turns its body about the frame's bracket bolts, as the CAD and the Visualizer show it, so the exported transform is the turned body's: its lens sits where it does in ToskLight and its beam points the same way. Another application therefore turns the hanging frame and clamp with the body, since MVR cannot keep them level. A fixture drawn from its own 3D model turns as a whole about its origin, and a lamp at bracket 0 exports exactly as before.
-
-An imported MVR fixture takes its whole orientation as its rotation, with its bracket level. An MVR this desk or the PreViz Rig Editor exported brings its fixtures back with their own location, rotation and bracket angle, so a lamp shines from the same place in the same direction after the round trip. If another application saves the archive without ToskLight's fixture information, its fixtures are read like any other MVR: the bracket stays in the rotation and the location is the turned body's.
-
-Visual-only Venue fixtures are exported as fixtures; there is no separate Stage scene-asset collection. Check the archive in the receiving application before relying on it as an interchange master.
-
-![Save Show As showing the summary and warnings of an MVR export](../../assets/screenshots/workflows/mvr-export.png)
-
-MVR is an exchange format, not a replacement for the native `.show` history. Keep the native show and named revisions as the operational source.
+Keep the native `.show` file and named revisions as your programming and recovery source.
 
 ## New Show and reusable bases
 
-**New Show** keeps **Load from MVR** in the title bar. **Load Clean Built-in Default** and **Create Empty Show** share the first row at equal widths. **Start from a base show** lists each base name, portable description, last saved time, and **Create show** action. **Edit description** opens a separate editor; **Save description** stores it with the portable show. Existing shows without a description remain usable and display “No description”. Creating from a base makes an independent copy, including its description, and leaves the base unchanged.
+Use **Save as Template** to make a library show available under **Start from a base show**. Choose **Create show** beside it to work on an independent copy. Its portable description is copied too. Editing the new show never edits the base or its named revisions.

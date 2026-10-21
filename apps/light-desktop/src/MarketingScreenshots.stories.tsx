@@ -193,7 +193,11 @@ function FullApplicationComposition() {
 							</div>
 						}
 						control={
-							<CommandSectionFixture initialMode="playbacks" hardware={false} />
+							<CommandSectionFixture
+								initialMode="playbacks"
+								hardware={false}
+								playbackCount={8}
+							/>
 						}
 					/>
 				</div>

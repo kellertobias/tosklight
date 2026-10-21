@@ -2,12 +2,8 @@
 
 <!-- toc: exclude-headings -->
 
-ToskLight includes an original single-color icon family for lighting-desk controls, show content,
-and fixture types. Every SVG has a transparent background and renders black by default. Inline
-consumers can change the CSS `color` of the shared `tosklight-icon` class.
-
-The generated contact sheets below are grouped by icon family. Each filename below an icon names
-the corresponding editable source SVG.
+Use these contact sheets to identify fixture and control icons. The label below each symbol is
+its name in the icon library.
 
 ## Beam size
 

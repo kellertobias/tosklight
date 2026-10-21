@@ -2,35 +2,29 @@
 
 ## DMX output
 
-The DMX output pane is a live monitor and diagnostic override surface. Values view displays up to 512 slots per shown universe. Selecting a slot reveals its decimal and hexadecimal address, DIP-switch representation, patched fixture, fixture-channel position, attribute, current raw value, and a 0-255 override control. **Release override** returns that address to normal engine output.
+**Values** shows the final raw output, up to 512 slots per universe. Select a slot to inspect its address, patched fixture/channel, and raw value. A diagnostic override bypasses normal programming: choose **Release override** when finished.
 
-With no slot selected, the information area summarizes output health over the last 60 seconds: the minimum, average, and maximum measured frame rate; a histogram counting the frames delivered in each rate band; and the send errors in that window alongside the total since the current show was opened. The bands are disjoint, so every frame is counted exactly once: a frame at 25 Hz appears in the 20–30 Hz band and nowhere else. The maximum reading is capped at the 60 Hz the desk is asked for, and anything faster reads as “> 60 Hz”.
+With no slot selected, inspect output health: measured frame rate and send errors over the last 60 seconds, plus **Change lead time** from a Cue or Dynamic starting to its first sent frame. **Reset** starts new lead-time readings for a test run.
 
-Below the errors, **Change lead time** shows how long a started Cue or Dynamic takes to reach the wire: the time from the instant it should start outputting to the instant the output frame that first carries it is sent. A Cue should start at its GO, Back, Goto or Playback On, or, for an automatic Follow, Wait, Link or Chaser step, at the output frame that takes the step. A Dynamic should start when it is activated, after its activation delay, or at the beat or bar boundary it waits for. **Max** is the longest lead since the desk started, the show was opened or the readings were reset; **Last 60 s** is the longest within the last minute; **Latest** is the most recent. A reading shows “—” until a start has been measured. **Reset** starts every reading over, for example before a cue-to-cue run. A lead longer than five seconds is not a slow start but a running Cue or Dynamic being re-established on its original start, such as an edited Dynamic restarting, and is left out of the readings. Measuring adds no work beyond reading the clock to the output path, so the readings never slow output down.
+The compact pane shows Values for the first two universes. The full built-in also provides **Sources** for raw overrides, **Nodes** for network endpoints, and **DMX Settings** for dot size.
 
-A compact pane stays in Values view, limits the universe list to the first two universes, and uses the global DMX dot-size preference.
+| Nodes status | Meaning / action |
+| --- | --- |
+| **Active / Listening** | Data is flowing, or the listener is ready. |
+| **Idle / Disabled** | No recent traffic, or the route is switched off. |
+| **Conflict** | Another source sends the same universe. Change one source or route. |
+| **Error / Unavailable** | Read the reason and check the route, interface, or transport. |
 
-The full DMX built-in adds **Sources**, which lists and releases active raw overrides; **Nodes**, which lists every Art-Net and sACN endpoint the desk sends to or hears from; and **DMX Settings**, which changes Small/Large dot size.
+Rows identify protocol, delivery mode, direction, address, and universe. Configured routes show logical → destination universe. Select a row for details. ToskLight's own applications are named so they can be distinguished from another console.
 
-**Nodes** shows one row per endpoint with its protocol (Art-Net or sACN, plus Broadcast, Multicast, or Unicast delivery for a route), its direction (**Send** or **Receive**, marked **Configured** or **Heard** on the network), the address and port, the universe (a route shows `logical → wire` universe; a heard source shows its universes as ranges such as `9–11, 20`), and a status with what to do about it:
+Configure routes under **Desk Setup > Outputs**, rather than in this monitor. See [DMX Output and Universe Routes](../10-Show-Setup/04-dmx-output.md).
 
-* **Active** — data is flowing now. **Listening** — the desk is ready to hear this endpoint.
-* **Idle** — configured, but nothing was sent or heard recently. **Disabled** — the route is switched off in **Desk Setup > Outputs > Routes**.
-* **Conflict** — another source on the network sends a universe this desk also sends. The row names that source; move one of them to another universe.
-* **Error** — sending fails or the route is invalid; the row gives the reason. **Unavailable** — the transport behind the endpoint could not start, for example because the output bind address has no broadcast network or does not allow multicast.
-
-Send rows are the show's network routes plus the desk's own announcements (ArtPollReply answers and sACN universe discovery). Receive rows are the ArtPoll and sACN-discovery listeners, the **ArtTimeCode UDP bind** when one is configured, and whatever the desk heard: controllers polling it, other devices broadcasting Art-Net, and other sACN sources announcing their universes. A heard endpoint disappears 25 seconds after it goes quiet. A row that is one of ToskLight's own applications rather than third-party hardware is marked **ToskLight Media Server**, **ToskLight Visualizer** or **ToskLight Desk** beside its role, so an own endpoint is not mistaken for another console on the network; the Media Server and the Visualizer announce those names themselves, and an sACN source keeps the operator's own output label after the name. Select a row to see all of its details in the information area; with nothing selected, the area counts endpoints per protocol and direction and lists those that need attention. The tab reads the desk's network state once a second while it is open. When the desk cannot be read, an error banner stays above the last known list until the next successful read. Output-engine fields and editable logical-universe routes live under **Desk Setup > Outputs**, not in the DMX pane or Pane Settings.
-
-**Pane configuration:** only common size and removal controls.
-
-![DMX output pane](../../assets/screenshots/panes/dmx.png)
+![DMX output monitor](../../assets/screenshots/panes/dmx.png)
 
 ## Help
 
-The Help pane renders the same numbered Markdown catalog used to build this manual. Folder navigation selects a topic, safe relative images are loaded from Help assets, and desk buttons, keyboard keys, tables, and links receive their documentation styling. When live Help is enabled, the catalog refreshes automatically.
+Help presents the same topics as this manual. Select a topic in the left column to read it on the right. Follow links for related workflows and use the pane's size controls for a larger reading area.
 
-The catalog remains in a left column and the selected topic remains in a right column, including when Help is embedded as a pane. External links are restricted to safe HTTPS targets and local images cannot traverse outside Help assets.
-
-**Pane configuration:** only common size and removal controls. The selected topic is navigation state rather than a persistent pane-setting field.
+**Pane configuration:** common position, size, title, and removal settings.
 
 ![Help pane](../../assets/screenshots/panes/help.png)

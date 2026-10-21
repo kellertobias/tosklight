@@ -2,176 +2,103 @@
 
 ## Cuelist Pool
 
-The Cuelist Pool is numbered storage for sequences and Chasers. A populated tile shows its Cuelist number, name, and Cue count. A ▶ marker indicates a running Cuelist. Tap a populated tile to open its Cues. Right-click it, or hold it on a touch surface, to open that exact Cuelist's settings. When a tile has a preview image, tap the image itself to inspect a larger modal view. Record plus a pool position creates or updates a Cuelist; Set workflows use an ordinary tile tap as the explicit assignment target. While Set is waiting for that source, every populated Cuelist tile receives the literal Set outline and the complete tile is the target; empty tiles remain ordinary and unoutlined.
+Tap a Cuelist to open its Cues. Hold or right-click its tile for settings. Tiles show number, name, Cue count, and a ▶ when running; tap a preview image to enlarge it.
 
-The full window can search the 1,000-position pool by number or name using the shared [window search bar](01-desk-interface-and-windows.md#search-bars). Holding a populated tile opens Cuelist configuration: Sequence or Chaser mode, priority, HTP/LTP intensity mode, wrap behavior, restart behavior, timing overrides, Cue renumbering, and Chaser speed, multiplier, and crossfade. **Chaser X-fade** is stored from `0%` to `100%` of the effective step: `0%` snaps, `50%` fades for half the interval, and `100%` fades for the complete interval. Changing the Speed Group BPM or multiplier changes the live fade duration without changing the stored percentage. These settings change the Cuelist itself and must not be confused with Pane Settings.
+Record plus a pool position creates or updates a Cuelist. With Set armed, outlined populated tiles are assignment targets. Otherwise, an ordinary tap opens the list.
 
-**Pane configuration:** **Type colors / Individual colors** chooses the configured lime Cuelist treatment or explicit item colors for this pane. Search and Cuelist configuration belong to the full content window. Common size and removal controls also apply.
+The full window searches by number or name. Cuelist settings include Sequence/Chaser mode, priority, HTP/LTP intensity, wrap/restart behavior, and timing. **Chaser X-fade** is a percentage of each step: 0% snaps, 50% fades for half the step, and 100% fades throughout it.
 
-![Cuelist Pool pane](../../assets/screenshots/panes/cuelist-pool.png)
+**Pane configuration:** Type colors or Individual colors, plus common layout controls. Cuelist settings change the show object rather than this pane.
+
+![Cuelist Pool](../../assets/screenshots/panes/cuelist-pool.png)
 
 ## Cues - Cuelist
 
-This pane shows the Cues of one Cuelist. By default every row shows these columns, in order: **Preview**, **No.**, **Name**, **Trigger**, **Trigger Time**, **In Delay**, **In Fade**, **Out Delay**, and **Out Fade**. All nine columns remain available without changing the pane settings. Running and next Cues receive status highlighting. Selecting a row changes the current row selection but does not execute it.
+The table shows one Cuelist's Cues, previews, triggers, and In/Out delays and fades. Current and next Cues are marked. Selecting a row does not run it.
 
-Stage previews are pictures, not live 3D views. Each one is drawn once — when the Cue is recorded, when it is edited, when a fixture moves on the Stage, or when a Group it uses changes — and is then stored in the show alongside the Cue. Opening a Cuelist therefore draws nothing: the desk shows the stored pictures. Because they travel inside the show file, a Cuelist opened on another desk arrives with its previews already drawn, and a desk without 3D rendering still shows them. A Cue recorded from a desk that cannot draw has no preview until a desk that can opens that Cuelist.
+Touch a value to edit it. **Name** opens text entry; numeric timing opens the number pad; trigger and jump fields offer their relevant choices. **Out Fade > Use Release** follows the desk's Release timing master, and **Out Delay > Use In Fade** follows the Cue's In Fade. Enter a number to make a linked field independent.
 
-A Cue that contains only ToskLight Media Server content is previewed by that Media Server instead of the Stage. The desk works out the exact DMX state the Cue leaves on the server, including values tracked from earlier Cues and Group values, and the server draws that state off-screen without changing what its output currently shows:
+Timing cells fill as their real trigger, delay, or fade runs. Incoming and outgoing phases progress independently. Pause freezes the indicators; the completed fill remains until that Cue runs again.
 
-- A Cue that addresses the server's master, or more than one of its layers, shows the composited **Program** image of the patched output, with its media, effects, tint, and master processing.
-- A Cue that addresses exactly one layer shows only that layer's composited picture. Transparent areas stay transparent and appear over a checkerboard; neither the whole Program nor the library file's thumbnail is shown.
+Copy, Move, and Delete outline eligible Cue rows. Touch a row to address that complete Cuelist/Cue; navigation and scrolling remain available. Set outlines editable values rather than executing the Cue.
 
-Each picture belongs to the addressed server, output, and layer. In a show with several Media Servers, a Cue for one server never shows another server's image. A Cue that mixes lighting fixtures with media, or addresses two servers, keeps its Stage preview. Media previews are not stored in the show, because they depend on the server's own library; they are asked for again whenever the Cue content changes.
+### Previews
 
-When there is no picture, the Preview cell says why instead of showing a broken or older image:
+Stage previews are stored pictures of the Cue, not live renderers. They travel with the show and refresh when the relevant programming or rig changes.
 
-| Cell | Meaning |
+A media-only Cue can use a ToskLight Media preview. One layer shows that layer over a transparency checkerboard; a master or multi-layer Cue shows the composed Program. Lighting/media mixtures keep a Stage preview. Media previews require the corresponding server and library.
+
+| Preview message | Action |
 | --- | --- |
-| **Loading media preview** | The server is still loading the selected media. The desk asks again shortly. |
-| **Empty media** | The picture is valid but shows nothing: no media is selected, or the layer or master is at zero. |
-| **Media output missing** | The server no longer has the patched output, its personality does not match the patch, or it cannot draw Cue previews. Update ToskLight Media or patch the output again. |
-| **Media Server offline · Retry** | The server did not answer. Touch the cell to ask again. The desk also asks again when the server is reported online. |
+| **Loading media preview** | Wait for the server to load it. |
+| **Empty media** | Check selected media, layer level, and master. |
+| **Media output missing** | Update or repatch the output. |
+| **Media Server offline · Retry** | Check connectivity and tap to retry. |
 
-The Cue table is the editing surface. Activate **Name** or **Info** to open the desk keyboard directly. **Jump** and **Trigger** open the same full grouped-choice model used for Playback button functions; LINK choices display the destination number and name while storing its stable identity. **Jump Count**, **Trigger Time**, **In Delay**, **In Fade**, **Out Delay**, and **Out Fade** open the number model directly. Out Fade also offers **Use Release**, linking it to the desk Release timing master; Out Delay offers **Use In Fade**, linking it to the Cue's effective In Fade. Linked cells show the source and effective time. Entering an explicit number makes the field independent again without discarding its previously stored explicit value. Committing the direct editor applies that one value through the authoritative Cuelist update; closing it leaves the stored value unchanged. Out timing controls decreasing or released Intensity independently, so an old look can overlap the entering look or leave an intentional black gap. Existing Cues without a selected link retain their stored explicit or inherited timing behavior. Selecting a row does not execute its Cue, and property editing no longer takes table width for a selected-Cue sidebar. Cue deletion remains an explicit Delete Cue command with a complete Cue address.
+### Settings and following
 
-The timing cells use their background as a live progress display: empty means not started and filled means complete. **Trigger Time** starts at the authoritative beginning of the actual trigger interval: a TIME trigger begins when the preceding Cue receives GO, while FOLLOW and LINK begin after their source Cue finishes. **In Delay**, **In Fade**, **Out Delay**, and **Out Fade** each start when that phase actually starts and fill independently until that phase completes, including when incoming and outgoing work overlap. Pausing freezes every running fill; resuming continues it from the same point. A completed cell stays filled after the transition settles and while the operator changes rows or panes. It resets only when that Cue is triggered again as a new authoritative transition. These displays follow playback runtime rather than a browser-local timer, so reopening the view does not lose or restart progress.
+The full window returns to the Pool and opens **Cuelist Settings**. Choose mode, priorities, wrap/restart, and timing, then **Save**. Closing unsaved settings offers Save, Discard, or Stay.
 
-Bare Copy or Move outlines every visible Cue row as a source; touching anywhere in one outlined row records its complete Cuelist-and-Cue address. The same rows become destinations after AT, including after navigating normally through the Cuelist Pool to another list. Bare Delete outlines each Cue row and touching anywhere inside the row executes the complete Delete Cue command. Set does not turn a Cue row into a target: it keeps ordinary row selection and, in the constrained-height editor, outlines only the exact editable value buttons with a literal SET badge. Cuelist navigation, Pane Settings, and table scrolling remain ordinary navigation while a target command is active.
+In Pane Settings, **Displayed Cuelist** can be **Fixed** or **Follow selection**. Fixed keeps one chosen list. Follow selection shows the explicitly selected Playback's Cuelist; a non-Cuelist Playback leaves it empty. The row follows its actual current Cue, including Chaser steps.
 
-The full window also provides navigation back to the Cuelist Pool and **Cuelist Settings**. Cuelist Settings opens as a modal over the view. Its title bar contains Save, Renumber Cues, and a two-line Mode menu showing the current Sequence or Chaser mode. The body groups numeric/intensity priority, wrap/restart behavior, and timing into three explained columns. Chasers additionally expose a typed Speed multiplier and a `0–100%` Chaser X-fade fader. Close leaves clean settings immediately; if settings are dirty, choose **Save changes**, **Discard changes**, or **Stay** explicitly. The pool's right-click and hold shortcuts open the same modal without starting assignment.
+**Compact Cue rows** reduces row height and hides preview pictures. Common position, size, and removal controls also apply.
 
-The compact pane starts fixed to Cuelist 1 or the first available list. In Pane Settings, **Displayed Cuelist** can keep the pane **Fixed** to any available Cuelist or **Follow selection**. Follow selection resolves the desk's explicitly selected playback and shows its Cuelist; selecting a Group playback or having no selected playback leaves the pane empty instead of switching to an unrelated list. While that Cuelist runs, the selected row and inline Cue editor follow its actual current Cue, including automatic Chaser steps. The fixed Cuelist choice and display mode are stored with that pane, so different Cues panes can remain on different lists while another follows the desk selection and active Cue.
-
-**Pane configuration:** **Displayed Cuelist** selects Fixed or Follow selection, **Cuelist** chooses the fixed list, and **Compact Cue rows** reduces table-row height and hides Preview-column pictures. The common size and removal controls also apply. With the exact bare Delete command active, the complete Pane title receives a red DELETE target outline and removes that Pane after its normal confirmation; the Pane body, Settings control, resizing, and view navigation are never Delete targets.
-
-![Cues pane](../../assets/screenshots/panes/cues.png)
+![Cue table](../../assets/screenshots/panes/cues.png)
 
 ## Cuelists (tabs)
 
-This pane currently opens the Cuelist Pool and then replaces it with the selected list's Cue table. Despite its legacy label, the current implementation does not display multiple tabs. In compact mode the full-window Back control is hidden, so returning to the Pool requires reopening or replacing the pane. Treat this as a current interface limitation rather than as a multi-tab workspace.
+**Cuelists** integrates the Pool, Cue table, and settings. It currently replaces the Pool with the chosen list rather than showing several tabs. In a compact pane the full-window Back control is hidden; reopen or replace the pane to return to the Pool.
 
-Open **Cuelists** for the integrated Pool, Cue editing, and Cuelist configuration workflow. Open Window still offers **Cues** for a permanent Cue overview. Older saved Desktops can contain pool-only panes, but the catalog does not duplicate the integrated Cuelists workflow with a separate Cuelist Pool choice.
+Use **Cues** for a permanent fixed/following Cue overview.
 
-**Pane configuration:** only common size and removal controls.
-
-![Cuelists pane](../../assets/screenshots/panes/cuelists.png)
+![Integrated Cuelists pane](../../assets/screenshots/panes/cuelists.png)
 
 ## Running
 
-The Running window collects one row for every independently stoppable runtime object. It shows running Cuelists, standalone Dynamics, Timecodes, and Macros by default. Several software, hardware, OSC, API, or playback controls that address the same shared runtime still produce one row.
+Running lists Cuelists, standalone Dynamics, Timecodes, and Macros. Several controls operating the same object produce one row. A Dynamic inside a Cuelist remains part of that Cuelist rather than a second stoppable row.
 
-A Cuelist row uses the Cuelist's own number and name and shows its current Cue number. It does not use a playback page or fader-assignment number. A Dynamic contained by that Cuelist is subordinate activity and does not receive another row; **Off** on the Cuelist row releases the containing Cuelist. A standalone Dynamic, running Timecode, or active Macro execution receives its own row, its own stable identity where defined, and the explicit **Cue —** value.
+Each **Off** stops exactly its named object. Cuelist rows show the current Cue; other objects show **Cue —**. Filter with **All**, **Cuelists**, **Dynamics**, **Timecodes**, or **Macros**.
 
-Every **Off** button targets exactly the object named by its row: release Cuelist, stop standalone Dynamic, stop Timecode, or cancel Macro execution. The button reports progress while that action is pending and cannot submit a duplicate action. Start, current-Cue, pause, resume, completion, release, cancellation, and stop changes reconcile from authoritative runtime state while the window remains open.
-
-Use **All**, **Cuelists**, **Dynamics**, **Timecodes**, or **Macros** to restrict the list. An empty filtered list says which kind is not running instead of appearing broken.
-
-Add Running to a Desktop with **Open Window**. It is a pane-only window and does not appear in the BUILT-INS dock.
-
-**Pane configuration:** **Running kind** stores All, Cuelists, Dynamics, Timecodes, or Macros for this pane. Common size and removal controls also apply.
+Running is pane-only: add it through **Open Window**. **Running kind** saves that pane's filter.
 
 ## Macros
 
-The Macro Pool stores portable, show-owned command sequences. Tap to run; right-click or use
-**SET** to open the editor. The editor validates command text, numbers lines, and provides
-**Run Macro**, **Run line**, and the available safe **Undo last run** action. Use the
-[Command Line Reference](../20-Programmer-and-Cues/01-command-line.md) for the grammar and
-[Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md)
-for playback use.
+Tap a Macro to run it; right-click or use **SET** to edit it. The editor provides **Run Macro**, **Run line**, and **Undo last run** where available. See [Command Line Reference](../20-Programmer-and-Cues/01-command-line.md) for syntax.
 
 ## Timecode
 
-The Timecode Pool stores portable timelines. The editor has transport, seek, a complete overview,
-markers, and Cuelist, Speed, and Audio lanes; select an item to edit its timing and properties.
-Markers label positions but do not execute output. The timeline and its optional audio run from one
-authoritative clock, so reopening the editor restores the live position.
+Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output.
 
-Scrub the ruler or drag the playhead to inspect a position without changing live output.
-The **Playhead** encoder shows the editor position. The title position button shows the live
-transport position; press it to explicitly seek to the position selected with the playhead.
+Scrubbing the ruler or dragging the playhead inspects a position without seeking live output. The **Playhead** encoder shows that editor position; press the title's transport position button to seek explicitly.
 
-Edits save automatically without resetting a playing or paused transport. The title reports
-**Saving…**, **Saved**, or **Not saved**; a failed write retains your draft and offers **Retry
-autosave**. **Stop** remains available while edits save. Duration and transport offset accept
-`HH:MM:SS.FF` at 44 fps; incomplete typing stays local, and invalid entries explain the accepted
-range when you leave the field. Press Escape to restore the current saved field value.
+Edits autosave while transport runs. Check **Saving…**, **Saved**, or **Not saved**; use **Retry autosave** after a failure. Stop remains available. Duration and offset use `HH:MM:SS.FF` at 44 fps; Escape restores an unfinished field.
 
-Select a clip to edit its Cue range and start/end behavior, or its Audio Player folder, file,
-repeat, and volume points. Selected Speed keyframes expose phase; audio-volume keyframes expose
-fade duration. **Copy clip**, **Copy keyframe**, and **Copy marker** duplicate the selected item;
-use its Delete action to remove it and editor Undo/Redo to recover changes. A copied clip needs
-an empty interval on its lane. Waveform loading and failures are visible, and **Retry waveform**
-reloads the selected audio without changing transport.
+Select a clip to edit its Cue range, start/end behavior, or audio folder/file, repeat, and volume. Speed keyframes expose BPM and phase; audio-volume keyframes expose fades. Copy/Delete controls operate on the selected clip, keyframe, or marker. Editor Undo/Redo recovers changes.
 
-A Cuelist clip contains the individual Cues in its selected Cue range. Each Cue shows its start
-position, its **In fade** across the top of the lane, and its **Out fade** across the bottom. The
-start and end handles of each range snap to Timecode frames. Moving a start handle changes the
-corresponding delay boundary; moving an end handle changes when that fade completes. The desk saves
-the resulting delay and fade duration on the authoritative Cue in the Cuelist. The clip retains only
-its Timecode placement, Cue range, and State Start or Cue Start plus Hold or Release behavior; it
-does not keep a second private copy of Cue timing. A linked timing range names its source; dragging
-one of its handles is the operator's explicit choice to replace that link with the displayed
-independent timing.
+### Cue timing on the timeline
 
-A new Cuelist lane opens with one clip already placed. On an empty lane that clip takes the rest
-of the timeline from the playhead; where the lane already has clips it copies the length, Cue range,
-and behavior of the last clip left of the playhead; and a Cuelist whose Cues all schedule themselves
-supplies its own length. A new Speed lane likewise opens with one keyframe at the start of the
-timeline. Select a keyframe and enter its **BPM** directly or through the number pad.
+A Cuelist clip displays its Cues' **Out timing** above **In timing**. Drag start/end handles to change the actual Cue delays/fades, snapped to frames. These changes also affect the Cuelist's live timing. Dragging a linked range explicitly replaces its link with independent timing.
 
-A Cue that waits for a manual **GO** has no timing of its own, so the Timecode lane owns its
-transition point. Such a Cue shows a movable transition handle inside the clip; drag it, or use the
-arrow keys, to place the frame where the clip advances to that Cue. Until a point is placed the Cue
-follows its predecessor's completion, and the handle is drawn dashed to show the position is still
-the default. The transition is stored on the clip as an offset from the clip start, so moving the
-clip carries its transitions with it and the Cuelist keeps its manual trigger for live use.
+A manual-GO Cue has a transition handle inside the clip. Drag it or use arrow keys to place its advance time. Until placed, its dashed handle follows the previous Cue's completion. Moving the clip carries these transitions without changing its manual trigger for ordinary playback.
 
-With a marker selected, **Place Marker** moves it to the current playhead and **Move To** opens a
-modal for typing an exact timecode.
+New Cuelist lanes start with a clip; Speed lanes start with a keyframe. Select a marker and use **Place Marker** for the playhead position or **Move To** for an exact time.
 
-Playing Timecode drives that shared Cuelist runtime and shows which clip and Cue are executing.
-Pause freezes Cue timing and output. Seeking, moving backwards, resuming, and looping reconstruct the
-same current Cue, tracked state, timing progress, and output that uninterrupted playback produces at
-the same frame. **Hold** retains the clip's final Cue until it is superseded; **Release** removes the
-clip's Cuelist ownership at its end frame. A missing Cuelist or Cue remains visible with a concrete
-recovery cause; the editor otherwise offers only the edits that keep a clip valid, so Cue-order and
-fade-boundary mistakes cannot be made in the first place. The editor never shows
-a clip as executing merely because the Timecode transport is Playing.
+### Running
 
-Configure the source, frame rate, loss behavior, audio device, and latency trim in Desk Setup. See
-[Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md)
-for timing and trigger behavior.
+Playing drives the same Cuelist runtime as other controls. Pause holds timing and output; seek and loop restore the state appropriate to their destination. **Hold** keeps a clip's final Cue until superseded; **Release** relinquishes it at the end. Missing Cuelists or Cues remain marked for repair.
+
+Configure input source, frame rate, loss behavior, audio device, and latency in Desk Setup. See [Triggers, Chasers, and Speed Groups](../20-Programmer-and-Cues/13-triggers-chasers-and-speed.md).
 
 ## Virtual Playbacks
 
-A Virtual Playbacks pane is a configurable surface for the same show-owned Playbacks
-used by screens and attached hardware. Pages 1–99 each contain sparse positions
-1–1000. A control addresses `page.position`; there is no separate virtual bank.
-Surfaces displaying the same address operate the same assignment and runtime.
+A Playbacks pane operates the same show assignments as screens and hardware. Pages 1–99 have positions 1–1000. An explicit `page.position` always addresses that assignment, regardless of the displayed page.
 
-Configure explicit row starts, counts, and buttons, faders or push encoders. A
-20-column, 14-row pane beginning at 401 displays positions 401–680. Choose **Own**,
-**Pinned** or **Follow** another named surface for its page source. Follow chains
-cannot contain cycles. The visibly selected surface supplies the shared command
-line's current page; an explicit `page.position` addresses another page.
+Configure rows, counts, buttons/faders/encoders, and an **Own**, **Pinned**, or **Follow** page source. **Take from Screen** copies a saved screen arrangement into a draft: review it and press **Apply**. This copies layout, not assignments, and does not follow later edits.
 
-**Take from Screen** copies a screen's saved arrangement into a review draft, even
-when that screen is closed or its hardware disconnected. Review the rows and page
-source, then press **Apply**. Closing the draft leaves both surfaces unchanged.
-The copy contains no Playback assignments and does not follow later screen edits.
+Right-click a control or use **SET** for Playback Configuration. Actions, colors, icons, and images belong to that Playback. Pane Settings controls layout and **Solo Regions**, including their colors and addresses across pages.
 
-Right-click a control, or press `[SET]` and then the control, to open its standard
-Playback Configuration. Icons, images, colors, actions and fader modes belong to
-the assigned Playback. Pane Settings provides layout/page configuration and general
-**Solo Regions** membership editing with explicit addresses across pages.
+For full-window tile sizing and the current Cue insert, see [Virtual Playbacks](../20-Programmer-and-Cues/14-virtual-playbacks.md). Preload eligibility is configured separately; Flash and fader movement remain Live. See [Preload](../20-Programmer-and-Cues/12-preload.md).
 
-Preload eligibility uses configured position ranges on all pages by default, with
-optional page restrictions. It is independent of which surface operates the
-Playback. Flash and fader movement remain Live; captured permanent actions retain
-their exact address, order and source through page changes. Programmer capture is
-a separate setting. See [Virtual Playbacks](../20-Programmer-and-Cues/14-virtual-playbacks.md)
-and [Preload](../20-Programmer-and-Cues/12-preload.md) for operation and release behavior.
+![Eight-Playback pane](../../assets/screenshots/panes/virtual-playbacks.png)
 
-![Virtual Playbacks pane](../../assets/screenshots/panes/virtual-playbacks.png)
-
-![Virtual Playbacks pane settings](../../assets/screenshots/panes/virtual-playbacks-settings.png)
+![Playback pane settings](../../assets/screenshots/panes/virtual-playbacks-settings.png)

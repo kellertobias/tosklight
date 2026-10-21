@@ -2,7 +2,9 @@
 
 ![ToskLight Architect application icon](../assets/branding/tosklight-architect.png)
 
-ToskLight Architect combines CAD-based venue and rig planning with live visualization. Its **PreViz Renderer** draws the live 3D picture, while its **PreViz Rig Editor** prepares a portable show and venue before a desk is involved. Control and the Rig Editor use the same `.show` format and its embedded fixture-profile revisions. Transferring a show between them copies the document; it does not create two simultaneous writers.
+ToskLight Architect plans venues and rigs in its editor and shows them in a separate PreViz
+renderer. Its `.show` documents also open in Control. A document loaded from or published to a
+desk can keep rig edits synchronized; an independent file stays separate.
 
 ## Choose a scene source
 
@@ -17,16 +19,20 @@ The Rig Editor's preview does not require a DMX route. A standalone renderer fol
 
 ## Open Architect
 
-Start the PreViz Rig Editor. On a new installation it opens a writable copy of the Demo Show; otherwise it reopens the recent document. Use **Open Viz** in the editor to launch the renderer against that planning document. The CAD drawing is not a separate window: **CAD** is a screen in the sidebar beside Show, Patch, Venue and Media; its title holds icon tools for adding trusses, stage elements and curtains and for drawing lines, boxes, text and measurements, and its **Elements** panel arranges the drawings and lists the venue objects. **Show** holds the file actions, the rig overview and the show's information, and the Visualizer, the fixture library and the DMX wiring are pages of **Settings** at the foot of the sidebar. Use **Open Window** to open another Architect window on the same show when the drawing and the patch sheet should be on two screens at once; every window edits the one open document, so a fixture patched in one appears in the other. The renderer stays the one window of its own. Use **Get Show from Running ToskLight Control** when a discovered Desk should be copied into the editor, or **Load from Visualizer** on the Desk to copy the editor document back.
+The editor opens a writable Demo Show on a new installation, otherwise its recent document.
+Use **Open Viz** for the separate renderer. The sidebar provides **Show**, **CAD**, **Patch**
+and **Media**; **Settings** holds renderer, fixture-library and DMX configuration.
+**Open Window** opens another editor window on the same document.
 
-Discovery uses ToskLight's local-network show service. It is optional, and it is separate from the CITP service used for Media Server libraries and previews. A missing discovery button does not stop either application from opening an ordinary `.show` file.
+![Architect CAD workspace with the venue, rig views and Placement panel](../assets/screenshots/workflows/architect-cad.png)
 
-> [!danger] Missing graphic
-> Add an annotated PreViz Rig Editor overview and a same-rig comparison of the principal 2D and 3D renderer views.
+Use [Plan a Rig and Move It](06-planning-and-transfer.md) for placement, walls, plan exports and
+Control synchronization. Configure a real Art-Net or sACN route for live desk lighting, including
+explicit loopback unicast when both applications run on one computer.
 
 ## What Architect draws
 
-Every fixture has a body. A fixture package may carry its exact model; otherwise PreViz chooses a deterministic packaged fallback from the profile metadata. Movement uses the profile's physical limits and rates. Ordered wheels visibly cross intermediate slots, lasers and particle effects use bounded package scripts, Crowd Areas populate deterministic silhouettes, and Venue fixtures provide scenery and media surfaces.
+Every fixture has a body. A fixture package may carry its exact model; otherwise PreViz chooses a packaged fallback from the profile metadata. Movement uses the profile's physical limits and rates. Ordered wheels visibly cross intermediate slots, lasers and particle effects use their packaged simulations, Crowd Areas populate audience figures, and Venue fixtures provide scenery and media surfaces.
 
 The Rig Editor patches fixtures, edits their installed geometry, configures venue and media surfaces, and previews fixture values. It consumes package-owned models, gobos, wheel definitions, laser engines, and effect scripts; it does not author those package assets or fixture profiles.
 

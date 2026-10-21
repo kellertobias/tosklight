@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { nativeCapturePng } from "./nativeCapture";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(240_000);
@@ -69,10 +70,15 @@ test("captures the reviewed Storybook marketing gallery and preserves static sti
 	// only completeness check worth making is the one at the end, against the manifest.
 	await fs.rm(REVIEWED_ROOT, { recursive: true, force: true });
 	await fs.mkdir(REVIEWED_ROOT, { recursive: true });
-	for (const entry of manifest.entries.filter((candidate) => candidate.sourceFile)) {
-		await fs.copyFile(
-			path.join(ROOT, entry.sourceFile as string),
+	for (const entry of manifest.entries.filter(
+		(candidate) => candidate.sourceFile,
+	)) {
+		await fs.writeFile(
 			path.join(REVIEWED_ROOT, entry.file),
+			await nativeCapturePng(
+				page,
+				await fs.readFile(path.join(ROOT, entry.sourceFile as string)),
+			),
 		);
 	}
 
@@ -140,10 +146,18 @@ test("captures the reviewed Storybook marketing gallery and preserves static sti
 		if (entry.file === "media-server-library.png") {
 			const thumbnails = page.locator(".media-library-file-pool-grid img");
 			expect(await thumbnails.count()).toBeGreaterThan(0);
-			await expect.poll(() => thumbnails.evaluateAll((images) =>
-				images.every((image) => image instanceof HTMLImageElement &&
-					image.complete && image.naturalWidth > 0),
-			)).toBe(true);
+			await expect
+				.poll(() =>
+					thumbnails.evaluateAll((images) =>
+						images.every(
+							(image) =>
+								image instanceof HTMLImageElement &&
+								image.complete &&
+								image.naturalWidth > 0,
+						),
+					),
+				)
+				.toBe(true);
 		}
 
 		const captureTarget = entry.captureSelector
@@ -193,7 +207,9 @@ function validateEntry(entry: MarketingScreenshotEntry, storyIds: Set<string>) {
 	expect(entry.caption.trim().length).toBeGreaterThan(10);
 	expect(entry.theme).toBe("dark");
 	if (entry.sourceFile) {
-		expect(entry.sourceFile).toMatch(/^docs\/marketing\/assets\/stills\/.+\.png$/u);
+		expect(entry.sourceFile).toMatch(
+			/^docs\/marketing\/assets\/stills\/.+\.png$/u,
+		);
 		return;
 	}
 	expect(entry.viewport?.width).toBeGreaterThanOrEqual(320);

@@ -1,35 +1,44 @@
 # Operate Outputs, Master, and Layers
 
-The operator surface separates the selected output's Master from its ordered layers. DMX remains the normal show-control owner; browser takeover is a deliberate temporary override for setup and diagnosis.
+Select the output in the dock. Its **Master** controls the complete picture; each ordered layer
+supplies one part. DMX normally controls playback. Browser takeover temporarily overrides it.
 
-> [!danger] Missing graphic
-> Add an annotated Pixel playback screenshot showing Master, ordered layers, takeover ownership, isolated layer preview, composite preview, and physical output.
+![Pixel Playback controls for the selected output and layer](../assets/screenshots/workflows/pixel-playback.png)
 
-## Take control
+## Take control and choose content
 
-Take over the output or exact layer before changing it from the browser. The surface identifies browser ownership so a technician does not mistake a local preview action for a Desk command. Release takeover when the Desk should become authoritative again.
+Take over the output or a specific layer before editing it in the browser. Select its numeric
+content folder/file and optional mask. Content 0 or 255 is blank. Raise both the layer and Master
+when checking a picture. Release takeover to return to desk control.
 
-## Choose content
+![Layer preview, composite and physical output check different parts of the result](../assets/diagrams/pixel-layer-flow.svg)
 
-A layer selects one addressed content folder/file and an optional mask folder/file. Content `0` or `255` is blank. The isolated layer preview proves that layer's source and transformations; the composite preview proves the result after layer order, blending, effects, and the Master are applied.
+The isolated preview shows that layer. The composite includes layer order, blending, masks,
+effects and Master. A correct layer may disappear in the composite because another layer covers
+it or its blend, opacity, mask or Master suppresses it.
 
-A clip that has not been played recently has to be read from disk before its first frame exists. While it loads, the layer keeps playing the clip it showed before and switches on the first frame of the new clip, so a content change does not flash black. The layer status reads Loading until the switch. Set the limit in **Settings > Libraries > Clip switch** as milliseconds with the number field, its step buttons, or its touch keypad; it saves automatically, and a value above 10000 is shown as an error and not saved. The default is 500. When the new clip is still not ready after that time, the layer shows nothing until it is. `0` switches the hold off. The limit applies from the next content change without a restart. Selecting blank content, a disabled or deleted file, or a file that fails to load never holds the previous clip: the layer becomes transparent at once.
+## Layer controls
 
-## Transform and shape a layer
+| Tab | Controls |
+| --- | --- |
+| **Playback** | Play mode, dimmer, volume, speed/BPM and playback range. |
+| **Frame** | Position, scale, scaling mode, rotation and 3D model/pan/tilt. |
+| **Colour** | Tint and greyscale (White Blend). |
+| **Mask** | Mask selection and placement. |
+| **Blend** | Blend mode and strobe. |
+| **Effects** | Bank 1, then Bank 2; a generated visualizer also has its own Visualizer tab. |
 
-Layer controls include position, scale, rotation, opacity, crop or shaper behavior, blending, color treatment, and typed effects supported by the active personality. Edit one control at a time while watching both the isolated and composite previews. A correct isolated layer can still disappear in the composite because of its order, blend, opacity, mask, Master, or another layer.
+**Playback range** shows clip length, In point and Out point as `mm:ss.ff`. **Clear playback range**
+restores the whole clip. See [Playback range](05-generated-sources-and-effects.md#playback-range)
+for how the points are measured.
 
-### Where each layer control lives
+The Visualizer tab's four channels are separate from effect banks. Unused channels are labelled
+**Unused**. The Master has output-wide geometry, mask, shapers and colour controls rather than a
+content address.
 
-The Media pane groups a layer's controls into tabs:
+## Clip loading
 
-- **Playback** — Play mode, Dimmer, Volume, Speed, Playback BPM, and Blur, followed by the **Playback range** heading. It holds the read-only **Clip length** of the clip the layer shows, with **✕ Clear playback range** at its right, then **In point** and **Out point**. One press of **✕** sets In and Out both back to 0, so the whole clip plays again. It is greyed out while the range is already the whole clip. The points are shown and typed as `mm:ss.ff` at the frame rate in **Settings > Libraries > In and Out points** (see [Playback range](05-generated-sources-and-effects.md#playback-range)). The range is shown on this tab only.
-- **Frame** — Scale, Scaling mode, Position, and Rotation, followed by the **3D model** heading with **Model**, **Pan**, and **Tilt**. **Model** lists **Flat** and every slot in **Library › Models**. A new layer is **Flat** at Pan 0° and Tilt 0°, and Pan and Tilt still turn a Flat layer.
-- **Colour**, **Mask**, and **Blend** — tint and greyscale, the mask placement, and blend mode with strobe. From the Desk, the Color special dialog's colour is the tint and its **White Blend** is the greyscale; the layer's Dimmer and the Master stay separate.
-- **Effects** — the two effect banks. When the layer shows a generated visualizer, a **Visualizer** tab comes first with that visualizer's own settings for this layer and its four Visualizer Parameter channels, each named by the visualizer; a channel the visualizer does not use reads **Unused** and is disabled. The Visualizer tab never changes **Bank 1** or **Bank 2**. Other content shows only **Bank 1** and **Bank 2**.
-
-## Master output
-
-The Master controls the output-wide result and owns output-level configuration exposed by the selected personality. A layer can be correct and still remain black when the Master is black, stopped, or owned by another source.
-
-To return to show control, release the browser takeover rather than trying to reproduce the Desk's last DMX values manually. The next valid Art-Net or sACN frame then remains the authoritative input.
+During a content change, the layer can hold the old clip until the new one's first frame is ready.
+**Settings → Libraries → Clip switch** sets that maximum wait from 0–10,000 ms, default 500 ms.
+Zero disables the hold. If the new clip is still loading after the limit, the layer becomes
+transparent until ready. Blank, disabled, deleted or failed content becomes transparent immediately.

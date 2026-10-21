@@ -7,45 +7,52 @@
 			"caption": "Everything an operator touches, on one surface.",
 			"storyId": "tosklight-marketing--full-application",
 			"viewport": {
-						"width": 1600,
-						"height": 920
+				"width": 1600,
+				"height": 920
 			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
-},
+		},
 		{
 			"file": "control-programmer.png",
 			"title": "The programmer",
 			"caption": "Familiar attribute banks, encoders, and command-line programming.",
 			"storyId": "tosklight-command-section--programmer-software",
 			"viewport": {
-						"width": 1920,
-						"height": 761
+				"width": 1920,
+				"height": 761
 			},
 			"captureSelector": ".control-section",
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
-},
+		},
 		{
 			"file": "control-groups.png",
 			"title": "Groups",
 			"caption": "Keep the fixture selections you use throughout the show close at hand.",
 			"storyId": "tosklight-marketing--groups-window",
 			"viewport": {
-						"width": 960,
-						"height": 560
+				"width": 960,
+				"height": 560
 			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
-},
+		},
 		{
-			"file": "control-cues.png", "storyId": "tosklight-marketing--cues-window",
-			"viewport": { "width": 1180, "height": 560 },
+			"file": "control-cues.png",
+			"storyId": "tosklight-marketing--cues-window",
+			"viewport": {
+				"width": 1180,
+				"height": 560
+			},
 			"mode": "software",
-			"interactions": [], "title": "Cues", "caption": "Build a repeatable sequence of intentions for the show.", "theme": "dark"
+			"interactions": [],
+			"title": "Cues",
+			"caption": "Build a repeatable sequence of intentions for the show.",
+			"theme": "dark"
 		},
 		{
 			"file": "control-preload-go.png",
@@ -53,15 +60,19 @@
 			"caption": "Set up a change while the current look remains live.",
 			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
 			"viewport": {
-						"width": 1180,
-						"height": 720
+				"width": 1180,
+				"height": 720
 			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
-},
+		},
 		{
-			"file": "control-stage.png", "sourceFile": "docs/marketing/assets/stills/control-stage.png", "title": "Visualizer", "caption": "Select fixtures and navigate the measured Stage plan directly from the desk.", "theme": "dark"
+			"file": "control-stage.png",
+			"sourceFile": "docs/marketing/assets/stills/control-stage.png",
+			"title": "Visualizer",
+			"caption": "Select fixtures and navigate the measured Stage plan directly from the desk.",
+			"theme": "dark"
 		},
 		{
 			"file": "control-fixture-library.png",
@@ -69,60 +80,63 @@
 			"caption": "Bring real fixture data into the show.",
 			"storyId": "tosklight-marketing--fixture-library-window",
 			"viewport": {
-						"width": 1200,
-						"height": 640
+				"width": 1200,
+				"height": 640
 			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
-						{
-									"action": "fill",
-									"selector": "input[aria-label='Search fixture library']",
-									"value": "Robe"
-						},
-						{
-									"action": "expect-visible",
-									"selector": "button:has-text('ESPRITE')"
-						},
-						{
-									"action": "expect-hidden",
-									"selector": "button:has-text('Titan Tube')"
-						},
-						{
-									"action": "fill",
-									"selector": "input[aria-label='Search fixture library']",
-									"value": ""
-						},
-						{
-									"action": "expect-visible",
-									"selector": "button:has-text('Titan Tube')"
-						}
+				{
+					"action": "fill",
+					"selector": "input[aria-label='Search fixture library']",
+					"value": "Robe"
+				},
+				{
+					"action": "expect-visible",
+					"selector": "button:has-text('ESPRITE')"
+				},
+				{
+					"action": "expect-hidden",
+					"selector": "button:has-text('Titan Tube')"
+				},
+				{
+					"action": "fill",
+					"selector": "input[aria-label='Search fixture library']",
+					"value": ""
+				},
+				{
+					"action": "expect-visible",
+					"selector": "button:has-text('Titan Tube')"
+				}
 			]
-},
+		},
 		{
 			"file": "control-output-engine.png",
 			"title": "Output",
 			"caption": "Map logical universes to Art-Net and streaming ACN routes.",
 			"storyId": "tosklight-marketing--desk-setup-outputs-window",
 			"viewport": {
-						"width": 960,
-						"height": 560
+				"width": 960,
+				"height": 560
 			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
-						{
-									"action": "click",
-									"selector": "button[role='tab']:has-text('Routes')"
-						}
+				{
+					"action": "click",
+					"selector": "button[role='tab']:has-text('Routes')"
+				}
 			]
-},
+		},
 		{
 			"file": "tracked-programming.png",
 			"title": "Track every change",
 			"caption": "See what comes from the current cue, what the Programmer changes, and what is prepared next, so you can build a new look without losing the one on stage.",
 			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
-			"viewport": { "width": 1180, "height": 720 },
+			"viewport": {
+				"width": 1180,
+				"height": 720
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -132,7 +146,10 @@
 			"title": "Application overview",
 			"caption": "Run the complete desk: select and program fixtures, build looks, store cues, and operate playbacks from one workspace.",
 			"storyId": "tosklight-marketing--full-application",
-			"viewport": { "width": 1600, "height": 920 },
+			"viewport": {
+				"width": 1600,
+				"height": 920
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -142,7 +159,10 @@
 			"title": "Touch programmer",
 			"caption": "Program fixtures from a software-only touch desk with the same command language used on an attached surface.",
 			"storyId": "tosklight-command-section--programmer-software",
-			"viewport": { "width": 1920, "height": 761 },
+			"viewport": {
+				"width": 1920,
+				"height": 761
+			},
 			"captureSelector": ".control-section",
 			"theme": "dark",
 			"mode": "software",
@@ -153,7 +173,10 @@
 			"title": "Groups",
 			"caption": "Capture ordered fixture selections once, then recall them throughout programming, cues, and playbacks.",
 			"storyId": "tosklight-marketing--groups-window",
-			"viewport": { "width": 960, "height": 560 },
+			"viewport": {
+				"width": 960,
+				"height": 560
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -163,7 +186,10 @@
 			"title": "Color presets",
 			"caption": "Build your show from reusable color looks, from practical whites to saturated accents, instead of recreating values cue by cue.",
 			"storyId": "tosklight-marketing--color-presets-window",
-			"viewport": { "width": 840, "height": 440 },
+			"viewport": {
+				"width": 840,
+				"height": 440
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -173,7 +199,10 @@
 			"title": "Position presets",
 			"caption": "Build your show from reusable focus positions so every cue can call a consistent stage picture.",
 			"storyId": "tosklight-marketing--position-presets-window",
-			"viewport": { "width": 480, "height": 336 },
+			"viewport": {
+				"width": 480,
+				"height": 336
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -183,7 +212,10 @@
 			"title": "Cues",
 			"caption": "Store sparse tracked cues with timing, then run a repeatable show from the playback surface.",
 			"storyId": "tosklight-marketing--cues-window",
-			"viewport": { "width": 960, "height": 560 },
+			"viewport": {
+				"width": 960,
+				"height": 560
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -193,7 +225,10 @@
 			"title": "Hardware-connected programmer",
 			"caption": "Use the same programmer and command line with an attached hardware control surface, without giving up desk workflows.",
 			"storyId": "tosklight-command-section--programmer-hardware-connected",
-			"viewport": { "width": 1080, "height": 720 },
+			"viewport": {
+				"width": 1080,
+				"height": 720
+			},
 			"captureSelector": ".control-section",
 			"wide": true,
 			"theme": "dark",
@@ -226,7 +261,10 @@
 			"title": "Fixture library",
 			"caption": "Find, inspect, and import fixture profiles so real hardware is ready to patch into a show.",
 			"storyId": "tosklight-marketing--fixture-library-window",
-			"viewport": { "width": 1200, "height": 640 },
+			"viewport": {
+				"width": 1200,
+				"height": 640
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
@@ -259,11 +297,17 @@
 			"title": "Output routes",
 			"caption": "Route each show universe over Art-Net, sACN, or supported USB DMX interfaces from one output setup.",
 			"storyId": "tosklight-marketing--desk-setup-outputs-window",
-			"viewport": { "width": 960, "height": 560 },
+			"viewport": {
+				"width": 960,
+				"height": 560
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
-				{ "action": "click", "selector": "button[role='tab']:has-text('Routes')" }
+				{
+					"action": "click",
+					"selector": "button[role='tab']:has-text('Routes')"
+				}
 			]
 		},
 		{
@@ -271,7 +315,10 @@
 			"title": "Channels",
 			"caption": "Inspect the live values driving each fixture while programming and running the show.",
 			"storyId": "tosklight-marketing--channels-window",
-			"viewport": { "width": 960, "height": 560 },
+			"viewport": {
+				"width": 960,
+				"height": 560
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -281,7 +328,10 @@
 			"title": "DMX",
 			"caption": "Trace the final DMX values for every universe, fixture, channel, and address before they leave the desk.",
 			"storyId": "tosklight-marketing--dmx-window",
-			"viewport": { "width": 960, "height": 560 },
+			"viewport": {
+				"width": 960,
+				"height": 560
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -291,7 +341,10 @@
 			"title": "Movement with intent",
 			"caption": "Shape intensity, color, and position as editable curves, spread motion across a fixture selection, and preview the result before it reaches the stage.",
 			"storyId": "tosklight-marketing--dynamics-view",
-			"viewport": { "width": 1600, "height": 920 },
+			"viewport": {
+				"width": 1600,
+				"height": 920
+			},
 			"captureSelector": "section.dynamic-full-discussion-editor",
 			"theme": "dark",
 			"mode": "software",
@@ -302,17 +355,23 @@
 			"title": "Timecode timeline",
 			"caption": "Arrange markers, audio, speed changes, and cue-list clips on a frame-addressed timeline for repeatable playback.",
 			"storyId": "tosklight-marketing--timecode-view",
-			"viewport": { "width": 1600, "height": 920 },
+			"viewport": {
+				"width": 1600,
+				"height": 920
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
 		},
 		{
 			"file": "media-server-dashboard.png",
-			"title": "Media Server dashboard",
-			"caption": "The dedicated Media Server operator surface identifies the active show and summarizes output, library, and DMX health.",
-			"storyId": "tosklight-media-server--components",
-			"viewport": { "width": 1440, "height": 900 },
+			"title": "Pixel administration",
+			"caption": "Pixel administration keeps live output playback, media selection, and picture controls together.",
+			"storyId": "tosklight-media-server--media",
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -330,7 +389,10 @@
 			"title": "Built-in live controls",
 			"caption": "Run Pixel directly with familiar desk-style controls when DMX is not the right control path, then adjust playback, position, masks, frames, and effects while the show is running.",
 			"storyId": "tosklight-media-server--media",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -340,11 +402,17 @@
 			"title": "Every visual, ready for the show",
 			"caption": "Manage videos, transparent images, live visualizers, and flexible text in one visual library. Pixel prepares imported media for reliable playback and keeps every asset ready at a predictable desk address.",
 			"storyId": "tosklight-media-server--library",
-			"viewport": { "width": 1440, "height": 1100 },
+			"viewport": {
+				"width": 1440,
+				"height": 1100
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
-				{ "action": "click", "selector": "button:has-text('Golden cloth')" }
+				{
+					"action": "click",
+					"selector": "button:has-text('Golden cloth')"
+				}
 			]
 		},
 		{
@@ -352,7 +420,10 @@
 			"title": "A visual library that goes beyond files",
 			"caption": "Select a live sound-driven visualizer beside videos, transparent images, and flexible text, then keep every visual asset ready to use from one clear library.",
 			"storyId": "tosklight-media-server--visualizers",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -360,9 +431,12 @@
 		{
 			"file": "media-server-text.png",
 			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"caption": "The Library's Text filter expands through folders 200\u2013249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
 			"storyId": "tosklight-media-server--text",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -372,7 +446,10 @@
 			"title": "Media Server outputs",
 			"caption": "Output settings keep picture target, presentation, orientation, and sound routing together without nesting another window inside Settings.",
 			"storyId": "tosklight-media-server--settings-outputs",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -382,7 +459,10 @@
 			"title": "Media Server audio",
 			"caption": "The production audio monitor exposes live bass, mid, treble, level, peak, waveform, spectrum, beat, and tempo analysis from the Media Server input.",
 			"storyId": "tosklight-media-server--audio",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -392,7 +472,10 @@
 			"title": "Media Server network and DMX input",
 			"caption": "One Network & DMX tab keeps the listeners and the DMX personality, protocol, universe, and start address that arrive on them together.",
 			"storyId": "tosklight-media-server--settings-network-and-inputs",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -402,7 +485,10 @@
 			"title": "Media Server audio input",
 			"caption": "The Audio title tab configures the source that drives audio-reactive media.",
 			"storyId": "tosklight-media-server--settings-audio-input",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -412,7 +498,10 @@
 			"title": "Media Server DMX diagnostics",
 			"caption": "Logs gives DMX Diagnostics its own title tab for live receiver state, decoded channels, and generated fixture downloads.",
 			"storyId": "tosklight-media-server--dmx-diagnostics",
-			"viewport": { "width": 1440, "height": 900 },
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []

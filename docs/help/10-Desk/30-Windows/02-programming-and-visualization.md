@@ -2,215 +2,145 @@
 
 ## Preset pool
 
-The Preset pool recalls reusable attribute values into the programmer. Intensity, Color, Position, and Beam presets contain only attributes from that family. A Mixed preset can contain any combination of attributes. A preset does not execute a Cue by itself. Tap a populated tile to apply it to the current fixture selection. With Record armed, an empty tile stores a new preset and a populated tile offers overwrite or merge.
+Tap a Preset to apply it to the current selection. Intensity, Color, Position, and Beam presets store their own family; Mixed presets can combine families. Record plus an empty position creates a Preset; recording onto a populated one offers the chosen merge/overwrite workflow.
 
-Each tile shows its number, title, family, icon or artwork, and how many fixture-value entries it contains. The pool provides at least 200 numbered positions and grows to include the highest stored preset number. Filtering to one family disables tiles from the other families instead of deleting or renumbering them.
+Tiles show number, name, preview, and the number of fixtures currently on the Preset. With no fixtures selected, the first tap selects the Preset's stored targets; the second recalls it.
 
 **Pane configuration:**
 
-- **Preset family** selects Mixed, Intensity, Color, Position, or Beam for this pane only. Mixed is a family for presets containing any combination of attributes; it is not an aggregate list of the other families. Two Preset panes can therefore show different families.
-- **Type colors / Individual colors** chooses the color source for this pane. Type mode uses the configured Preset-family default. Individual mode shows only an explicit button color and leaves uncolored tiles grey.
-- **Show group shortcuts** adds the Group strip below the pool so fixtures can be selected before a preset is recalled or recorded.
+- **Preset family** keeps this pane on one family; Mixed is a separate family rather than an aggregate.
+- **Type colors / Individual colors** selects the family default or individual presentation colors.
+- **Show group shortcuts** adds a Group selection strip.
 
-The full Presets window additionally exposes family buttons and pool-color settings in its header. With Set armed, tapping a preset opens its local button presentation settings: title, icon, and button color. Those presentation choices are stored in desk data, scoped to the active show identity, and do not change the stored preset values.
+Use **SET** and a Preset for its local title, icon, and button color. These presentation choices stay with the desk; they do not change stored values.
 
-In **Desk Setup → Preferences → Defaults → Pools** or **Desktop settings**, two values control the square tile size for Groups, Presets, Cuelists, Macros, and Dynamics pools:
+For square tiles, **Desk Setup > Preferences > Defaults > Pools** and Desktop settings provide default and minimum widths. Increase the default for larger, fewer tiles. For an exact count filling a pane, choose **Fixed grid** in Pane Settings instead.
 
-- **Default pool tile width (px)** is the width a pane fits its columns to. Tiles stretch to fill the row. The default is 72 px, allowing three columns in a pane about 225 px wide. Larger values show fewer columns.
-- **Minimum pool tile width (px)** only applies when stretching would make tiles wider than 1.5 times the default width. The pane then adds one more column, as long as its tiles stay at least this wide. The default is 56 px. A minimum above the default width is treated as the default width.
-
-Tiles narrower than the default width show their text at 80% size. Both values are saved with the desk layout; a layout saved with the earlier single tile width uses that value as its default width. A Group pane with an explicit **Columns** value keeps that column count.
-
-![Preset pool pane](../../assets/screenshots/panes/presets.png)
+![Preset pool](../../assets/screenshots/panes/presets.png)
 
 ![Preset pool settings](../../assets/screenshots/panes/presets-settings.png)
 
 ## Group pool
 
-The Group pool stores ordered fixture selections. Order matters for operations such as value spreading, and an intentionally stored empty Group remains different from an unused pool position. Tap a populated Group to select its current ordered members and place that Group reference on the command line, ready for an operation such as **DIV**. Record plus an empty tile stores the current selection; recording over an existing Group offers overwrite or merge.
+Groups store ordered selections. Tap one to select its members. Record onto an empty position stores the current selection; an existing Group offers the selected merge/overwrite workflow. Order affects spreading. A deliberately stored empty Group is different from an unused position.
 
-A populated tile shows its number, name, member count, and status information such as missing members, portable stored attributes, unsupported values, or whether it is derived or frozen. A selected Group is highlighted. Hold a populated tile to open its operational controls: adjust its Group master, select the live or frozen membership, refresh a frozen snapshot, detach a derived Group, replace membership, or undo the latest membership/programming change.
+Tiles show member counts and derived/frozen status. Hold one for membership, freeze/refresh, and Group-master controls. A Group Master limits member intensity without rewriting Cue or Programmer values. Missing fixture IDs are reported and skipped.
 
-The Group master limits the intensity of members when that Group is assigned to a playback fader. It does not rewrite their programmer or Cue values. Missing fixture IDs are reported and skipped; they do not turn the Group into an empty Group.
+**Pane configuration:** choose Type colors or Individual colors and the common tile layout. Membership edits belong to the Group, rather than Pane Settings.
 
-**Pane configuration:** **Type colors / Individual colors** chooses the shared Group default or explicit item colors for this pane. Its membership and Group-master controls are content operations, not pane-layout settings. The common size and removal settings also apply.
-
-![Group pool pane](../../assets/screenshots/panes/groups.png)
+![Group pool](../../assets/screenshots/panes/groups.png)
 
 ## Fixture sheet
 
-The Fixture sheet is the detailed programming-state inspection and selection table. Each value cell shows the winning ordinary static base before Dynamic/FAT modulation. A running Dynamic keeps its icon and pool number beside the affected member but does not replace the base with its continuously sampled value. Open **DMX output** to inspect the changing resolved DMX result. While Preload is active, the Fixture sheet adds the pending base and Dynamic identity for comparison. Activating a row selects that fixture or logical head. A compact pane shows every eligible row in Fixture ID order and scrolls when the rows exceed the available pane height.
+Use the Fixture Sheet to select fixtures or heads and inspect current programming. It shows the ordinary static base; a Dynamic's icon identifies modulation without replacing that base with continuously changing values. Use **DMX** for the final changing output. Preload adds pending values for comparison.
 
-Venue fixtures, `visual_only` profiles, and complete fixture IDs beginning `0.` remain in Show Patch, Stage, selection, MVR, and the portable show but never appear as Fixture sheet rows. These independent scenery checks run before active-only, Cuelist, ordering, and head filters. An authoritative selection containing only hidden scenery therefore selects no unrelated Fixture sheet row.
+Simple fixtures have one row; multi-head fixtures have a shared `.0` row and individual `.1`, `.2`, etc. Venue scenery stays in Patch and Stage, outside this programming table.
 
-Simple fixtures use one row. Multi-head fixtures can expose a `.0` master row for shared parameters and `.1`, `.2`, and following logical-head rows for the individual heads.
-
-During PREV/NEXT stepping, every row in the remembered base selection remains visibly selected with a subdued patterned treatment, while the actual current fixture or head uses the prominent selected treatment and a stronger left marker. This distinction does not rely on color alone and remains visible whether HIGH is off or on. PREV and NEXT move the prominent marker without hiding the base; ALL restores ordinary complete-selection styling, and an external selection replaces both indications. Multi-head state appears on the actual subhead rows. When subheads are hidden, the visible master row retains a contained-base or contained-step indication so the active state is not hidden.
+While stepping with PREV/NEXT, the original selection stays subdued and the current fixture is prominent. **ALL** restores the complete selection. Hidden subheads retain an indication on their master row.
 
 ### Fixture sheet columns
 
-| Column | What it shows |
+| Column | Shows |
 | --- | --- |
-| **ID** | The fixture number. Multi-head targets add `.0` for the master and `.1` onward for logical heads. |
-| **Icon** | The fixture profile's stage icon. This column normally appears between ID and Name. |
-| **Name / type** | Operator name with optional manufacturer/mode. An assigned Group-master badge shows its effective fader/Flash state and explicitly reports when live Highlight output bypasses it. |
-| **Patch** | The fixture's universe and address, or **Unpatched**. This dedicated column is off by default. |
-| **Intensity** | The ordinary base level as a meter and percentage. During Preload, an arrow shows the pending base percentage. |
-| **Color** | An RGB swatch and label. Every swatch has the same thin light-grey boundary so black, dark, bright, absent, and mixed colors remain distinct from the table without changing the resolved fill. During Preload, a second swatch identifies the pending color. Fixtures without color parameters show the neutral fallback. |
-| **Position** | A position glyph and pan/tilt values. Fixtures without position parameters show a dash. During Preload, the pending pan/tilt values appear below. |
-| **Beam** | Authoritative semantic Beam bases such as an open state or indexed gobo. |
-| **Shapers** | Authoritative framing/shaper member bases. |
-| **Focus** | Authoritative focus, edge, frost, or zoom member bases. |
-| **Control** | Authoritative semantic fixture-control bases without exposing raw DMX. |
-| **Media** | Distinct Media Folder/File and, where supported, Mask Folder/File base pairs. |
+| **ID / Icon / Name** | Fixture identity, optional profile detail, and status. |
+| **Patch** | Universe/address or Unpatched; off by default. |
+| **Intensity** | Base percentage and pending Preload value. |
+| **Color** | Color swatch and name; a recalled Preset is named, otherwise the nearest known color appears in angle brackets. |
+| **Position** | Aim glyph and angles in degrees. |
+| **Beam / Shapers / Focus / Control** | The fixture's supported controls in those families. |
+| **Media** | Content and supported Mask folder/file values. |
 
-The **Columns** settings independently control ID, Icon, Name, Patch address, Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media. At least one column remains visible. Existing saved **Dimmer** visibility migrates to **Intensity**; newly available group columns do not turn themselves on in an existing layout. Source styling distinguishes current Programmer, Playback, and profile-default bases.
+Unsupported families show **—**, rather than an invented color or position. Source styling distinguishes Programmer, Playback, and profile defaults. A snowflake marks full or partial **FREEZE**; **INSIDE** identifies frozen subheads hidden by the current view.
 
-Freeze state appears in the Name cell as a blue snowflake status that is separate from selection,
-Highlight, Group-Master limitation, and patch state. `❄ FREEZE` is a full-output Freeze;
-`❄ FREEZE · Intensity · Color` (with the applicable family names) is a partial Freeze. A master row
-shown without its frozen subheads adds `INSIDE` so the state is not hidden by the head filter.
+**Fixture Sheet** settings provide **View**, **Columns**, and **Groups**:
 
-A column only reports attributes the lantern actually carries. A fixture without colour or without Position shows **—** in that column with no colour swatch and no position crosshair, so a frost-only or dimmer-only lantern is never given a preview it cannot honour. Where the lantern does carry the group and nothing drives it, the column shows the profile home value: physical white for colour and the default pose for Pan and Tilt. Pan and Tilt read in degrees as the pose the fixture is actually commanded to, the same value the Pan and Tilt encoders show; where that pose is not known the column shows **—** rather than a channel percentage.
+- **Compact mode:** Off shows text and graphics; **Icon only** and **Text only** use shorter rows. Status, selection, and Dynamic identity remain visible.
+- **Included heads:** All, No sub heads, or No master heads.
+- Choose Fixture ID or active-first ordering, active-only or Cuelist filtering, visible columns, and Group shortcuts.
 
-**Pane configuration:** **Fixture Sheet → Compact mode** has exactly **Off**, **Icon only**, and **Text only**. Off keeps the detailed 43 px presentation. Icon only uses deterministic 32 px rows, retains graphical base/Preload summaries, and removes ordinary value text. Text only uses the same 32 px rows, retains concise semantic base/Preload text, and removes decorative value graphics. Both compact modes narrow the ID column to 64 px and use a shorter 26 px table header; Icon only draws a smaller 20 px intensity meter with 4 px of space above and below it. Both compact modes keep Dynamic identities, source ownership, Group-master/Highlight status, fixture type, selection, and step markers. Configured columns are never dropped at a breakpoint; a small pane scrolls horizontally when the selected set still cannot fit. Each pane, the full built-in, and each fixed external Fixture Sheet persist their own desk-local mode, defaulting to Off without changing portable show data.
+Each pane keeps its own view. Narrow panes scroll rather than silently dropping configured columns.
 
-**Show active fixtures only** limits that pane to fixtures carrying Programmer values; this is useful beside a Cuelist Pool while recording looks. **Show group shortcuts** adds the Group strip. The common size and removal controls also apply. In the full Fixture Sheet window, open **Fixture Sheet** settings and use **View** for Compact mode, fixture heads, ordering, and filters; **Columns** for visible data and optional Name details; and **Groups** for the Group strip. **Included heads** defaults to **All**. Choose **No sub heads** to show only master rows with the fixture's bare ID, or **No master heads** to show only subhead rows without indentation. There is no per-row expand or collapse button. These full-sheet choices persist with the desk layout. Ordering can use Fixture ID or put active programmer fixtures first; filters can show only active fixtures or limit membership to one Cuelist.
+![Fixture Sheet](../../assets/screenshots/panes/fixtures.png)
 
-![Fixture sheet pane](../../assets/screenshots/panes/fixtures.png)
+![Icon-only view](../../assets/screenshots/panes/fixtures-icon-only.png)
 
-![Fixture sheet Icon-only compact mode](../../assets/screenshots/panes/fixtures-icon-only.png)
+![Text-only view](../../assets/screenshots/panes/fixtures-text-only.png)
 
-![Fixture sheet Text-only compact mode](../../assets/screenshots/panes/fixtures-text-only.png)
+![Fixture Sheet pane settings](../../assets/screenshots/panes/fixtures-settings.png)
 
-![Fixture sheet pane settings](../../assets/screenshots/panes/fixtures-settings.png)
+![Full-sheet view controls](../../assets/screenshots/workflows/fixture-sheet-settings-view.png)
 
-![Full Fixture Sheet view controls](../../assets/screenshots/workflows/fixture-sheet-settings-view.png)
-
-![Full Fixture Sheet column controls](../../assets/screenshots/workflows/fixture-sheet-settings-columns.png)
+![Full-sheet column controls](../../assets/screenshots/workflows/fixture-sheet-settings-columns.png)
 
 ## Media
 
-The Media window is available from **Shift + Stage** in Built-ins and from **Open Window**. Without a configured CITP/MSEX connection it says that no CITP Media Server is available and still shows the complete 0–255 Content and Mask folder/file configuration ranges. Endpoint setup remains under **Show Patch > Media Servers**. When a server connects, its advertised names, thumbnails, status, and controls reconcile into the same stable configuration surface without hiding unadvertised values.
+Open Media from **Shift + Stage** in Built-ins or **Open Window**. Choose **Server**, then a layer. Selecting a layer selects that logical head for the Programmer.
 
-Choose the physical master in **Server**, then choose one of its advertised logical layers. A layer touch replaces the desk's shared fixture selection with that exact logical head, so the Programmer, OSC, attached controls, and other panes continue to describe one authoritative selection. The Program output and layer thumbnails use the preview-source and layer identities advertised by the server; source number, layer number, and fixture sub-ID are not assumed to be interchangeable. Loading, stale, failed, unsupported, and offline states are shown beside the preview rather than drawn into the program image. An offline server reports a short reason - **Not responding**, **Connection refused**, **Unexpected reply**, or **Request rejected** - rather than the raw CITP protocol text; the underlying protocol error stays available as the status tooltip and in **Show Patch > Media Servers**.
+Configure server connections in **Show Patch > Media Servers**. Connected servers supply names and thumbnails. Without CITP, the complete numeric folder/file ranges remain available. Offline or unavailable previews show their reason.
 
-Every patched **ToskLight Audio Player** appears in **Server** alongside the Media Servers; several patched players remain several entries. The Audio Player is an Internal fixture with no DMX address and no CITP endpoint, so it is listed as **Internal** instead of Online or Offline, and the CITP note is not shown for it. Because audio has no rendered frame, its master preview shows a music note, and its layer image shows a music note with the live volume percentage and the addressed folder/file number above it. Browsing a player lists the folders and files of the audio library bound to it, named as the library holds them, because a player advertises nothing over CITP. Its Volume sits on the **Intensity** encoder group beside the other levels, and the patch shows the player with a music-note icon. Browsing a folder and file programs its Media Folder and Media File exactly as for a Media Server; a player patched before this change keeps its stored Audio Folder and Audio File attributes instead.
+Touching a folder browses it without changing output. Touching a file applies that folder and file together as one Programmer edit. Media encoders apply immediately. **Media / Mask** chooses which content pair to browse.
 
-Control sections never change shape between servers. A control whose attribute the addressed layer or Master head does not carry is shown greyed out in place rather than removed, so the same section always holds the same controls in the same order. A personality that reports no attribute set at all keeps every control enabled.
+Internal **ToskLight Audio Players** also appear in Server. They use the configured audio library, have no DMX or CITP endpoint, and show a music-note preview with live volume.
 
-**In point** and **Out point** on the **Playback** tab are typed, not dragged. Touch the value to open the entry keyboard and type the In point as `mm:ss.ff` from the clip's start and the Out point as `mm:ss.ff` before the clip's end; `m:ss.ff`, `ss.ff`, and whole seconds are accepted too. `ff` counts frames at the frame rate the ToskLight Media Server reports, which is set in its **Settings > Libraries > In and Out points** (25 fps by default), so `00:49.09` at 25 fps is sent as frame count 1234. The DMX channels still carry 16-bit frame counts, and an Out point of `00:00.00` shows **End of clip**. Seconds of 60 or more after a minute field, frames at or above the rate, and times beyond the 65535-frame maximum are refused with a message and nothing is sent. The desk never assumes a rate: while it is being read the control says so, and when the server cannot be read, is not connected through the ToskLight Media API, or does not report a rate, the control shows **Frame rate unknown** with the reason and a **Check frame rate again** button, and the points are shown and entered as frame counts until the rate is known.
+### Clip range
 
-**Clip length**, just above **In point**, is read-only. It shows the whole length of the clip the layer is set to, as its Media Server reports it over CITP, in the same `mm:ss.ff` as the points. While the rate is unknown it shows seconds. Changing In or Out never changes it; choosing another clip does. When the layer has no clip it reads **No clip**. When the server does not report a length for the clip it reads **Not reported**, and the desk does not guess one. Some third-party servers do not report lengths, and a still image has none.
+On **Playback**, touch **In point** or **Out point** and enter `mm:ss.ff`. In is measured from the start; Out is measured back from the end. A zero Out point means **End of clip**. Frames use the rate reported by ToskLight Media; when it is unavailable, the controls explain **Frame rate unknown** and accept frame counts.
 
-The **✕** at the right of **Clip length** is **Clear playback range**. One press sets both In and Out back to 0, so the whole clip plays again, with no further step and no confirmation. It is greyed out while both points are already 0.
+**Clip length** is read-only. **✕ Clear playback range** resets both points to zero immediately. Unsupported or unreported clip lengths remain explicitly marked.
 
-The folder and file pools separate browsing from live output. Touching a folder changes only the local draft and loads its files; it does not change Programmer values or DMX. Touching a file commits that folder and file together as one Programmer operation and one Undo step. It never exposes the newly browsed folder with the old live file. Media encoders remain immediate and do not use this staged touch workflow.
-
-**Media / Mask** always selects the corresponding complete numeric folder/file range. Advertised mask names and thumbnails reconcile into those slots; without that advertisement the values remain configurable through the patched layer's Programmer attributes and are identified as not advertised. Server-specific secondary controls still appear only when the fixture and connection advertise them. Library administration and connection setup stay outside this window.
-
-A saved Media pane keeps its selected server, layer, Media/Mask choice, content section, and secondary-region visibility as desk-local state. A disconnect, missing patch, or temporarily unsupported capability does not delete that pane or silently select another server. The pane explains the unavailable state and resumes the same stable identities when they return.
-
-**Pane configuration:** the selected server and layer, browser choice, main content section, and secondary-region visibility belong to this pane. Common size and removal controls also apply.
+A pane remembers its server, layer, browser, and section. Disconnecting does not silently switch it to another server. Greyed controls indicate attributes the selected layer cannot use.
 
 ## Stage
 
-The Stage is the spatial selection and visualization surface. In 2D it shows fixture symbols, position, color, intensity, and direction. In 3D it renders patched fixtures, multi-patch physical instances, beams, and visual-only Venue fixtures. Tap or marquee fixtures to select them; Shift extends a range and Control/Command toggles fixtures. **Follow Preload** changes the Stage from live output to the pending Preload visualization.
+Use Stage for spatial selection and inspection. **2D** shows the plan, **3D** shows models and aim, and **3D Viz** adds rendered light. Tap or marquee fixtures; Shift extends selection and Control/Command toggles it.
 
-**Pane configuration:**
+**Pane configuration:** choose the view, **Follow Preload**, and Group shortcuts. Each pane keeps its own camera, so Live and Preload views can coexist.
 
-- **Stage view** selects 2D or 3D for this pane.
-- **Follow Preload** makes this pane a dedicated preview surface while another Stage pane can remain live.
-- **Show group shortcuts** adds the Group strip.
-- The common size and removal controls apply per pane.
-
-Drag to orbit, scroll to zoom, use the middle button to pan, and use the secondary button to slide
-the view. **Follow Preload** shows the pending values where present; a preloaded Dynamic remains
-live because it is a running function. **2D** is the rig plan, **3D** is the model-and-aim view,
-and **3D Viz** adds the rendered light picture. A clearly reported unavailable Stage never affects
-programming, playback, or DMX output.
+Drag to orbit, scroll to zoom, middle-drag to pan, and secondary-drag to slide. An unavailable Stage does not stop programming or DMX output.
 
 ### Stage is a selection and viewing surface
 
-Only the full Stage window exposes **Select fixtures** and **Navigate**. A Stage pane reflects the global mode, but it does not contain the controls that switch it.
+The full Stage window provides **Select fixtures** and **Navigate**. Navigate repurposes the encoder bank: **Position** controls camera X/Y/Z and Zoom, and **Direction** controls Pan/Tilt. These controls move the view, not the rig.
 
-With **Navigate** active, the desk's ordinary encoder bank replaces the Programmer attributes. On
-the renderer camera, **Position** provides X, Y, Z, and Zoom; **Direction** provides Pan and Tilt.
-The software encoders use the same tap, drag, wheel, arrow-key, and direct-value interactions as
-the Programmer encoders. Attached encoders turn in fine steps, press-turn in coarse steps, and
-open the same direct-value editor when pressed.
+Edit physical placement in **Show Patch** or Architect. Use **Open Stage Renderer** for visual feedback while patching and add visual-only scenery from Venue profiles.
 
-Positions are edited in **Show Patch**: physical patch and multi-patch placement provides every fixture's location and rotation, with **Open Stage Renderer** for visual feedback while patching. Add a truss, platform, curtain, or other scenery object from the **Venue** manufacturer in **Show Patch**; these visual-only fixtures receive `0.x` fixture IDs and no DMX address.
+| Render quality | Appearance |
+| --- | --- |
+| **Draft** | Basic light cones. |
+| **Standard** | Adds gobo patterns. |
+| **High** | Adds feathered edges, falloff, and shadows. |
+| **Ultra** | Adds uneven, drifting haze. |
 
-A Stage pane stores its own view and side independently, so a Live pane and a **Follow Preload**
-pane can look at the rig from different places.
+**Environment brightness** reveals unlit scenery; **Background** changes the room color; **Exposure** is a fixed brightness multiplier, rather than automatic exposure. **Floor grid** adds metre-spaced reference lines.
 
-**Render quality** applies to the 3D Viz view and is a ladder of what is in the beam, each tier
-adding to the one below it:
+With labels enabled, **UV** means native UV drive is active. The estimation mark means visible color prediction is incomplete. Stage does not simulate fluorescence or replace UV with purple. Verify the real fixture for critical focus and color.
 
-- **Draft** — the light cones, and nothing in them.
-- **Standard** — and the gobos, so a projected pattern is a pattern rather than a plain cone.
-- **High** — and the fall-off: a feathered field edge, the light dropping away across the pool, and
-  shadows where a beam meets something opaque.
-- **Ultra** — and the haze itself, drifting and uneven, so a beam through it varies along its
-  length instead of running through a uniform slab.
-
-On a fresh desk, **Environment brightness** starts at 5%, leaving an unlit rig just visible without
-flattening the fixtures' output. Changing it is persisted with the desk layout; an existing saved
-value, including zero, remains authoritative when that layout is reopened.
-
-**Floor grid** lays a dark reference grid of lines on the ground plane, a metre apart, with the
-centre lines drawn stronger. It is lines rather than a surface: it takes no light and hides nothing
-under it.
-
-**Background** is the colour behind the rig — the room rather than the show — and applies to every
-Stage view. It is very dark and slightly blue by default.
-
-Exposure is fixed. The Stage does not adapt to how much light the rig is producing the way an eye
-does, because a desk has to answer "how bright is this" with the same picture every time: taking a
-rig down has to look like taking a rig down, across the whole of the fader rather than the bottom
-of it. The **Exposure** trim is the operator's own multiplier over that.
-
-With fixture labels enabled, **UV** beside a fixture number means native UV drive is active. A small steady triangle means its visible color prediction is estimated or incomplete. These optional marks include every head, including a UV-only head. Stage shows known visible output; it does not replace ultraviolet with purple or simulate fluorescence. The marks do not open messages or interrupt programming.
-
-Stage receives authoritative Live and Preload output from the engine. A disconnected view freezes its last coherent state and reconnects without blocking Programmer, Playback, command handling, or physical output.
+Close the renderer when not needed, or lower quality while arranging the rig.
 
 ![Native Stage rendering](../../assets/screenshots/panes/stage.png)
 
 ![Stage pane settings](../../assets/screenshots/panes/stage-settings.png)
 
-![Stage controls and 2D plan](../../assets/screenshots/workflows/stage-window-2d.png)
+![Stage controls and plan](../../assets/screenshots/workflows/stage-window-2d.png)
 
 ## Visualization
 
-The Visualization pane monitors raw DMX or resolved fixture attributes without changing output.
-Add rows and text, number, bar, or graph widgets in **Pane Settings → Visualization**. Configure the
-source, range, scale, and display style; unavailable sources are identified rather than shown as
-live values.
+Visualization monitors DMX or fixture attributes without changing output. In **Pane Settings > Visualization**, add text, number, bar, or graph widgets and configure their source, range, scale, and style. Unavailable sources are marked.
 
 ## Channels
 
-The Channels pane is a direct programming bank ordered by Fixture ID. In the default **Intensity only** mode, it assigns one fader to each fixture. Faders fill each page from left to right across the first row and then continue on the second row. Each fader is labelled with the fixture's name, carries its Fixture ID in the top corner for command-line addressing, is followed by **Intensity**, and shows the resolved percentage. A fixture with no name of its own falls back to its profile name, and an unnamed fixture on an unnamed profile falls back to **Fixture _ID_**. Moving it writes an intensity value into the programmer; tapping its card selects the fixture. A disabled fader replaces the attribute label with its current reason, such as **Empty position**, **Programmer values are loading**, or **Preload control is unavailable**. The reason disappears as soon as that fader becomes available.
+Channels provides direct programming faders. **Intensity only** gives each level-capable fixture a fader; **All channels** groups its attributes in profile order. Touching a card selects its fixture; moving a fader changes the Programmer.
 
-In **Pane Settings → Channels**, choose **Intensity only** or **All channels** for that pane. **All channels** keeps fixtures grouped in Fixture ID order and shows each fixture's attributes in profile-authored order. Each fader identifies the fixture by name, with its Fixture ID and the attribute it controls. The full Channels window offers the same display choice in **Channel Settings**, along with the number of faders per row.
+Use **Pane Settings > Channels** for display mode. The full **Channel Settings** also controls faders per row and offers pages. A compact pane stays on the first bank. See [Channel Faders](07-channel-faders.md).
 
-The full Channels window has previous/next controls and a page picker with at least eight channel pages. The compact pane hides that header, so it remains on channels 1-20 and cannot change pages from inside the pane. Use the full window when access beyond the first bank is required.
-
-**Pane configuration:** only the common size and removal controls.
-
-![Channels pane](../../assets/screenshots/panes/channels.png)
+![Channel faders](../../assets/screenshots/panes/channels.png)
 
 ## Dynamics
 
-The Dynamics pool holds numbered animated values. Tap a tile to toggle it for the current ordered
-selection, or Shift-click to edit it; use **SET** followed by a Playback to assign it. The editor
-shows **Lanes**, **Phase**, and **Speed** for attribute curves, target spreading, and BPM/Speed
-Group control. **Take Selection** stores a target (a single Group stays live; other selections are
-frozen); a stored target takes precedence over any active selection. **Clear Selection** removes
-it. A Dynamic without a stored target never runs on every fixture by itself: with nothing
-selected, the first tap selects every fixture that can run it (a fixture with a channel one of
-its lanes drives) and starts nothing; the second tap starts it on that selection. Use a Stage pane for Live or Follow Preload visualization.
+Tap a Dynamic to toggle it on the selection; Shift-click opens its editor. Use **SET** and a Playback to assign it. The editor's **Lanes**, **Phase**, and **Speed** define animation, spreading, and timing.
 
-**Pane configuration:** only common size and removal controls.
+**Take Selection** stores a target. A single Group remains live; other selections are frozen. **Clear Selection** removes the target. With no stored target or selected fixtures, the first tap selects compatible fixtures and the second starts the Dynamic.
+
+Use a Live or Follow Preload Stage to inspect it. See [Programming Windows](06-programming-windows.md#dynamic-lanes) for lane units and examples.
 
 ![Dynamics editor](../../assets/screenshots/panes/dynamics.png)

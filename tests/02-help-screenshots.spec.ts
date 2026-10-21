@@ -14,170 +14,271 @@ test.use({ viewport: { width: 1600, height: 1100 } });
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SCREENSHOT_DIR = path.join(ROOT, "docs/help/assets/screenshots");
 const LIVE_CAPTURE_DIR = path.join(
-  ROOT,
-  ".artifacts/test/help-screenshots/live-app",
+	ROOT,
+	".artifacts/test/help-screenshots/live-app",
 );
 const PANE_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "panes");
 const WORKFLOW_SCREENSHOT_DIR = path.join(SCREENSHOT_DIR, "workflows");
 const SCREENSHOT_TEXT_FILE = "documentation-cue-notes.md";
 const screenshotManifest = JSON.parse(
-  fsSync.readFileSync(
-    path.join(ROOT, "docs/help/screenshot-manifest.json"),
-    "utf8",
-  ),
-) as { entries: Array<{ file: string; source: "storybook" | "live-app" | "native-still" }> };
+	fsSync.readFileSync(
+		path.join(ROOT, "docs/help/screenshot-manifest.json"),
+		"utf8",
+	),
+) as {
+	entries: Array<{
+		file: string;
+		source: "storybook" | "live-app" | "native-still";
+	}>;
+};
 const liveScreenshotFiles = new Set(
-  screenshotManifest.entries
-    .filter((entry) => entry.source === "live-app")
-    .map((entry) => entry.file),
+	screenshotManifest.entries
+		.filter((entry) => entry.source === "live-app")
+		.map((entry) => entry.file),
 );
 
-interface ShowEntry { id: string; name: string }
-interface VersionedObject<T = Record<string, unknown>> { id: string; revision: number; body: T }
-interface PatchedFixtureBody { fixture_id: string; fixture_number?: number; logical_heads?: Array<{ fixture_id: string }> }
+interface ShowEntry {
+	id: string;
+	name: string;
+}
+interface VersionedObject<T = Record<string, unknown>> {
+	id: string;
+	revision: number;
+	body: T;
+}
+interface PatchedFixtureBody {
+	fixture_id: string;
+	fixture_number?: number;
+	logical_heads?: Array<{ fixture_id: string }>;
+}
 
-test("captures help and README screenshots from the default show desk @ui @docs", async ({ page, desk, api }) => {
-  page.setDefaultTimeout(12_000);
-  await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
-  await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "panes"), { recursive: true });
-  await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "workflows"), { recursive: true });
-  await fs.mkdir(PANE_SCREENSHOT_DIR, { recursive: true });
-  await fs.mkdir(WORKFLOW_SCREENSHOT_DIR, { recursive: true });
-  await Promise.all(
-    (await fs.readdir(PANE_SCREENSHOT_DIR))
-      .filter((file) => liveScreenshotFiles.has(`panes/${file}`))
-      .map((file) => fs.unlink(path.join(PANE_SCREENSHOT_DIR, file))),
-  );
-  await Promise.all(
-    (await fs.readdir(WORKFLOW_SCREENSHOT_DIR))
-      .filter((file) => liveScreenshotFiles.has(`workflows/${file}`))
-      .map((file) => fs.unlink(path.join(WORKFLOW_SCREENSHOT_DIR, file))),
-  );
-  await openSeededDefaultStageShow(api);
+test("captures help and README screenshots from the default show desk @ui @docs", async ({
+	page,
+	desk,
+	api,
+}) => {
+	page.setDefaultTimeout(12_000);
+	await fs.mkdir(SCREENSHOT_DIR, { recursive: true });
+	await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "panes"), { recursive: true });
+	await fs.mkdir(path.join(LIVE_CAPTURE_DIR, "workflows"), { recursive: true });
+	await fs.mkdir(PANE_SCREENSHOT_DIR, { recursive: true });
+	await fs.mkdir(WORKFLOW_SCREENSHOT_DIR, { recursive: true });
+	await Promise.all(
+		(await fs.readdir(PANE_SCREENSHOT_DIR))
+			.filter((file) => liveScreenshotFiles.has(`panes/${file}`))
+			.map((file) => fs.unlink(path.join(PANE_SCREENSHOT_DIR, file))),
+	);
+	await Promise.all(
+		(await fs.readdir(WORKFLOW_SCREENSHOT_DIR))
+			.filter((file) => liveScreenshotFiles.has(`workflows/${file}`))
+			.map((file) => fs.unlink(path.join(WORKFLOW_SCREENSHOT_DIR, file))),
+	);
+	await openSeededDefaultStageShow(api);
+	await configureEightDocumentationPlaybacks(api, "main", 1);
 
-  await desk.open(api.baseUrl);
-  await showDockMode(page, "desks");
-  await page.getByRole("button", { name: /Programming/ }).click();
-  await selectFixtures(page, desk, "1 + 2 + 3 + 4 + 5 + 6");
-  await setDimmerByTouch(page, 50);
-  await setStagePaneTo3d(page);
-  await expect(page.locator(".group-strip .group-card").filter({ hasText: "Front Fresnels" })).toBeVisible();
-  await expect(page.locator(".control-section")).toContainText("50%");
-  await page.waitForTimeout(500);
-  await page.locator(".control-section.programmer").screenshot({ path: shot("software-keypad.png") });
-  await page.screenshot({ path: shot("default-desk-overview.png"), fullPage: true });
+	await desk.open(api.baseUrl);
+	await showDockMode(page, "desks");
+	await page.getByRole("button", { name: /Programming/ }).click();
+	await selectFixtures(page, desk, "1 + 2 + 3 + 4 + 5 + 6");
+	await setDimmerByTouch(page, 50);
+	await setStagePaneTo3d(page);
+	await expect(
+		page
+			.locator(".group-strip .group-card")
+			.filter({ hasText: "Front Fresnels" }),
+	).toBeVisible();
+	await expect(page.locator(".control-section")).toContainText("50%");
+	await page.waitForTimeout(500);
+	await page
+		.locator(".control-section.programmer .numeric-pad.programmer-number-block")
+		.screenshot({ path: shot("software-keypad.png") });
+	await page.screenshot({
+		path: shot("default-desk-overview.png"),
+		fullPage: true,
+	});
 
-  await openCuelistDetailWithPlayback(page);
-  await expect(page.locator(".control-section.playbacks")).toBeVisible();
-  await expect(page.locator(".cue-table tbody tr")).toHaveCount(6);
-  await expect(page.locator(".playback-fader-bank")).toContainText("Front Fresnels");
-  await page.screenshot({ path: shot("cuelist-playback.png"), fullPage: true });
+	await api.playbackAction({ page: 1, position: 1 }, "go");
+	await openCuelistDetailWithPlayback(page);
+	await expect(page.locator(".control-section.playbacks")).toBeVisible();
+	await expect(page.locator(".cue-table tbody tr")).toHaveCount(6);
+	await expect(page.locator(".playback-fader-bank")).toContainText(
+		"Front Fresnels",
+	);
+	await expect(
+		page.locator(
+			".control-section.playbacks .playback-fader-bank article[data-playback-slot]",
+		),
+	).toHaveCount(8);
+	await page.screenshot({ path: shot("cuelist-playback.png"), fullPage: true });
 
-  await showDockMode(page, "builtins");
-  await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
-  await expect(page.locator(".fixture-window")).toBeVisible();
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "on" }, true, undefined, { deskId: api.session!.desk.id });
-  await page.waitForTimeout(175);
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "next" }, true, undefined, { deskId: api.session!.desk.id });
-  await expect(page.locator('.fixture-window [data-step-selection="active"]')).toHaveCount(1);
-  await expect(page.locator('.fixture-window [data-step-selection="base"]').first()).toBeVisible();
-  await page.screenshot({ path: shot("fixture-sheet-programmer.png"), fullPage: true });
-  await api.request("POST", "/api/v2/output/highlight/actions", { request_id: crypto.randomUUID(), action: "off" }, true, undefined, { deskId: api.session!.desk.id });
+	await showDockMode(page, "builtins");
+	await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
+	await expect(page.locator(".fixture-window")).toBeVisible();
+	await api.request(
+		"POST",
+		"/api/v2/output/highlight/actions",
+		{ request_id: crypto.randomUUID(), action: "on" },
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
+	await page.waitForTimeout(175);
+	await api.request(
+		"POST",
+		"/api/v2/output/highlight/actions",
+		{ request_id: crypto.randomUUID(), action: "next" },
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
+	await expect(
+		page.locator('.fixture-window [data-step-selection="active"]'),
+	).toHaveCount(1);
+	await expect(
+		page.locator('.fixture-window [data-step-selection="base"]').first(),
+	).toBeVisible();
+	await page.screenshot({
+		path: shot("fixture-sheet-programmer.png"),
+		fullPage: true,
+	});
+	await api.request(
+		"POST",
+		"/api/v2/output/highlight/actions",
+		{ request_id: crypto.randomUUID(), action: "off" },
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
 
-  await captureWorkflowReference(page);
-  const patch = await api.patch();
-  const selectedDmx = patch.fixtures.find((fixture: any) => fixture.universe === 1 && fixture.address != null)
-    ?? patch.fixtures.find((fixture: any) => fixture.universe != null && fixture.address != null);
-  if (!selectedDmx || selectedDmx.universe == null || selectedDmx.address == null) throw new Error("The documentation show has no patched DMX channel");
-  await capturePaneReference(page, { universe: selectedDmx.universe, address: selectedDmx.address });
+	await captureWorkflowReference(page);
+	const patch = await api.patch();
+	const selectedDmx =
+		patch.fixtures.find(
+			(fixture: any) => fixture.universe === 1 && fixture.address != null,
+		) ??
+		patch.fixtures.find(
+			(fixture: any) => fixture.universe != null && fixture.address != null,
+		);
+	if (
+		!selectedDmx ||
+		selectedDmx.universe == null ||
+		selectedDmx.address == null
+	)
+		throw new Error("The documentation show has no patched DMX channel");
+	await capturePaneReference(page, api, {
+		universe: selectedDmx.universe,
+		address: selectedDmx.address,
+	});
 
-  await page.getByRole("button", { name: /Open show menu/ }).click();
-  await page.getByRole("button", { name: "Help", exact: true }).click();
-  await expect(page.locator(".help-window")).toBeVisible();
-  await page.screenshot({ path: shot("help-command-line.png"), fullPage: true });
+	await page.getByRole("button", { name: /Open show menu/ }).click();
+	await page.getByRole("button", { name: "Help", exact: true }).click();
+	await expect(page.locator(".help-window")).toBeVisible();
+	await page.screenshot({
+		path: shot("help-command-line.png"),
+		fullPage: true,
+	});
 
-  const expectedPaneFiles = screenshotManifest.entries
-    .filter((entry) => entry.source === "live-app" && entry.file.startsWith("panes/"))
-    .map((entry) => path.basename(entry.file))
-    .sort();
-  await expect.poll(async () => (await fs.readdir(PANE_SCREENSHOT_DIR)).filter((file) => liveScreenshotFiles.has(`panes/${file}`)).sort()).toEqual(expectedPaneFiles);
-  const expectedWorkflowFiles = workflowScreenshots.filter((file) =>
-    liveScreenshotFiles.has(`workflows/${file}`),
-  );
-  await expect.poll(async () => (await fs.readdir(WORKFLOW_SCREENSHOT_DIR)).filter((file) => liveScreenshotFiles.has(`workflows/${file}`)).sort()).toEqual(expectedWorkflowFiles);
+	const expectedPaneFiles = screenshotManifest.entries
+		.filter(
+			(entry) => entry.source === "live-app" && entry.file.startsWith("panes/"),
+		)
+		.map((entry) => path.basename(entry.file))
+		.sort();
+	await expect
+		.poll(async () =>
+			(await fs.readdir(PANE_SCREENSHOT_DIR))
+				.filter((file) => liveScreenshotFiles.has(`panes/${file}`))
+				.sort(),
+		)
+		.toEqual(expectedPaneFiles);
+	const expectedWorkflowFiles = workflowScreenshots.filter((file) =>
+		liveScreenshotFiles.has(`workflows/${file}`),
+	);
+	await expect
+		.poll(async () =>
+			(await fs.readdir(WORKFLOW_SCREENSHOT_DIR))
+				.filter((file) => liveScreenshotFiles.has(`workflows/${file}`))
+				.sort(),
+		)
+		.toEqual(expectedWorkflowFiles);
 });
 
 function shot(file: string): string {
-  return capturePath(file);
+	return capturePath(file);
 }
 
 function workflowShot(file: string): string {
-  return capturePath(`workflows/${file}`);
+	return capturePath(`workflows/${file}`);
 }
 
 async function showDockMode(page: Page, mode: "desks" | "builtins") {
-  const toggle = page.getByRole("button", { name: "Desktops / Built-ins", exact: true });
-  if ((await toggle.getAttribute("data-dock-mode")) !== mode) {
-    await toggle.click();
-  }
+	const toggle = page.getByRole("button", {
+		name: "Desktops / Built-ins",
+		exact: true,
+	});
+	if ((await toggle.getAttribute("data-dock-mode")) !== mode) {
+		await toggle.click();
+	}
 }
 
 const workflowScreenshots = [
-  "desk-setup-inputs.png",
-  "desk-setup-lock.png",
-  "desk-setup-network-api.png",
-  "desk-setup-output-engine.png",
-  "desk-setup-screens.png",
-  "desk-setup-shows-recovery.png",
-  "desk-setup-timecode.png",
-  "fixture-library-create.png",
-  "fixture-library-import.png",
-  "fixture-library-mode-editor.png",
-  "fixture-library.png",
-  "fixture-sheet-settings-columns.png",
-  "fixture-sheet-settings-view.png",
-  "mvr-export.png",
-  "mvr-new-show.png",
-  "patch-add-fixture.png",
-  "show-load-revisions.png",
-  "show-menu.png",
-  "show-patch.png",
-  "stage-settings.png",
-  "stage-window-2d.png",
+	"desk-setup-inputs.png",
+	"desk-setup-lock.png",
+	"desk-setup-network-api.png",
+	"desk-setup-output-engine.png",
+	"desk-setup-screens.png",
+	"desk-setup-shows-recovery.png",
+	"desk-setup-timecode.png",
+	"fixture-library-create.png",
+	"fixture-library-import.png",
+	"fixture-library-mode-editor.png",
+	"fixture-library.png",
+	"fixture-sheet-settings-columns.png",
+	"fixture-sheet-settings-view.png",
+	"mvr-export.png",
+	"mvr-new-show.png",
+	"patch-add-fixture.png",
+	"show-load-revisions.png",
+	"show-menu.png",
+	"show-patch.png",
+	"stage-settings.png",
+	"stage-window-2d.png",
 ].sort();
 
 async function openSeededDefaultStageShow(api: ApiDriver): Promise<ShowEntry> {
-  const bytes = await fs.readFile(new URL("./fixtures/default-stage.show", import.meta.url));
-  const show = await api.createShow<ShowEntry>({
-    // Each run gets a fresh desk data directory, so the operator-facing name can stay stable.
-    name: "Spring Tour",
-    data_base64: bytes.toString("base64"),
-    overwrite: false,
-  });
-  await api.openShow(show.id, { transition: "hold_current" });
-  await seedScreenshotProgramming(api, show.id);
-  await api.saveShowRevision(show.id, "Technical rehearsal");
-  await api.saveShowRevision(show.id, "Opening night");
-  return show;
+	const bytes = await fs.readFile(
+		new URL("./fixtures/default-stage.show", import.meta.url),
+	);
+	const show = await api.createShow<ShowEntry>({
+		// Each run gets a fresh desk data directory, so the operator-facing name can stay stable.
+		name: "Spring Tour",
+		data_base64: bytes.toString("base64"),
+		overwrite: false,
+	});
+	await api.openShow(show.id, { transition: "hold_current" });
+	await seedScreenshotProgramming(api, show.id);
+	await api.saveShowRevision(show.id, "Technical rehearsal");
+	await api.saveShowRevision(show.id, "Opening night");
+	return show;
 }
 
 // The second entry is the card the Open Window catalog offers, which is not always the pane's own
 // title: the catalog files the pool, its Cues, and Cuelist settings under one "Cuelists" card.
 const paneReference = [
-  ["presets", "Preset pool", "presets", "Pool"],
-  ["groups", "Group pool", "groups", null],
-  ["fixtures", "Fixture sheet", "fixtures", "Shortcuts"],
-  ["stage", "Stage", "stage", "Stage"],
-  ["cuelist_pool", "Cuelists", "cuelist-pool", null],
-  ["cues", "Cues", "cues", null],
-  ["cuelists", "Cuelists", "cuelists", null],
-  ["playbacks", "Playbacks", "virtual-playbacks", "Playbacks"],
-  ["file_manager", "File Manager", "file-manager", null],
-  ["text_editor", "Text Editor", "text-editor", "Text Editor"],
-  ["channels", "Channels", "channels", null],
-  ["dynamics", "Dynamics", "dynamics", null],
-  ["dmx", "DMX output", "dmx", null],
-  ["help", "Help", "help", null],
+	["presets", "Preset pool", "presets", "Pool"],
+	["groups", "Group pool", "groups", null],
+	["fixtures", "Fixture sheet", "fixtures", "Shortcuts"],
+	["stage", "Stage", "stage", "Stage"],
+	["cuelist_pool", "Cuelists", "cuelist-pool", null],
+	["cues", "Cues", "cues", null],
+	["cuelists", "Cuelists", "cuelists", null],
+	["playbacks", "Playbacks", "virtual-playbacks", "Playbacks"],
+	["file_manager", "File Manager", "file-manager", null],
+	["text_editor", "Text Editor", "text-editor", "Text Editor"],
+	["channels", "Channels", "channels", null],
+	["dynamics", "Dynamics", "dynamics", null],
+	["dmx", "DMX output", "dmx", null],
+	["help", "Help", "help", null],
 ] as const;
 
 /**
@@ -185,408 +286,753 @@ const paneReference = [
  * card. A card names the window and describes what it is for, so it is matched on the name alone.
  */
 async function openCatalogCard(page: Page, title: string) {
-  const dialog = page.getByRole("dialog", { name: "Open Window" });
-  const card = dialog.getByRole("button").filter({ has: page.getByText(title, { exact: true }) });
-  for (const tab of await dialog.getByRole("tab").all()) {
-    await tab.click();
-    if (await card.count()) {
-      await card.first().click();
-      return;
-    }
-  }
-  throw new Error(`The Open Window catalog offers no "${title}" window`);
+	const dialog = page.getByRole("dialog", { name: "Open Window" });
+	const card = dialog
+		.getByRole("button")
+		.filter({ has: page.getByText(title, { exact: true }) });
+	for (const tab of await dialog.getByRole("tab").all()) {
+		await tab.click();
+		if (await card.count()) {
+			await card.first().click();
+			return;
+		}
+	}
+	throw new Error(`The Open Window catalog offers no "${title}" window`);
 }
 
 async function captureWorkflowReference(page: Page) {
-  const openShowMenu = async () => {
-    await page.getByRole("button", { name: /Open show menu/ }).click();
-    await expect(page.locator(".show-modal")).toBeVisible();
-  };
-  const closeNested = async (selector: string) => {
-    const modal = page.locator(selector);
-    // The MVR modal offers its file chooser straight away, and that chooser sits above whatever
-    // opened it.
-    const picker = page.getByRole("dialog", { name: "Choose files or folders" });
-    if (await picker.count()) {
-      await picker.getByRole("button", { name: "Close File Manager" }).click();
-      await expect(picker).toBeHidden();
-    }
-    // Modals close via a legacy ".modal-close" button or a ModalTitleBar "Close …" action.
-    const legacyClose = modal.locator(".modal-close");
-    const titleClose = modal.locator(".ui-modal-title-close:visible");
-    if (await legacyClose.count()) await legacyClose.click();
-    else if (await titleClose.count()) await titleClose.first().click();
-    else await modal.getByRole("button", { name: /^Close / }).first().click();
-    await expect(modal).toBeHidden();
-  };
+	const openShowMenu = async () => {
+		await page.getByRole("button", { name: /Open show menu/ }).click();
+		await expect(page.locator(".show-modal")).toBeVisible();
+	};
+	const closeNested = async (selector: string) => {
+		const modal = page.locator(selector);
+		// The MVR modal offers its file chooser straight away, and that chooser sits above whatever
+		// opened it.
+		const picker = page.getByRole("dialog", {
+			name: "Choose files or folders",
+		});
+		if (await picker.count()) {
+			await picker.getByRole("button", { name: "Close File Manager" }).click();
+			await expect(picker).toBeHidden();
+		}
+		// Modals close via a legacy ".modal-close" button or a ModalTitleBar "Close …" action.
+		const legacyClose = modal.locator(".modal-close");
+		const titleClose = modal.locator(".ui-modal-title-close:visible");
+		if (await legacyClose.count()) await legacyClose.click();
+		else if (await titleClose.count()) await titleClose.first().click();
+		else
+			await modal
+				.getByRole("button", { name: /^Close / })
+				.first()
+				.click();
+		await expect(modal).toBeHidden();
+	};
 
-  await openShowMenu();
-  await page.locator(".show-modal").getByRole("button", { name: "Enter Setup", exact: true }).hover();
-  await page.locator(".show-modal").screenshot({ path: workflowShot("show-menu.png") });
-  await page.getByRole("button", { name: "Load", exact: true }).click();
-  const loadShow = page.getByRole("dialog", { name: "Load show" });
-  await expect(loadShow.getByRole("button", { name: "Load Latest" }).first()).toBeVisible();
-  await loadShow.getByRole("button", { name: "Revisions for Spring Tour", exact: true }).click();
-  const revisions = page.getByRole("dialog", { name: "Revisions for Spring Tour", exact: true });
-  await expect(revisions.getByRole("row").filter({ hasText: "Latest Autosave" })).toBeVisible();
-  await expect(revisions.getByRole("row").filter({ hasText: "Technical rehearsal" })).toBeVisible();
-  await expect(revisions.getByRole("row").filter({ hasText: "Opening night" })).toBeVisible();
-  await revisions.screenshot({ path: workflowShot("show-load-revisions.png") });
-  await revisions.getByRole("button", { name: "Close revisions", exact: true }).click();
-  await closeNested(".load-show-modal");
-  // Save As writes the MVR archive straight to the chosen location and then shows the server's
-  // summary of that archive: where it went, what it carries and every export warning.
-  await page.getByRole("button", { name: "Save As", exact: true }).click();
-  const saveAs = page.getByRole("dialog", { name: "Save show" });
-  await saveAs.getByRole("button", { name: "Export MVR", exact: true }).click();
-  const exportSummary = saveAs.getByRole("status", { name: "MVR export summary" });
-  await expect(exportSummary).toContainText("Exported MVR to");
-  await expect(exportSummary).toContainText(/\d+ fixtures · \d+ scenery objects/u);
-  await expect(exportSummary).toContainText("Not included:");
-  await saveAs.screenshot({ path: workflowShot("mvr-export.png") });
-  await closeNested(".save-show-modal");
-  // Load from MVR offers its file chooser straight away; the archive just exported is the one an
-  // operator would preview before creating the show.
-  await page.getByRole("button", { name: "New Show", exact: true }).click();
-  await page.getByRole("button", { name: "Load from MVR", exact: true }).click();
-  const mvrPicker = page.getByRole("dialog", { name: "Choose files or folders" });
-  await mvrPicker.getByRole("button", { name: "Spring Tour.mvr, file" }).click();
-  await mvrPicker.getByRole("button", { name: "Select", exact: true }).click();
-  const importMvr = page.getByRole("dialog", { name: "MVR import" });
-  const importSummary = importMvr.getByRole("region", { name: "MVR source and destination" });
-  await expect(importSummary).toBeVisible();
-  await expect(importSummary).toContainText("Spring Tour.mvr → Spring Tour");
-  await expect(importSummary).toContainText(/\d+ fixtures · 0 scenery objects/);
-  await expect(importSummary.getByRole("status")).toContainText("0 required decisions remaining");
-  const fixtureCount = Number((await importSummary.textContent())?.match(/(\d+) fixtures/)?.[1]);
-  expect(fixtureCount).toBeGreaterThan(0);
-  await expect(importMvr.getByRole("region", { name: "Fixture address resolutions" })
-    .getByRole("article", { name: /^Import fixture / })).toHaveCount(fixtureCount);
-  await importMvr.screenshot({ path: workflowShot("mvr-new-show.png") });
-  await closeNested(".mvr-modal");
-  await page.getByRole("button", { name: "Show Patch", exact: true }).click();
+	await openShowMenu();
+	await page
+		.locator(".show-modal")
+		.getByRole("button", { name: "Enter Setup", exact: true })
+		.hover();
+	await page
+		.locator(".show-modal")
+		.screenshot({ path: workflowShot("show-menu.png") });
+	await page.getByRole("button", { name: "Load", exact: true }).click();
+	const loadShow = page.getByRole("dialog", { name: "Load show" });
+	await expect(
+		loadShow.getByRole("button", { name: "Load Latest" }).first(),
+	).toBeVisible();
+	await loadShow
+		.getByRole("button", { name: "Revisions for Spring Tour", exact: true })
+		.click();
+	const revisions = page.getByRole("dialog", {
+		name: "Revisions for Spring Tour",
+		exact: true,
+	});
+	await expect(
+		revisions.getByRole("row").filter({ hasText: "Latest Autosave" }),
+	).toBeVisible();
+	await expect(
+		revisions.getByRole("row").filter({ hasText: "Technical rehearsal" }),
+	).toBeVisible();
+	await expect(
+		revisions.getByRole("row").filter({ hasText: "Opening night" }),
+	).toBeVisible();
+	await revisions.screenshot({ path: workflowShot("show-load-revisions.png") });
+	await revisions
+		.getByRole("button", { name: "Close revisions", exact: true })
+		.click();
+	await closeNested(".load-show-modal");
+	// Save As writes the MVR archive straight to the chosen location and then shows the server's
+	// summary of that archive: where it went, what it carries and every export warning.
+	await page.getByRole("button", { name: "Save As", exact: true }).click();
+	const saveAs = page.getByRole("dialog", { name: "Save show" });
+	await saveAs.getByRole("button", { name: "Export MVR", exact: true }).click();
+	const exportSummary = saveAs.getByRole("status", {
+		name: "MVR export summary",
+	});
+	await expect(exportSummary).toContainText("Exported MVR to");
+	await expect(exportSummary).toContainText(
+		/\d+ fixtures · \d+ scenery objects/u,
+	);
+	await expect(exportSummary).toContainText("Not included:");
+	await saveAs.screenshot({ path: workflowShot("mvr-export.png") });
+	await closeNested(".save-show-modal");
+	// Load from MVR offers its file chooser straight away; the archive just exported is the one an
+	// operator would preview before creating the show.
+	await page.getByRole("button", { name: "New Show", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Load from MVR", exact: true })
+		.click();
+	const mvrPicker = page.getByRole("dialog", {
+		name: "Choose files or folders",
+	});
+	await mvrPicker
+		.getByRole("button", { name: "Spring Tour.mvr, file" })
+		.click();
+	await mvrPicker.getByRole("button", { name: "Select", exact: true }).click();
+	const importMvr = page.getByRole("dialog", { name: "MVR import" });
+	const importSummary = importMvr.getByRole("region", {
+		name: "MVR source and destination",
+	});
+	await expect(importSummary).toBeVisible();
+	await expect(importSummary).toContainText("Spring Tour.mvr → Spring Tour");
+	await expect(importSummary).toContainText(/\d+ fixtures · 0 scenery objects/);
+	await expect(importSummary.getByRole("status")).toContainText(
+		"0 required decisions remaining",
+	);
+	const fixtureCount = Number(
+		(await importSummary.textContent())?.match(/(\d+) fixtures/)?.[1],
+	);
+	expect(fixtureCount).toBeGreaterThan(0);
+	await expect(
+		importMvr
+			.getByRole("region", { name: "Fixture address resolutions" })
+			.getByRole("article", { name: /^Import fixture / }),
+	).toHaveCount(fixtureCount);
+	await importMvr.screenshot({ path: workflowShot("mvr-new-show.png") });
+	await closeNested(".mvr-modal");
+	await page.getByRole("button", { name: "Show Patch", exact: true }).click();
 
-  await expect(page.locator(".patch-window")).toBeVisible();
-  await page.locator(".patch-window").screenshot({ path: workflowShot("show-patch.png") });
-  await page.getByRole("button", { name: "+ Add fixture", exact: true }).click();
-  await expect(page.locator(".fixture-browser-modal")).toBeVisible();
-  await page.locator(".fixture-browser-modal").screenshot({ path: workflowShot("patch-add-fixture.png") });
-  await page.getByRole("button", { name: "Close Add fixture", exact: true }).click();
+	await expect(page.locator(".patch-window")).toBeVisible();
+	await page
+		.locator(".patch-window")
+		.screenshot({ path: workflowShot("show-patch.png") });
+	await page
+		.getByRole("button", { name: "+ Add fixture", exact: true })
+		.click();
+	await expect(page.locator(".fixture-browser-modal")).toBeVisible();
+	await page
+		.locator(".fixture-browser-modal")
+		.screenshot({ path: workflowShot("patch-add-fixture.png") });
+	await page
+		.getByRole("button", { name: "Close Add fixture", exact: true })
+		.click();
 
-  await openShowMenu();
-  await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
-  await expect(page.locator(".setup-window")).toBeVisible();
-  const setupSections = [
-    ["Shows & recovery", "desk-setup-shows-recovery.png"],
-    ["Others", "desk-setup-inputs.png"],
-    ["Outputs", "desk-setup-output-engine.png"],
-    ["Timecode", "desk-setup-timecode.png"],
-    ["Network & Inputs", "desk-setup-network-api.png"],
-    ["Screens & playback", "desk-setup-screens.png"],
-  ] as const;
-  for (const [section, file] of setupSections) {
-    await page.locator(".setup-window nav").getByRole("button", { name: section, exact: true }).click();
-    await page.locator(".setup-window").screenshot({ path: workflowShot(file) });
-  }
-  await page.getByRole("button", { name: "Configure desk lock", exact: true }).click();
-  await page.getByRole("dialog", { name: "Desk Lock" }).screenshot({ path: workflowShot("desk-setup-lock.png") });
-  await page.getByRole("button", { name: "Close Desk Lock settings", exact: true }).click();
-  await page.locator(".setup-window nav").getByRole("button", { name: "Shows & recovery", exact: true }).click();
-  await page.getByRole("button", { name: "Open Fixture Library", exact: true }).click();
-  await expect(page.locator(".fixture-library-setup")).toBeVisible();
-  await page.getByRole("dialog", { name: "Fixture Library" }).screenshot({ path: workflowShot("fixture-library.png") });
-  await page.getByRole("button", { name: "Create fixture", exact: true }).click();
-  await page.locator(".fixture-profile-editor-modal").screenshot({ path: workflowShot("fixture-library-create.png") });
-  await page.getByRole("tab", { name: "Modes", exact: true }).click();
-  await page.getByRole("button", { name: "Edit channels for Default", exact: true }).click();
-  const modeEditor = page.getByRole("dialog", { name: "Edit Default mode" });
-  await expect(modeEditor).toBeVisible();
-  await captureModeEditorChannels(page);
-  await modeEditor.getByRole("button", { name: "Close mode editor", exact: true }).click();
-  await page.getByRole("button", { name: "Close fixture editor", exact: true }).click();
-  await page.getByRole("button", { name: "Discard changes", exact: true }).click();
-  await expect(page.locator(".fixture-profile-editor-modal")).toBeHidden();
-  await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
-  await page.locator(".gdtf-import-modal").screenshot({ path: workflowShot("fixture-library-import.png") });
-  await page.getByRole("button", { name: "Close Import GDTF", exact: true }).click();
-  await page.getByRole("button", { name: "Close Fixture Library", exact: true }).click();
+	await openShowMenu();
+	await page.getByRole("button", { name: "Enter Setup", exact: true }).click();
+	await expect(page.locator(".setup-window")).toBeVisible();
+	const setupSections = [
+		["Shows & recovery", "desk-setup-shows-recovery.png"],
+		["Others", "desk-setup-inputs.png"],
+		["Outputs", "desk-setup-output-engine.png"],
+		["Timecode", "desk-setup-timecode.png"],
+		["Network & Inputs", "desk-setup-network-api.png"],
+		["Screens & playback", "desk-setup-screens.png"],
+	] as const;
+	for (const [section, file] of setupSections) {
+		await page
+			.locator(".setup-window nav")
+			.getByRole("button", { name: section, exact: true })
+			.click();
+		await page
+			.locator(".setup-window")
+			.screenshot({ path: workflowShot(file) });
+	}
+	await page
+		.getByRole("button", { name: "Configure desk lock", exact: true })
+		.click();
+	await page
+		.getByRole("dialog", { name: "Desk Lock" })
+		.screenshot({ path: workflowShot("desk-setup-lock.png") });
+	await page
+		.getByRole("button", { name: "Close Desk Lock settings", exact: true })
+		.click();
+	await page
+		.locator(".setup-window nav")
+		.getByRole("button", { name: "Shows & recovery", exact: true })
+		.click();
+	await page
+		.getByRole("button", { name: "Open Fixture Library", exact: true })
+		.click();
+	await expect(page.locator(".fixture-library-setup")).toBeVisible();
+	await page
+		.getByRole("dialog", { name: "Fixture Library" })
+		.screenshot({ path: workflowShot("fixture-library.png") });
+	await page
+		.getByRole("button", { name: "Create fixture", exact: true })
+		.click();
+	await page
+		.locator(".fixture-profile-editor-modal")
+		.screenshot({ path: workflowShot("fixture-library-create.png") });
+	await page.getByRole("tab", { name: "Modes", exact: true }).click();
+	await page
+		.getByRole("button", { name: "Edit channels for Default", exact: true })
+		.click();
+	const modeEditor = page.getByRole("dialog", { name: "Edit Default mode" });
+	await expect(modeEditor).toBeVisible();
+	await captureModeEditorChannels(page);
+	await modeEditor
+		.getByRole("button", { name: "Close mode editor", exact: true })
+		.click();
+	await page
+		.getByRole("button", { name: "Close fixture editor", exact: true })
+		.click();
+	await page
+		.getByRole("button", { name: "Discard changes", exact: true })
+		.click();
+	await expect(page.locator(".fixture-profile-editor-modal")).toBeHidden();
+	await page.getByRole("button", { name: "Import GDTF", exact: true }).click();
+	await page
+		.locator(".gdtf-import-modal")
+		.screenshot({ path: workflowShot("fixture-library-import.png") });
+	await page
+		.getByRole("button", { name: "Close Import GDTF", exact: true })
+		.click();
+	await page
+		.getByRole("button", { name: "Close Fixture Library", exact: true })
+		.click();
 
-  await showDockMode(page, "builtins");
-  await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
-  await expect(page.locator(".stage-window")).toBeVisible();
-  await page.locator(".stage-window").screenshot({ path: workflowShot("stage-window-2d.png") });
-  await page.locator(".stage-window").getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("dialog", { name: "Stage Settings" }).screenshot({ path: workflowShot("stage-settings.png") });
-  await page.getByRole("dialog", { name: "Stage Settings" }).getByRole("button", { name: "Close settings" }).click();
+	await showDockMode(page, "builtins");
+	await page.locator(".dock-entry").filter({ hasText: "Stage" }).click();
+	await expect(page.locator(".stage-window")).toBeVisible();
+	await page
+		.locator(".stage-window")
+		.screenshot({ path: workflowShot("stage-window-2d.png") });
+	await page
+		.locator(".stage-window")
+		.getByRole("button", { name: "Settings" })
+		.click();
+	await page
+		.getByRole("dialog", { name: "Stage Settings" })
+		.screenshot({ path: workflowShot("stage-settings.png") });
+	await page
+		.getByRole("dialog", { name: "Stage Settings" })
+		.getByRole("button", { name: "Close settings" })
+		.click();
 
-  await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
-  await page.locator(".fixture-window").getByRole("button", { name: "Settings" }).click();
-  const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet" });
-  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-view.png") });
-  await fixtureSettings.getByRole("tab", { name: "Columns", exact: true }).click();
-  await fixtureSettings.screenshot({ path: workflowShot("fixture-sheet-settings-columns.png") });
-  await fixtureSettings.getByRole("button", { name: "Close settings" }).click();
-
+	await page.locator(".dock-entry").filter({ hasText: "Fixtures" }).click();
+	await page
+		.locator(".fixture-window")
+		.getByRole("button", { name: "Settings" })
+		.click();
+	const fixtureSettings = page.getByRole("dialog", { name: "Fixture Sheet" });
+	await fixtureSettings.screenshot({
+		path: workflowShot("fixture-sheet-settings-view.png"),
+	});
+	await fixtureSettings
+		.getByRole("tab", { name: "Columns", exact: true })
+		.click();
+	await fixtureSettings.screenshot({
+		path: workflowShot("fixture-sheet-settings-columns.png"),
+	});
+	await fixtureSettings.getByRole("button", { name: "Close settings" }).click();
 }
 
 /** Author a small six-channel moving wash through the same attribute picker used by operators. */
 async function captureModeEditorChannels(page: Page) {
-  const editor = page.getByRole("dialog", { name: "Edit Default mode", exact: true });
-  await editor.getByRole("tab", { name: "Channels", exact: true }).click();
-  const channels = [
-    ["Intensity", "Intensity"], ["Position", "Pan"], ["Position", "Tilt"],
-    ["Color", "Red"], ["Color", "Green"], ["Color", "Blue"],
-  ];
-  for (const [index, [group, attribute]] of channels.entries()) {
-    const slot = index + 1;
-    await editor.getByRole("button", { name: "Add channel", exact: true }).click();
-    if (attribute === "Intensity") continue;
-    await editor.getByRole("button", { name: `Attribute for slot ${slot}: Intensity`, exact: true }).click();
-    const picker = page.getByRole("dialog", { name: `Attribute · slot ${slot}`, exact: true });
-    await picker.getByRole("textbox", { name: "Search attributes", exact: true }).fill(attribute);
-    await picker.getByRole("listbox", { name: "Encoder groups", exact: true }).getByRole("option", { name: new RegExp(`^${group}\\b`) }).click();
-    // Production registry groups Pan/Tilt under Position and RGB under Color.
-    await picker.getByRole("listbox", { name: "Activation groups", exact: true }).getByRole("option").first().click();
-    await picker.getByRole("listbox", { name: / attributes$/ }).getByRole("option", { name: new RegExp(`^${attribute}\\b`) }).first().click();
-    await expect(picker).toBeHidden();
-    await expect(editor.getByRole("button", { name: `Attribute for slot ${slot}: ${attribute}`, exact: true })).toBeVisible();
-  }
-  await expect(editor.locator(".fixture-channel-row")).toHaveCount(channels.length);
-  await expect(editor.getByText(/No logical channels/)).toHaveCount(0);
-  const bounds = await editor.boundingBox();
-  const lastRow = await editor.locator(".fixture-channel-row").last().boundingBox();
-  if (!bounds || !lastRow) throw new Error("The populated mode editor is not visible");
-  // Capture the real title, channel table and controls without a page of unused modal space.
-  await page.screenshot({ path: workflowShot("fixture-library-mode-editor.png"), clip: {
-    x: bounds.x, y: bounds.y, width: bounds.width,
-    height: lastRow.y + lastRow.height - bounds.y + 24,
-  } });
+	const editor = page.getByRole("dialog", {
+		name: "Edit Default mode",
+		exact: true,
+	});
+	await editor.getByRole("tab", { name: "Channels", exact: true }).click();
+	const channels = [
+		["Intensity", "Intensity"],
+		["Position", "Pan"],
+		["Position", "Tilt"],
+		["Color", "Red"],
+		["Color", "Green"],
+		["Color", "Blue"],
+	];
+	for (const [index, [group, attribute]] of channels.entries()) {
+		const slot = index + 1;
+		await editor
+			.getByRole("button", { name: "Add channel", exact: true })
+			.click();
+		if (attribute === "Intensity") continue;
+		await editor
+			.getByRole("button", {
+				name: `Attribute for slot ${slot}: Intensity`,
+				exact: true,
+			})
+			.click();
+		const picker = page.getByRole("dialog", {
+			name: `Attribute · slot ${slot}`,
+			exact: true,
+		});
+		await picker
+			.getByRole("textbox", { name: "Search attributes", exact: true })
+			.fill(attribute);
+		await picker
+			.getByRole("listbox", { name: "Encoder groups", exact: true })
+			.getByRole("option", { name: new RegExp(`^${group}\\b`) })
+			.click();
+		// Production registry groups Pan/Tilt under Position and RGB under Color.
+		await picker
+			.getByRole("listbox", { name: "Activation groups", exact: true })
+			.getByRole("option")
+			.first()
+			.click();
+		await picker
+			.getByRole("listbox", { name: / attributes$/ })
+			.getByRole("option", { name: new RegExp(`^${attribute}\\b`) })
+			.first()
+			.click();
+		await expect(picker).toBeHidden();
+		await expect(
+			editor.getByRole("button", {
+				name: `Attribute for slot ${slot}: ${attribute}`,
+				exact: true,
+			}),
+		).toBeVisible();
+	}
+	await expect(editor.locator(".fixture-channel-row")).toHaveCount(
+		channels.length,
+	);
+	await expect(editor.getByText(/No logical channels/)).toHaveCount(0);
+	const bounds = await editor.boundingBox();
+	const lastRow = await editor
+		.locator(".fixture-channel-row")
+		.last()
+		.boundingBox();
+	if (!bounds || !lastRow)
+		throw new Error("The populated mode editor is not visible");
+	// Capture the real title, channel table and controls without a page of unused modal space.
+	await page.screenshot({
+		path: workflowShot("fixture-library-mode-editor.png"),
+		clip: {
+			x: bounds.x,
+			y: bounds.y,
+			width: bounds.width,
+			height: lastRow.y + lastRow.height - bounds.y + 24,
+		},
+	});
 }
 
-async function capturePaneReference(page: Page, selectedDmx: { universe: number; address: number }) {
-  await showDockMode(page, "desks");
-  await page.getByRole("button", { name: /New desktop/ }).click();
-  await expect(page.locator(".empty-desk")).toBeVisible();
-  for (const [, title, slug, settingsTab] of paneReference) {
-    await page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
-    await openCatalogCard(page, title);
-    const pane = page.locator(".desk-pane");
-    await expect(pane).toBeVisible();
-    const gridBox = await page.locator(".desk-grid").boundingBox();
-    const resizeBox = await pane.locator(".pane-resize-handle").boundingBox();
-    if (!gridBox || !resizeBox) throw new Error(`Cannot resize ${title} for its documentation screenshot`);
-    await page.mouse.move(resizeBox.x + resizeBox.width / 2, resizeBox.y + resizeBox.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(gridBox.x + gridBox.width - 3, gridBox.y + gridBox.height - 3);
-    await page.mouse.up();
-    await page.waitForTimeout(150);
-    if (slug === "text-editor") {
-      await pane.getByRole("button", { name: "Open File", exact: true }).click();
-      const picker = page.getByRole("dialog", { name: "Choose files or folders" });
-      await picker.getByRole("button", { name: `${SCREENSHOT_TEXT_FILE}, file` }).click();
-      await picker.getByRole("button", { name: "Select", exact: true }).click();
-      await expect(pane.locator(".text-editor-header-state")).toContainText("Saved");
-    }
-    if (slug === "virtual-playbacks") {
-      await pane.getByRole("button", { name: "Create playback surface", exact: true }).click();
-      const bank = pane.locator(".playback-fader-bank[data-playback-surface]");
-      const cards = bank.locator("article[data-playback-slot][data-playback-row]");
-      await expect(cards).toHaveCount(280);
-      const rowSizes = await cards.evaluateAll((elements) => {
-        const rows = new Map<string, number>();
-        for (const element of elements) {
-          const row = element.getAttribute("data-playback-row") ?? "";
-          rows.set(row, (rows.get(row) ?? 0) + 1);
-        }
-        return [...rows.values()];
-      });
-      // Tile presentation reflows the 280 authored cells to the pane width: every row is full
-      // except the last, which holds the remainder.
-      const columns = rowSizes[0] ?? 0;
-      expect(columns).toBeGreaterThan(1);
-      expect(rowSizes).toEqual([...Array(Math.floor(280 / columns)).fill(columns), ...(280 % columns ? [280 % columns] : [])]);
-      const first = bank.locator('article[data-playback-slot="401"]');
-      await expect(first).toBeVisible();
-      await expect(first).toHaveAttribute("data-page", /^[1-9]\d?$/);
-      const effectivePage = await first.getAttribute("data-page");
-      await expect(bank.locator('article[data-playback-slot="680"]')).toHaveAttribute("data-page", effectivePage ?? "");
-      await expect(pane.getByRole("button", { name: "Create playback surface", exact: true })).toHaveCount(0);
-    }
-    if (slug === "dmx") {
-      await pane.getByRole("button", { name: new RegExp(`^Universe ${selectedDmx.universe}, address ${selectedDmx.address}, value`) }).click();
-      await expect(pane.locator(".dmx-fixture-card")).not.toContainText("Fixture: Empty");
-    }
-    await pane.screenshot({ path: paneShot(`${slug}.png`) });
-    if (slug === "file-manager") {
-      // The File Manager pane has no header Settings button; continue on a fresh desktop.
-      await showDockMode(page, "desks");
-      await page.getByRole("button", { name: /New desktop/ }).click();
-      await expect(page.locator(".empty-desk")).toBeVisible();
-      continue;
-    }
-    await pane.getByRole("button", { name: "Settings" }).click();
-    const dialog = page.getByRole("dialog", { name: "Pane Settings" });
-    await expect(dialog).toBeVisible();
-    if (settingsTab) {
-      await dialog.getByRole("tab", { name: settingsTab, exact: true }).click();
-      await dialog.screenshot({ path: paneShot(`${slug}-settings.png`) });
-      await dialog.getByRole("tab", { name: "Pane Settings", exact: true }).click();
-    }
-    await dialog.getByRole("button", { name: "Remove pane" }).click();
-    await expect(page.locator(".empty-desk")).toBeVisible();
-  }
+async function capturePaneReference(
+	page: Page,
+	api: ApiDriver,
+	selectedDmx: { universe: number; address: number },
+) {
+	await showDockMode(page, "desks");
+	await page.getByRole("button", { name: /New desktop/ }).click();
+	await expect(page.locator(".empty-desk")).toBeVisible();
+	for (const [, title, slug, settingsTab] of paneReference) {
+		await page.locator(".empty-desk").click({ position: { x: 10, y: 10 } });
+		await openCatalogCard(page, title);
+		const pane = page.locator(".desk-pane");
+		await expect(pane).toBeVisible();
+		const gridBox = await page.locator(".desk-grid").boundingBox();
+		const resizeBox = await pane.locator(".pane-resize-handle").boundingBox();
+		if (!gridBox || !resizeBox)
+			throw new Error(
+				`Cannot resize ${title} for its documentation screenshot`,
+			);
+		await page.mouse.move(
+			resizeBox.x + resizeBox.width / 2,
+			resizeBox.y + resizeBox.height / 2,
+		);
+		await page.mouse.down();
+		await page.mouse.move(
+			gridBox.x + gridBox.width - 3,
+			gridBox.y + gridBox.height - 3,
+		);
+		await page.mouse.up();
+		await page.waitForTimeout(150);
+		if (slug === "text-editor") {
+			await pane
+				.getByRole("button", { name: "Open File", exact: true })
+				.click();
+			const picker = page.getByRole("dialog", {
+				name: "Choose files or folders",
+			});
+			await picker
+				.getByRole("button", { name: `${SCREENSHOT_TEXT_FILE}, file` })
+				.click();
+			await picker.getByRole("button", { name: "Select", exact: true }).click();
+			await expect(pane.locator(".text-editor-header-state")).toContainText(
+				"Saved",
+			);
+		}
+		if (slug === "virtual-playbacks") {
+			await pane
+				.getByRole("button", { name: "Create playback surface", exact: true })
+				.click();
+			const bank = pane.locator(".playback-fader-bank[data-playback-surface]");
+			const cards = bank.locator(
+				"article[data-playback-slot][data-playback-row]",
+			);
+			const surfaceId = await bank.getAttribute("data-playback-surface");
+			if (!surfaceId)
+				throw new Error("Documentation playback surface has no ID");
+			await configureEightDocumentationPlaybacks(api, surfaceId, 1);
+			await expect(cards).toHaveCount(8);
+			await expect(cards.first()).toBeVisible();
+			await expect(cards.last()).toBeVisible();
+			await pane.getByRole("button", { name: "Settings" }).click();
+			const layoutSettings = page.getByRole("dialog", {
+				name: "Pane Settings",
+			});
+			await layoutSettings
+				.getByRole("radio", { name: "Fixed grid", exact: true })
+				.click();
+			await layoutSettings.getByLabel("Tile rows", { exact: true }).fill("2");
+			await layoutSettings
+				.getByLabel("Tile columns", { exact: true })
+				.fill("4");
+			await layoutSettings
+				.getByRole("button", { name: "Close settings", exact: true })
+				.click();
+			const firstTile = await cards.first().boundingBox();
+			expect(firstTile?.width).toBeGreaterThan(250);
+			expect(firstTile?.height).toBeGreaterThan(200);
+			await expect(
+				pane.getByRole("button", {
+					name: "Create playback surface",
+					exact: true,
+				}),
+			).toHaveCount(0);
+		}
+		if (slug === "dmx") {
+			await pane
+				.getByRole("button", {
+					name: new RegExp(
+						`^Universe ${selectedDmx.universe}, address ${selectedDmx.address}, value`,
+					),
+				})
+				.click();
+			await expect(pane.locator(".dmx-fixture-card")).not.toContainText(
+				"Fixture: Empty",
+			);
+		}
+		await pane.screenshot({ path: paneShot(`${slug}.png`) });
+		if (slug === "file-manager") {
+			// The File Manager pane has no header Settings button; continue on a fresh desktop.
+			await showDockMode(page, "desks");
+			await page.getByRole("button", { name: /New desktop/ }).click();
+			await expect(page.locator(".empty-desk")).toBeVisible();
+			continue;
+		}
+		await pane.getByRole("button", { name: "Settings" }).click();
+		const dialog = page.getByRole("dialog", { name: "Pane Settings" });
+		await expect(dialog).toBeVisible();
+		if (settingsTab) {
+			await dialog.getByRole("tab", { name: settingsTab, exact: true }).click();
+			await dialog.screenshot({ path: paneShot(`${slug}-settings.png`) });
+			await dialog
+				.getByRole("tab", { name: "Pane Settings", exact: true })
+				.click();
+		}
+		await dialog.getByRole("button", { name: "Remove pane" }).click();
+		await expect(page.locator(".empty-desk")).toBeVisible();
+	}
 }
 
 function paneShot(file: string): string {
-  return capturePath(`panes/${file}`);
+	return capturePath(`panes/${file}`);
 }
 
 function capturePath(file: string): string {
-  return path.join(
-    liveScreenshotFiles.has(file) ? SCREENSHOT_DIR : LIVE_CAPTURE_DIR,
-    file,
-  );
+	return path.join(
+		liveScreenshotFiles.has(file) ? SCREENSHOT_DIR : LIVE_CAPTURE_DIR,
+		file,
+	);
 }
 
 async function seedScreenshotProgramming(api: ApiDriver, showId: string) {
-  const patched = await objects<PatchedFixtureBody>(api, showId, "patched_fixture");
-  const byNumber = new Map(patched.flatMap((fixture) => fixture.body.fixture_number == null ? [] : [[fixture.body.fixture_number, fixture.body.fixture_id] as const]));
-  const fixtureIds = (...numbers: number[]) => numbers.map((number) => {
-    const id = byNumber.get(number);
-    if (!id) throw new Error(`Default stage fixture ${number} is missing`);
-    return id;
-  });
-  const groups = [
-    ["1", "Front Fresnels", fixtureIds(1, 2, 3, 4, 5, 6), 0.9],
-    ["2", "Back Profiles", fixtureIds(101, 102, 103, 104, 105, 106, 107, 108), 0.75],
-    ["3", "LED Washes", fixtureIds(201, 202, 203, 204, 205), 0.65],
-    ["4", "Floor PARs", fixtureIds(401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412), 0.8],
-    ["5", "RGB Sunstrips", fixtureIds(501, 502, 503, 504, 505, 506), 0.7],
-  ] as const;
-  for (const [id, name, fixtures] of groups) {
-    await put(api, showId, "group", id, {
-      name,
-      fixtures,
-      derived_from: null,
-      frozen_from: null,
-      programming: {},
-    });
-  }
-  await put(api, showId, "preset", "1.1", {
-    name: "House Half",
-    family: "Intensity",
-    number: 1,
-    values: {},
-    group_values: { "1": { intensity: { kind: "normalized", value: 0.5 } } },
-  });
-  // Colour presets are universal: one whole semantic colour that recall applies to every
-  // selected fixture, the form recording a Preset with one colour on every fixture stores.
-  await put(api, showId, "preset", "2.1", {
-    name: "Warm Stage",
-    family: "Color",
-    number: 1,
-    values: {},
-    group_values: {},
-    universal_values: { color: semanticColor("Tungsten White") },
-  });
+	const patched = await objects<PatchedFixtureBody>(
+		api,
+		showId,
+		"patched_fixture",
+	);
+	const byNumber = new Map(
+		patched.flatMap((fixture) =>
+			fixture.body.fixture_number == null
+				? []
+				: [[fixture.body.fixture_number, fixture.body.fixture_id] as const],
+		),
+	);
+	const fixtureIds = (...numbers: number[]) =>
+		numbers.map((number) => {
+			const id = byNumber.get(number);
+			if (!id) throw new Error(`Default stage fixture ${number} is missing`);
+			return id;
+		});
+	const groups = [
+		["1", "Front Fresnels", fixtureIds(1, 2, 3, 4, 5, 6), 0.9],
+		[
+			"2",
+			"Back Profiles",
+			fixtureIds(101, 102, 103, 104, 105, 106, 107, 108),
+			0.75,
+		],
+		["3", "LED Washes", fixtureIds(201, 202, 203, 204, 205), 0.65],
+		[
+			"4",
+			"Floor PARs",
+			fixtureIds(401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412),
+			0.8,
+		],
+		["5", "RGB Sunstrips", fixtureIds(501, 502, 503, 504, 505, 506), 0.7],
+	] as const;
+	for (const [id, name, fixtures] of groups) {
+		await put(api, showId, "group", id, {
+			name,
+			fixtures,
+			derived_from: null,
+			frozen_from: null,
+			programming: {},
+		});
+	}
+	await put(api, showId, "preset", "1.1", {
+		name: "House Half",
+		family: "Intensity",
+		number: 1,
+		values: {},
+		group_values: { "1": { intensity: { kind: "normalized", value: 0.5 } } },
+	});
+	// Colour presets are universal: one whole semantic colour that recall applies to every
+	// selected fixture, the form recording a Preset with one colour on every fixture stores.
+	await put(api, showId, "preset", "2.1", {
+		name: "Warm Stage",
+		family: "Color",
+		number: 1,
+		values: {},
+		group_values: {},
+		universal_values: { color: semanticColor("Tungsten White") },
+	});
 
-  const cueListId = crypto.randomUUID();
-  await put(api, showId, "cue_list", cueListId, {
-    id: cueListId,
-    name: "Opening Sequence",
-    priority: 0,
-    mode: "sequence",
-    looped: false,
-    chaser_step_millis: 1000,
-    speed_group: null,
-    cues: [
-      cue(1, "Preset", [["1", 0.25], ["2", 0.15], ["3", 0.1]]),
-      cue(2, "Front warm", [["1", 0.75], ["2", 0.25], ["4", 0.25]]),
-      cue(3, "Back build", [["1", 0.45], ["2", 0.8], ["3", 0.55]]),
-      cue(4, "Floor punch", [["2", 0.35], ["4", 0.9], ["5", 0.55]]),
-      cue(5, "Sunstrip chase", [["3", 0.6], ["4", 0.45], ["5", 1.0]]),
-      cue(6, "Final look", [["1", 0.85], ["2", 0.85], ["3", 0.75], ["4", 0.8], ["5", 0.7]]),
-    ],
-  });
-  const assignments: Record<string, unknown> = {
-    "1": playback("Opening Sequence", { type: "cue_list", cue_list_id: cueListId }),
-  };
-  for (const [id, name, , initialMaster] of groups.slice(0, 4))
-    assignments[String(Number(id) + 1)] = playback(name, { type: "group", group_id: id, initial_master: initialMaster }, ["select", "flash", "select_dereferenced"]);
-  for (const position of [1, 2, 3, 4, 5])
-    assignments[String(400 + position)] = assignments[String(position)];
-  await put(api, showId, "playback_page", "1", { number: 1, name: "Main", assignments });
-  await api.request("POST", "/api/v2/files/shows/operations", { operation: "create_file", sources: [], destination: "", name: SCREENSHOT_TEXT_FILE });
-  const empty = await api.request<any>("GET", `/api/v2/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`);
-  await api.request("PUT", "/api/v2/files/shows/text", {
-    path: SCREENSHOT_TEXT_FILE,
-    text: "# Run of show\n\n- 18:45 House open\n- 19:25 Beginners\n- 19:30 Opening Sequence\n\n## Notes\n\nCheck follow spots before preset.\n",
-    revision: empty.revision,
-  });
+	const cueListId = crypto.randomUUID();
+	await put(api, showId, "cue_list", cueListId, {
+		id: cueListId,
+		name: "Opening Sequence",
+		priority: 0,
+		mode: "sequence",
+		looped: false,
+		chaser_step_millis: 1000,
+		speed_group: null,
+		cues: [
+			cue(1, "Preset", [
+				["1", 0.25],
+				["2", 0.15],
+				["3", 0.1],
+			]),
+			cue(2, "Front warm", [
+				["1", 0.75],
+				["2", 0.25],
+				["4", 0.25],
+			]),
+			cue(3, "Back build", [
+				["1", 0.45],
+				["2", 0.8],
+				["3", 0.55],
+			]),
+			cue(4, "Floor punch", [
+				["2", 0.35],
+				["4", 0.9],
+				["5", 0.55],
+			]),
+			cue(5, "Sunstrip chase", [
+				["3", 0.6],
+				["4", 0.45],
+				["5", 1.0],
+			]),
+			cue(6, "Final look", [
+				["1", 0.85],
+				["2", 0.85],
+				["3", 0.75],
+				["4", 0.8],
+				["5", 0.7],
+			]),
+		],
+	});
+	const assignments: Record<string, unknown> = {
+		"1": playback("Opening Sequence", {
+			type: "cue_list",
+			cue_list_id: cueListId,
+		}),
+	};
+	for (const [id, name, , initialMaster] of groups.slice(0, 4))
+		assignments[String(Number(id) + 1)] = playback(
+			name,
+			{ type: "group", group_id: id, initial_master: initialMaster },
+			["select", "flash", "select_dereferenced"],
+		);
+	for (const position of [1, 2, 3, 4, 5])
+		assignments[String(400 + position)] = assignments[String(position)];
+	await put(api, showId, "playback_page", "1", {
+		number: 1,
+		name: "Main",
+		assignments,
+	});
+	await api.request("POST", "/api/v2/files/shows/operations", {
+		operation: "create_file",
+		sources: [],
+		destination: "",
+		name: SCREENSHOT_TEXT_FILE,
+	});
+	const empty = await api.request<any>(
+		"GET",
+		`/api/v2/files/shows/text?path=${encodeURIComponent(SCREENSHOT_TEXT_FILE)}`,
+	);
+	await api.request("PUT", "/api/v2/files/shows/text", {
+		path: SCREENSHOT_TEXT_FILE,
+		text: "# Run of show\n\n- 18:45 House open\n- 19:25 Beginners\n- 19:30 Opening Sequence\n\n## Notes\n\nCheck follow spots before preset.\n",
+		revision: empty.revision,
+	});
 }
 
-function cue(number: number, name: string, groupLevels: Array<[string, number]>) {
-  return {
-    number,
-    name,
-    changes: [],
-    fade_millis: 1500,
-    delay_millis: 0,
-    trigger: { type: "manual" },
-    group_changes: groupLevels.map(([group_id, value]) => ({
-      group_id,
-      attribute: "intensity",
-      value: { kind: "normalized", value },
-      fade_millis: 1500,
-    })),
-  };
+function cue(
+	number: number,
+	name: string,
+	groupLevels: Array<[string, number]>,
+) {
+	return {
+		number,
+		name,
+		changes: [],
+		fade_millis: 1500,
+		delay_millis: 0,
+		trigger: { type: "manual" },
+		group_changes: groupLevels.map(([group_id, value]) => ({
+			group_id,
+			attribute: "intensity",
+			value: { kind: "normalized", value },
+			fade_millis: 1500,
+		})),
+	};
 }
 
-function playback(name: string, target: Record<string, unknown>, buttons: [string, string, string] = ["go", "go_minus", "flash"]) {
-  return { name, target, buttons, button_count: 3, has_fader: true, footprint: { type: "normal" }, fader: "master", go_activates: true, auto_off: true, xfade_millis: 0, color: "#20c997", flash_release: "release_all", protect_from_swap: false };
+function playback(
+	name: string,
+	target: Record<string, unknown>,
+	buttons: [string, string, string] = ["go", "go_minus", "flash"],
+) {
+	return {
+		name,
+		target,
+		buttons,
+		button_count: 3,
+		has_fader: true,
+		footprint: { type: "normal" },
+		fader: "master",
+		go_activates: true,
+		auto_off: true,
+		xfade_millis: 0,
+		color: "#20c997",
+		flash_release: "release_all",
+		protect_from_swap: false,
+	};
 }
 
-async function objects<T>(api: ApiDriver, showId: string, kind: string): Promise<Array<VersionedObject<T>>> {
-  return api.showObjects<T>(showId, kind);
+async function objects<T>(
+	api: ApiDriver,
+	showId: string,
+	kind: string,
+): Promise<Array<VersionedObject<T>>> {
+	return api.showObjects<T>(showId, kind);
 }
 
-async function put(api: ApiDriver, showId: string, kind: string, id: string, body: unknown) {
-  await api.seedShowObject(showId, kind, id, body);
+async function put(
+	api: ApiDriver,
+	showId: string,
+	kind: string,
+	id: string,
+	body: unknown,
+) {
+	await api.seedShowObject(showId, kind, id, body);
 }
 
-async function selectFixtures(page: Page, desk: { command(value: string): Promise<void> }, command: string) {
-  await desk.command(command);
-  await expect(page.locator(".fixture-window .ui-data-table-row.selected")).toHaveCount(6);
+async function selectFixtures(
+	page: Page,
+	desk: { command(value: string): Promise<void> },
+	command: string,
+) {
+	await desk.command(command);
+	await expect(
+		page.locator(".fixture-window .ui-data-table-row.selected"),
+	).toHaveCount(6);
 }
 
 async function setDimmerByTouch(page: Page, value: number) {
-  const encoder = page.getByRole("group", { name: "Enc 1 · Dimmer", exact: true });
-  await encoder.getByRole("button", { name: "Set Enc 1 · Dimmer value" }).click();
-  await expect(page.getByRole("dialog", { name: "Enc 1 · Dimmer value" })).toBeVisible();
-  await page.keyboard.type(String(value));
-  await page.keyboard.press("Enter");
+	const encoder = page.getByRole("group", {
+		name: "Enc 1 · Dimmer",
+		exact: true,
+	});
+	await encoder
+		.getByRole("button", { name: "Set Enc 1 · Dimmer value" })
+		.click();
+	await expect(
+		page.getByRole("dialog", { name: "Enc 1 · Dimmer value" }),
+	).toBeVisible();
+	await page.keyboard.type(String(value));
+	await page.keyboard.press("Enter");
 }
 
 async function setStagePaneTo3d(page: Page) {
-  const stagePane = page.locator(".desk-pane").filter({ hasText: "Stage · Main floor" });
-  await stagePane.getByRole("button", { name: "Settings" }).click();
-  await page.getByRole("tab", { name: "Stage", exact: true }).click();
-  await page.getByRole("radio", { name: "3D", exact: true }).click();
-  await page.getByRole("tab", { name: "Shortcuts", exact: true }).click();
-  await page.getByRole("switch", { name: "Group shortcuts", exact: true }).check({ force: true });
-  await page.getByRole("button", { name: "Close settings" }).click();
-  await expect(stagePane.locator('[data-stage-view="3d"]')).toBeVisible();
-  // Browser screenshot runners have no sibling native renderer. The requested view must persist,
-  // while the pane truthfully reports that this screen cannot draw it instead of faking a canvas.
-  await expect(stagePane.getByRole("status")).toContainText("No Stage on this screen");
+	const stagePane = page
+		.locator(".desk-pane")
+		.filter({ hasText: "Stage · Main floor" });
+	await stagePane.getByRole("button", { name: "Settings" }).click();
+	await page.getByRole("tab", { name: "Stage", exact: true }).click();
+	await page.getByRole("radio", { name: "3D", exact: true }).click();
+	await page.getByRole("tab", { name: "Shortcuts", exact: true }).click();
+	await page
+		.getByRole("switch", { name: "Group shortcuts", exact: true })
+		.check({ force: true });
+	await page.getByRole("button", { name: "Close settings" }).click();
+	await expect(stagePane.locator('[data-stage-view="3d"]')).toBeVisible();
+	// Browser screenshot runners have no sibling native renderer. The requested view must persist,
+	// while the pane truthfully reports that this screen cannot draw it instead of faking a canvas.
+	await expect(stagePane.getByRole("status")).toContainText(
+		"No Stage on this screen",
+	);
 }
 
 async function openCuelistDetailWithPlayback(page: Page) {
-  await showDockMode(page, "builtins");
-  await page.locator(".dock-entry").filter({ hasText: "Cue Lists" }).click();
-  const firstCuelist = page.locator(".cuelist-card").first();
-  await firstCuelist.click();
-  await expect(page.locator(".cue-table tbody tr")).toHaveCount(6);
-  await page.locator(".mode-toggle").click();
-  await expect(page.locator(".control-section.playbacks")).toBeVisible();
+	await showDockMode(page, "builtins");
+	await page.locator(".dock-entry").filter({ hasText: "Cue Lists" }).click();
+	const firstCuelist = page.locator(".cuelist-card").first();
+	await firstCuelist.click();
+	await expect(page.locator(".cue-table tbody tr")).toHaveCount(6);
+	await page.locator(".mode-toggle").click();
+	await expect(page.locator(".control-section.playbacks")).toBeVisible();
+}
+
+/** Only this isolated documentation desk: show a single readable bank of eight assigned slots. */
+async function configureEightDocumentationPlaybacks(
+	api: ApiDriver,
+	surfaceId: string,
+	first: number,
+) {
+	await api.request(
+		"POST",
+		`/api/v2/playback-surfaces/${encodeURIComponent(surfaceId)}/update`,
+		{
+			request_id: crypto.randomUUID(),
+			layout: {
+				rows: [
+					{
+						first_position: first,
+						count: 8,
+						presentation: "fader",
+						button_count: 3,
+					},
+				],
+			},
+		},
+		true,
+		undefined,
+		{ deskId: api.session!.desk.id },
+	);
 }

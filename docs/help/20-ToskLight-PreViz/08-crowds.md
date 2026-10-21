@@ -1,35 +1,15 @@
 # Crowd Areas
 
-The shipped **Venue — Crowd Area** fixture puts an audience into the show as one visual-only
-scenery fixture. It has no DMX address. Choose one of its nine modes: Sitting, Standing still, or
-Dancing, each at Sparse, Medium, or Dense authored density.
+Add **Venue — Crowd Area** for a visual-only audience. It has no DMX address. Choose Sitting,
+Standing still or Dancing, each at Sparse, Medium or Dense density.
 
-In **Show Patch**, set **Footprint width** and **Footprint depth** independently. These values are
-stored with the Stage layout in metres and draw the same rectangular footprint in plan views that
-the 3D Visualizer populates with flat, double-sided black people and contrasting outlines from the
-shipped audience artwork. Height is never scaled with the footprint: Sitting uses seated human
-height, while Standing still and Dancing use standing human height.
+Set **Info → Placement → Size → Width / Depth** in Architect, or **Footprint width / depth** in
+Control's Show Patch. The footprint changes independently from human height. Crowd Areas can
+range from 1 to 250 metres on each side.
 
-In the PreViz plan, **Info** shows the same two sides as **Size — Width** and **Depth**, each from 1 to
-250 m, both for a Crowd Area you have just added and at any time after; with several Crowd Areas
-selected they spread like any other field. The size is kept with the patch, so it is still there when
-the show is saved and reopened, and the desk draws it too unless its own Stage layout sets another.
-The plan fills the new footprint with more rows and more people in each, at the spacing of a standing
-audience, rather than stretching the same few.
+The chosen footprint, mode and density produce a stable layout after saving or restarting.
+Moving another fixture does not reshuffle the audience.
 
-People are as tall as a real audience: every standing person is between 1.55 and 1.85 m, spread
-around a typical 1.70 m, in the plan and in the Visualizer alike. Nobody is drawn two metres tall.
-
-Population is deterministic. The fixture's stable show identity, selected mode, authored
-footprint, and density produce the same people after saving, reopening, or restarting the
-Visualizer. Moving another fixture does not reshuffle them. Changing mode or footprint produces a
-new deterministic layout contained within the rectangle and on its floor plane.
-
-Draft and Standard omit crowds. High draws up to 384 people per frame. Ultra starts at 1,024 and
-follows the renderer's measured 16 ms GPU adaptation ladder down with render scale when necessary.
-When an authored audience exceeds the current budget, the Visualizer retains a stable subset and
-reports authored and drawn counts in its benchmark output instead of destabilizing frame time.
-
-**Crowd amount** in the Visualizer's local Quick Settings applies from 0% to 100% to every Crowd
-Area in that window. It changes only how many authored people that renderer draws; it never rewrites
-the show, mode, footprint, or stable identity.
+Draft and Standard omit crowds. High and Ultra draw them with a performance limit. Use
+**Quick Settings → Crowd amount** to reduce the visible audience from 100% to 0% on this renderer.
+It does not rewrite the show's authored area or density.

@@ -2,16 +2,15 @@
 
 ToskLight resolves several active sources into one output value per fixture attribute.
 
-> [!danger] Missing graphic
-> Add an output-ownership diagram showing HTP comparison, LTP recency, priorities, Programmer ownership, masters, Release, and the final DMX value.
+![Sources, ownership and final fixture output](../../assets/diagrams/output-ownership.svg)
 
 ## HTP
 
-Highest Takes Precedence is normally used for intensity. The highest contributing level wins, so bringing up another intensity master cannot reduce a higher active source. Releasing the winning source reveals the next-highest contribution.
+Playback Intensity normally uses Highest Takes Precedence. The highest contributing level wins, so bringing up another intensity master cannot reduce a higher active source. Releasing the winning source reveals the next-highest contribution.
 
 ## LTP
 
-Latest Takes Precedence is normally used for color, position, beam, and other non-intensity attributes. The most recent eligible owner wins within priority rules. Temporary Flash/Temp actions restore the prior LTP owner when released rather than leaving their last value behind.
+Latest Takes Precedence is normally used for color, position, beam, and other non-intensity playback attributes. Programmer edits use LTP semantics, including Intensity. The most recent eligible owner wins within priority rules. Temporary Flash/Temp actions restore the prior LTP owner when released rather than leaving their last value behind.
 
 ## Priority and programmer output
 

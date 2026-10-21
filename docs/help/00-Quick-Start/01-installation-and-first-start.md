@@ -21,39 +21,24 @@ configuration and library live under Application Support.
 
 The separate **ToskLight Hardware Controls** application is used for the attached hardware-control surface when that artifact is included in the release.
 
-Hardware Controls has an **OSC | Native Hardware | Native Simulator** mode switch in its title bar, and the status
-beside it always names the active mode:
-
-- **OSC** sends the on-screen controls to the desk over the documented
-  [OSC protocol](../90-Protocols/01-osc.md) and shows whether the desk is connected, its current
-  page, and the last control sent.
-- **Native Hardware** exercises a device attached to the desk through its native extension. The
-  device's controls go straight to the desk, so the on-screen controls are dimmed and only mirror
-  feedback. The status shows whether the device is connected, starting, unavailable (no extension
-  configured) or in error, with the extension's last error. It reads that health from the desk
-  server, so set **Desk HTTP port** in Settings when the server does not use port 5000.
-- **Native Simulator** connects the on-screen surface to the loopback relay of the supervised
-  simulator extension. Its buttons, faders, and encoders become typed native-extension inputs;
-  this mode does not open an OSC subscription. Build and install the simulator extension as
-  described in the [native-extension SDK](../../engineering/native-extension-sdk.md) before using
-  this mode.
-
-Switching mode closes the previous connection before the new one opens, and the choice is kept for
-the next launch.
+Choose **OSC** for an on-screen surface over the network, or **Native Hardware** for a configured
+attached device. Native mode mirrors device feedback; its on-screen controls are dimmed.
+Set **Desk HTTP port** in Settings if Control does not use port 5000. The selected mode is remembered.
+**Native Simulator** is a development option; it requires a separately installed simulator extension.
 
 ## Standalone server and browser desk
 
 Choose the archive matching macOS Apple Silicon, Windows AMD64, Linux AMD64, or Linux ARM64. Start `light-headless` with a writable data directory, then open the displayed address in a supported browser. Use `--bind 0.0.0.0:5000` only on a trusted lighting network.
 
-When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting it. Browser and API clients must then send that shared desk token. Users remain passwordless operator identities inside that protected desk boundary.
+When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting it. Connect browser and API clients using that shared desk token. All attached surfaces operate the same desk.
 
 ## First-start checklist
 
-- The status in Desk Setup is connected and an `Operator` user exists.
+- The status in Desk Setup is connected and the expected show is active.
 - A new show can be created and appears in the show library.
 - The correct physical screens are assigned.
 - OSC, native extensions, Art-Net, and sACN are disabled until intentionally configured.
 - The DMX view reports the expected frame rate with no send errors.
 - A named revision can be created and loaded as a separate autosaved copy before real programming begins, without rewinding the original show's Latest Autosave.
 
-See [Desk Setup](../10-Desk/10-Show-Setup/index.md) next. Developers building from source should use the repository `./build open` and `./build archive` commands described in the README.
+Continue with [Desk Setup](../10-Desk/10-Show-Setup/index.md).

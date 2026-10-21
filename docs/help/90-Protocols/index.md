@@ -1,9 +1,10 @@
 # Protocols
 
-ToskLight exposes OSC for desk and control-surface input with authoritative feedback.
+Connect external controls and keep Pixel in step with the desk:
 
-Start with [OSC Protocol](01-osc.md). A ToskLight Media Server receives the desk's Speed Groups
-through [Media Server Speed Groups](02-media-speed-groups.md). Its layers' dedicated visualizer
-channels are described in [Media Server Visualizer Parameters](03-media-visualizer-parameters.md).
-A desk asks a Media Server to draw a Cue's programmed state through
-[Media Server Cue Snapshots](04-media-cue-snapshots.md).
+- [OSC](01-osc.md): attach a programming surface or playback-only remote.
+- [Speed Groups](02-media-speed-groups.md): follow Control’s tempo in Pixel.
+- [Visualizer Parameters](03-media-visualizer-parameters.md): adjust generated visuals.
+- [Media Cue Previews](04-media-cue-snapshots.md): check a Cue without playing it live.
+
+Custom client and wire-format details live in the linked engineering references.

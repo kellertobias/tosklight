@@ -1,13 +1,7 @@
 # Programming Cues
 
-## Quick summary
-
-1. Build a look in the Programmer, record it into a Cue, then press **CLR twice** (first clears selection, second clears Programmer values) and run that Cue.
-2. Set **In Fade/Delay** on the Cue being entered. Set **Out Fade/Delay** on the Cue being left for decreasing or released Intensity.
-3. Stored per-value timing takes priority unless **Force Cue Timing** is on. An explicit per-value fade of zero means snap, even when the Cue has a longer fade.
-4. For an automatic next step, set FOLLOW or TIME on that next Cue; see [Triggers, Chasers, and Speed Groups](13-triggers-chasers-and-speed.md).
-
-A Cue stores what is currently in the programmer. Values that are merely visible from a playback, defaults, Highlight, or resolved output are not recorded. A Cue is one stored step inside a Cuelist; a playback is a control that may be assigned to that Cuelist, not the Cuelist itself.
+A Cue stores Programmer values, not merely the look visible from playback, defaults or Highlight.
+A Cuelist holds the sequence; its assigned Playback runs it.
 
 ## Record the first Cue
 
@@ -16,8 +10,7 @@ A Cue stores what is currently in the programmer. Values that are merely visible
 3. Name the Cue and set fade, delay, and trigger behavior in Cuelist View.
 4. Clear the programmer and run the Cue to prove that the stored data is sufficient.
 
-> [!danger] Missing graphic
-> Add a Cue lifecycle diagram showing Programmer values being recorded into a Cue, the Cue inside a Cuelist, assignment to a playback, and playback output after the Programmer is cleared.
+![Programmer, Cue recording and playback verification](../../assets/diagrams/cue-lifecycle.svg)
 
 Recording onto an empty Cuelist creates its first Cue without assigning it to a playback. Recording onto an empty playback creates a Cuelist, records its first Cue, and assigns it. On touch, the whole visible playback is the Record target. On an attached desk, only its topmost playback button is the target; if no button is assigned, use the visible on-screen section. The fader is never a Record target, so it remains usable while programming.
 
@@ -25,17 +18,28 @@ When a target Cuelist contains exactly one Cue, the desk asks whether to **Add C
 
 Press `[REC]` twice to choose how this Record stores the programmer: **Smart**, **Merge** (into the Cue the playback is on, programmer values win), **Add Existing** (only what that Cue does not store yet), or **Add Cue** (always a new Cue). Press title-bar **Record** to use the choice once, or turn on **Set as default** first to make it the desk's Record default for every following plain `[REC]`. Choose **Smart** with **Set as default** on to return to the regular behaviour. See [Choosing How to Record](01-command-line.md#choosing-how-to-record-rec-rec).
 
-From the command line, the default target is a Cuelist. `[REC][CUE][CUE] <Cuelist-number> [ENT]` appends there and selects it; later use `[REC][CUE][ENT]` to append to the selected Cuelist. `[REC][PBK] <position> [ENT]` records through a Playback on the effective page of the visibly selected surface; `[REC][PBK] <page>.<position> [ENT]` selects an explicit address. Pages run from 1 to 99 and positions from 1 to 1000. Screens, panes, keyboard, OSC, and attached hardware address the same assignments. Pressing `[PBK]` twice keeps the same Playback operand; it does not select another bank.
-
-To choose the Cue number, use `[REC][CUE][CUE] <Cuelist-number> [CUE] <Cue-number> [ENT]`, or omit the Cuelist address for the selected Cuelist. An existing Cue is overwritten; an unused number is inserted. Cue numbers are paths, not decimals: `2`, `2.0`, `2.1`, `2.1.0`, and `2.2` are all distinct and sort in that order.
+For explicit Cuelist/Cue addresses, insertion and page-aware playback commands, see
+[Recording Cues](01-command-line.md#recording-cues). Cue numbers are paths, not decimals:
+`2`, `2.0`, `2.1`, `2.1.0` and `2.2` are distinct and sort in that order.
 
 ## Edit Cue contents
 
-Normal Record overwrites the addressed Cue, `[REC][+]` merges programmer values, and `[REC][-]` removes their fixture/attribute addresses. Copy, Move, and Delete use explicit addresses. Renumbering and edits are protected as one show mutation; check the final Cue order before proceeding.
+Normal Record overwrites the addressed Cue, `[REC][+]` merges programmer values, and `[REC][-]` removes their fixture/attribute addresses. Copy, Move, and Delete use explicit addresses. Check Cue order after renumbering or moving Cues.
 
-Use `[^REC]` to update existing programming. **Update** changes values stored directly in the current Cue; **Tracked** changes the earlier Cue supplying each tracked value; **Known** writes values into the current Cue only when their addresses already occur somewhere in the Cuelist; **All** also introduces new addresses. The command forms are plain `[^REC]`, `[^REC][-]`, `[^REC][+][+]`, and `[^REC][+]` respectively. Press `[^REC]` twice while holding Shift, then release Shift, to choose how to update: **Smart**, **Merge** (All), **Add Existing** (Known), or **Add Cue** (a new Cue in the touched Cuelist), once or as the desk's Update default. Its title-bar **Targets** opens the complete Update Targets modal. The preview explains eligible, ignored, source-Cue, and destination results before confirmation. See [Updating Existing Programming](01-command-line.md#updating-existing-programming) for exact targets and Preset updates.
+Use **Update** for existing programming. Review its target preview before confirmation:
 
-For a temporary change, hold `[REC]` to open **Record Settings** and enable **Cue only** before recording. The following Cue automatically restores each Cue-only address to its previous tracked value, or releases an address that had no earlier value. Turn **Cue only** off again for ordinary tracking records. The setting and generated restoration data survive a show refresh or reopen. Record Settings saves each change immediately; press title-bar **Done** to close it. Each option explains its effect below its label: **Record default** is the desk's stored Record choice (**Smart**, **Merge**, **Add Existing**, or **Add Cue**) that every plain `[REC]` uses, and **Cue only** is kept on this screen. The former **Record mode** and **Merge into active Cue** settings were replaced by the Record default; a desk that had **Merge into active Cue** on starts with **Merge** as its default.
+| Mode | Destination |
+| --- | --- |
+| **Update** | Values stored directly in the current Cue. |
+| **Tracked** | The earlier Cue supplying each tracked value. |
+| **Known** | Current Cue, only for addresses already used in the Cuelist. |
+| **All** | Current Cue, including new addresses. |
+
+See [Updating Existing Programming](01-command-line.md#updating-existing-programming) for commands
+and the target chooser.
+
+For a temporary change, hold `[REC]` to open **Record Settings** and enable **Cue only** before recording. The following Cue automatically restores each Cue-only address to its previous tracked value, or releases an address that had no earlier value. Turn **Cue only** off again for ordinary tracking records. The setting and restoration data survive reopening. Record Settings saves immediately;
+**Done** closes it. **Record default** chooses the operation used by later plain REC presses.
 
 ## Timing and triggers
 

@@ -1,59 +1,87 @@
 # Cues and Playbacks
 
-## Quick summary
-
-- A **Cuelist** stores the sequence; a **playback** is the button/fader control assigned to run it.
-- **GO** runs the next Cue. **Pause/Resume** holds and continues the current transition; GO also resumes a paused transition.
-- **In** timing belongs to the Cue you enter; **Out** timing belongs to the Cue you leave and applies to decreasing or released Intensity.
-- **Cue Fade** supplies the sequence's fallback fade. **Programmer Fade** controls programming transitions and Preload GO. **Release** supplies Out Fade when that cell is linked to Release.
-- Press **CLR twice** before checking Cue output: first clears selection, second clears Programmer values. Check the playback page before using a page-relative address.
-
-A Cuelist contains ordered Cues. A playback is an operator control assigned to a Cuelist, Group, or specialized master.
+A **Cuelist** stores ordered Cues. A **Playback** is a control assigned to that list, a Group or a
+special master. Clear the Programmer (**CLR twice**) before proving playback on its own.
 
 ![Cuelist and assigned playback controls](../../assets/screenshots/cuelist-playback.png)
 
 ## Assign controls
 
-Press `[^SET]` with no source object, then choose a playback button or touch area, to open Playback Configuration. The command-line equivalent is `[^SET][PBK] <playback-number> [ENT]`. A regular `[SET]` edits the value or object chosen next; it does not assign. Playback Configuration has three edge-to-edge tabs: **Function**, **Behavior**, and **Layout**. Function uses two scrollable Fixture Library-style lists: choose Cue List, Group Master, Speed Master, or Special on the left, then choose its specific target from the visible list on the right. Playback name and color are in the compact full-width row below both lists. Behavior's **Auto-off** switches independently control **When fader reaches zero** and **When Flash is released**. These are shared Cuelist settings, so every physical or Virtual Playback assigned to that Cuelist observes the same choices. Master zero turns the Cuelist Off only when enabled; raising it later resumes the same current Cue only when that zero gesture caused the Off. X-fade endpoints and Temp controls never trigger this Auto-off. Flash Auto-off is armed only when that Flash started an otherwise Off Cuelist; an intentionally On Cuelist remains On when Flash releases. **When Flash or Swap is released** separately chooses whether release removes all temporary values or leaves retained non-intensity state. **Turn off when other playbacks take full control** is also separate and acts only after normal full-level playbacks replace every value; partial takeover, Flash, and Temp do not count. **Protect from Swap** keeps the playback at its current level while another Swap is held. Layout assigns each available button and fader through a choice dialog that explains the selected function. Button functions are grouped into Step Control, Permanent State, Temporary State, and Selection; specialized masters and faders use corresponding control groups. Choose **Empty Button** beside the dialog Close button to leave that physical button unassigned. Choose title-bar **Apply** to save a changed draft, or Close to discard it; Apply remains disabled when nothing differs from the opened configuration.
+Press **Shift+SET**, then choose a Playback to open its configuration. Or choose the source first,
+then the destination: **Shift+SET → Group/Cuelist → Playback**. A regular SET edits, rather than assigns.
 
-Choosing a different playback type immediately loads its standard layout. Cue List uses Go Minus, Go Plus, Flash, and Master. Group Master uses Select, Select dereferenced, Flash, and Master. Speed Master uses Double, Half, Learn, and Learned-speed percentage. Programmer Fade and Cue Fade use Double, Half, and Off above their time fader; Off sets the time to zero. Grand Master uses Blackout, Pause Dynamics, and Flash above its fixed master fader.
+| Tab | Configure |
+| --- | --- |
+| **Function** | Playback type and target, then name and colour. **None** clears the assignment without deleting its target. |
+| **Behavior** | Auto-off, temporary release behavior and Swap protection. |
+| **Layout** | Available button, fader and push-encoder functions. **Empty Button** leaves one unassigned. |
 
-The desk timing strip exposes **Programmer Fade**, **Cue Fade**, and **Release** together on touch and attached control surfaces. Release is the authoritative fallback for Cues whose Out Fade is linked to Release; changing it updates those linked Cues without rewriting their remembered explicit Out Fade values.
+**Apply** saves the draft; Close discards it. Changing type loads its standard control layout.
+A Cue List normally uses Go Minus, Go Plus, Flash and Master; a Group Master uses selection,
+dereferenced selection, Flash and Master. Fade masters provide Double, Half, Off and a time fader;
+Off sets their time to zero.
 
-For a direct Group Master assignment, press `[^SET]`, touch the source Group tile, then touch the destination physical or Virtual Playback. The visible command line remains armed with the explicit Group until that destination completes the assignment.
+### Auto-off and temporary controls
 
-Choose the red **None** function and then **Apply** to clear that playback without deleting its referenced Cue List or Group. Selecting None only previews the clear; Close keeps the playback unchanged. Assignment persists in the show and remains page-aware.
+These Behavior settings are independent. Cuelist choices affect every Playback assigned to it.
 
-## Manage playback pages
+- **When fader reaches zero** turns the list Off at Master zero. Raising it resumes the same Cue
+  only when that zero gesture caused the Off. Temp and X-fade endpoints do not trigger it.
+- **When Flash is released** turns it Off only if that Flash started an otherwise Off list.
+- **When Flash or Swap is released** chooses whether temporary release also removes retained
+  non-intensity state.
+- **Turn off when other playbacks take full control** requires complete replacement by normal
+  full-level playbacks; partial, Flash and Temp takeovers do not count.
+- **Protect from Swap** retains this Playback's level while another Swap is held.
 
-Touch the current **Page** control to open **Playback pages** and select an existing page. The keyboard button at the right of each page opens the full-text keyboard to rename that page without selecting it. **Add new page** creates and selects the next numbered page. When the last page already contains an assigned playback, the Next Page control also creates and selects a new empty page automatically; it remains disabled while the last page is empty so the desk does not accumulate unused pages.
+**Preferences → Defaults** supplies initial Auto-off choices and **Start after first recording**;
+changing defaults does not rewrite existing lists. If first-record start is enabled, creating a
+Playback/list/first Cue starts it at full and clears the recorded values while retaining selection.
+Adding later Cues or recording into an existing empty list does not auto-start.
 
-To rename the current page, press **SET** and then touch the **Page** control. Enter the new name and choose **Rename Page**. Page names and assignments are stored with the show, while the desk and each independently paged screen retain their own current-page position.
+## Manage pages
+
+Touch **Page** to choose an existing page. Its keyboard icon renames without selecting.
+**Add new page** creates/selects the next page. Next Page also creates one when the last page is
+occupied, but does not keep adding empty pages.
+
+For the current page, **SET → Page → Rename Page** changes its name. Names and assignments are
+stored in the show; each independently paged surface keeps its own position. Check the selected
+surface's effective page before entering an undotted Playback number.
 
 ## Run Cues
 
-Desk Settings → Preferences → Defaults supplies the initial Cuelist Auto-off choices and **Start after first recording** for newly created playback/Cuelist/first-Cue transactions. All three defaults are Off for compatibility. Changing a Desk default does not rewrite existing Cuelists. When first-record start is enabled, the new playback starts on its recorded Cue at 100% and the recorded Programmer values clear while fixture selection remains; recording into an existing empty Cuelist or adding later Cues never auto-starts.
+| Action | Result |
+| --- | --- |
+| **GO** | Run the next Cue, or resume a paused transition. |
+| **GO minus** | Reconstruct and run the previous Cue. |
+| **Pause / Resume** | Freeze/continue the current transition without advancing. |
+| **Release** | Remove this Playback's ownership, exposing underlying sources. |
+| **Flash** | Play temporarily with Cue timing while held. |
+| **Temp** | Temporary playback toggled by one press on, another off. |
 
-GO advances to the next Cue and applies its tracking state with configured timing. Increasing Intensity uses the incoming Cue's In delay/fade; decreasing or released Intensity uses the outgoing Cue's Out delay/fade. For Cue 1 → Cue 2, edit Cue 2's In cells and Cue 1's Out cells. Stored per-value timing takes priority unless Force Cue Timing is enabled; see [Programming Cues](04-programming-cues.md#which-cue-owns-the-timing). The two directions may overlap or leave a black gap. If GO, GO minus, or Go To interrupts a running fade, the new transition starts from the currently resolved output rather than jumping to a stored Cue endpoint. GO minus reconstructs the previous Cue rather than relying on programmer residue. A playback button configured as **Pause** freezes a transition and changes to **Resume** while paused; pressing it again continues the same Cue without advancing. GO also continues a paused transition. Release removes the playback's ownership and permits lower-priority sources to become visible.
+An interrupted fade starts the new transition from the current output. Incoming values use the
+entered Cue's In timing; decreasing/released Intensity uses the left Cue's Out timing. Stored
+per-value timing wins unless Force Cue Timing is on. See
+[Programming Cues](04-programming-cues.md#which-cue-owns-the-timing).
 
-**Flash** and **Temp** play the Cuelist with its Cues' own timing, as GO does: the Cue fades in with its In Fade, and Follow and Time triggers advance the list while it is held. Temp works like a Flash that toggles: one press starts it and the next ends it.
+Flash/Temp still run Follow and Time triggers. A list that releases all parameters turns itself
+Off after those releases finish, also ending its Flash/Temp. This does not apply to an empty,
+paused or chaser list, or one still holding Group values or running Dynamics.
 
-A Cuelist that no longer holds any parameter turns itself off. Build the last Cue to release everything the list set, and once those releases have faded out the playback goes Off by itself. A Flash or Temp holding it ends with it, so the Temp button reads off again and its next press starts the list afresh. This applies to lists that actually held values. It does not apply to a list whose Cue has not set anything yet, a chaser, a paused list, or a list with Group values or running Dynamics.
+### Jumps, selection and order
 
-Each Cue row can define a **Jump** destination and positive **Jump Count**. The destination is tied to the Cue itself, so the displayed Cue number and name follow later renumbering. On each arrival at that jump point, the next GO takes the Jump destination until the configured count is exhausted; the following GO continues to the ordinary next Cue. Jump points count independently. Turning the Cuelist Off or restarting it clears all jump counts. Fast-forward or Go To navigation that passes a jump point clears that point's count without taking its Jump, so a later run cannot inherit a stale loop.
+Set a Cue's **Jump** destination and positive **Jump Count** for a counted loop. Each arrival
+uses one Jump until its count is exhausted, then the next GO continues normally. Off/restart resets
+the counts. Go To navigation past a Jump resets it without taking it. Renumbering keeps destinations.
 
-The active playback is an explicit operator selection. Running another playback must not silently steal that selection. Cuelist View shows current/next state, Cue detail, and playback configuration.
+Running another Playback does not change the explicitly selected one. **Cuelist View** shows its
+current/next Cue. Touch a pool preview to enlarge it. **Cuelist Settings → Renumber Cues** numbers
+consecutively from **First new Cue number** without changing Cue order or contents.
 
-In the Cuelist Pool, touch a Cuelist's preview image to open that actual image at a larger size;
-Close, Escape, or the backdrop returns to the pool. **Cuelist Settings → Renumber Cues** assigns
-the entered **First new Cue number** to the first Cue, then numbers every later Cue consecutively
-without changing their order, names, values, timing, or stable identities. Choose title-bar
-**Renumber** to apply the change or Close to cancel it.
+Recording on touch uses the visible Playback area; hardware uses its topmost button, or its
+on-screen section if buttonless. The fader remains live. See
+[Record targets](01-command-line.md#recording-the-first-cue).
 
-On the touch playback surface, the whole playback is a Record target. On an attached desk, only the topmost assigned playback button is a Record target. If the playback has one button, that is the topmost button; if it has no buttons, use its visible on-screen section. The physical fader is explicitly not a Record target, so it can still be moved while recording. The touched target's normal action is suppressed while Record is armed. Outside Record, playback buttons and the fader remain independent controls. Selection retains the playback's explicit identity when pages change, even when another page uses the same slot.
-
-The visible layout never invents controls the playback does not have. A one-button playback exposes one button; a two-button playback exposes two. Increasing its footprint can reveal additional configured controls, but the compact footprint shows only the controls that exist.
-
-## Restart behavior
-
-First and Continue policies determine how a Cuelist starts after release or restart. Looping and chaser modes change end-of-list behavior. Test the exact production policy after a real server/app restart.
+**First / Continue**, looping and chaser settings determine starts and end-of-list behavior.
+Rehearse the actual production policy after a restart.

@@ -9,10 +9,6 @@ A show programs colour in one of two ways, chosen per show:
   fixture by fixture, how to show that colour as closely as each fixture can. An RGBW wash, a CMY
   spot and a wheel-only profile given the same colour each do their best with what they have.
 
-Earlier builds could store Red, Green, Blue and the other single colour channels as separate
-percentages. The desk does not open a show that still holds them. See
-[Shows programmed before fixture-independent programming](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming).
-
 ## Choosing the model
 
 **Setup → Attributes & encoders → Color model** shows and switches the model of the show that is
@@ -176,7 +172,7 @@ Preset reference. Otherwise it shows the nearest known colour name in angle brac
 In a Color Intent show, a Color preset recorded from fixtures that all hold the same colour is stored
 once, as that colour, rather than once per fixture. Such a preset is **universal**: recalling it
 gives that colour to every selected fixture, including fixtures that were never part of it. Its
-pool tile reads **Any** followed by the number of fixtures currently showing it, for example `Any · 2 fx`.
+pool tile shows the number of fixtures currently showing it.
 
 A Color preset recorded from fixtures holding different colours keeps each fixture's own colour and
 only ever applies to those fixtures; it is never stretched over the rest of the selection.
@@ -196,10 +192,3 @@ system at all are resolved from their channel names and reported as uncalibrated
 A show keeps the profile revision each fixture was patched with, so updating a fixture profile
 changes how that fixture shows the colour only when the operator updates the fixture; the colour
 stored in the show never changes.
-
-## The colour itself
-
-For fixture developers and integrations: a Color Intent colour is a CIE 1931 2° XYZ value relative to
-the D65 white point, with the white at a luminance *Y* of 1 and every component between 0 and 1.2.
-It is stored and sent as `{ "x", "y", "z" }` under the `color` attribute. Only its chromaticity is
-the colour; a colour of zero luminance is treated as white rather than as black.

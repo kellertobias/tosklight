@@ -1,7 +1,5 @@
 # Quick Start
 
-## Intro
-
 ToskLight is open-source show-control software, built with open-source Rust, JavaScript, and other
 third-party components. The source is published in the [ToskLight GitHub repository](https://github.com/kellertobias/tosklight). Read the [ToskLight Community License](https://github.com/kellertobias/tosklight/blob/main/LICENSE) and the generated [third-party license notices](https://kellertobias.github.io/tosklight/third-party-licenses.html) before distributing a bundled build.
 
@@ -14,7 +12,7 @@ The ToskLight bundle contains three operator products:
 
 ![ToskLight Control, ToskLight Architect, and ToskLight Pixel application icons](../assets/branding/tosklight-suite.png)
 
-- **ToskLight Control** is the lighting-control application. It owns the Programmer, Groups, Presets, Cuelists, Cues, Playbacks, Dynamics, patch, output routes, users, and screen layouts.
+- **ToskLight Control** is the lighting-control application. Use it to patch, program and run the lighting show.
 - **ToskLight Architect** combines CAD-based venue and rig planning with a standalone 3D visualizer. Its Rig Editor plans and patches a rig; its renderer draws it from live Art-Net or sACN, from the editor's preview, or from its built-in demonstration source.
 - **ToskLight Pixel** is the media server. It plays video, pictures, text, generated visuals, and effects on configured displays. Control operates its master and layers through patched Media fixtures and can use CITP/MSEX for names, thumbnails, libraries, and previews.
 
@@ -43,7 +41,7 @@ flowchart LR
 
 ### Start from the Demo Show
 
-The bundled **Demo Show** is built as a useful starting point. It follows the lead programmer's showfile setup philosophy, developed over years of work on professional lighting consoles:
+Use the bundled **Demo Show** to learn the show structure:
 
 1. Stable Groups describe the physical rig, such as stage Profile fixtures, stage Wash fixtures, audience lights, or Sunstrips.
 2. Those physical Groups are combined or referenced to create the Groups used while busking.
@@ -73,7 +71,7 @@ Start **ToskLight Pixel**, select and test its output, upload content, and wait 
 finish. Verify the physical display before patching the matching Media Server fixture in Control.
 Configure the corresponding Art-Net or sACN address and CITP endpoint in Show Patch.
 
-Media Server settings save automatically. DMX protocol, universe and start address, the Art-Net, sACN and Speed Group listen addresses, the tempo source, the pixel map, audio tuning, and layer, playback, and takeover changes apply immediately. Monitor, resolution, presentation-rate, sound and audio device, personality, CITP and interface address, and library-directory changes take effect after the Media Server restarts.
+Pixel saves settings automatically. Check its restart prompts after changing display, audio or network settings.
 
 ### First Architect rig
 
@@ -88,7 +86,7 @@ Continue with [ToskLight Architect](../20-ToskLight-PreViz/index.md).
 ### Before doors
 
 - Save a named revision and prove that the intended show reopens.
-- Verify the active user, show, playback page, output routes, universes, and physical destinations.
+- Verify the active show, playback page, output routes, universes, and physical destinations.
 - Clear temporary Programmer, Highlight, Freeze, FixAT, and Preload states that are not part of the show.
 - Run every required Cuelist, Macro, Timecode, Dynamic, Preload transition, and release path.
 - Confirm Media displays, audio, CITP previews, and content slots from the production machine.

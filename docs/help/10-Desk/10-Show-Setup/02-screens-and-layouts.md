@@ -1,143 +1,74 @@
 # Screens and Desktop Layouts
 
-Open **Show > Desk Setup > Screens & playback** to configure the primary desk surface and, in the desktop application, optional operator screens.
+Open **Show > Desk Setup > Screens & playback** to configure the main surface and optional desktop screens. Screen settings belong to the desk installation.
 
 ## Configure a screen
 
-For the default screen, set its operator-facing name. Choose **Configure Playbacks** to add playback rows. Each row has its own **First Playback Number**, **Playbacks in row**, **Input type** (**Fader**, **Buttons**, or **Potentiometer or encoder**), and **Buttons** count. A potentiometer or encoder shows its current position on a rotary percentage dial. Rotate or drag it to change the Playback level, press its center for the configured Playback button, or use the separate **Set value** control for numeric entry. Programmer encoders are separate controls. Choose its **Page source** and press **Save** to apply the layout. The default screen starts with its own page. **Enable software keyboard shortcuts** controls the complete software shortcut layer for this screen; attached hardware disables that layer automatically. The other default-screen controls take effect and save immediately. Choose **Undo** in the Screens & playback title bar to reverse the most recent actual default-screen change. Opening a modal or moving between setup sections does not create an undo step.
+Name the default screen and choose **Configure Playbacks**. For each row, set **First Playback Number**, **Playbacks in row**, **Input type**, and **Buttons**. Choose its **Page source**, then **Save**.
 
-Choose **Known windows** to see every window that has connected. Every window operates the one desk, so the list identifies windows rather than desk configurations to pick between. Connected windows appear first, followed by disconnected ones; each group is ordered by the most recent connection. Every entry shows its stable client identity, connection state, and last-connected time. Older migrated entries show **Last connected unknown** until that window connects again. The window you are looking at is marked **This window**.
+A **Fader** row controls levels. A **Buttons** row provides only actions. **Potentiometer or encoder** uses a rotary level control: turn or drag it for level, press its centre for the Playback action, or use **Set value** for numeric entry. These are separate from Programmer encoders.
 
-A disconnected window can be dropped with **Forget window** and a named confirmation, or every disconnected one at once with **Forget other windows**. This window and any connected window cannot be forgotten. Forgetting removes only the record that the window has connected before. The desk is untouched: its page, playback selection, desk lock, and Update defaults belong to the desk and outlive any single window, as do portable shows, users, optional screens, installation-wide configuration, Playback assignments, and show-owned Solo Regions. A forgotten window that connects again is simply known again, operating the same desk.
+**Enable software keyboard shortcuts** controls the main screen's shortcut layer; attached hardware disables it automatically. Other main-screen changes save immediately. **Undo** in the setup title bar reverses the latest saved change.
 
-Choose **Configure desk lock** in the Screens & playback title bar to open its configuration modal. Set the lock message, unlock control, and optional wallpaper, then choose **Save Lock Configuration** in the modal title bar. The Show menu's **Lock Desk** action applies that saved configuration.
+![Screen and Playback configuration](../../assets/screenshots/workflows/desk-setup-screens.png)
 
-When hardware is connected, **Hardware lighting** provides virtual faders for **LED brightness**, **Gooseneck brightness**, and **Gooseneck color**. Move a fader from 0 to 100%; changes apply automatically while you move it. On Compact Connect, color blends its two lamp channels: 0 is blue, 100 is white, and intermediate values mix them. A brightness of 0 turns that illumination off. The settings are saved with the desk and restored when the hardware reconnects. They apply while ToskLight controls the hardware; another application that takes ownership keeps its own lighting settings.
+### Known windows and desk lock
 
-The fields of the default screen line up along their top edges. Explanations such as the keyboard
-shortcut note wrap below their own control and never shift the controls or buttons beside them.
+**Known windows** lists connected and previously connected windows; **This window** marks the current one. Use **Forget window** or **Forget other windows** to remove disconnected records. This does not delete show data or desk settings.
 
-The Tauri desktop application can add optional screens. Choose **Add Screen** in the Screens &
-playback title bar; it sits in its own button group, apart from **Undo** and the configuration
-actions. The browser version shows no **Add Screen** action. Each new screen appears as a row with
-its name and the **Copy browser link**, **Configure screen**, **Open Screen**, and **Remove Screen**
-buttons.
+**Configure desk lock** sets the message, unlock control, and optional wallpaper. Choose **Save Lock Configuration**, then use **Show > Lock Desk** when needed.
 
-**Configure screen** opens one modal with the **Layout**, **Settings**, **Placement**, and
-**Playbacks** tabs in its title bar. Each tab is a single form without extra frames or headings, and
-every change saves immediately. On **Layout**, **Content** and the chosen pane or Desktop span the
-form; **Dock** and **Playbacks** sit side by side above **Command line** and **Programming**, and
-**Page controls** follows below. In a narrow modal the four switches stack in one column and the
-form scrolls. **Playbacks** edits the screen's playback rows in place, without a second dialog:
-choose **Add Row** in the modal title bar, drag a row by its handle to reorder it, or remove it with
-its delete button. A row layout that would run past position 1000 stays on screen with a
-**Not saved yet** note until you correct it; switching tabs keeps what you typed. If the desk
-rejects a change, the modal says **Could not save this screen** with the reason.
+### Hardware lighting
 
-Each optional screen can use its normal
-configurable **Desktop** or a **Fixed full-screen pane**. A fixed pane fills the screen's pane
-workspace without pane headers, resizing, settings, selection, or editing controls. Configure it
-from the controlling screen; the external display remains view-only.
+With hardware connected, **Hardware lighting** controls **LED brightness**, **Gooseneck brightness**, and **Gooseneck color**. Changes apply immediately and are restored on reconnect. On Compact Connect, color runs from blue at 0 to white at 100. A brightness of 0 switches that illumination off.
 
-The fixed-pane choices are **Fixture Sheet**, **Stage - 2D**, **Stage - 3D**,
-**Cues - Cuelist**, and **Text**. Their display settings and any fixed Cuelist or text file are
-stored with that optional screen. If configured content is missing, the screen shows an unavailable
-state and does not substitute another Cuelist or file.
+### Add an optional screen
 
-A screen's **Content** is **Desktop**, **Controls only**, **Fixed full-screen pane**, **Fixed left
-pane**, or **Fixed right pane**. Only **Desktop** and **Fixed full-screen pane** put pane content
-above the control region.
+In the desktop application, choose **Add Screen**. Use its **Configure screen**, **Open Screen**, **Copy browser link**, and **Remove Screen** actions. The browser cannot create native screen windows.
 
-**Controls only** gives the whole screen height to the control region: the encoders when this screen
-carries them, the Playback section otherwise. Nothing is reserved above it.
+**Configure screen** has **Layout**, **Settings**, **Placement**, and **Playbacks** tabs. Changes save immediately. A failed save remains visible with its reason; correct **Not saved yet** rows before relying on them.
 
-**Fixed left pane** and **Fixed right pane** divide the entire screen, not just its upper part. The
-chosen widget keeps its configured **Pane width (%)** — a share of the window width, so it holds its
-proportion on every display — over the full height on that side, and the
-control region takes every remaining pixel on the other side. There is no empty region above either
-one. When the screen carries neither the encoders nor Playbacks, the remaining side stays empty.
+Choose the screen's **Content**:
 
-**Show Dock** needs **Desktop** content. Every other content mode turns the Dock off and keeps its
-control disabled. Returning to **Desktop** makes the Dock control available again, but does not
-silently turn it back on. **Playbacks** and **Page Controls** remain independent and reserve their
-normal screen space wherever a control region exists.
+| Content | Use |
+| --- | --- |
+| **Desktop** | A configurable pane workspace above the control region. |
+| **Controls only** | Encoders or Playbacks use the full height. |
+| **Fixed full-screen pane** | One view-only pane fills the workspace. |
+| **Fixed left pane / Fixed right pane** | A pane occupies the chosen side at **Pane width (%)**, with controls beside it. |
 
-The encoder section of an optional screen never carries the keypad, the programmer fader or the
-Delete and Move tools; those stay on the main screen. It keeps the encoder group tabs with their
-Align, Special Dialog and Dynamics controls and the encoders below them. **Command line** adds the
-programmer command line above them on that screen.
+Fixed panes support **Fixture Sheet**, **Stage - 2D**, **Stage - 3D**, **Cues - Cuelist**, and **Text**. Configure them from the controlling screen. Missing content is reported rather than replaced with another list or file.
 
-While an optional screen carries both the encoders and Playbacks, one button toggles between the two
-sections. It sits at the top right of the command line where that screen shows it, and directly right
-of **Dynamics** on the encoder tab row where it does not. A screen without the encoders has nothing
-to toggle and shows no such button.
+**Show Dock** is available only for Desktop content. **Playbacks**, **Page Controls**, **Command line**, and **Programming** configure the controls on that screen. The optional encoder section omits the main keypad, Programmer fader, Delete, and Move tools.
 
-On a **Desktop** screen the control region is the bottom band across the whole window width, as on
-the main screen: the Dock reaches down to it and no further.
+Select a physical display and native fullscreen in **Placement**. With the Dock shown, **Exit fullscreen** is at its top; with the Dock hidden, it is in the upper-right corner. Closing an optional screen closes only that window. Reopen it with **Open Screen**. Closing the main window quits ToskLight.
 
-Each optional screen can also select a physical display and enter native fullscreen. Native
-fullscreen controls the application window on the physical display; **Fixed full-screen pane**
-controls the content inside that window. With **Show Dock** enabled, **Exit fullscreen** sits at
-the top of the Dock, as on the main screen. With the Dock hidden, a compact **Exit fullscreen**
-control stays in the upper-right corner. Its **Playbacks** tab provides the same row controls as
-the default screen's **Configure Playbacks** dialog and also selects its **Page source**.
-**Own page** keeps an independently changeable page, **Pinned page** stays on the chosen page, and
-**Follow surface** tracks another named surface. Follow chains cannot contain a cycle. All surfaces
-use the same show-owned Playback assignments at each page and position.
-Browser-only operation displays the default-screen controls but cannot create or claim support for
-native optional-screen windows.
+Keep the main window open and connected: optional screens share its server, session, command line, and selection. A connection error offers **Retry now**.
 
-> [!danger] Missing graphic
-> Add a screen-ownership diagram showing the default screen, additional screens, connected clients, Desktop or fixed-pane content, encoder placement, playback placement, and Own page, Pinned page, and Follow surface.
+### Page sources
 
-Pressing **X** in an optional screen window closes that window and marks the screen closed, so it
-stays closed until you open it again from **Setup → Screens** or with its **Open Screen** action.
-The rest of the desk keeps running. Pressing **X** on the main window quits ToskLight.
+Each screen uses the same show-owned assignments but can display a different page:
 
-An optional screen window is part of the same desk as the main window. It uses the main window's
-server and operator session, so it shows the same command line, selection and live state; it never
-starts a desk of its own and has no server setting. If a screen cannot join — for example because
-the server is not reachable or the main window is still connecting — the screen says why and
-retries on its own. **Retry now** tries again at once; pressing it repeatedly never opens another
-desk. Keep the main window open and connected while screens are in use.
+- **Own page** can be changed independently.
+- **Pinned page** stays on one chosen page.
+- **Follow surface** tracks another named surface. Follow chains cannot loop.
+
+![One desk with optional screens and independent page sources](../../assets/diagrams/screen-ownership.svg)
 
 ## Encoder placement
 
-Choose **Configure encoder placement** in the Screens & playback title bar. Its **Encoder placement** modal decides which screen carries the encoder section, independently of the
-Playback controls. Choose **Encoders on** to select the main screen or any optional screen, and
-**Visible encoders** to show four, five or six encoders, including with attached hardware.
+Choose **Configure encoder placement**, then **Encoders on** to select the main or an optional screen. **Visible encoders** selects four, five, or six controls, including with attached hardware.
 
-Enable **Compact encoder assignments** in the default screen settings or an optional screen’s **Configure → Layout** settings to show assignments beside hardware Playbacks. It is off by default. The display keeps all configured encoders in one row, with their current values or value spreads. Press **Int**, **Col**, **Pos**, **Beam** or another group to select it; press the active group again to cycle its pages. Group and page selection is shared with the full encoder bar. The readouts are display-only; **Programmer Fade**, **Page** and the large **A–E** speed groups remain touchable. Switching to the full Encoders view hides the compact assignments.
+Moving encoders leaves the main command line, keypad, and tools in place. If their assigned screen is closed, use **Use encoders on this screen** to bring them back.
 
-The main screen keeps its whole programmer whatever the placement is. While the encoders live on
-another screen, the main screen still carries its command line, its keypad and its Delete and Move
-tools, and its Programmer/Playback toggle stays available; only the encoder pane itself moves, and
-it names the screen the encoders went to. In Programmer mode, the command line shows **Programmer is assigned to** the selected screen. The
-setting you made stays out of the main screen list. If the chosen screen is closed, the same modal shows
-the placement warning and offers **Use encoders on this screen** to take the encoders back in one
-explicit action.
+An optional screen with encoders and Playbacks offers an **Encoders / Playback** switch. It starts on Encoders and changes only which control section is visible.
 
-An optional screen that carries the encoders and also shows **Playbacks** or **Page Controls**
-offers a **Playback**/**Encoders** switch and starts on **Encoders**. The switch has no row of its
-own: on the encoder view it sits at the end of the encoder group tabs, directly right of
-**Dynamics**; on the Playback view it sits in the page controls, directly above **PAGE UP**. Neither
-section loses height to it. It is a single button carrying both labels, the current section in blue
-and the other in white; pressing it changes section. The button keeps the same size and place in
-either view, so the row around it never moves. A screen that carries only one of the two shows that section without a
-switch.
+**Compact encoder assignments** adds readouts beside hardware Playbacks. Press a group such as **Int**, **Col**, or **Pos** to select it; press it again for the next page. The readouts themselves do not edit values. This option is off by default.
 
-Playback rows share all available playback height according to their controls. With attached playback hardware, a row without faders uses one height unit and a row with faders uses two. On a touch surface, a one-button row uses one unit and makes the whole playback section its button, with the function label at bottom-right. A two- or three-button faderless row uses two units and places its buttons side by side. A fader row uses four units. The unit size adapts so all configured rows and columns fit the playback area without scrolling. Hardware views indicate the actual arrangement. Touch controls retain at least 44px targets; if the available area cannot support a configured layout, the bank shows an actionable space message instead of presenting clipped controls. Configure fewer controls or enlarge the control area. Solo regions are configured in a Playbacks pane displaying this screen, or through a long press on the lower section’s PROG/PLAYBK button.
-
-![Default screen and playback configuration](../../assets/screenshots/workflows/desk-setup-screens.png)
+Playback rows divide the available height according to their controls. All configured rows fit without scrolling. If the area is too small for usable touch controls, enlarge it or configure fewer controls. Edit Solo Regions in a Playbacks pane displaying that screen, or hold the lower **PROG/PLAYBK** control.
 
 ## Build task Desktops
 
-Create separate Desktops for common jobs such as Programming, Playback, Patch, and diagnostics. Add only the panes needed for that job. Use full built-ins for temporary work that should not change a Desktop. Layout changes are autosaved to desk data.
+Create Desktops for tasks such as Programming, Playback, Patch, or diagnostics, then add the panes needed for each. Layout changes save automatically. Full built-ins provide temporary workspaces without changing a Desktop.
 
-Desktop layout controls arrange operator panes; they do not define fixture selection geometry.
-There is no built-in Layout pane or window. Use Stage to author fixture X/Y/Z positions, Group
-settings to define shared Projection and Phase ranking, and a Dynamic's Projection tab for a local
-override. Older Desktops that contained the retired Layout pane open without it and keep their
-remaining panes.
-
-For pane geometry and available windows, see [Application Layout and Window Manager](../30-Windows/01-desk-interface-and-windows.md).
+For pane titles, tile sizing, moving, and resizing, see [Desk Interface and Windows](../30-Windows/01-desk-interface-and-windows.md). Fixture positions are edited in Show Patch or Architect, rather than by moving desk panes.

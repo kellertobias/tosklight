@@ -10,7 +10,7 @@ By default, each Playback is a tile that acts as one large button. Its title is 
 
 In pane Settings, choose **Screen** to display a selected screen’s live configured rows, or **Free region** to keep independent rows. Both modes fit every configured row and column inside the pane without scrolling. Tiles stretch independently across the pane’s full width and height; resizing the pane changes the cell proportions without changing the configured row or column count. Three configured rows always remain three visible rows. Its page may follow the displayed screen, follow another screen, or use a **Custom page**. Select a custom page through the page number and caret in the pane title. Free region retains its independently configured positions and rows.
 
-Configure each free-region row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a 20-column, 14-row pane starting at 401 covers positions 401–680 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.
+Configure each free-region row's first position, number of positions and presentation: buttons, faders or push encoders. Preserve gaps between rows when useful. For example, a four-column, two-row pane starting at 1 covers positions 1–8 on its displayed page. Pane controls use the same configured Playback actions, fader modes, icons and images as screen controls.
 
 Choose **Pinned** for a fixed page, **Own** for this surface's page selection, or **Follow** another named surface. Following chains cannot contain cycles. Different panes may operate different pages concurrently. The shared command line uses the visibly selected surface's effective page for an undotted Playback number; use an explicit `page.position` to address another page. In Playback mode, the command field names the selected surface and its effective page, including when that Screen is closed. In Programmer mode, when the encoders are on another screen, it shows **Programmer is assigned to** that screen.
 
@@ -34,6 +34,6 @@ Choose **Create Solo Region** in the pane title, select grid cells, enter a name
 
 ## Preload
 
-Preload eligibility is configured by Playback position ranges, independent of the surface used. For example, `1 THRU 15 + 101 THRU 115` captures eligible permanent actions in those positions. Range union applies to every page by default, with optional page restrictions. Overlaps do not duplicate an action and unmatched positions remain Live.
+Preload eligibility is configured by Playback position ranges, independent of the surface used. For example, `1 THRU 8 + 101 THRU 108` captures eligible permanent actions in those positions. Range union applies to every page by default, with optional page restrictions. Overlaps do not duplicate an action and unmatched positions remain Live.
 
 The existing permanent-action set and Temp toggle behavior remain unchanged. Flash and fader movement stay Live. Programmer capture is a separate option. Captured actions retain their exact address, order and source through page changes and are committed together by Preload GO. See [Preload](12-preload.md) for inspection, removal, timing and release behavior.

@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
+import { nativeCapturePng } from "./nativeCapture";
 
 test.describe.configure({ mode: "serial" });
 test.setTimeout(180_000);
@@ -354,7 +355,10 @@ async function preserveNativeCapture(
 ) {
 	if (!entry.sourceFile)
 		throw new Error(`${entry.file} needs a native sourceFile`);
-	const actual = await fs.readFile(path.join(ROOT, entry.sourceFile));
+	const actual = await nativeCapturePng(
+		page,
+		await fs.readFile(path.join(ROOT, entry.sourceFile)),
+	);
 	const size = pngDimensions(actual);
 	expect(size.width, `${entry.file} native width`).toBeGreaterThanOrEqual(320);
 	expect(size.height, `${entry.file} native height`).toBeGreaterThanOrEqual(

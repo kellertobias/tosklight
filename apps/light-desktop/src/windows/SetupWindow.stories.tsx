@@ -152,7 +152,7 @@ const attributeConfiguration: AttributeConfigurationSnapshot = {
 	validation_error: null,
 };
 
-const configuration: DeskConfiguration = {
+export const marketingConfiguration: DeskConfiguration = {
 	frame_rate_hz: 44,
 	output_bind_ip: "0.0.0.0",
 	osc_bind: "0.0.0.0:8000",
@@ -412,20 +412,27 @@ const marketingFixtureLibrary: FixtureLibraryState = {
 export function MarketingSetupWindow({
 	initialSection,
 	initialFixtureLibraryOpen = false,
+	initialOutputsTab = "engine",
+	initialNetworkTab = "control-server",
+	outputRoutes = marketingOutputRoutes,
 }: {
 	initialSection: SetupSection;
 	initialFixtureLibraryOpen?: boolean;
+	initialOutputsTab?: OutputsSettingsTab;
+	initialNetworkTab?: NetworkSettingsTab;
+	outputRoutes?: VersionedObject<OutputRoute>[];
 }) {
 	const [section, setSection] = useState(initialSection);
-	const [draft, setDraft] = useState(configuration);
+	const [draft, setDraft] = useState(marketingConfiguration);
 	const [fixtureLibraryOpen, setFixtureLibraryOpen] = useState(
 		initialFixtureLibraryOpen,
 	);
 	// Outputs, Network, Defaults and Attributes each carry their own tabs in the title chrome,
 	// which insists on an active one. A section whose tab is missing here throws on render.
-	const [outputsTab, setOutputsTab] = useState<OutputsSettingsTab>("engine");
+	const [outputsTab, setOutputsTab] =
+		useState<OutputsSettingsTab>(initialOutputsTab);
 	const [networkTab, setNetworkTab] =
-		useState<NetworkSettingsTab>("control-server");
+		useState<NetworkSettingsTab>(initialNetworkTab);
 	const [defaultsTab, setDefaultsTab] =
 		useState<DefaultsSettingsTab>("record-update");
 	const [attributeTab, setAttributeTab] =
@@ -469,7 +476,9 @@ export function MarketingSetupWindow({
 		<ApplicationStateHarness>
 			<StoryShowObjectsProvider>
 				<FilesProvider source={files}>
-					<DmxDiagnosticsProvider diagnostics={marketingDmxDiagnostics}>
+					<DmxDiagnosticsProvider
+						diagnostics={{ ...marketingDmxDiagnostics, outputRoutes }}
+					>
 						<FixtureLibraryProvider library={marketingFixtureLibrary}>
 							<div style={{ height: "100vh", minWidth: 820 }}>
 								<ScreensProvider source={screens}>

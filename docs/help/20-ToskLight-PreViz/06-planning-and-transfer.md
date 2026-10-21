@@ -1,1128 +1,327 @@
 # Plan a Rig and Move It
 
-The PreViz Rig Editor is a rig-planning window: the same patch sheet the desk uses, over a
-show file rather than over a running desk. A rig planned there and a show running on a desk are
-the same rig, and neither side should have to go looking for a file to get from one to the other.
+Architect prepares the rig, venue and drawings in a portable `.show` document. Use Control to
+program Cues and Playbacks. The editor's lighting preview checks a rig without creating programming.
 
-> [!danger] Missing graphic
-> Add an authority and transfer diagram showing copied `.show` documents between Control and the Rig Editor, renderer-local overrides, configured show DMX inputs, derived Desk routes, and live Art-Net or sACN values.
+![Architect document transfer and live lighting are separate connections](../assets/diagrams/architect-transfer.svg)
 
 ## Open Demo Show
 
-The editor's file bar has an **Open Demo Show** button beside **New Show**, and it needs nothing else: no file to find,
-no desk on the network, and no rig to patch first. It opens a full demonstration rig — front-of-house
-profiles and PAR cans, moving washes and profiles, beams, strobes, scanners, Sunstrips, blinders, a
-hazer, three lasers, six cold-spark fountains, four flame jets and two media servers — as an
-ordinary show of your own. The venue includes its trusses, stage decks, curtains, a dancing crowd
-and a disco ball over the dancefloor. One media server feeds the two projection screens at the
-stage sides and the header screen flown above the back truss; the other feeds the three LED panels
-around the Sunstrips.
-
-On a new installation the editor opens a writable copy of this Demo Show immediately. The Desk's
-**Default Stage Show**, the editor copy, **Open Demo Show**, and Visualizer demo mode all come from
-this same portable template.
-
-What opens is always a **copy**. The demo that ships with ToskLight is a template and is never
-opened, never written to, and never changed by anything you do. The copy is written into this
-installation's own shows folder and named after the demo it came from: **Demo Show** the first
-time, **Demo Show 2** the next, and so on. The file bar's status line says which copy it is and
-where it was written.
-
-So a demo copy is yours. Patch it, repatch it, save it, rename it, delete it. Pressing **Open Demo
-Show** again gives you a fresh copy of the shipped rig rather than reopening whatever you did to
-the last one.
-
-The demo is built from the fixture packages this version of ToskLight ships, so its fixtures carry
-the same profile revisions, models and modes the fixture library does. It is the quickest way to
-see what the Visualizer draws, and the rig the product demonstration video is shot from.
+Choose **Show → New Show → Open Demo Show** for a complete rig with fixtures, scenery and media
+surfaces. Every press creates a writable copy named **Demo Show**, **Demo Show 2**, and so on;
+the bundled template is never changed. A new installation opens a copy automatically.
 
 ## The Show screen
 
-**Show**, at the top of the dock, is the open show as a document. It is available with no show open,
-because it is where a show is created or opened. Its file actions run across the top: **New Show**
-and **Open Demo Show** under **New Show**; **Load Show from Disk**, **Load Recent Shows**, and **Load from ToskLight Control** under **Open**; then **Save As**,
-**Publish to ToskLight Control**, **Import MVR** and **Export MVR**.
+Use the file actions at the top of **Show**:
 
+| Action | Result |
+| --- | --- |
+| **New Show** | Create an empty document or a Demo Show copy. |
+| **Open** | Load a file, a recent document, or an active show discovered on Control. |
+| **Save As** | Open a new, independent copy with its own identity. |
+| **Publish to ToskLight Control** | Add this document to a discovered desk's show library and follow that copy. |
+| **Import MVR / Export MVR** | Exchange the rig with other planning applications. Review the import or export limitations. |
 
-**Load Recent Shows** opens a modal with a scrollable table of files opened on this computer,
-newest first. Names omit the `.show` extension; Location shows an Internal badge for internal files, and Last saved shows the file timestamp. Files moved or deleted are omitted. Use the modal close control to dismiss it.
-**Load from ToskLight Control** lists only active shows announced by discovered desks.
-The table includes the desk IP address and operating system when announced. There is no manual host or IP input.
+**Load Recent Shows** lists existing files, newest first. **Load from ToskLight Control** lists
+discovered desks with an active show; it has no manual IP entry. When discovery is unavailable,
+transfer an ordinary `.show` file instead.
 
-A show loaded from a desk stays synchronized with that desk's show: there is no save to the desk.
-See [Stay in step with Control](#stay-in-step-with-control). **Save As** writes a copy as a *new*
-show, with its own identity and no desk: the copy opens in its place and never writes into the desk
-show the original follows.
+Click the pencil beside the show name to rename it. Enter or clicking away accepts; Escape
+cancels. The filename stays unchanged. For a document following Control, this local rename does
+not rename the desk's library entry.
 
-**Publish to ToskLight Control**, beside **Save As**, is how a show made here — or a Save As copy —
-joins a desk. Choose a desk from the list of desks on the network: the desk adds the show to its
-show library as a new show, and the window continues with the desk's copy, in step with it from
-then on. It starts sending edits once the show is opened on the desk; until then the chip reads
-**Show not active on Control**.
-
-Below them the show is seen from both sides at once. The left half draws the rig from above, with the
-show's name over it. The right half is **Show information**, which titles every printed CAD page, in
-two columns:
-
-* **Show**, on the left: **Project**, **Venue**, **Show date** and **Version**.
-* **Lighting designer**, on the right: **Name**, **Phone**, **Email** and the **Company logo**.
-
-Below both columns are the show's name, when it was last saved, and how many fixtures and universes it
-uses. Change a field and press **Save project info** to write it into the show; nothing is saved
-until you do.
-
-**Upload logo** takes a PNG, JPEG or WebP. The show keeps it as one small JPEG, flattened onto white
-and fitted within 800 × 400 pixels, so it travels with the show and needs no file beside it. Every
-printed page — plan pages, fixture lists and the page frames on the CAD screen — shows the logo in
-the title block where the ToskLight mark is otherwise drawn. **Replace logo** chooses another one and
-**Remove logo** takes it off; either change is kept once you press **Save project info**. A logo file
-that is not one of these formats, or is larger than 10 MB, is refused with the reason.
-
-**Make Default** keeps the lighting designer's name, phone, email and logo on this computer, not in
-the show. Every show created afterwards with **New Show** starts with them; shows that are opened,
-copied from a desk or opened from the demo keep their own. Press it again whenever the details change.
-
-**MCP** in the Show screen's title opens the MCP integration in its place; press it again to return
-to the file actions.
-
-### MCP tools
-
-The MCP server edits the show that is open in the Architect, the same way its own windows do. Each
-edit is written against the revision it read, so a change you make in a window at the same time is
-refused, not overwritten. Fixtures are named by the number an operator says out loud; a Venue object
-is named by its `0.N` number (pass `"0.10"` as text, because the number 0.10 is 0.1). Anything
-outside what the Architect allows — a size outside a profile's range, a DMX address on a Venue
-object, a source for a server that is not there — is refused with the reason.
-
-**Fixtures and Venue objects**
-
-* `search_fixture_library` — profiles by manufacturer, name or mode, with their ids, modes, patch
-  policy and Venue kind.
-* `list_fixtures` — every fixture and Venue object, with placement, patch and layer. A Venue object
-  also reports its kind, its size in metres, which measurements can be set, its colour, a chain's
-  ends and its model scale.
-* `add_fixture` — adds a fixture or a Venue object. Name the profile by `profile_name`, plus
-  `manufacturer` when two makers use the name, for its newest revision and first mode; or pass the
-  ids `search_fixture_library` returns. A Venue object gets the next free `0.N` number and no DMX
-  address. `size_metres`, `colour`, `chain_mode` (or `chain_top` and `chain_bottom`) and
-  `model_scale` set its size and look as it is placed.
-* `remove_fixture`, `set_fixture_placement`, `set_fixture_shaper_and_gel`, `set_fixture_identity`,
-  `set_fixture_patch`, `add_multipatch` and `assign_position_master` — edit one fixture. Nothing
-  else about the fixture changes.
-* `set_venue_size` — sets a Venue object's width, height or depth in metres. Only the measurements
-  its profile makes adjustable can be set, within the profile's minimum and maximum, as in the patch
-  sheet.
-* `set_venue_options` — sets a Venue object's colour as `#RRGGBB`; `null` gives it its kind's own
-  material back. On a chain it also sets the ends: `chain_mode` is `plain`, `motor_top` or
-  `motor_bottom`, or set `chain_top` and `chain_bottom` one at a time.
-* `set_model_scale` — draws an object at 0.01 to 100 times the size it was built at; `null` draws it
-  at its built size.
-* `list_layers`, `remove_layer` and `set_fixture_layer` — list the patch layers, empty one onto
-  another, and move one fixture. `save_layer` works on a desk only; the Architect has no route that
-  creates or renames a layer.
-
-**Media layout**
-
-These tools edit the Media workspace's layout. A desk has no media layout, so there they are
-refused.
-
-* `get_media_layout` — media servers, sources, LED module types, surfaces with their sections, and
-  projectors, each with its id and revision.
-* `put_media_server`, `put_media_source`, `put_led_module_type`, `put_media_surface` and
-  `put_media_projector` — create an object when no `id` is given, or update the one named. An
-  update changes only the fields given. A surface's `sections` replace its sections. Each section
-  is a `projection_screen`, `tv` or `led` section, and an LED section without `occupied_cells`
-  fills every cell of its grid.
-* `delete_media_object` — deletes one object by `kind` and `id`. Deleting a server removes its
-  sources; a surface that showed one keeps its fallback image.
-
-## Rename the show
-
-A show has a name of its own, separate from its file. The **Show** screen shows it over the rig
-overview, with a pencil beside it. Press the pencil, type the new name, and press Enter or click
-away to keep it; Escape leaves the name as it was, and an empty name changes nothing. The name is
-what a desk's **Load Show** menu offers, so a renamed show is offered under its new name at once.
-The file keeps its name; **Save As** writes the show to a new one. Renaming a show that follows a
-desk renames it on this computer only: the desk's show keeps the name its own library gave it.
-
-## Configure the fixtures the rig is made of
-
-**Library** is a page of **Settings**, at the foot of the dock, rather than one of the show's own
-screens, because the fixture library belongs to the computer rather than to the document. The page
-is available with no show open, and every show planned here afterwards patches from what is in it.
-Its **Create Fixture** action, marked with a plus, and search sit left of the Settings pages in the
-one title.
-
-The library reads in three columns — **Manufacturer**, **Fixture**, and **Fixture info** — so each
-column offers only what the column to its left has already chosen. Choose a manufacturer to see its
-fixtures, and a fixture to read what it is: type, modes with their footprints, size, weight, power,
-connectors, light source, lens, colour temperature, luminous output, beam angle, and its
-photograph. The search bar narrows every column at once. **Create Fixture** opens a blank profile;
-**Edit as new revision** opens the chosen one. This is the same editor ToskLight Control uses, so a
-profile authored here is the one the desk reads, with the same Identity, Simulation and Modes tabs
-and the same rules. Saving stores the next immutable revision: the library
-assigns the number, and a save is refused rather than silently overwriting work if another window
-has revised the same fixture in the meantime. A show already patched against an earlier revision
-keeps its own embedded snapshot and is unaffected.
-
-One difference from the desk is deliberate: the Architect reads the operator's own filesystem
-when choosing a photograph, icon, or GLB, because it has no configured file roots to confine a
-chooser to. The Geometry tab is the same as on the desk, including its live 3D preview: the lamp
-body alone on a dark-blue background, framed to fill the view, updating as parts, transforms and
-emitters are edited. The preview shows the geometry only, without a beam; how the lamp lights the
-rig is checked in the Visualizer.
-
-Channel work is the same on both products. Channels are ordered by dragging a row or by its move
-buttons, and that order is the DMX slot order within the split. A channel's DMX range is divided
-into named functions — a shutter that is closed to 17, open to 72, then strobing to 254 reads as
-those names on an encoder instead of a percentage — and one physical channel may carry functions
-of different kinds, so a combined dimmer-and-strobe slot is one channel with two bands. Whether a
-channel follows a virtual dimmer, and whether it inverts or never fades, are set per channel in
-its editor.
-
-## Editing the patch sheet
-
-The dock has four screens: **Show**, **CAD**, **Patch** and **Media**. **Patch** lists every
-fixture with a DMX address, lamps and effect devices — lasers, foggers, particle effects and
-patched scenery — alike. Switch on **Show all** above its layers and it also lists the Venue
-objects that are placed but not patched — trusses, stage elements, curtains and imported models —
-and **+ Add fixture** offers them. Selecting a Venue object in a view switches **Show all** on. The **Patch**
-title has two tabs at its right end, directly left of the window's **Settings** (⚙): **Sheet** is
-the patch sheet, and **DMX** is the address grid described in "The Patch screen's DMX tab" below.
-
-The Visualizer follows the selection of **CAD** and **Patch**. Every selected fixture, imported model
-and Venue object — trusses, stage elements and curtains included — is outlined in blue there, in the
-3D views and on the plan and elevations alike. Selecting more, deselecting and changing the selection
-update the outline at once; clearing the selection removes it. The outline only marks the object: its
-light output, position and material stay as they are, and clicking in the Visualizer picks as it
-always does.
-
-**Settings**, below the screens, holds the pages that are not a view of the rig: **Visualizer**,
-**Library** and **DMX**. It opens on **Visualizer**. **Visualizer** is one page of boxes that fill the window's width — two to a row, three or four once
-the window is wide enough, and one to a row in a narrow window: **Lamp** and **Laser** atmosphere,
-then **Rendering**, **Features** and **Picture**. **Features** holds **Crowd amount** beside the
-labels, selection and floor grid. When the boxes are taller than the window, the page scrolls, so
-every control can be reached however short the window is.
-
-Click a column header to order the sheet by that column, for example **Fixture ID** or **Patch**;
-click it again to reverse the order. An arrow marks the column the sheet is ordered by. **Patch**
-orders by universe, then address. Fixtures with nothing in the column, such as unpatched fixtures
-or fixtures without a note, always come last, and fixtures with the same value keep Fixture ID
-order. Shift and drag ranges follow the order the sheet shows. The sheet opens ordered by
-Fixture ID.
-
-Choose which columns the sheet shows from the window's **Settings** (⚙) under **Columns**; the last
-visible column cannot be switched off. Patch and Venue each remember their own columns on this
-computer. Above the switches, **View** offers three quick views, which only the Architect has — the
-desk's Show Patch window does not:
-
-- **Patch**: Fixture ID, Name, Manufacturer, Product / mode, Patch, Masters, Invert Pan,
-  Invert Tilt, MIB, Layer and Note.
-- **Visualization**: Fixture ID, Name, Location, Rotation, Bracket, Shaper, Footprint, Colour,
-  Chain, Scale, Layer, 2D, 3D and Note.
-- **Compact**: Fixture ID, Name, Patch, Layer and Note.
-
-**Footprint width**, **Footprint height** and **Footprint depth** size a generated Venue object — a
-truss's length, a curtain's width and drop, a stage element's rise — and show a dash for the
-measurements the object is not made to, and for everything else in the rig. Click a size to type
-it in metres; a size the object cannot be built at is refused with the range it can take. The size
-is kept when the object is edited here or on the desk.
-
-**Colour** sets a generated Venue object's colour — a curtain's serge, a black truss — with
-**Default colour** returning it to its own material. **Chain** chooses **Plain chain**, **Motor on
-top** or **Motor on bottom**; the end without the motor has a steelflex. The Visualizer draws each object with what was chosen for it, and a desk shows and edits the
-same columns in **Show Patch**.
-
-**Scale** draws a Venue object — an imported model above all — at a multiple of the size it was
-built at, from `0.01` to `100`. `1`, or an empty entry, is its built size; anything outside the
-range is refused with the range. The plan, the Visualizer and a desk's Stage all draw it at that
-scale, and everything that is not a Venue object shows a dash.
-
-**View** names the quick view whose columns the sheet shows exactly; changing a single column
-leaves it reading **Custom**.
-
-**Masters** says which masters reduce a fixture: `none`, `group` (the Group Masters only), `grand`
-(the Grand Master only) or `both`. Click it to choose another value; anything short of `both`
-warns which master the fixture stays live under. A fixture with no intensity shows `—`.
-
-**MIB** is Move in Black: `Off`, or the delay before the fixture moves while dark, from `0s` to
-`30s` with decimals such as `2.5s`. Click it to switch Move in Black off or on and set the delay.
-
-Click a fixture's **Note** to open the note editor.
-
-**No Layer Assigned**, under **All fixtures**, lists every fixture on the screen that has no layer
-of its own: fixtures still on the default layer, and fixtures whose layer no longer exists. While
-**Show all** is off, the sidebar hides every layer whose fixtures all belong to another screen —
-for example a Trusses layer on the Patch screen — and hides **No Layer Assigned** when it would be
-empty. An empty layer you created stays listed. Selecting fixtures in the drawing switches
-**Show all** on only when that selection happens; returning to the screen later does not switch it
-on again. The layer list appears once the screen's fixtures have arrived, already reduced to what
-the screen shows, so no layer flashes up and vanishes as the screen opens.
-
-To delete a layer, press the bin to the right of its fixture count and confirm. Its fixtures stay
-in the show and move to **No Layer Assigned**. A locked layer must be unlocked first, and the
-default layer has no bin. The bin is the Architect's; on the desk, delete a layer with the keyboard
-shortcut or the hardware button.
-
-While a layer is open, selecting stays in it: clicking, Shift and drag ranges, and Ctrl-click
-only ever select that layer's fixtures, and the sheet keeps showing the layer. A selection made in
-the drawing or another window opens **All fixtures** only when it includes fixtures outside the
-open layer.
-
-Right-click a value to edit it. When the fixture you right-click belongs to the selection, the
-editor changes every selected fixture; when it does not, the selection is replaced by that fixture
-and only that fixture is edited.
-
-A Fixture ID range in the value entry can be left open: `1100 [THRU] [ENTER]` numbers the selected
-fixtures 1100, 1101, 1102 and on, and `1101 [THRU] [−] [ENTER]` numbers them 1101, 1100, 1099 and
-on. A closed range such as `1012 [THRU] 1004` still counts from its first value towards its last.
-
-After **Enter**, the sheet scrolls to the fixture whose value you opened when the new value moved
-its row out of view, for example when a new Fixture ID sorts it further down.
-
-With several fixtures selected, **Delete** asks whether to delete or unpatch all of them. Delete
-removes every selected fixture from the show and clears the selection; Unpatch keeps their fixture
-lines and clears all their DMX addresses. Either choice is applied as one patch change. Fixtures
-on a locked layer are left out, and a fixture outside the selection is still deleted on its own.
-
-## Lighting the rig without a desk
-
-Select fixtures in the patch sheet and the editor's preview controls light them. No desk, no
-network route, no console: this is what makes a demo rig worth opening, and what lets you check a
-plan from every view before anyone rigs anything.
-
-**Simple** exposes Intensity, Pan, Tilt, Colour and Gobo. It sets them on every selected fixture at
-once, through the fixture's own profile — so one colour works on an RGB fixture and a CMY one
-without you having to know which you are looking at, and a 16-bit channel gets its fine byte.
-
-**Full DMX** is available when exactly one fixture is selected, and shows every slot of that
-fixture's complete mode: every logical head, every channel, coarse and fine bytes, named as the
-fixture library names them. It is a testing tool for one fixture, not a way to program a rig, so
-selecting none or several disables it visibly and leaves the values it already set alone.
-
-**Clear** returns the selected fixtures to their defaults.
-
-These are preview values, not programming. They are session state of the window: they never enter
-the show file, never become a preset, a cue or a stored look, and they are gone when the document
-is closed. The editor has no programmer, no command line, no playbacks and no cue stack — anything
-that starts to need cues, tracking or arbitration belongs on a desk, and the answer there is to
-connect to one.
-
-### When real DMX arrives
-
-Preview values apply to a fixture while no source has delivered that fixture's universe.
-
-* Start a real Art-Net or sACN source for one of the show's universes and the fixtures on it follow
-  the network immediately. Fixtures on other universes keep the editor's values.
-* Stop that source and the visualizer **holds the last values it received** rather than reverting to
-  the preview look. A universe that has had real DMX keeps it until you clear it or a source
-  resumes — a rig that jumped back to a preview the moment a console was unplugged would be worse
-  than one that froze.
-* Editor values and received DMX are never blended for the same parameter. A universe has one
-  owner at a time.
-
-The visualizer's status line says which is happening: **No DMX in — the Viz editor is driving these
-fixtures** when the preview plane is lighting the rig, and the ordinary **Waiting for DMX** when
-nothing is driving it at all.
-
-## Load from ToskLight Control
-
-The third action under **Open** opens a modal listing the currently active shows announced by
-control desks on the network. Desks without an active show are omitted. Select **Load** beside
-a show to copy the desk's currently active show into Architect. There is no IP address input or
-manual desk configuration. The list follows network discovery as desks arrive and disappear.
-
-The loaded document is bound to that desk and that show on this computer, and from then on the two
-stay in step on their own. A portable copy transferred to another computer, or written with
-**Save As**, carries no desk binding.
+Under **Show information**, enter the project, venue, date, version and lighting designer's
+contact details, then press **Save project info**. These details appear in printed title blocks.
+**Upload logo** accepts PNG, JPEG or WebP up to 10 MB. **Replace logo** and **Remove logo** are also
+saved with **Save project info**. **Make Default** keeps the designer details and logo on this
+computer for future **New Show** documents; it does not change existing shows.
 
 ## Stay in step with Control
 
-A document loaded from ToskLight Control follows the desk's show without any Save:
-
-* Every edit made here — moving a lamp, drawing an annotation, renaming a layer, editing the show
-  information — reaches the desk as soon as it is made. One drag, one paste or one undo is one
-  change on the desk, however many lamps it moves.
-* Every change made on the desk to the rig — a fixture's address, a layer, a note — appears here
-  without reopening the document. Cues, playbacks, programmer values, selection and Highlight are
-  the desk's own and never travel.
-* Edits are saved on this computer before anything is sent. Quit, lose the network or restart the
-  computer, and they are still there; they reach the desk, each exactly once and in order, the next
-  time it can be reached.
-* Live control — the preview controls, received DMX — never becomes an edit and is never sent.
-
-The chip under the file name in the dock says where the document stands. It shows nothing for a
-document that follows no desk.
-
-| Chip | Meaning |
-|---|---|
-| **Synced** (green) | The desk has every edit. Only this state says *Saved to Control*. |
-| **N pending** (blue) | Saved on this computer and on its way to the desk. |
-| **Offline** (grey) | The desk cannot be reached, the operator chose **Work offline**, or the desk has a different show open — then it reads **Show not active on Control**. Edits keep being saved here and are sent once the show is open on the desk again; nothing is ever written into another show. |
-| **N conflicts** (amber) | Someone on the desk changed the same thing. |
-| **Sync error** (red) | Something needs a look: the desk refused a change, a different desk answers at the desk's address, or a file this computer keeps for synchronization was damaged and has been rebuilt. |
-
-When two people change *different* things — a layer's order here and its name on the desk — both
-changes are kept. When both change the *same* thing, the desk's version stays in the document and
-the chip turns amber. Press it: the panel lists each conflict with **Control's** version and
-**yours**. **Keep Control's** drops your version; **Use mine** sends yours again, this time over
-Control's. Until you choose, your version is kept and nothing is lost.
-
-A change the desk refuses outright appears in the same panel with **Discard my change** and **Send
-again**. **Dismiss** clears a sync error once you have read it. **Work offline** stops talking to
-the desk while you keep working; **Reconnect** catches up.
-
-On the desk, the show name in the dock shows **⇄ Architect** while an Architect is following the
-show.
-
-If a file this computer keeps for synchronization is damaged, the document still opens. A damaged
-list of followed documents opens the document on its own, without its desk, and says why; the
-damaged file is left in place. A damaged record of unconfirmed edits is set aside, and the edits are
-recovered from the document itself.
-
-
-## The Patch screen's DMX tab
-
-The **DMX** tab in the **Patch** title shows every channel of every patched universe as a grid of
-numbered cells. A cell is lit when a fixture, one of its splits, or one of its multi-patches
-occupies that address and dark when nothing does. The addresses of one fixture share a single
-outline, a fixture's first address carries a mark on its left edge, so neighbouring fixtures stay
-apart, and an address two patches share is drawn in orange. Select a cell to see which fixture owns
-it, its patch range, split, fixture channel and attribute, and the address's DIP-switch setting.
-**Sheet** returns to the patch sheet.
-
-The tab's only window setting (⚙) is **Show sidebar**, which shows or hides the side column; this
-computer remembers the choice.
-
-To repatch a fixture, drag its block by any of its cells to the new addresses. The block keeps the
-cell you took it by under the pointer, stops at the start and end of the universe, and can be
-dropped into another patched universe. A split or a multi-patch copy moves on its own. Moved blocks
-are outlined with a dashed line, and **Pending patch** at the top of the side column lists every
-move with its old and new address. Nothing is written until **Apply Patch**, which writes every
-moved fixture as one patch change; **Discard** puts the blocks back. A refused change stays pending
-and shows the reason. Dragging back to the stored address takes a move off the list. Because
-**Apply Patch** is in the side column, blocks can only be dragged while **Show sidebar** is on.
-
-## The DMX settings page
-
-**DMX** is a page of **Settings**. Its own three tabs sit left of the Settings pages in the title:
-
-* **Network** configures where the show's DMX arrives from: the network interface this computer
-  receives it on, and the live DMX inputs described below.
-* **Values** is the desk's **DMX Output** window applied to the DMX this machine receives. Each
-  universe the show patches or listens on is a row of dots, one for every channel, that brighten
-  with the received level. A patched channel's dot has a grey outline and an unpatched one a dark
-  red outline. A universe's header names the protocol, frame rate and sender, **Holding the last
-  frame** once a source stops, or **Waiting for DMX** before anything arrived. Select a dot to
-  read its value, fixture and DIP switches; with nothing selected, the side column lists every
-  input being listened on with its health, its sender, and how many packets it accepted. Values
-  has no window settings. The editor outputs no DMX, so nothing on this tab overrides a value.
-* **Sources** lists every Art-Net node and sACN source this computer finds on the network, one row
-  per IP address: its name, IP address and protocols, its **Inputs** — each DMX input and the
-  Art-Net universe it sends — and **Outputs** — each DMX output and the Art-Net universe it plays —
-  and the universes it **Sends** and **Receives**. A universe is highlighted while its data is
-  arriving. Select a node's name to read its long name, MAC address and status report.
-
-Values listens exactly where the Visualizer does: the show's output routes, the live DMX inputs
-over them, and the Art-Net and sACN defaults for every patched universe when neither names any,
-each on the interface chosen for its protocol. It only listens while the tab is open, and shares
-its ports so a Visualizer on the same computer keeps receiving beside it.
-
-Sources sends an Art-Net poll to each network every three seconds and lists the nodes that answer;
-a node that stops answering disappears after about ten seconds. sACN has no poll: a source is
-listed from the universe-discovery announcements it sends every ten seconds. The ToskLight desk
-does both, so it appears with every universe its routes send. A sender that neither answers polls
-nor announces still appears, with the universes it is seen sending: any Art-Net broadcast, and
-sACN on the show's own universes. sACN receivers announce
-nothing, so they cannot be listed. Like Values, Sources uses the interface chosen for each protocol
-and only looks while the tab is open. A node that answers polls only by unicast can be missed
-while a Visualizer on the same computer is receiving Art-Net.
-
-## Choose the input network
-
-A computer with more than one network — a lighting network beside an office or venue network, or
-two lighting networks — can receive DMX on only the one that carries it. The **Input Interfaces**
-section at the top of the **DMX** settings page's **Network** tab has one choice per protocol:
-
-* **Art-Net interface** and **sACN interface** each offer **All interfaces**, the default, and
-  every network interface this computer has, by its system name and IPv4 address — for example
-  `en0 · 10.0.0.5`. The loopback interface is marked **(this computer only)**.
-* Choosing an interface takes effect at once: the **Values** tab and a running Visualizer listen
-  on that interface only. Art-Net broadcast, sACN multicast, and unicast addressed to that
-  interface all still arrive; DMX arriving on any other network is ignored.
-* The two protocols are independent, so Art-Net can come from one network and sACN from another.
-
-The choice belongs to this computer, not the show. It is saved with the Visualizer's settings,
-so the Visualizer and the editor always listen on the same network, and a show opened on another
-computer never carries this one's interface names.
-
-An interface is remembered by its name, so an address that changes when the network is renewed is
-still the same choice. When the chosen interface is not connected, it is listed as **not
-connected** and a warning says that the protocol is not received until it returns: the editor
-does not quietly fall back to every network. New interfaces appear in the list within a few
-seconds of being connected.
-
-## Configure live DMX inputs
-
-The **DMX** settings page's **Network** tab maps a logical show universe to the Art-Net or
-sACN universe the separate Visualizer output receives. Each mapping can be enabled or disabled
-and carries its protocol, wire universe, delivery mode, and UDP port. Art-Net offers Broadcast or
-Unicast; sACN offers Multicast or Unicast. Choose **Apply** to store the mappings in the portable
-show, or **Cancel** to discard the draft. The network interface the mappings are received on is
-chosen separately for each computer, as described above, and is never written into the show.
-
-When a desk is detected, **Take from Desk** reads that desk's compatible output routes through a
-read-only Visualizer session. With more than one desk, first select the source. The imported routes
-are only a preview until **Apply** is chosen: taking routes does not replace the show and does not
-change the desk. An explicit show input wins over a derived output route for the same logical
-universe.
-
-A Visualizer showing the editor's document always receives where these settings say. The
-per-universe input pins in the Visualizer's own Quick Settings apply only while it shows a desk or
-an opened show file; they are hidden while the editor is the source and never replace the show's
-inputs.
-
-## Load from Visualizer
-
-The desk's **Load Show** menu offers the document this editor has open, in the same way and with
-the same result: the desk imports it as an ordinary show and opens it. Only an editor that
-actually has a document open is offered — an editor with nothing open is on the network, and says
-so, but there is nothing to load from it.
-
-## What the two sides publish
-
-Each application announces itself on the local network, over the same standard service discovery
-printers and audio interfaces use, saying which of the two it is and what it currently holds. It
-publishes nothing else: no show content, no programming, no desk state. The name follows the
-machine, so a rig with two editors is two entries an operator can tell apart.
-
-The document served to the network is read-only, and it is the same read-only document the
-Visualizer itself reads. There is no route into the editor that changes anything from outside it.
-
-## When there is nothing to offer
-
-Discovery is a convenience and never a requirement. A network with no discovery, a firewall that
-blocks it, or a machine where the responder will not start costs the button and nothing else:
-both applications start, run, and open files exactly as they did before. A show file opened
-through **Open** or **Show from USB** is the same show file either button would have fetched.
-
-## Fixture drawings in plans and documents
-
-The Visualizer and rigging-document consumers use the same named top, left, right, front, and back
-SVG drawings carried by an immutable fixture-package revision. The SVG's millimetre coordinate
-space, origin, and orientation place it at physical scale. A fixture whose package carries no model
-of its own is drawn in the CAD from the line drawing of the shipped model the Visualizer shows for
-it, at the fixture's size; generated Venue objects keep their own drawing. The Visualizer's own
-plan and elevation views draw such a fixture from the same line drawings, its top drawing on the
-plan and its front and side drawings on the elevations, mirrored for the back and the right, and
-fall back to the model's generated silhouette for a view it has no drawing of. Only if neither exists
-is the renderer's fixture-type vector used, followed by a plain box for an unknown type.
-
-Every CAD view shows the stage the way the Visualizer's own views do: the plan has downstage at
-the bottom, **Left to right** (standing house left) has downstage on the right, **Right to left**
-has it on the left, and the front elevation is seen from the audience. A fixture's front, its lens
-and its direction indicator land on the same side of the stage as in the 3D view.
-
-Blinders, flat LED PARs, strobes and floods are drawn facing the audience from above and from the
-front, and PARs and Fresnels point forward from above. From the side, every lamp that hangs in a
-frame is drawn exactly as the Visualizer poses it for the fixture's **Bracket** angle, 0
-included: the body turns about its hinge, the clamp and the hanging frame stay where they are and
-are drawn in front of it. A Fresnel at 45° is drawn with its body turned 45° nose-down about the
-bracket bolts while its hanging frame and coupler do not move, and the 3D view shows it the same.
-An elevation shows whichever side of the lamp its rotation turns toward it, to the nearest quarter
-turn: a lamp turned 90° shows its side, and its bracket angle, on the front elevation. At 0 a
-blinder hangs face-down like any other lamp; turn the bracket to point it at the audience. A
-multi-patch instance uses its own bracket angle. A fixture drawn from its own 3D model turns as a
-whole by its bracket angle in every view. The plan (top) view keeps each drawing's own pose. LED
-wash moving heads are drawn from the front looking straight at you. **Export MVR** writes a
-bracketed lamp the same way, turned about the same hinge, so its light leaves the lens where the CAD
-and the 3D view show it; see [Shows, Revisions, and MVR](../10-Desk/10-Show-Setup/10-shows-revisions-and-mvr.md).
-
-Each lamp's direction indicator starts where its light leaves it — the lens of the body it is
-drawn with — and points where the lamp points: its bracket angle and its rotation, as the
-Visualizer aims it, with moving heads at their home pan and tilt. A lamp with no known lens starts
-its indicator at its position. The viewports and printed pages draw the same indicator; a viewport
-draws it in a half-transparent yellow, so it stands apart from the lamp's outline.
-
-A print page's cogwheel has a **Mounting hardware** switch. It is on for a new page and for a page
-saved before the switch existed; switched off, that page prints every fixture without its clamp
-wherever the model has a drawing without one. The viewports always show the hardware.
-
-SVG remains the source for both on-screen and printable plans. HTML retains the vector artwork;
-PDF or PNG output rasterizes that SVG at the requested output size rather than maintaining a
-separate bitmap asset. Plan composition uses world depth and explicit opaque/empty regions, so its
-occlusion does not depend on package file order or incidental 3D material names.
-
-A fixture or Venue object that follows a **3D Point** on the desk (its **Position Reference** in
-Show Patch) is drawn where it was rigged: the point's live position is desk state the plan does not
-read, and moving the point changes nothing in the CAD. The plan says so instead. **Follows 3D Point
-901 · Truss point** appears beside the object in every viewport, whether or not fixture IDs and DMX
-addresses are shown, and at the top of its **Placement** tab in **Info**. Editing the object here
-keeps its reference; only the desk sets or clears one.
-
-## Plan orientation
-
-The top-down plan reads like a map: **+X** runs to the right and **+Y** up, so upstage is at the
-top of the drawing and the audience at the bottom. The orientation mark in each viewport names the
-axes it shows. Rotating a top-down viewport turns the whole plan with it; the mark follows, so a
-quarter turn clockwise shows **+Y** to the right and **−X** up.
-
-## Cut planes
-
-Seen from the side, a stage with curtains both sides is a wall: the near one hides the rig the
-drawing is about. Each CAD viewport therefore carries a pair of cut planes, set beside its view
-selector, that limit how far into the drawing it looks.
-
-Give a **From** and a **To** depth in metres. Either may be left empty, which is what "everything
-upstage of the house curtain" means: a near limit and no far one. The axis being cut is the one
-the view looks along, so a top-down plan cuts by **Height** and the four elevations cut by
-**Depth**. The control shows the drawing's own near and far ends as placeholders, and **Show all**
-returns the whole drawing.
-
-An element has thickness, so a plane passing through one still shows it; only an element lying
-wholly beyond the cut is dropped. A pair given the wrong way round reads as the same slice. What
-the cut takes away is also unselectable, since you cannot pick what the drawing does not show.
-
-A print page added from a viewport takes that viewport's cut planes with it, so a PDF prints the
-slice you composed rather than the whole rig. A viewport saved before cut planes existed has none,
-which means the whole drawing.
-
-## Drawings under the plan
-
-A plot is drawn over the venue, so the venue's own drawing can be placed under it. **Elements** in
-the CAD title opens a side panel whose title row carries its two tabs, **Drawings** and **Objects**,
-and a **+** button that adds to the open tab. On **Drawings**, **+ → Import drawing (DXF, SVG)…**
-takes a DXF or an SVG, reads it, and
-tells you what it found — what the file says its units are, how large the drawing is in metres, and
-how many lines it holds — before anything is placed. Nothing is written into the show until you
-press **Place Drawing**.
-
-Every drawing belongs to one axis, the one it was drawn for: a ground plan to the top-down view, a
-section or a front elevation to the matching elevation. It appears on the views that show that
-axis and nowhere else, and a rotated top-down view turns its drawings with the rig rather than
-leaving the plan behind.
-
-Placement is in metres of the show, not of the file: give the drawing's origin an **X** and **Y**,
-a **Scale** if the file was not drawn at full size, and a **Rotation** if it does not face the way
-the rig does. Check the result against something you know — a stage width, a truss span — and the
-rest of the drawing follows. **Show** takes a drawing off the views without removing it; **Remove**
-deletes it from the show.
-
-What the show keeps is the drawing itself, as lines, rather than the file it came from. A placed
-drawing therefore travels with the show: save it, copy it to another machine, open it there, and
-the plan is still under the rig with no file to go looking for. Re-importing the same drawing after
-the CAD file changes places it again as a new drawing.
-
-Lines, polylines, circles, arcs and ellipses are drawn, and so are the blocks a plan is assembled
-from. Text, dimensions, hatches and splines are not: a drawing under a plot is there to say where
-the walls are, and the lettering of somebody else's title block is not part of that. Cut planes do
-not apply to drawings either, so a view cut to a slice of the rig still shows the venue it stands
-in.
-
-**Drawings** lists every placed drawing and every line, box, text and measurement drawn on a view,
-as a tree you arrange freely. **+ → New folder** adds a folder — inside the selected folder, or at the
-top level — ready to be named. Drag a row onto a folder to put it inside, or onto another row to put it
-before that row. The selected row carries the same moves as buttons: **↑** and **↓** move it among its
-neighbours, and **⇤** takes it out of its folder. A selected folder also shows **✎** to rename it and
-**✕** to delete it, which hands what it held to the folder around it, so no drawing is lost. The arrangement is saved in the show and every Architect window follows it; a show saved
-before folders existed opens with every drawing at the top level. Select a placed drawing to set its
-**X**, **Y**, **Scale** and **Rotation** below the tree, or a drawn item to **Erase** it.
-
-Each print page carries its own switches for the drawings on its axis, beside the page's cut
-planes. A page prints every drawing of its axis unless you switch one off, which is also what a
-page saved before drawings could be placed does.
-
-## The CAD title's tools
-
-The **CAD** screen's own title holds its tools, as icon buttons grouped and divided like every other
-title's buttons. Rest the pointer on a button, or reach it with the keyboard, and its name appears in
-a tooltip just below it, above the side panel and the viewports. A drawing tool's tooltip also shows
-the key that picks it, such as **Draw line · L**. From left to right:
-
-* **Undo** and **Redo** step back and forward through moves and deletions in the drawing. ⌘Z
-  (Ctrl+Z) undoes too, and ⇧⌘Z (Ctrl+Y) redoes.
-* The add group places venue objects. **Add truss**, **Add stage element**, **Add scenery** and
-  **Add primitive** each place their part at once when pressed. A small caret in the button's
-  bottom-right corner opens a menu of the parts that button can place, each shown by its picture; the
-  part the button places now is highlighted. Choosing a part places it and makes it the part the
-  button places from then on, and this computer remembers that choice for the next time you open the
-  CAD screen. Every part in the menu has a small button at the right of its row, which can be
-  reached with Tab. Beside a truss or a stage deck it is **Place Multiple** (a grid of four
-  squares), described below. Beside every other part — the stairs, the handrail, scenery and
-  primitives — it is **++**, **Add Several**: it holds that exact part, with its options and size,
-  without placing one first, and every click on a CAD view then places another copy where you
-  click, until you press Escape or **Done** on the banner.
-  * **Add truss** (a truss segment) lists the sections — **Pipe**, **2-point**, **3-point deco**,
-    **3-point regular**, **4-point** and **4-point large** — with the straight truss and, for
-    **3-point regular** and **4-point**, the corner pieces made for that section. It places a
-    **3-point regular** straight truss until you choose another.
-  * **Add stage element** (a deck raised off the floor) lists the decks on **Regular feet** and the
-    decks on **Scissor feet**, each by platform size, the one **Stairs** and the **Handrail**.
-    **Stairs** is one entry. It places a flight without rails. With the flight selected, choose its
-    rails on the **Placement** tab in **Info**, under **Parameters → Handrails**: **None**,
-    **Left**, **Right** or **Both sides**, left and right as seen climbing it. The drawing shows the
-    change at once. Either kind of deck is built
-    to the height set in **Info**, so there is no part per leg height. Stairs climb to the height set
-    there in 200 mm steps, and a handrail is a stage edge guard 1 m high, set to any length from
-    0.4 m to 24 m. It places a 2 × 1 m deck on scissor feet until you choose another. From above, a
-    flight is drawn as stairs rather than a deck: a line across it at every nosing, an arrow pointing
-    up the climb and its rails along the chosen sides. A flight climbs along its longer side, as it
-    does in the Visualizer. An elevation that looks across the climb shows the steps in profile,
-    rising the way the arrow points. One that looks along it shows the flight end on, at its full
-    height. Turning the flight turns this with it. Stairs placed from the retired **Stairs with
-    Handrails** part keep their rails up both sides until you choose otherwise.
-  * **Add scenery** (a drape on its rail) keeps the scenic elements together: the **Curtain** —
-    one, generated at any width and drop you set in **Info**, so a 3 m drape is this curtain at 3 m —
-    the **Chain**, the **Disco ball** — any diameter from 0.2 to 1.5 m on up to 3 m of chain, both
-    set in **Info** as **Diameter** and **Chain** — the **Stage railing** and the **Flight rack**. The
-    rack is one entry: it is placed at 8U and 0.6 m deep and selected, so **Info** shows its **Units**
-    (1 to 24) and **Depth** (0.4 to 1 m) straight away to set the size it should be; both change at
-    any time. A rack size chosen from the older list of 2U to 16U racks places this one rack. Every
-    view draws the rack as a road case, its corners rounded and capped with ball corners, with a
-    panel at each unit on its front; it keeps that look at any size. The button places the curtain until you choose another.
-  * **Add primitive** (a box, a ball and a cylinder) lists **Box**, **Cylinder** and **Ball**. Each
-    fills the width, height and depth set in **Info** — a cylinder stands upright, so its height is its
-    length — and takes the **Colour** set for it, neutral grey until you choose one. **Load model…**
-    at the end of its menu opens the file picker for a 3D model — glTF, GLB, 3MF or OBJ — and places
-    it at the stage origin, selected, while **Loading the 3D model…** shows until it is in. Place,
-    turn and scale it from **Info** like any Venue object; the show carries the model itself, so it
-    opens again with the show. A file that cannot be read is refused with the reason and changes
-    nothing; closing the picker loads nothing.
-  * **Place Multiple**, beside each truss and stage deck in those two menus, opens a dialog that
-    lays out many of that exact part at once and writes them in one step. A plan of the
-    arrangement under the fields shows every element as it will be placed and follows each change.
-    Nothing is placed until **Place**; **Cancel** places nothing at all, and everything placed is
-    left selected so you can move, turn or size it as one.
-    * For a **truss**, type the **First point** and **Last point** of the run (X, Y and Z in
-      metres) and how many **Sections** it is made of. The sections are spaced evenly from the first
-      point to the last, each centred on its share of the run, and each is turned about Z only to
-      the run's heading on the plan — never pitched or rolled. When the two points stand at
-      different heights, each section is raised to the height of its own place along the run, so
-      the run is stepped, not tilted. A straight section's **Section length** starts at the length
-      that fills the run end to end and can be typed; a corner piece keeps its own size.
-    * For a **stage deck**, choose whether the decks lie **Long side across** or **Long side
-      deep**, how many go **Across (X)** and **Deep (Y)**, and the **Grid centre** (X, Y and the
-      height Z the decks are placed at). The decks butt against each other at their own footprint,
-      so the grid has no gaps and no overlaps, and the dialog names the size it will cover.
-  * **Add venue element** (a box) opens a dialog listing the Venue objects in this computer's fixture
-    library that no button above places — crowds, PA and backline, figures and imported venue
-    models — each shown by its picture on a dark ground. The trusses, decks, scenic elements and
-    primitives are left out on purpose: place those from their own buttons and part menus. The
-    **PA Speaker** is set in **Info**: **Pole stand** puts it up on a pole, and **Pole** sets the
-    pole's height up to 2 m under its 0.6 m cabinet. The **Line Array** is set by its **Elements**,
-    1 to 24 under its flying frame. The curtains made at one fixed width, and the disco ball, racks,
-    PA tops and line array modelled at one size, are no longer offered; a show that placed one still
-    draws it. Type in the dialog's search to narrow the list by name or type. Choosing an object
-    only selects it; **Add** in the title bar (or a double-click on the object) places one. The
-    small **++** button on each object — its tooltip reads **Add Several** — closes the dialog and
-    holds that object instead: every click on a CAD view then places another copy where you click,
-    on the floor in a plan and at the height you click in an elevation, until you press Escape or
-    **Done** on the banner at the top of the view.
-
-A placed part goes to the stage origin with the next free virtual ID, the drawing shows it at once,
-and it is selected so **Info** opens to place it and set its size. A Place Multiple takes the next
-free virtual IDs one after another, in the order it lays the elements out. A part whose profile is not in this
-computer's fixture library is listed but cannot be chosen, and pressing a button whose part is missing
-says so instead of placing anything. When the show refuses a placement, the reason appears at the top
-right of the drawing.
-* The drawing group is what a press on a viewport does. **Select** (**V**), the arrow, selects and
-  moves the rig as before; **Draw line** (**L**), **Draw box** (**P**), **Place text** (**T**),
-  **Measure** (**M**) and **Erase** (**R**) draw on the view you use them in.
-* **Plans** and **Elements** open their side panels, and **Settings** (⚙) the CAD settings.
-
-## Rough venue tools
-
-**Draw wall**, beside **Draw line**, draws connected wall segments. Click the first endpoint,
-then each corner; finish the run with Escape. Near a wall corner, the pointer snaps to that
-corner. Elsewhere along a wall, it snaps to the wall centreline so a new run can start or end
-at a T-junction. Segments snap to horizontal, vertical and 45° diagonal directions. Hold Shift
-for free placement: corner, wall, angle and automatic loop-closure snapping are all disabled. The dropdown
-beside Draw wall offers windows, doors, pillars and stairs. Choose a window or door, move over a
-wall to preview its position, then click to attach it. Escape ends repeated placement.
-
-Select a wall or click an opening to configure it in **Info → Placement**. Wall colour, dimensions
-and construction settings are edited there, alongside position and rotation. Opening settings
-include width, height and, for a door, single/double leaves, inward/outward swing and hinge side.
-Dimensions and positions are in metres; **Angle** turns the object around the vertical axis.
-Position X/Y is the centre of a wall or furniture footprint, and Position Z is its floor height.
-The venue builder also provides floor, roof and balcony slabs, tables, chairs and bar sections.
-
-A **Wall** has length, height and thickness. Its centre, length and angle determine its endpoints.
-**Snap endpoints to nearby walls (25 cm)** is on initially: placing or applying a wall moves the
-nearest endpoint onto another endpoint within that distance, keeping its length and heading.
-Turn it off for a deliberate gap. **Wall colour** offers a colour picker and a six-digit **Wall colour hex** value; the colour is
-kept with that wall and its Undo/Redo history. New walls start neutral grey.
-Connected wall segments form a continuous corner in CAD plans, exported PDFs and 3D.
-Internal end caps are hidden at joins; doors and windows keep their own openings. Each
-segment remains individually selectable and keeps its own colour and construction settings.
-Moving or removing a neighbour rebuilds the join automatically.
-**Room ceiling height** sets the height used when walls enclose
-a room. If enclosing walls request different ceiling heights, the lowest requested height is used.
-
-**Add window** and **Add door** add openings to that wall. Each opening has an offset from the
-wall's local start and a width and height. A window also has a sill height and a **rectangular**,
-**round** or **arched** shape; round windows keep width and height equal. A door starts at the
-floor: choose **single** or **double**, **inward** or **outward**, and the hinge side as viewed
-from the wall's local front. **Remove opening** removes only that opening. Openings belong to
-the wall, so moving, turning, duplicating or deleting the wall handles its openings too. Overlapping
-openings or openings extending past the wall are refused when applied.
-
-A **Pillar** has a round, square or rectangular footprint and custom dimensions. Round and square
-footprints keep width and depth equal. **Table** offers round and rectangular footprints with
-custom dimensions. **Chair** offers **Black with metal legs**, **Decorative white** and **Bar stool**.
-A **Bar** is a solid counter with adjustable width, height and depth.
-
-For **Floor / roof / balcony**, choose **Floor**, **Roof** or **Balcony**, then set **Elevation above floor** and
-**Slab thickness**. A floor uses the same editable outline and elevation controls as a balcony;
-set elevation to 0 for the venue floor or raise it for a landing. Stair intersections create floor
-openings automatically. The outline is an ordered list of local horizontal points: X is across the
-object and **Depth** is positive toward the front (audience). Edit each point in metres, use **Add outline point**
-to insert a point on the closing edge, or **Remove point** to simplify the outline. At least three
-points must remain. Crossing edges and zero-area outlines are refused. Position moves the whole
-outline; Angle turns it. Elevation is measured above the placement's floor datum, so a balcony can
-be duplicated and raised independently to form several stacked theatre levels.
-
-**Stairs** has **Width**, total **Rise**, horizontal **Run** and **Steps** (1–256). A new flight
-starts at 1.2 m wide, rises 3 m over a 4.5 m run and has 16 steps. The flight rises along positive
-local Depth, towards the front (audience); use **Angle** to turn its direction. Position Z is the
-lower floor datum. A staircase intersecting a floor or balcony creates its opening automatically in
-Architect, exported plans and 3D; moving or resizing the stairs updates that opening. No separate
-cutout object is needed.
-
-Select a venue construction and open **Info → Placement** to change these choices directly.
-Each committed edit stores the complete assembly as one undoable operation. The normal CAD selection,
-move, rotate, duplicate, delete, **Undo** and **Redo** tools also work on these objects. The show
-keeps their construction details when saved, reopened or synchronized with Control.
-
-Top plans show wall outlines. In side views, front walls that obscure other elements are drawn
-as outlines so the venue interior remains visible and selectable; far walls retain their faces.
-Exported plan pages retain the complete venue, including door swing symbols and all balcony levels. In 3D, a camera outside an enclosed room hides the near walls and ceiling that
-would obstruct the interior; a camera inside keeps the enclosing walls visible. Independent balcony
-levels remain visible. Hidden walls and ceilings still block light and cast shadows, so moving the
-camera does not change the venue's lighting. Windows and doors are genuine openings in both the
-visible surfaces and light-blocking geometry. This behavior applies across rendering qualities.
-
-## The side panel
-
-**Plans**, **Elements** and **Info** share the side panel at the right of the drawing. Each panel's
-title row holds its name, its tabs and a **+** button whose menu lists what can be added there: on
-**Plans** a **Fixture list** page, on **Elements** the drawings or objects of the open tab. Drag the
-panel's left edge to make it wider or narrower, or focus the edge and use ← and →; the width is kept
-for the next time.
-
-**Info** follows the selection. Select one element in a view and it opens at the foot of the side
-panel; with no panel open, it is the whole side panel. Its title row has two tabs, **Generic** and
-**Placement**; the tab you chose stays open as the selection changes.
-
-For one element, **Generic** edits its **Name** and **Notes** and, for a lamp, its **Patch** as
-`universe.address` — one field per split, and an empty field unpatches it. **Placement** edits its
-**Position** (X, Y and Z in metres) and **Rotation** (X, Y and Z in degrees). A generated Venue object —
-a truss, a curtain, a stage element — shows its **Size** instead of a scale: only the measurements its
-profile lets you set, such as a truss's width (its length), a curtain's width and height or a stage
-element's height, in metres within the range the profile allows. A size outside that range is put
-back rather than written. A stage element's or stairs' **Position** is where its feet stand — the
-middle of its footprint on the floor — so Z 0 stands on the stage floor, and changing its height
-raises or lowers the deck without moving the feet. Every other generated object is positioned by
-its centre. Its **Parameters** follow: a **Colour** as a hex value, empty for the kind's
-default, and for a chain its **Chain top** and **Chain bottom**. A placed 3D model shows **Scale**. A
-lamp shows its **Bracket angle** and **Barndoors** angle, empty when none are fitted. Every number
-field names its unit.
-
-An element keeps the exact version of its profile it was placed with, so a show always draws what it
-drew when it was built. When this computer's library holds a newer version of that profile — because
-a shipped part has been corrected since, such as a truss section or the size of a corner block —
-**Placement** says so and offers **Update to the newest version**. It changes nothing else: the
-name, position, rotation, patch and the measurements you set stay as they are, and a measurement the
-profile does not let you set, such as a truss's section, comes back at the corrected one. Elements
-you do not update are left alone. The fields take typing from the keyboard: a change is written when you press
-Enter or leave the field, and Escape puts back what was there.
-
-With several elements selected, **Generic** lists them by **ID**, **Name**, **Model** and **Patch**, and
-a multi-patched fixture says how many copies it has. Click one to select only that element.
-**Placement** edits them together: **X**, **Y**, **Z**, **Rot X**, **Rot Y** and **Rot Z**, and for the
-lamps among them **Bracket angle** and **Barndoors**. A field shows the value they share, or the ends of
-an even spread as `1 THRU 5`. When the values follow no such line the field is empty and shows the range
-they cover, lowest to highest, in the field's unit, such as `-1.2m THRU 1.2m`. Type one
-value to set every element, or a range — `1 THRU 5`, `1 … 5` or `1 ... 5` — to spread it evenly from the
-first selected element to the last. **Placement Assistant** lays the selection out in the order it was
-selected: along a **Line** from a start to an end, in a **Grid** from a start with a number of columns
-and a spacing across and deep, or around a **Circle** from its centre, radius, start angle and arc,
-where 360° spaces the elements evenly around the whole circle. Nothing moves until **Apply**.
-
-When every selected element was patched from the same model, **Shared model** follows the placement
-fields and names it — `All 4 × Generic Stage Element 2 × 1 m`. It carries that model's own controls:
-the measurements its profile lets you set, such as a stage element's **Height** or a truss's
-**Width**, or a placed model's **Scale**, and the **Parameters** it is built with. They read and
-spread like the fields above, one value for the whole selection or a range across it, and each
-measurement is held inside the range the profile allows. Sameness is the model itself: four 2 × 1 m
-stage elements share one, a 2 × 1 m beside a 1 × 1 m does not, and a mixed selection keeps the
-placement fields alone.
-
-The move gizmo stands on the selected element's own origin, or on the centre of a selected group.
-Drag an arrow to move along that axis, or the square to move freely. Holding Shift while dragging an
-arrow spreads the selection along it, from the first selected element to the last.
-
-Hold **Option** (on Windows and Linux, **Ctrl**) while dragging the gizmo to place a copy instead:
-the copy follows the pointer and the original stays where it is. The preview follows the key as you
-press and release it mid-drag, and the key's state as you let go of the mouse decides: held, one copy
-is placed where the preview shows it; let go of the key first, and the drag moves the selection as
-usual, with no copy made. A copy is a
-new element like one from **Duplicate** — its own identity, the next free number, unpatched — it
-becomes the selection, and one **Undo** takes it away again. Option-dragging anywhere but the
-gizmo still pans the view.
-
-The amber quarter arc between the two arrows turns the selection about the axis the view looks
-along: Z in a plan, Y in a front or back view, X in a side view. Drag along the arc; the turn
-follows the pointer round the gizmo in 15° steps, and holding Shift turns it freely in tenths of a
-degree. Beside the gizmo, **Rotation Z +30°** (or X, or Y) says how far it has turned. A turn changes
-the same rotation the Info panel's **Rotation** field for that axis sets, so the arc and the typed
-field always agree. One element turns about its own origin; several turn together about the
-gizmo, each carried round it as well as turned. Letting go commits the turn as one step, which
-**Undo** puts back; letting go where you started turns nothing. The arc keeps its size on screen at
-every zoom.
-
-While you drag, the gizmo shows where its origin is on the two axes the view shows — X and Y in a
-plan, the horizontal axis and Z in an elevation — in metres, the same figures as the Info panel's
-position. Type a number while still dragging to place the origin there on the axis you are moving
-along, or start it with + or − to move it by that distance along the axis's positive or negative
-direction; the preview follows what you type, and Enter (or letting go) commits it. On a free drag
-with the square, the underlined axis is the one you type into; Tab switches to the other. A comma
-works as the decimal point. Text that is not yet a number, such as a lone sign, is marked and moves
-nothing: Enter does nothing and letting go abandons the move. Escape clears what you typed, and a
-second Escape abandons the move. A typed move neither snaps nor spreads.
-
-### Snapping
-
-With **Settings (⚙) → Enable snapping** on, a moved object that comes within about 12 pixels of a fit
-lands exactly on it, and a magenta diamond marks the fit while the drag holds it. Snapping is part of
-an ordinary drag of the move gizmo; no key needs to be held:
-
-* **Trusses** join where their connectors meet: the ends of a straight truss, and the end of each
-  arm of a corner, T-piece, cross or node, where the coupler egg sits. A corner block is 500 mm
-  overall wherever it has arms, so adding arms makes it busier rather than bigger. Connectors join
-  only within one truss system: three-point to three-point, four-point to four-point.
-* **Stage elements** — decks on scissor lifts, decks on regular feet and stairs — butt their sides
-  against a neighbour's and line them up flush with its sides, each direction on its own: slide a
-  deck along the front of a wider one and it closes up against it wherever you let go, and its end
-  clicks into line with the wider deck's end when it comes close. Two sides that meet on both axes
-  put corner on corner. A magenta line runs along each side that was lined up. This works for
-  elements turned in quarter turns; one turned at another angle still puts its corners on another's.
-  In a side or front view a stage element's feet land on another stage element's top. A stage
-  element stands on its position: the position is the floor under the middle of its feet.
-* **Curtains** hang their rail just under a truss or pipe, and line their ends up with the ends of
-  the next curtain.
-* **Handrails** land their foot line on the outside edge of a stage element, and their ends on that
-  element's corners, so a run of rail closes a side of the deck.
-* **Lamps** clamp onto the nearest pipe of a truss; with snapping on, a lamp dropped onto a truss is
-  also recorded as mounted on it. What reaches the pipe is the lamp's own **mounting clip**, which
-  its profile declares — the hook clamp on its yoke, the omega bracket under a moving head — so a
-  short lamp catches a pipe from the distance its real hardware reaches and no further. A fixture
-  whose profile says it hangs from nothing, such as a hazer or a floor can, is never picked up by a
-  truss. See **Mounting** in the fixture profile editor to set the clip on a model you imported.
-
-Only the axes the drag can move change, so a plan view never changes heights, and a truss, pipe or
-rail more than half a metre off the view's plane — a truss 6 m above a lamp on the floor, seen from
-above — is out of reach. **Measure** snaps its ends in the same way, onto connectors, stage corners,
-curtain ends and the centre of every object. Hold **Shift** to place freely: while it is held, a drag
-or a measurement snaps to nothing and a moved lamp is not mounted.
-
-The switch is on unless you turn it off. Before decks and trusses snapped, it read **Snap to
-declared truss mounts** and governed only whether a moved lamp was recorded on a truss; a computer
-where that old switch was turned off starts with snapping on, since nobody had turned off snapping
-that did not yet exist.
-
-The trash button at the top of Info, **Delete** and **Backspace** delete the selection from the
-show, with every multi-patch copy of each fixture. A single selected element goes at once; several
-are always confirmed first, and **Cancel** leaves every one of them in place. A deletion is one step:
-**Undo** in the CAD title, or ⌘Z, brings back everything it removed — same fixtures, numbers, patch
-and place — and **Redo** deletes it again. While a field has the focus, Backspace edits the field,
-and during a move it edits the typed position.
-
-With **Select** in hand, right-click an element in a viewport for its menu: **Group**, **Ungroup**,
-**Duplicate** and **Delete**. Lamps, trusses, stage parts and imported models all offer Duplicate and
-Delete; **Group** and **Ungroup** stand above them and appear only when they would do something.
-Right-clicking an element that belongs to the selection keeps the selection, so the menu acts on all
-of it; right-clicking another element selects it (with its group) first. A right-click on empty plan
-opens nothing, and while a drawing tool is in hand a right-click still finishes the line instead.
-From the keyboard, press the Menu key or Shift+F10 to open the menu for the selection, the arrow keys to move, Enter to choose and
-Escape to close it.
-
-* **Group** and **Ungroup** are the same actions as ⌘G and ⇧⌘G and as the buttons at the top of
-  **Objects**, described under [Groups](#groups). **Group** shows when two or more selected Venue
-  elements are not already exactly one group, **Ungroup** when the selection touches a group.
-* **Duplicate** (⌘D, Ctrl+D) adds a copy of each selected element beside it, edges touching, to the
-  right as the viewport you opened the menu in — or last used, for ⌘D — shows right. A copy is a new element with its own identity and the next free
-  fixture (or virtual) number above its original's, keeps its profile, mode, size, rotation and name,
-  and is not patched — give it a DMX address in Info when it needs one. The copies become the
-  selection. **Undo** takes them away again.
-* **Delete** is the trash button's delete: one element goes at once, several are confirmed first,
-  and **Undo** brings the elements back.
-
-A multi-patched fixture stands in the plan once for each copy. Click a copy and Info edits that copy
-alone: its name, position and rotation change, and the fixture and its other copies stay where they
-are. **Copy** at the top of Info switches between the original and each copy, named by its DMX
-address. Notes and scale belong to the fixture, so their labels say **(all copies)**. Dragging in the
-plan still moves the fixture with all its copies.
-
-## The grid
-
-A pale grey grid is drawn over every view. Its lines are one step of the scale indicator apart, so
-zooming changes the grid with the scale. **Settings (⚙) → Grid** switches it off, sets its colour, or
-fixes its spacing to a length that no longer follows the scale. Type the colour as a hex value such as
-`#c9d1d9` and press Enter, pick it from the colour panel, or choose one of the presets. The grid is a
-setting of this computer's Architect, not of the show: every show opened here uses it, every open
-Architect window follows a change at once, and a show carried to another machine is drawn with that
-machine's grid. **Show sub-grid** adds small plus
-signs at the scale indicator's quarter steps between the lines. A grid too dense to read at the
-current zoom is left out until you zoom in.
-
-What the drawing tools draw is saved in the show, shown in every Architect window, and printed on that
-view's plan pages:
-
-* **Draw line**: click each point. The length of the segment you are drawing is shown on it until
-  you click. Double-click, press Enter or right-click to finish an open line — a right-click adds no
-  point where the pointer is; click the first point again to close it.
-* **Draw box**: click one corner, then click the opposite corner.
-* With snapping on, a line's and a box's points snap: onto a corner of a truss (its box or a
-  connector) or of a stage element in reach; otherwise a line's next point that is nearly level with
-  or plumb over the last one is made exactly horizontal or vertical; and every coordinate left free
-  lands on whole 10 cm. Hold Shift to draw exactly where the pointer is.
-* **Place text**: click where the text starts, type, and press Enter. Text is sized for the zoom it
-  was placed at and grows and shrinks with the plan.
-  With **Select** in hand, click placed text to pick it: it is outlined in cyan and picked on its
-  own, so the element drawn under the words stays unselected. Drag the words to move them, or use
-  the gizmo that stands on the text's start — the square moves it freely, an arrow along one axis.
-  While text is picked, **Info** shows its **Text**, its **Height**, its **Font** and its
-  **Position** — X and Y on a plan, **Across** and **Height** on an elevation — and typing a value
-  there moves or rewords it. **Font** sets the words in the screen's own typeface (the default),
-  **ISO 3098 (osifont)** for lettering to the technical-drawing standard, or one of Allen V.
-  Hershey's plotter alphabets: **Hershey Simplex** (single stroke), **Hershey Duplex** (heavier)
-  or **Hershey Complex** (serif). The Hershey alphabets have no umlauts, ß or some symbols; those
-  characters are drawn in osifont. The show keeps only the font's name, so it opens anywhere, and
-  a font a later release adds shows in the screen's own typeface here. The fonts ship with
-  ToskLight under their own open licences, listed with the third-party notices. A printed plan
-  embeds each font its text is set in, so the PDF shows the same lettering on any computer and its
-  words can still be searched and copied; text in the screen's own typeface and every measurement
-  print in Helvetica.
-  Every move or change is one step **Undo** puts back, and it is kept with the show. Click anywhere
-  else to put the text down.
-* **Measure**: drag from one point to another. The measurement is drawn in amber with a tick at
-  each end and its distance — in millimetres below a metre, in metres above. With snapping on, each
-  end snaps onto the nearest connector, stage corner, curtain end or object centre; hold Shift to
-  measure from exactly where you press.
-* **Erase**: click a line, box, measurement or text to remove it.
-
-Escape drops a line, box or text still in progress; pressing it again returns to **Select**. The
-middle mouse button or Alt still pans while any tool is in hand. On a rotated top-down view, what
-you draw turns with the rig. Drawing is off while the print pages are open.
-
-Single keys work the CAD screen without the pointer. They act on the viewport you last clicked in,
-and are ignored while you type in a field or a dialog is open:
-
-| Key | Does |
+**Load from ToskLight Control** copies the active show and follows that desk. **Publish to
+ToskLight Control** starts following the published copy once Control opens it. Rig edits move in
+both directions automatically; there is no separate Save to Control. Programmer values, selection,
+Highlight, Cues and Playbacks remain Control's own.
+
+Edits are saved locally before transmission. After a network loss, they wait until the same show
+is active on that desk again. **Save As** creates an independent document without this binding.
+
+| Status chip | What to do |
 | --- | --- |
-| **V** | **Select** |
-| **L** | **Draw line** |
-| **P** | **Draw box** |
-| **T** | **Place text** |
-| **M** | **Measure** |
-| **R** | **Erase** |
-| **1** to **5** | **Top down**, **Left to right**, **Right to left**, **Front to back**, **Back to front**, framed on the rig |
-| **+** and **−** | Zoom in and out |
-| **W**, **A**, **S**, **D** | Move the view up, left, down and right |
-| **⌘D** (Ctrl+D) | **Duplicate** the selection beside itself and select the copies |
-| **⌘G** (Ctrl+G) | **Group** the selected Venue elements |
-| **⇧⌘G** (Shift+Ctrl+G) | **Ungroup** the selected groups |
+| **Synced** | Control has every edit. |
+| **N pending** | Edits are saved here and waiting to reach Control. |
+| **Offline / Show not active on Control** | Restore the connection or open the followed show on Control. |
+| **N conflicts** | Open the chip and choose **Keep Control's** or **Use mine** for each conflicting edit. |
+| **Sync error** | Open the chip, read the reason and correct it. Use **Discard my change** or **Send again** where offered. |
 
-The project paperwork printed on every page is no longer a CAD panel: set it under **Show
-information** on the **Show** screen.
+Changes to different fields are kept together. If both operators change the same field,
+Control's version remains visible until you resolve the conflict; your version is retained.
+**Work offline** pauses communication; **Reconnect** catches up. Control shows **⇄ Architect**
+beside its show name while Architect follows it.
 
-## Objects in the Elements panel
+On Control, **Load Show → Load from Visualizer** imports and opens the editor's current document.
+An editor without an open document has nothing to offer.
 
-**Objects**, the second tab of **Elements**, lists what the venue is built from apart from the lamps:
-**Venue items** — every shipped Venue object, generated like trusses, curtains and stage elements or
-drawn from a model like truss corners, decks on legs and the disco ball — and **3D models**, which
-lists only the models imported into this show. Each row names the object, its ID, its kind and its
-size in metres.
+## MCP integration
 
-### Groups
+**MCP** in the Show title opens its integration settings. Connected tools act on the open show,
+subject to the same sizes, patch rules and revision checks as the editor. Review proposed edits
+before running them; the CAD and patch update with accepted changes.
 
-Select two or more Venue elements — the trusses of one rig, the decks of a stage — and press
-**Group** at the top of **Objects**, ⌘G, or **Group** in the right-click menu of a viewport. The
-group is saved in the show as **Group 1**, **Group 2** and so on, and is listed under **Groups**
-above the other objects; its elements move there from the lists below. **▸** opens a group to show
-its members.
+## Configure fixtures
 
-A click selects the whole group: its row, one of its members in the list, or any of its elements in a
-view, and so does a selection rectangle that catches one of them. Hold **Shift** to take elements one
-at a time instead — Shift-click in a view adds or removes just that element, and Shift-click on a
-member in the list selects only that member. A selected group moves together with the gizmo, like any
-selection. Every element of a selected group is drawn in violet, in the CAD views and in the 3D
-PreViz alike, while an element selected on its own — including one Shift-picked out of its group —
-keeps the ordinary blue selection colour, so a whole group always reads apart from a single piece. **Ungroup** — at the top of **Objects**, in the right-click menu, or ⇧⌘G — dissolves
-every group the selection touches and leaves its elements where they are. An element is in one group
-at most: grouping it again takes it out of its old group. A deleted element leaves its group, and a
-group with no element left goes with it. **+** adds more: the same truss, stage element, curtain,
-primitive and venue element as the title, and **Import 3D model…**, which places a GLB, glTF, 3MF or OBJ file as described below and selects it. Select a row to select the object in the
-views; **Info** below then sets its position, rotation and scale.
+Open **Settings → Library** to choose a manufacturer, fixture and mode, inspect its specifications,
+or use **Create Fixture** / **Edit as new revision**. The library belongs to this computer.
+A show keeps its embedded profile revisions until you explicitly update its fixtures.
+See [Fixture Types and GDTF](../10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md) for profile editing.
+
+The **Patch → Sheet** tab lists DMX fixtures. Turn on **Show all** to include visual-only Venue
+objects. Selecting a Venue object in CAD also turns it on. **+ Add fixture** adds from the library;
+**+ Import 3D model** imports a venue model.
+
+Click a column header to sort; click again to reverse. Empty values sort last. Shift selections
+follow the displayed order. Under the title's **Settings (⚙) → Columns**, choose columns or a
+**Patch**, **Visualization** or **Compact** quick view. Changing individual columns produces **Custom**.
+
+Right-click a value to edit it. If that fixture is selected, the edit applies to the selection;
+otherwise it selects and edits that fixture alone. Check the selected rows before confirming.
+
+| Field | Use |
+| --- | --- |
+| **Fixture ID** | Renumber; an open range such as `1100 THRU` counts upward, `1101 THRU −` downward. |
+| **Location / Rotation / Bracket** | Place and aim the fixture. |
+| **Footprint / Colour** | Size and colour adjustable Venue objects. |
+| **Chain** | Plain chain, motor on top, or motor on bottom. |
+| **Scale** | Resize a Venue model from 0.01× to 100×. |
+| **Masters** | Choose `none`, `group`, `grand` or `both`; heed the warning if a fixture bypasses a master. |
+| **MIB** | Disable Move in Black or set its delay from 0 to 30 seconds. |
+| **Note** | Add a rigging or production note. |
+
+Select a layer to limit sheet selection to it. **All fixtures** removes that limit. Deleting a
+layer retains its fixtures under **No Layer Assigned**; unlock a locked layer first. Deleting
+fixtures removes them from the show. **Unpatch** retains them and their programming but clears
+DMX addresses. Locked-layer fixtures are excluded from a multi-fixture deletion.
+
+### Repatch on the DMX grid
+
+Open **Patch → DMX**. Each fixture's occupied cells share an outline; orange cells indicate address
+overlap. Select a cell for the owner, attribute, patch range and DIP-switch setting.
+
+With **Show sidebar** on, drag a block to another address or patched universe. Each split or
+multi-patch copy moves independently. Moves appear dashed and are listed under **Pending patch**.
+Choose **Apply Patch** to save them together or **Discard** to revert. A refused move remains
+pending with its reason. **Sheet** returns to the fixture table.
+
+## Preview lighting without a desk
+
+Select fixtures and use **Simple** for Intensity, Pan, Tilt, Colour and Gobo. **Full DMX** exposes
+all slots when exactly one fixture is selected. **Clear** restores the selected fixtures' defaults.
+These are temporary preview values: closing the document discards them, and they never become
+Cues or Presets.
+
+Real Art-Net or sACN takes over each universe as soon as it arrives. Other universes retain their
+preview. When the source stops, the renderer holds its last received frame; it does not jump back
+to the editor preview. The status line identifies preview, waiting and live-input states.
+
+## Receive live DMX
+
+Open **Settings → DMX → Network**:
+
+1. Choose an **Art-Net interface** and **sACN interface**, independently. **All interfaces** is the
+   default. A missing chosen interface shows **not connected** and does not fall back silently.
+2. Add live-input mappings from logical show universe to protocol, wire universe, delivery mode
+   and port. Art-Net offers Broadcast/Unicast; sACN offers Multicast/Unicast.
+3. Press **Apply** to store the mappings in the show, or **Cancel** to discard the draft.
+
+**Take from Desk** previews compatible routes from a detected desk; choose a desk first when
+several are available, then **Apply**. Explicit show inputs override derived routes for the same
+logical universe. Interface choices stay on this computer.
+
+**Values** shows received levels, sender, rate and **Holding the last frame** / **Waiting for DMX**.
+Select a channel for its value and fixture. **Sources** lists discovered Art-Net nodes and sACN
+sources; a silent or non-discoverable device may not appear. These diagnostics listen only while
+open. Architect sends no DMX.
+
+While the renderer follows the editor, these show inputs govern it. Its own per-universe Quick
+Settings overrides apply only when following a desk or an independently opened show file.
+
+## Work in CAD
+
+The title contains **Undo**, **Redo**, placement tools, drawing tools, **Plans**, **Elements** and
+**Settings (⚙)**. Hover or focus an icon for its name and shortcut.
+
+### Place stage and scenery
+
+Use **Add truss**, **Add stage element**, **Add scenery**, **Add primitive**, or **Add venue element**.
+A button places its current part; its caret chooses another. A placed object is selected, ready for
+**Info → Placement** to set position, rotation, size and options. Venue objects receive `0.N` IDs
+and have no DMX address.
+
+- **Place Multiple**, beside a truss or stage deck, previews a complete arrangement before **Place**.
+  A truss run uses first/last points and a section count. Different endpoint heights produce a
+  stepped run, not tilted sections. A deck grid uses orientation, counts across/deep and its centre.
+- **Add Several (++)** holds a part for repeated click placement until Escape or **Done**.
+- **Load model…** imports GLB, glTF, 3MF or OBJ; see [Place your own venue models](#place-your-own-venue-models).
+
+Adjustable parts use the size and options in **Placement**, rather than a separate part for every
+size. For example, set a curtain's width/drop, a stage deck's height, a chain's motor end, or a line
+array's element count there.
+
+### Draw walls and fit openings
+
+**Draw wall**, beside **Draw line**, draws a connected run: click the start and each corner, then
+Escape to finish. It snaps to existing corners, points along walls, and horizontal/vertical/45°
+directions. Hold Shift to disable corner, wall, angle and loop-closure snapping.
+
+Use its dropdown for windows, doors, pillars and stairs. With a window or door active, hover a
+wall to preview the opening, then click to attach it. Escape ends repeated placement.
+Select the wall or opening and use **Info → Placement**:
+
+| Object | Main settings |
+| --- | --- |
+| Wall | Length, height, thickness, colour and room ceiling height. |
+| Window | Width, height, sill and rectangular, round or arched shape. |
+| Door | Width, height, single/double leaves, inward/outward swing and hinge side. |
+| Pillar | Round, square or rectangular footprint and dimensions. |
+| Floor, roof or balcony | Outline, elevation above floor and slab thickness. |
+| Stairs | Width, rise, run and step count. |
+| Furniture | Table shape/size, chair style, or bar dimensions. |
+
+Openings move with their wall. Overlapping openings or openings outside it are refused.
+**Snap endpoints to nearby walls (25 cm)** can close a nearby endpoint when placing/applying a wall;
+turn it off for a deliberate gap. Connected segments appear as continuous walls in plans and 3D,
+while remaining individually selectable and colourable. Enclosed walls create a ceiling at the
+lowest requested **Room ceiling height**.
+
+Slab outlines need at least three non-crossing points. Edit local X/Depth points, add/remove points,
+then position and rotate the whole slab. Elevation is measured from its placement's floor datum;
+duplicate and raise balconies for stacked levels. Stairs rise along positive local Depth; rotate
+them with **Angle**. Stairs intersecting a floor or balcony create a cutout automatically, which
+follows later stair edits.
+
+Top views draw wall outlines. Side views outline obstructing near walls so you can see and select
+the interior. Exported plans retain the venue. In 3D, a camera outside an enclosed room hides
+obstructing near walls and ceilings; from inside they remain visible. Cutaway surfaces still block
+light and cast shadows. Windows and doors are real openings. Balconies remain visible.
+
+### Edit the selection
+
+**Info** follows the selection at the right of CAD. **Generic** holds name, notes and patch;
+**Placement** holds position, rotation, sizes and parameters. Fields show units. Enter or leaving
+a field commits; Escape restores its previous value. Stage decks and stage stairs are positioned
+at the floor under their feet; other generated scenery uses its centre.
+
+With several elements selected, enter one value for all or `1 THRU 5` to spread in selection order.
+Mixed values show their range. **Shared model** exposes common part settings only when the selected
+objects use the same model. **Placement Assistant** previews Line, Grid or Circle arrangements;
+**Apply** commits them.
+
+**Update to the newest version** appears when a newer library profile is available. It retains
+placement, patch and adjustable measurements; review the updated geometry before using the plan.
+
+### Move, rotate and duplicate
+
+Drag the gizmo's arrow along one axis or its square freely. Shift-arrow dragging spreads the
+selection. Hold Option (Ctrl on Windows/Linux) while dragging the gizmo to duplicate; release the
+modifier before the pointer to move instead. Copies have new IDs and are unpatched.
+
+The amber arc rotates about the view axis in 15° steps; Shift allows free rotation. Several
+selected elements rotate around their shared centre. During a move, type a coordinate, or start
+with `+`/`−` for a relative distance. Tab changes axis during a free move; Enter commits. Typed
+moves do not snap or spread. Escape clears typed input, then cancels the drag.
+
+With **Settings → Enable snapping** on, the gizmo snaps compatible truss connectors, stage edges,
+curtain rails/ends, handrail feet and fixture mounting clips. Only movable axes change. Shift
+suppresses snapping and automatic fixture mounting. A plan drag cannot snap a floor fixture to a
+truss far above it; use an elevation to set height.
+
+Right-click a selected object for **Group**, **Ungroup**, **Duplicate** and **Delete**. A single
+Delete acts immediately; several selected objects require confirmation. Undo restores their IDs,
+patch and placements. A multi-patch copy's **Info** edits that copy's placement; dragging the
+fixture in CAD moves its copies together. Notes and scale are shared across copies.
+
+### Group venue objects
+
+Under **Elements → Objects**, select at least two Venue elements and choose **Group** (Cmd/Ctrl+G).
+Clicking any member selects the group; Shift selects individual members. Violet outlines mark a
+whole selected group, blue an individual element. **Ungroup** (Shift+Cmd/Ctrl+G) dissolves touched
+groups without moving their parts. Each element belongs to at most one group.
+
+### Draw and measure
+
+| Tool | Operation |
+| --- | --- |
+| **Select (V)** | Select and move objects or placed text. |
+| **Draw line (L)** | Click points; Enter, double-click or right-click finishes. Click the start to close. |
+| **Draw box (P)** | Click opposite corners. |
+| **Place text (T)** | Click, type and Enter. Select later to change words, height, font or position in Info. |
+| **Measure (M)** | Drag endpoints; read millimetres below 1 m, metres above. |
+| **Erase (R)** | Click an annotation to remove it. |
+
+With snapping on, drawing points prefer nearby object corners, horizontal/vertical alignment and
+10 cm coordinates; Shift draws freely. Measurements snap to connectors, corners, curtain ends
+and centres. Escape cancels unfinished work; a second Escape returns to Select. Middle mouse or
+Alt pans. Drawing tools are unavailable while print pages are open.
+
+**1–5** selects the five plan/elevation views, **+/−** zooms and **W/A/S/D** pans. Shortcuts are
+ignored while typing. **Settings → Grid** controls visibility, colour, automatic/fixed spacing and
+the quarter-step sub-grid. These preferences belong to this computer.
+
+## Import a venue drawing
+
+Open **Elements → Drawings → + → Import drawing (DXF, SVG)…**. Check the reported units, dimensions
+and line count, set its view axis, origin, scale and rotation, then **Place Drawing**. Verify a
+known distance, such as stage width. Drawings travel inside the show; no original file is needed.
+Supported geometry includes lines, polylines, circles, arcs, ellipses and blocks. Text, dimensions,
+hatches and splines are not imported.
+
+Use folders and drag rows in **Drawings** to organize imports and annotations. Select an imported
+drawing to adjust its placement, hide it or remove it. Deleting a folder retains its contents.
+Drawings appear only on their matching view axis and are not clipped by cut planes.
+
+## Compose and export plans
+
+**Plans** holds print pages and fixture-list pages. Set project and designer details on **Show**;
+these supply every page's title block. Plans use the same fixture poses, wall joins and drawing
+geometry as CAD. **Mounting hardware** in a page's settings hides fixture clamps where supported.
+
+Top plans place the audience at the bottom; elevations look from their named direction. The
+viewport's orientation mark follows a rotated plan. Lens direction indicators show the fixtures'
+installed aim. Objects following a Control **3D Point** remain at their authored rig position in
+CAD and are labelled with that reference.
+
+Use the viewport's **From / To** cut planes to omit obstructing scenery. Top views cut by height,
+elevations by depth. Empty limits are unrestricted; **Show all** clears the cut. Objects wholly
+outside the slice are hidden and cannot be picked. A page created from the viewport retains that
+slice. Each page also chooses which drawings on its axis to print.
 
 ## Place your own venue models
 
-With **Show all** on, the **Patch** sheet's title bar has **+ Import 3D model** beside **+ Add fixture**, for a venue
-the fixture library does not have: the hall you are playing, a stage build, a set piece. Choose a
-GLB, glTF, 3MF or OBJ file on this computer and it is placed at once, at the stage origin, on the
-layer that is open — or the default layer when **All fixtures** is. It gets the next free `0.x` ID
-and is selected, so set its **Location** and **Rotation** in the sheet like any other Venue object.
+Use **Add primitive → Load model…**, **Elements → + → Import 3D model…**, or the Patch import action.
+The imported model is placed at the stage origin and selected. Set its placement and scale in Info.
+It travels inside the show and can be placed again from **Imported models**.
 
-The model is kept in the show, not in the fixture library. It is listed under the manufacturer
-**Imported models**, travels with the show when it is saved, copied or opened on a desk, and is
-drawn by the Visualizer and the desk's Stage exactly like a shipped Venue object. While one copy
-of it is in the show, **+ Add fixture** on the Patch sheet offers it again for another; import the
-file again to replace a model with a changed version, which is placed as a new object.
+| Format | Prepare before import |
+| --- | --- |
+| GLB | Self-contained glTF 2.0 binary. |
+| glTF | Keep buffers/textures beside the file; export without Draco or meshopt compression. |
+| 3MF | Declared units and build placements are respected; converted upright from Z-up. |
+| OBJ | Metres, Y-up; keep its `.mtl` beside it. |
 
-Whatever format you choose, the show keeps the model as one self-contained GLB, so it needs no
-other file once it is imported and moving the originals later changes nothing.
-
-- **GLB** is kept as it is. It must be a GLB 2.0 file with its buffers and textures inside it.
-- **glTF** (`.gltf`) may keep its `.bin` buffers and its textures beside it, as most tools write
-  it; leave them in the folder they were exported to, next to the `.gltf`. A file that needs mesh
-  compression such as Draco or meshopt is refused; export it again without.
-- **3MF** is placed as its build says, with every part in its place, in the unit the file declares
-  — millimetres unless it says otherwise. It is turned upright from Z up to Y up, as the same CAD
-  tool's own glTF export would, and its base material colours are kept.
-- **OBJ** says nothing about units, so it is read as metres with Y up; scale it in the modelling
-  tool before exporting if it was built in millimetres. Its `.mtl` material library must be beside
-  it, and each material's diffuse colour is kept.
-
-glTF and GLB are read in metres with Y up, as glTF defines. A model is drawn at the size it was
-built, so a 20 m hall is 20 m wide, and it may have at most 2,000,000 triangles and 64 MB once
-packed together. Surface colours are drawn and textures are not. A file that breaks any of these
-rules, or names a file that is not beside it, is refused with the reason, and nothing is added.
-
+Surface colours are supported, textures are not. The packed model must fit within 64 MB and two
+million triangles. A rejected file reports the reason and adds nothing. Reimporting a changed
+file creates a new object; it does not replace existing copies.
 
 ## Review an MVR before importing
 
-**Import MVR** previews the exact embedded fixture files and modes. Native ToskLight profiles take
-precedence; a broken embedded GDTF cannot silently use an installed fixture with the same name.
-Read **Import limitations** before applying. Fixtures without usable profiles can be kept unresolved
-for recovery or skipped; choosing a different DMX address cannot resolve missing profile data.
+Read the preview's **Import limitations**, profiles, modes and addresses before applying.
+Fixtures without usable profiles may be retained unresolved for later repair or skipped; changing
+an address cannot repair a missing profile.
 
-Conflicting immutable native profile revisions are listed with affected fixture counts. Import is
-blocked by default. Choose **Import conflicting profiles as new identities** to copy the exact
-archive profiles without overwriting existing profiles or changing unrelated fixtures. Imported
-fixtures are bound to the copied identities. Mode,
-channel, geometry and profile-authored calibration identities inside each copied profile remain consistent.
-Per-fixture identity-bound corrections keep their original source identity and become inactive until
-revalidated for the new profile identity; they are never silently rebound. Retained
-GDTF bytes keep their original association evidence; export generates GDTF if that association no
-longer matches the new identity. The source is never silently revalidated.
+A conflicting profile revision blocks import unless you choose **Import conflicting profiles as
+new identities**. That choice retains the existing profiles and imports separate copies. Review
+any fixture-specific calibration that needs revalidation afterward.
 
-Apply uses the data captured by the preview, even if the picked file changes. Opening another
-show or preparing another archive replaces that preview. If the destination patch changes, preview
-again. An invalid address leaves the preview available so you can correct it. Reimporting the same
-fixture does not conflict with its own existing address. The planning patch sheet continues to
-show intentional address overlaps; resolve them before running the show on a control desk.
-
-Source, additional DMX-break and unsupported-scenery warnings remain visible after a successful
-import until **Done**. The portable show retains its imported profiles and source evidence without
-requiring them to be installed in this machine's fixture library.
+Apply uses the inspected preview. If the destination patch changes, preview again. Correct address
+overlap before running the rig on Control. Warnings remain available until **Done**.

@@ -1,78 +1,61 @@
 # Desk Interface and Windows
 
-ToskLight separates permanent Desktops from temporary full-window tools. The same windows can usually appear either as panes on a Desktop or as a full built-in workspace.
+A **Desktop** is a saved arrangement of panes. A **built-in** opens one tool at full size without changing that arrangement.
 
 ## The shell
 
-The left dock switches between **DESKTOPS** and **BUILT-INS**. Desktops are saved arrangements of panes. Built-ins open one tool at full size without changing the saved Desktop. The bottom command line, programmer controls, playback page controls, and Show menu remain available while moving between workspaces.
+Use **DESKTOPS** and **BUILT-INS** in the left Dock to switch workspaces. The command line, Programmer, Playback controls, and Show menu remain available.
 
-The Show menu contains show creation/loading, MVR exchange, Desk Setup, Help, development tools, system controls, and desk shutdown. Help itself is a split workspace: topics on the left and the selected Markdown page on the right.
+The Show menu opens shows, MVR exchange, Desk Setup, Help, and shutdown. **DMX** beside the command line opens **Running & Output**: use **Running** to inspect activity and **Desk State** for warnings. **All Off** asks for confirmation before releasing running Playbacks, Dynamics, and Programmer Preload.
 
-The **DMX** control beside the command line opens **Running & Output**. Its title-bar tabs keep **Running**, **Desk State**, and **Active Programmers** in one modal; a **Visualizer** tab joins them only while an external Visualizer is connected. It opens on Running unless a warning routes directly to Desk State. **All Off** stays in the title bar on every tab and asks for confirmation before it releases every running playback, dynamic, and Programmer Preload. A red triangle with a white exclamation mark beside DMX means Desk State needs attention. Rejected commands stay marked on the current command line, while connection and critical desk failures use the top status message. Expected no-ops, such as Align with no fixtures selected, leave the desk unchanged without notices, errors or announcements.
+A red warning beside DMX means Desk State needs attention. Rejected commands remain marked on the command line; connection failures appear in the top status message.
 
-Every desk window carries the same window strip with **X**, fullscreen, and move controls. On the
-main window the **X** quits ToskLight, because that window is the desk itself. On an optional screen
-window the **X** closes only that screen; the screen keeps its configuration and reopens from
-**Desk Setup → Screens**.
+Each application window has close, fullscreen, and move controls. Closing the main window quits ToskLight; closing an optional screen leaves the desk running. Outside fullscreen, drag unused built-in title space to move the application. A pane header instead moves that pane inside its Desktop.
 
-Outside fullscreen, drag a built-in's title or unused title-bar space to move the application
-window. Title-bar buttons and other controls keep their normal actions. On a Desktop, dragging
-a pane header moves that pane within the Desktop.
-
-Title-bar buttons within one action group use a single gray divider. The boundary between action groups uses a wider divider — two pixels of dark gray, one pixel of cyan, two pixels of dark gray — making related controls visible without inserting a black gap. Modal title bars use the same two dividers.
-
-> [!danger] Missing graphic
-> Add an annotated Desk screenshot identifying the Dock, pane workspace, window strip, Show menu, command line, Programmer controls, playback page controls, and Running & Output status.
+![Desk workspace, Dock, Programmer, and Playback controls](../../assets/screenshots/default-desk-overview.png)
 
 ## Search bars
 
-Search uses the same title-bar control in modals and regular windows. The search group is right-aligned immediately before every defined window or modal action. Its fixed order is magnifying glass, text, **X** while text is present, and the keyboard button. When a search offers additional options, the leading magnifying-glass area widens to include a chevron; press that leading area to open Options in a stacked dialog above the owning window or modal. Searches without options show the magnifying glass without a chevron or button behavior.
-
-Typing filters immediately unless the feature page explicitly documents a different search operation. **X** clears the query, and the keyboard button opens the shared full-text keyboard.
+Type in a title-bar search to filter immediately. **X** clears it and the keyboard button opens text entry. If the magnifying glass includes a chevron, press it for search options.
 
 ## Desktops and panes
 
-A Desktop uses a 24-column by 18-row grid. Create one with **New desktop** in the DESKTOPS dock. Open its settings to rename it, change its icon, set the default and minimum pool tile widths, clone the current layout, or delete it. At least one Desktop always remains.
+Choose **New desktop** in the Dock. Desktop settings rename it, change its icon and tile defaults, clone its layout, or delete it. At least one Desktop remains.
 
-Add a pane from the empty-cell picker or **Open Window**. Open Window groups descriptive pane choices into **Programming**, **Playback & Automation**, **Show & Visual**, and **Miscellaneous** title tabs. Macro Pool is under Programming. Running, Scheduler, and Help are under Miscellaneous. Cuelists is the single catalog entry for the integrated Pool, Cues, and Cuelist Settings workflow. Drag a pane by its header to move it. Open the pane settings to set its exact grid position and size, maximize it, change window-specific options, or remove it. Panes cannot overlap; moves and resizes are constrained to the grid.
+Add panes from an empty cell or **Open Window**, whose tabs are **Programming**, **Playback & Automation**, **Show & Visual**, and **Miscellaneous**. Drag a pane header to move it. Settings control exact position, size, and removal within the 24-column × 18-row workspace. Panes cannot overlap.
 
-In a pane's **Settings → Pane Settings**, edit **Pane title** to name that pane. The title is saved with the Desktop and survives reopening the show. It does not rename the pool's objects or change the pane type offered by **Open Window**.
+In **Settings > Pane Settings**, edit **Pane title** to give that instance a name. This does not rename its objects or its pane type in Open Window.
 
-Tiled panes also offer **Tile layout**. **Automatic squares** is the default for new panes: tiles stay square and the column count follows the pane width and the Desktop's default and minimum tile widths. **Fixed grid** lets you set **Tile rows** and **Tile columns**; those rows and columns fill the visible pane, so tiles may be rectangular. Scroll to reach later pool entries. Groups, Presets, Cuelists, Dynamics, Macro Pool, Timecode, Media file pools, and free-region Playback tiles share these controls.
+For tiled panes, choose **Tile layout**:
 
-Existing saved pane layouts retain their appearance until changed. A legacy Group pool with a fixed column count keeps its square tiles; its settings explain this until you choose a new mode. Playback panes showing controls or mirroring a Screen keep that surface's authored layout. Use **Free region** with Playback controls hidden to select square tiles or a fixed grid. Applying **Configure layout and page source** restores that authored Playback layout.
+- **Automatic squares** keeps tiles square and fits columns to the pane width. This is the default for new panes.
+- **Fixed grid** uses **Tile rows** and **Tile columns** to fill the pane, allowing rectangular tiles. Scroll for later entries.
 
+Groups, Presets, Cuelists, Dynamics, Macros, Timecode, Media pools, and free-region Playbacks support these choices. Existing layouts keep their appearance until changed. Playback panes displaying controls or mirroring a Screen use that surface's authored arrangement; hide controls and use **Free region** for independent tile sizing.
 
-Some options belong to one pane rather than the whole application. Examples include Stage 2D/3D view and Follow Preload, Preset family and pool color mode, Fixture ordering/filtering, the virtual-playback grid, and the selected text file. Pool panes can use **Type colors** or **Individual colors**. Type colors use the configured object-type or Preset-family default. Individual colors show an item's explicit presentation color and use grey when none is assigned.
+**Type colors** uses the object-type or Preset-family default. **Individual colors** uses assigned presentation colors and grey for uncolored objects.
 
 ## Built-in windows
 
-The operator windows are:
+| Window | Main use |
+| --- | --- |
+| **Stage** | Spatial selection and 2D/3D views. |
+| **Fixtures / Channels** | Select fixtures and inspect or set values. |
+| **Groups / Presets** | Recall selections and reusable values. |
+| **Cuelists / Cues / Playbacks** | Store, edit, and run looks. |
+| **Dynamics** | Create and run animated values. |
+| **DMX** | Inspect final output and diagnostics. |
+| **Patch** | Configure fixtures, addresses, and placement. |
+| **Desk Setup / Help** | Configure the installation and read the manual. |
 
-- **Stage** - 2D/3D selection, visualization, fixture/scenery placement, and Preload following.
-- **Fixtures** and **Channels** - current values, source ownership, selection, and fixture/channel detail.
-- **Groups** and **Presets** - reusable selection and attribute pools.
-- **Cuelists**, **Cues**, and **Playbacks** - stored scenes, timing, assignment, and execution.
-- **Dynamics** - animated attribute pools, editing, and running-source control.
-- **DMX** - live universe output, raw overrides, and diagnostics. Output routes are configured in **Desk Setup > Outputs**.
-- **Patch** - fixture IDs, modes, addresses, and multi-patch instances.
-- **Virtual Playbacks** - a configurable grid of playback actions.
-- **Desk Setup** and **Help** - persistent configuration and operator documentation.
+**Running** is pane-only: add it through Open Window. Hold **Shift** in BUILT-INS for alternatives: Stage → Media, Fixtures → Groups, Cuelists → Timecode, Dynamics → Macros, Channels → DMX. Timecode and Macros are also available through Open Window.
 
-**Running** is a pane-only window: add it to a Desktop with **Open Window**. It does not appear in the BUILT-INS dock. Hold **Shift** in BUILT-INS to reveal the alternate destinations: **Stage** becomes **Media**, **Fixtures** becomes **Groups**, **Cuelists** becomes **Timecode**, **Dynamics** becomes **Macros**, and **Channels** becomes **DMX**. Releasing **Shift** restores the normal destinations. Timecode and Macro Pool also remain available through **Open Window**.
-
-Development diagnostics are not an operator pane and do not appear in **Open Window**. Developers can open that surface from the **Desk Status** developer menu; persisted layouts that already contain it remain compatible.
-
-Use the [Pane Reference](index.md) for a screenshot and settings explanation for every available operator pane.
+See the [Pane Reference](index.md) for individual settings.
 
 ## Multiple screens
 
-Configure physical screens in **Desk Setup > Screens & playback**. Each optional screen has its own
-name, physical window placement, playback layout, page source, and either a configurable Desktop or
-a view-only **Fixed full-screen pane**. **Own page** keeps an independently changeable page;
-**Pinned page** stays on the chosen page; **Follow surface** tracks another named surface. Screen configuration belongs to the desk
-installation, while show programming remains in the portable show file.
+Configure optional screens under **Desk Setup > Screens & playback**. Each can show a Desktop or a fixed pane and use an **Own**, **Pinned**, or **Follow surface** Playback page. See [Screens and Desktop Layouts](../10-Show-Setup/02-screens-and-layouts.md).
 
 ## Where settings are stored
 
-Desktop layouts, screens, users, network inputs, output configuration, and pool presentation defaults live in desk data. Pool presentation keys include the active show identity so equal object numbers from different shows do not share an override; the preferences do not travel in a show file. Fixture patch, stage layout, groups, presets, Cuelists, and playbacks live in the active show. An unfinished command, open ordered selection/source gesture, page, and button state belong to the control desk. Confirmed temporary values belong to the active user's Programmer and are shared by that user's sessions on every desk; they remain distinct from the show until recorded.
+Desktop layouts, pane titles and presentation colors, screens, inputs, and installation preferences stay with the desk. Patch, stage placement, Groups, Presets, Cuelists, and Playback assignments travel in the show. Temporary Programmer values are shared across this desk's surfaces and become show programming only when recorded.

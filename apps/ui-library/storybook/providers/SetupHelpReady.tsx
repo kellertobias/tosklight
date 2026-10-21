@@ -1,5 +1,7 @@
 /** Offline-ready service projections for reproducible Setup documentation; never contacts a desk. */
-import type { PropsWithChildren } from "react";
+import { type PropsWithChildren, useMemo } from "react";
+import type { ExtensionRuntimeSnapshot } from "../../../light-desktop/src/api/client/deskManagement";
+import type { SessionResponse } from "../../../light-desktop/src/api/types";
 import { DeskSnapshotStateProvider } from "../../../light-desktop/src/features/deskSnapshot/DeskSnapshotState";
 import { DeskSnapshotStore } from "../../../light-desktop/src/features/deskSnapshot/store";
 import { ExtensionRuntimeActionsProvider } from "../../../light-desktop/src/features/extensions/ExtensionRuntimeActions";
@@ -35,7 +37,7 @@ desk.install(
 const shell = new ShellStatusStore();
 shell.install("connected", null);
 
-const extensionSnapshot = {
+const extensionSnapshot: ExtensionRuntimeSnapshot = {
 	extensions_directory: "Extensions",
 	configuration_path: "Extensions/extensions.json",
 	configuration_diagnostic: null,
@@ -43,16 +45,31 @@ const extensionSnapshot = {
 	instances: [],
 	instance_diagnostics: [],
 };
-const extensions = {
-	load: async () => extensionSnapshot,
-	rescan: async () => extensionSnapshot,
-};
 
-export function SetupHelpReady({ children }: PropsWithChildren) {
+export function SetupHelpReady({
+	children,
+	extensionStatus = extensionSnapshot,
+	session = null,
+}: PropsWithChildren<{
+	extensionStatus?: ExtensionRuntimeSnapshot;
+	session?: SessionResponse | null;
+}>) {
+	const storyDesk = useMemo(() => {
+		const store = new DeskSnapshotStore();
+		store.install(desk.getSnapshot().bootstrap, session);
+		return store;
+	}, [session]);
+	const storyExtensions = useMemo(
+		() => ({
+			load: async () => extensionStatus,
+			rescan: async () => extensionStatus,
+		}),
+		[extensionStatus],
+	);
 	return (
-		<DeskSnapshotStateProvider store={desk}>
+		<DeskSnapshotStateProvider store={storyDesk}>
 			<ShellStatusStateProvider store={shell}>
-				<ExtensionRuntimeActionsProvider actions={extensions}>
+				<ExtensionRuntimeActionsProvider actions={storyExtensions}>
 					{children}
 				</ExtensionRuntimeActionsProvider>
 			</ShellStatusStateProvider>

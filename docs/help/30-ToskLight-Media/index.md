@@ -2,18 +2,16 @@
 
 ![ToskLight Pixel application icon](../assets/branding/tosklight-pixel.png)
 
-ToskLight Pixel is the video, image, text, generated-visual, and effect media server in the ToskLight bundle. One server process runs the media engine and serves a browser administration interface; the picture itself is presented on one or more configured monitor or off-screen outputs.
+Pixel plays video, images, text and generated visuals on configured displays. Manage its library,
+outputs and playback from a browser; use Art-Net or sACN for console control.
 
-The shipped baseline creates one Main output. The configuration and runtime can describe additional outputs, but every production must verify its actual display, resolution, presentation rate, audio device, and GPU capacity.
+1. [Start Pixel](01-quick-start.md): open administration and prove the physical output.
+2. [Build the Media Library](02-library-and-uploads.md): addressed slots, uploads and conversion.
+3. [Outputs and Displays](03-outputs-and-displays.md): screens, pixel map, audio and DMX input.
+4. [Master and Layers](04-playback-and-layers.md): content, controls and temporary takeover.
+5. [Generated Sources and Effects](05-generated-sources-and-effects.md): text, audio reaction and banks.
+6. [3D Model Mapping](06-3d-model-mapping.md): choose/import a model and aim it.
+7. [Connect Control or Another Console](09-connect-the-desk.md): patch, names/previews and diagnosis.
 
-Use these chapters in order:
-
-1. [Start the Media Server](01-quick-start.md) — open administration, select a display, run the test pattern, and distinguish live controls from restart-required configuration.
-2. [Build the Media Library](02-library-and-uploads.md) — choose addressed slots, upload or replace content, and monitor conversion jobs.
-3. [Configure Outputs and Displays](03-outputs-and-displays.md) — monitor/off-screen targets, resolution, rate, the Pixel Map, audio, personalities, and network addresses.
-4. [Operate Outputs, Master, and Layers](04-playback-and-layers.md) — take control, choose content and masks, transform layers, and release them back to DMX.
-5. [Generated Sources and Effects](05-generated-sources-and-effects.md) — text, visualizers, audio-reactive content, and effect configuration.
-6. [3D Model Mapping](06-3d-model-mapping.md) — the Models library, glTF import requirements, the output camera, and the pan → tilt → roll order.
-7. [Connect ToskLight Control to Pixel](09-connect-the-desk.md) — patch Media personalities, match DMX, configure CITP/MSEX, use previews, and diagnose no-CITP operation.
-
-CITP/MSEX and ToskLight show discovery are different systems. Pixel advertises CITP/MSEX for output, library, thumbnail, and preview information. ToskLight Control currently uses a manually configured Media endpoint after a Media fixture is patched; Architect's Rig Editor can discover CITP servers while configuring media surfaces.
+Start with one Main output. Before adding outputs, verify each display, audio path and control
+address, and the computer's performance with the complete production load.

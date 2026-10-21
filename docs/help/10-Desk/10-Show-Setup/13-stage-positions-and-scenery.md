@@ -2,7 +2,7 @@
 
 Stage provides an operator selection surface for the saved spatial model; the model itself is edited in **Show Patch**.
 
-There is one set of fixture positions, and it is the 3D one. A 2D Stage is the renderer's plan of those positions, projected from whichever side the operator chooses in the Stage settings — above the rig, from the house, from upstage, or from either wing. It is not a second arrangement to be authored or regenerated, so a fixture moved in **Show Patch** is in its new place in every view at once.
+Stage 2D and 3D use the same saved positions. Changing a fixture in Show Patch updates every view; the 2D plan can be viewed from above, the house, upstage, or either wing.
 
 ## Position fixtures
 
@@ -20,13 +20,15 @@ In 3D, **Beam direction guides** adds a dotted aim line while a directional emit
 
 ## Add scenery and models
 
-Add scenery through **Show > Show Patch**. Choose a visual-only profile from the **Venue** manufacturer, such as Stage, Truss, Pipe, or Curtain. Trusses, stage elements and curtains are generated at the size they are placed, and so are the primitive shapes **Box**, **Cylinder** (standing upright) and **Ball**, which fill the width, height and depth you give them in the colour you choose; a stage deck comes in the platform sizes 1 × 0.5 m, 1 × 1 m and 2 × 1 m, on a scissor lift or on regular feet, and is built to the height you place it at. **Stage Stairs** climbs to the height you place it at in 200 mm steps, with a handrail up each side or without, and **Stage Handrail** is a stage edge guard 1 m high at any length from 0.4 m to 24 m. Truss corner blocks (2-way corner to 6-way node, for three- and four-point truss, 500 mm arms) are fixed parts, each its own profile. Patch assigns these objects IDs in the reserved `0.x` range (`0.1`, `0.2`, and so on) and does not ask for a DMX address. Position and rotate them through their patch placement like any other fixture, with the dedicated Stage Renderer open for visual feedback. A stage element, a deck on regular feet, stage stairs and a handrail are positioned by their feet — the middle of the footprint on the floor they stand on — so a Z of 0 stands on the stage floor and changing a stage element's rise raises or lowers its deck; the other generated objects are positioned by their centre.
+Add scenery in **Show > Show Patch** from the **Venue** manufacturer. Choose a stage deck, truss, curtain, stairs, or another scenic object, then set its available dimensions and color. These objects receive `0.x` fixture IDs and no DMX address.
 
-Stage does not maintain a second scene-asset collection. Standalone MVR geometry is reported as an import warning; recreate required scenery with Venue fixtures so it remains visible and editable through Patch and the Fixture Library.
+Position and rotate them like other patch objects. Decks, stage elements, and stage stairs stand on their feet: Z 0 places the footprint on the floor, and height changes raise the deck. Most other objects use their centre. Open **Stage Renderer** to check placement.
+
+Standalone MVR geometry is not imported. Recreate required scenery with Venue fixtures, or import a model in Architect.
 
 A venue model that is not in the fixture library — the hall itself, a stage build, a set piece — is imported as a GLB file on the **Patch** sheet of ToskLight PreViz, with **Show all** on, with **+ Import 3D model**. It is still a Venue object: it lives in the show under the manufacturer **Imported models**, appears in Show Patch with its `0.x` ID, and is positioned, rotated, layered, and drawn like the shipped ones. See [Place your own venue models](../../20-ToskLight-PreViz/06-planning-and-transfer.md#place-your-own-venue-models).
 
-The Stage, the PreViz Renderer and ToskLight Architect all draw the same Venue fixtures, and hiding a patch layer hides its scenery and crowds as well as its lights. Shows copied from an older Demo Show also carried a second set of standalone scenery records that no screen listed; opening such a show removes them once its patch holds its own Venue fixtures, so the renderer no longer draws scenery that is not in the patch.
+Stage, the PreViz Renderer, and Architect show the same Venue objects. Hiding a patch layer hides its scenery and lights.
 
 ## Visualization limits
 

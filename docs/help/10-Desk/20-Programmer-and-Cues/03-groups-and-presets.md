@@ -2,136 +2,98 @@
 
 Groups store ordered fixture selections. Presets store reusable attribute values.
 
-## Groups
+## Record and select Groups
 
-Select fixtures, press `[REC]`, and choose a Group target or enter its number. Normal record merges the selection into the Group and keeps existing members in order. Populated tiles show **REC MRG**; empty Groups and unused slots show **REC**. `[REC] [+]` explicitly merges; `[REC] [-]` subtracts. Choose one-off **Smart** before touching a populated Group to choose Merge or Overwrite; `RECORD SMART GROUP 22` explicitly overwrites Group 22. Intentionally empty Groups remain valid stored objects and differ from absent Group numbers. Missing Groups in a range are skipped.
+1. Select fixtures in the required order.
+2. Press **REC**, then a Group tile or `[GRP] <number> [ENT]`.
+3. Touch the Group later to select its live membership. Double-press freezes its current members
+   as an ordinary fixture selection.
 
-The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. The bottom-left fixture count is grey when none of the members are selected. When all members are selected, it shows only the total in white. When some members are selected, it shows selected/total, with the selected count in white and the remaining text grey. These counts also reflect frozen fixture selections without selecting the Group reference itself. Double-pressing a Group selects its current members as frozen fixtures. Clearing selection returns the count to grey.
+Normal recording merges into an existing Group, preserving its member order. **REC +** explicitly
+merges; **REC −** subtracts selected members. Choose one-off **Smart** for Merge/Overwrite, or
+`RECORD SMART GROUP 22` to overwrite Group 22. Stored empty Groups remain valid; absent Groups in
+a range are skipped.
 
-![Group tiles with no selected members, some selected members, and all members selected](../../assets/screenshots/panes/groups-tile-counts.png)
+The lower-left count is grey with no members selected, selected/total for a partial selection,
+and the white total when all are selected. This follows fixture selection as well as Group references.
 
-A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](01-command-line.md) for exact syntax.
+![Group member-count states](../../assets/screenshots/panes/groups-tile-counts.png)
 
-Plain-click a Group to select its live membership. Double-press it quickly to select the current
-members as frozen fixtures. Right-clicking a populated Group is the pointer shortcut for `[SET]`
-then tapping that Group: it selects the Group as the source for a Playback assignment. Touch-hold,
-or enter `[SET] [GRP] <number> [ENT]`, to open the Group settings modal. **General** contains only name, icon, and color. **Projection** maps
-Stage X/Y/Z positions into a 2D plane. **Phase** ranks that plane into the one-dimensional order
-each fixture takes its phase from, as Grid, Radial, or Radar. Fixtures that share a rank receive the
-same point of a `THRU` spread; members without a valid Stage position remain visible and receive
-individual fallback ranks.
+A live reference follows later membership changes. Dereference it when you need a frozen list.
+Derived Groups preserve their ordering rule and source relationship; see exact syntax in the
+[Command Line Reference](01-command-line.md#dereferencing-groups).
 
-A **Grid** ranks by the lines its direction makes across the plane, and every fixture standing on
-one of those lines shares a rank, so the phase advances from line to line and never along one. At
-0° the lines are the columns and a ten-by-ten grid runs in ten steps across it; at 90° they are the
-rows and it runs in ten steps down it. A direction between the axes makes diagonal lines the same
-way, so the same grid at 45° runs corner to corner in nineteen steps, each anti-diagonal moving as
-one. Fixtures standing close enough together to be on one line are treated as being on it, so a rig
-measured to the millimetre still ranks by the rows and columns it was built as.
+![Source Group, derived Group and frozen snapshot markers](../../assets/screenshots/panes/groups-tile-markers.png)
 
-Every projection is placed by one position and one direction, whichever kind it is. **Planar** looks
-along the direction and ranks across the plane at right angles to it; Rotation turns that plane, the
-position is not read, and the named Top/Front/Back/Left/Right presets remain. **Cylindrical** runs
-its axis along the direction through the position, and Rotation is where the spread starts around
-that axis; the spread leaves that angle in both directions and the two sides meet 180° away on the
-far side. **Spherical** points the direction from the position to the centre of the spread, which
-reaches its opposite 180° away, and Rotation turns the meridian that spread is measured around.
-With the direction along Stage +Z and no Rotation, a cylinder stands upright and starts its spread
-at Stage +X. Cylindrical and Spherical are aimed by **Azimuth** and **Elevation** rather than by
-direction components: Azimuth swings the direction about Stage +Z and Elevation lifts it off the
-horizon. Both tabs show what they set: **Projection** draws the shape in the Stage,
-drag to orbit it, and **Phase** plots the fixtures on the plane the projection ranks them in, shaded
-from black for the first rank to white for the last.
+### Configure ordering and phase
 
-A Group inherits its mapping from referenced Groups until it is given one of its own; changing
-anything on **Projection** or **Phase** makes the mapping this Group's own. Membership remains live
-either way. Mixed referenced mappings use visible source order until the Group receives its own
-mapping. There is no general Layout pane or selection grid: edit fixture positions in Stage, Group
-ordering here, and a Dynamic-only override in that Dynamic's **Projection** tab.
+Hold a Group or enter `[SET] [GRP] <number> [ENT]` for settings. **General** sets name, icon and
+colour. **Projection** maps Stage positions onto a plane; **Phase** orders that plane as Grid,
+Radial or Radar. Its preview shades first-to-last ranks. Fixtures sharing a rank receive the same
+point in a THRU spread; fixtures without a valid position use individual fallback ranks.
 
-A value programmed on a Group reaches every member that can hold it. A member without that
-attribute is left alone rather than given a value it has no channel for: a colour set on a Group of
-washes and profiles reaches the washes, and the profiles keep whatever they already had. Output and
-the Fixture Sheet are unchanged either way, because neither has ever shown an attribute a fixture
-does not have.
+Grid direction 0° ranks columns, 90° ranks rows, and 45° ranks diagonals. Projection may be Planar,
+Cylindrical or Spherical. Use its position/direction/rotation controls and the preview to align
+it with the rig; cylindrical/spherical direction uses azimuth and elevation.
 
-Group settings never contain a master. To create a Group Master, press `[SET]`, choose the explicit
-Group, then press the destination physical or Virtual Playback. Every Playback targeting the same
-Group controls one shared master; Playbacks targeting different Groups remain independent HTP
-contributors. Changing a Playback to **None** removes that assignment without changing the Group.
+Referenced Groups inherit mappings until you edit Projection or Phase locally. Membership remains
+live. Mixed source mappings use visible source order until you assign one. Fixture positions
+remain in Stage; a Dynamic may use its own Projection override.
 
-![Group pool with populated ordered Groups](../../assets/screenshots/panes/groups.png)
+A Group value reaches only members supporting that attribute. Unsupported members retain their
+other values. To create a **Group Master**, assign the explicit Group to a Playback; it is not a
+Group setting. Playbacks targeting that same Group share its master, while different Groups
+remain independent HTP contributors.
 
-![Group tiles showing the source Group, a derived Group, and a frozen snapshot](../../assets/screenshots/panes/groups-tile-markers.png)
+## Record and recall Presets
 
-## Presets
+Preset families have separate local numbers:
 
-Preset families are Mixed, Intensity, Color, Position, and Beam. Intensity stores only intensity attributes, including Shutter and Strobe. Color stores RGB, CMY, color-wheel, and other Color attributes. Position stores only Position attributes. Beam stores Beam and Focus attributes such as Zoom, Iris, Gobo, Prism and Frost. Mixed stores any attributes the operator chooses; it does not mean a combined list of every preset family. Recalling a Preset applies compatible values to the current selection while retaining the relationship needed for later updates where supported.
+| Address prefix | Family | Stored attributes |
+| --- | --- | --- |
+| `0.` | Mixed | Attributes chosen by the operator. |
+| `1.` | Intensity | Intensity, Shutter and Strobe. |
+| `2.` | Color | Colour values. |
+| `3.` | Position | Position values. |
+| `4.` | Beam | Beam/Focus functions, including Zoom, Iris, Gobo, Prism and Frost. |
 
-Each family is a separate pool with its own local preset numbers. The command-line address combines type and number: `0.1` is Mixed 1, `1.1` is Intensity 1, `2.1` is Color 1, `3.1` is Position 1, and `4.1` is Beam 1. The dotted address is not a global preset ID, so all five presets numbered 1 can coexist.
+For example, `2.1` means Color Preset 1, not a globally numbered Preset.
 
-For quick recording, press `[REC]` and touch a Preset. With the normal **Smart** desk default, an existing Preset merges the Programmer and shows **REC MRG**; an empty slot creates a Preset and shows **REC**.
+Build values, press **REC**, then touch a Preset. With normal Smart recording, an existing Preset
+merges (**REC MRG**); an empty slot records (**REC**). Merge retains other values and replaces
+matching ones. For complete replacement, choose one-off Smart then **Overwrite**, or enter
+`RECORD SMART 2.1`. Saved alternative Record defaults still apply.
 
-Merging keeps other stored values and replaces matching values with the Programmer's values. A saved alternative Record default or a one-off option still applies. To replace the entire existing Preset, choose the one-off **Smart** option, touch the tile, then choose **Overwrite**. On the command line, `RECORD SMART 2.1` explicitly overwrites Color Preset 1.
+Select fixtures and touch a Preset to recall compatible values. Recording recalled values into a
+Cue retains their Preset links. Updating the source changes linked Cue values, even during playback.
+A direct edit before recording makes that attribute independent. Clear the Programmer to check
+playback alone.
 
-When you recall a Preset and record its values into a Cue, those addresses retain their source
-Preset. Merging or updating that Preset changes the linked Cue values, including a Cue that is
-already running. Clear the Programmer to see playback alone. Editing a recalled value directly
-before recording stores that address independently; the other recalled addresses keep their links.
-Older Cues containing only recorded values remain independent.
+Moving a Preset retains links; copying creates a separate source. Deleting a linked source uses
+the Cue's recorded fallback. Creating another Preset at the old number does not take over the link.
+Cuelist View identifies missing sources and the recovery action.
 
-Moving a Preset preserves its links. Copying it creates a separate source. Deleting the source,
-or removing an attribute it supplied, makes a Cue use its recorded fallback; Cuelist View explains
-the missing source and how to restore or re-record it. A new Preset at the old number does not
-take over that link. Shows containing these links require a runtime that supports live Preset
-references; an older runtime refuses the show rather than silently changing its behavior.
+### Read the tile
 
-The lower-left corner of every stored Group and Preset tile shows its fixture information. A Group
-tile reads its member count, for example `8`, or the selected/total count, for example `3/8`. A
-Preset tile reads only the number of fixtures currently showing that Preset, for example `3`.
-The count compares each fixture's current effective values, after the Programmer and every
-Playback have been merged, with every value the Preset stores for it. A Preset that is only
-stored, or whose values another source has overridden, is not active. The count follows the
-live output state while the pane is open; no matching fixtures means `0`. After an accepted recall, the count updates promptly and then follows the resulting live output. Stored Group members
-and fixtures that are currently unpatched remain part of the Preset's targets. In a
-[Color Intent](05-color-intent.md) show, a Color preset that holds one shared colour is
-**universal**: it applies to every selected fixture. Its tile uses the same active fixture count,
-for example `2` when two fixtures currently show it.
+A Preset's lower-left number is the count of fixtures currently showing its values after all live
+sources are resolved. Overridden or merely stored values do not count; no matches shows 0.
+Unpatched fixtures still belong to the show's Preset targets.
 
-![Color Preset tiles with active fixture counts, segmented previews, and a chosen icon](../../assets/screenshots/panes/presets-color-details.png)
+![Active counts, segmented colour previews and an explicitly chosen icon](../../assets/screenshots/panes/presets-color-details.png)
 
-### Automatic Color and Position previews
+Automatic Color previews show the requested colour at full brightness, independently of Intensity.
+Several colours appear as segments, up to six; no averaging hides the spread. UV-only requests
+appear violet and unknown Direct appearance hatched grey.
 
-A Color or Position Preset recorded as a [Color Intent](05-color-intent.md) or as Pan/Tilt angles
-or a Target draws its own small preview in the tile's picture box. The preview is read from what
-the Preset stores; it never recalls the Preset, changes the Programmer or depends on the current
-output, and it follows every Record and Update of the Preset as soon as it is stored. It looks the
-same in the software-only and the hardware-connected layout. A Mixed Preset shows its colour, or
-its aim when it holds no colour.
+Position previews show up to ten distinct aims: Pan/Tilt for angles, or Stage X/upstage for targets.
+They retain the spread's proportions and extremes. Mixed angle/target Presets show the majority kind.
 
-- **Color** shows the colour the Preset asks for, at full brightness: Intensity is a separate
-  family, so a dim blue still reads blue and only a requested black reads black. White Blend and
-  its white target are included. A Preset holding several different colours shows one segment per
-  distinct colour, side by side in hue order, never a mixed average; a colour spread, such as a
-  rainbow across a Group, shows the colours it passes through. At most six segments are drawn;
-  with more, the first and last are kept and the rest are sampled evenly. UV without visible light
-  is drawn violet, and a Direct colour without a known appearance is drawn hatched grey.
-- **Position** shows a small square with up to ten dots, one per distinct aim: Pan across and
-  Tilt up for angles, or Stage X across and upstage up for a Target. The highest and lowest aim on
-  each axis and the outermost corners are always drawn; the remaining dots are spread evenly
-  through the rest of the aims, so a dense cluster keeps more dots than a single outlier. The square keeps the true shape of the
-  spread, so a line of fixtures is drawn as a line. When a Preset mixes angles and Targets, the
-  kind most fixtures use is drawn.
+![Automatic position previews for a fan, audience grid and centre target](../../assets/screenshots/panes/presets-position-details.png)
 
-![Position Preset tiles showing a fan, an audience grid, and a centre-stage target](../../assets/screenshots/panes/presets-position-details.png)
+A chosen icon or button colour replaces the automatic preview. **Automatic icon** restores it.
+Intensity and Beam Presets use plain tiles. These previews describe stored data; viewing them
+never recalls a Preset.
 
-An icon or button colour chosen in the Preset's button settings, or stored with the Preset in the
-show, replaces the automatic preview and keeps the tile as it was. **Automatic icon** in the button
-settings removes the chosen icon and colour again. Presets without a programming intention, such
-as a Color Preset that only holds a colour-wheel slot, Mixed Presets without colour or aim, and
-Intensity and Beam Presets keep the plain tile. Intensity has no preview because the tile already reports
-whether the Preset is active, and a level glyph could not tell a stored level from the output.
-
-Use pane settings to choose the displayed family and whether tiles use type colors or individual colors. The desk defaults are pale orange-yellow for Groups, lime for Cuelists and Sequences, cyan for Dynamics, dark red for future Macros, and grey for every Preset family. Desktop settings can customize or reset each default. Selection, focus, Store/Record/Update, disabled, and empty states also use borders, outlines, markers, labels, or dashed geometry so color is never their only indication. Test Presets on representative fixture modes before building Cues from them.
-
-![Preset pool and family-specific tiles](../../assets/screenshots/panes/presets.png)
+A Color Intent Preset holding one shared colour is **universal**, so it can apply to fixtures that
+were not selected when recorded. Different stored colours remain fixture-specific. See
+[Color Intent](05-color-intent.md#universal-color-presets).

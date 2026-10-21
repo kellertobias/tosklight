@@ -1,103 +1,50 @@
 # Tracking with PosiStageNet
 
-A tracking system — an OpenFollow station, or anything else that speaks PosiStageNet — says where
-things on stage are. ToskLight listens, and an object it is told about can become a **3D Point** in
-your show. Fixtures already follow 3D Points, so a light aimed at the point follows the performer.
+A PosiStageNet tracking system sends performer positions to ToskLight. Bind a tracker to a **3D Point**, then aim fixtures at that Point to follow it. Network traffic alone moves nothing.
 
-Open **Show Patch** and choose the **Tracking** tab.
+Open **Show Patch > Tracking**.
 
 ## What the desk does and does not do
 
-The tracking system does not aim anything. It sends positions; the desk decides what they mean.
-That is why **traffic on the network moves nothing on its own**. A tracker only moves a 3D Point
-after you have given it one on this tab.
-
-While a tracker is bound to a 3D Point, **that point is the marker**. A cue with a stored position
-cannot pull it away, and an encoder will not move it. To take it back, unbind it, or switch the
-binding off — both are on this tab, and both take effect immediately.
+The sender provides positions; ToskLight applies them only to explicitly bound Points. While bound, a Point follows the tracker instead of Cue or encoder positions. Unbind it or disable the binding to return control to the show.
 
 ## Set up the source
 
-PosiStageNet is multicast, so the desk joins a group and listens; there is nothing to connect to.
+1. Open **⚙ > Tracking** in Show Patch.
+2. Match the sender's **Multicast group** and **Port**; defaults are `236.10.10.10` and `56565`.
+3. Set **Stale after (ms)** for lost-input reporting and press **Apply tracking settings**.
+4. Enable **Receive PosiStageNet** on the Tracking tab.
 
-**Receive PosiStageNet** stays on the Tracking tab. Off means nothing is received and no point is
-held.
-
-Where the desk listens is part of **Tracking Settings**: press **⚙** at the top right of Show Patch
-and choose **Tracking** (the Tracking tab opens it there directly). When Show Patch is a pane, the
-same settings are in the pane's settings.
-
-| Setting | What it is |
-| --- | --- |
-| **Multicast group** | Where the tracking system transmits. `236.10.10.10` unless it has been moved. It must be a multicast group, `224.0.0.0` to `239.255.255.255`. |
-| **Port** | `56565` unless it has been moved. `1` to `65535`. |
-| **Stale after (ms)** | How long without a packet before a tracker is reported stale, `50` to `60000`. |
-
-Change the values and press **Apply tracking settings**; **Revert** returns to the stored values.
-A value the desk cannot use is named beside its field and nothing is sent. If the desk refuses the
-change, the message says why, and the desk keeps listening where it was. The values are saved with
-the show.
-
-The status line on the Tracking tab says what is happening in plain words:
-
-- **Listening … Nothing has arrived yet** — the sender may be off, or the desk may be on another
-  network. PosiStageNet cannot tell those apart, so the desk does not guess.
-- **Receiving on … from …** — packets are arriving, and this is who is sending them.
-- **Nothing heard … for 4s. Bound points are holding their last position.** — see below.
+**Revert** restores the stored settings. Invalid values remain marked without changing the receiver. The status distinguishes listening with no data, receiving from a sender, and stale input.
 
 ## Bind a tracker to a 3D Point
 
-Every tracker the desk has heard from is listed with its position in your show's own metres and how
-long ago it was last seen. Choose a 3D Point in its row to bind it.
+Choose a Point in a discovered tracker's row. Its position is shown in show metres; a new tracker can initially show a number until its name arrives.
 
-Names come in their own packet about once a second, so a tracker that has just appeared shows only
-its number for a moment. That is normal.
-
-Under **Bound points** each binding shows where the point actually ended up. If a marker walks
-further from the point's patched position than a 3D Point can reach, the point stops at the end of
-its travel and the row says **out of reach** — move the point's patched position closer to the area
-being covered.
+**Bound points** shows the resulting positions. **Out of reach** means the tracker exceeds the Point's travel: move the Point's patched resting position nearer the working area.
 
 ## When the tracking system goes quiet
 
-**Bound points hold their last position.** They do not jump back to what the show says, and they do
-not go to the origin. A light stays where it was pointed, which is a light you can take over. The
-Tracking tab says the source is stale, and how long it has been silent.
-
-Switching **Receive PosiStageNet** off is different: that is something you did on purpose, and the
-points go back to the show at once.
+Bound Points hold their last position, so lights do not jump to the origin or back to Cue positions. Check the stale message and sender/network. Turning **Receive PosiStageNet** off deliberately returns Points to show control immediately.
 
 ## Zones
 
-A zone is a box on stage. When somebody the zone watches is inside it, the zone runs a **Macro**;
-when the last of them leaves, it runs another. Anything you can write in a Macro is what a zone can
-do, including turning a playback on and off again.
+A zone runs a Macro when it becomes occupied and another when its last watched tracker leaves.
 
-| Setting | What it is |
+| Setting | Use |
 | --- | --- |
-| **From / To** | The two opposite corners of the box, in show metres. |
-| **On entering** | The Macro to run when the zone becomes occupied. |
-| **On leaving** | The Macro to run when it becomes empty. Leave it at **None** for a zone that should not turn itself off. |
-| **Hold for** | How long the change has to last before it counts. |
+| **From / To** | Opposite corners in show metres. |
+| **On entering / On leaving** | Macros to run; None means no action. |
+| **Hold for** | Required settling time before a change counts. |
 
-**Hold for** is what keeps a performer standing on the edge of a zone from firing the Macro over and
-over: the desk waits for the new state to settle before acting on it.
-
-A source going quiet does not empty its zones. A network switch rebooting is not everybody walking
-off stage, so nothing runs and the zones stay as they were.
+Use Hold for to avoid repeated actions near an edge. Lost tracking holds zone occupancy rather than firing a leave Macro.
 
 ## Calibration
 
-PosiStageNet uses metres with X right, Y up and Z depth. The desk converts this to its
-stage coordinates: X across, Y upstage and Z up. Positive PSN depth becomes downstage.
-Calibration offsets and zone corners use desk coordinates; **Rotation** turns about desk Z.
+**Origin x/y/z**, **Rotation**, and **Scale** align tracking with the rig. Offsets and zones use desk coordinates: X across stage, Y upstage, Z up. Rotation is about desk Z. PosiStageNet's Y-up/depth convention is converted automatically; its positive depth becomes downstage.
 
-Use **Origin x/y/z** when the tracking system was told its origin is somewhere else, and
-**Rotation** when it was set up facing another way. **Scale** is there for a system reporting in
-something other than metres.
+Set the origin and rotation against known stage points before aiming real fixtures. Use Scale only when the sender's units differ from metres.
 
 ## Where the configuration lives
 
-All of it is show data: the bindings, the zones, the calibration, and the group. It travels with the
-show to whichever desk is in the building. A show saved before this existed opens with tracking
-switched off and nothing bound.
+Source settings, bindings, zones, and calibration travel with the show. Older shows start with tracking disabled and no bindings.

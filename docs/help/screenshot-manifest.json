@@ -5,7 +5,10 @@
 			"file": "cuelist-playback.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1600, "height": 1100 },
+			"viewport": {
+				"width": 1600,
+				"height": 1100
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -15,7 +18,10 @@
 			"file": "default-desk-overview.png",
 			"source": "storybook",
 			"storyId": "tosklight-marketing--full-application",
-			"viewport": { "width": 1600, "height": 920 },
+			"viewport": {
+				"width": 1600,
+				"height": 920
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -24,7 +30,10 @@
 			"file": "fixture-sheet-programmer.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1600, "height": 1100 },
+			"viewport": {
+				"width": 1600,
+				"height": 1100
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -34,7 +43,10 @@
 			"file": "help-command-line.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-help--nested-topic",
-			"viewport": { "width": 1200, "height": 810 },
+			"viewport": {
+				"width": 1200,
+				"height": 810
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -44,18 +56,23 @@
 			"file": "software-keypad.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1600, "height": 339 },
+			"viewport": {
+				"width": 379,
+				"height": 328
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
-			"reason": "The image is a tightly cropped complete programmer control surface; the current Programmer Software story overflows its canvas and cannot reproduce that crop truthfully."
+			"reason": "The actual software keypad is captured by itself from the isolated documentation desk, including its real secondary key captions."
 		},
-
 		{
 			"file": "panes/channels.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-channels--two-row-bank",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -65,7 +82,10 @@
 			"file": "panes/cuelist-pool.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-cuelists-and-cues--pool-compact-help",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -75,7 +95,10 @@
 			"file": "panes/cuelists.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-cuelists-and-cues--pool-help",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -85,7 +108,10 @@
 			"file": "panes/cues.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-cuelists-and-cues--cues-with-properties",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -94,7 +120,10 @@
 			"file": "panes/dmx.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-dmx--selected-patched-channel",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -103,7 +132,10 @@
 			"file": "panes/dynamics.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-dynamics--full-application-discussion",
-			"viewport": { "width": 1496, "height": 1100 },
+			"viewport": {
+				"width": 1496,
+				"height": 1100
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -113,7 +145,10 @@
 			"file": "panes/file-manager.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-file-manager--populated",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -122,7 +157,10 @@
 			"file": "panes/fixtures.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-fixture-sheet--selected-steps-help",
-			"viewport": { "width": 1496, "height": 380 },
+			"viewport": {
+				"width": 1496,
+				"height": 380
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -132,7 +170,10 @@
 			"file": "panes/fixtures-icon-only.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-fixture-sheet--icon-only",
-			"viewport": { "width": 430, "height": 360 },
+			"viewport": {
+				"width": 430,
+				"height": 360
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
@@ -146,7 +187,10 @@
 			"file": "panes/fixtures-text-only.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-fixture-sheet--text-only",
-			"viewport": { "width": 430, "height": 360 },
+			"viewport": {
+				"width": 430,
+				"height": 360
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [
@@ -160,7 +204,10 @@
 			"file": "panes/groups.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-pools--groups",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -169,7 +216,10 @@
 			"file": "panes/help.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-help--nested-topic",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -178,47 +228,61 @@
 			"file": "panes/presets.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-pools--presets",
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
 		},
-    {
+		{
 			"file": "panes/stage.png",
 			"source": "native-still",
 			"storyId": null,
-			"viewport": { "width": 1496, "height": 761 },
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"reason": "Native Stage rendering is captured in the renderer; browser Storybook cannot host this native surface.",
 			"sourceFile": "docs/marketing/assets/stills/stage-3d-production.png"
 		},
-    {
-      "file": "panes/text-editor.png",
-      "source": "storybook",
-      "storyId": "tosklight-windows-text-editor--split-markdown",
-			"viewport": { "width": 1496, "height": 761 },
+		{
+			"file": "panes/text-editor.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-text-editor--split-markdown",
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+			"interactions": []
 		},
-    {
-      "file": "panes/virtual-playbacks.png",
-      "source": "live-app",
-      "storyId": null,
-			"viewport": { "width": 1496, "height": 761 },
+		{
+			"file": "panes/virtual-playbacks.png",
+			"source": "live-app",
+			"storyId": null,
+			"viewport": {
+				"width": 1496,
+				"height": 761
+			},
 			"theme": "dark",
 			"mode": "software",
-      "interactions": [],
-      "reason": "The unified Playbacks pane requires live desk surface, sparse assignment and runtime authority; tests/02-help-screenshots.spec.ts captures its actual pane."
+			"interactions": [],
+			"reason": "The unified Playbacks pane requires live desk surface, sparse assignment and runtime authority; tests/02-help-screenshots.spec.ts captures its actual pane."
 		},
-
 		{
 			"file": "panes/fixtures-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 236 },
+			"viewport": {
+				"width": 650,
+				"height": 236
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -228,7 +292,10 @@
 			"file": "panes/presets-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 270 },
+			"viewport": {
+				"width": 650,
+				"height": 270
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -238,7 +305,10 @@
 			"file": "panes/stage-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 288 },
+			"viewport": {
+				"width": 650,
+				"height": 288
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -248,7 +318,10 @@
 			"file": "panes/text-editor-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 236 },
+			"viewport": {
+				"width": 650,
+				"height": 236
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -258,18 +331,23 @@
 			"file": "panes/virtual-playbacks-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 334 },
+			"viewport": {
+				"width": 650,
+				"height": 334
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"reason": "Pane Settings composition is still covered only by the live desktop."
 		},
-
 		{
 			"file": "workflows/desk-setup-timecode.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-setup--timecode",
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -278,29 +356,37 @@
 			"file": "workflows/show-patch.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"reason": "The documented Show Patch contains representative patched fixtures; the current deterministic Patch story is an empty state."
 		},
-    {
+		{
 			"file": "workflows/stage-window-2d.png",
 			"source": "native-still",
 			"storyId": null,
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"reason": "The actual native Control Stage controls and 2D plan are captured in Control; browser Storybook cannot host this surface.",
 			"sourceFile": "docs/marketing/assets/stills/control-stage.png"
 		},
-
-    {
-      "file": "workflows/desk-setup-inputs.png",
-      "source": "storybook",
+		{
+			"file": "workflows/desk-setup-inputs.png",
+			"source": "storybook",
 			"storyId": "tosklight-windows-setup--others",
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -309,44 +395,59 @@
 			"file": "workflows/desk-setup-lock.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 424 },
+			"viewport": {
+				"width": 650,
+				"height": 424
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"reason": "No deterministic Desk Lock dialog story exists."
 		},
-    {
+		{
 			"file": "workflows/desk-setup-network-api.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-setup--network-and-inputs-help",
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
 		},
-    {
-      "file": "workflows/desk-setup-output-engine.png",
-      "source": "storybook",
-      "storyId": "tosklight-windows-setup--outputs",
-			"viewport": { "width": 1496, "height": 756 },
+		{
+			"file": "workflows/desk-setup-output-engine.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-setup--outputs",
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+			"interactions": []
 		},
-    {
-      "file": "workflows/desk-setup-screens.png",
-      "source": "storybook",
-      "storyId": "tosklight-windows-setup--screens-and-playback",
-			"viewport": { "width": 1496, "height": 756 },
+		{
+			"file": "workflows/desk-setup-screens.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-setup--screens-and-playback",
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
-      "interactions": []
+			"interactions": []
 		},
-    {
+		{
 			"file": "workflows/desk-setup-shows-recovery.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-setup--shows-and-recovery-help",
-			"viewport": { "width": 1496, "height": 756 },
+			"viewport": {
+				"width": 1496,
+				"height": 756
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
@@ -355,7 +456,10 @@
 			"file": "workflows/fixture-library-create.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1576, "height": 1076 },
+			"viewport": {
+				"width": 1576,
+				"height": 1076
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -365,7 +469,10 @@
 			"file": "workflows/fixture-library-import.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 560, "height": 186 },
+			"viewport": {
+				"width": 560,
+				"height": 186
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -375,7 +482,10 @@
 			"file": "workflows/fixture-library-mode-editor.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1560, "height": 1060 },
+			"viewport": {
+				"width": 1560,
+				"height": 1060
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -385,7 +495,10 @@
 			"file": "workflows/fixture-library.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1576, "height": 1076 },
+			"viewport": {
+				"width": 1576,
+				"height": 1076
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -395,7 +508,10 @@
 			"file": "workflows/fixture-sheet-settings-columns.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 520, "height": 663 },
+			"viewport": {
+				"width": 520,
+				"height": 663
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -405,7 +521,10 @@
 			"file": "workflows/fixture-sheet-settings-view.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 520, "height": 611 },
+			"viewport": {
+				"width": 520,
+				"height": 611
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -415,7 +534,10 @@
 			"file": "workflows/mvr-export.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1120, "height": 304 },
+			"viewport": {
+				"width": 1120,
+				"height": 304
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -425,7 +547,10 @@
 			"file": "workflows/mvr-new-show.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 820, "height": 570 },
+			"viewport": {
+				"width": 820,
+				"height": 570
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -435,7 +560,10 @@
 			"file": "workflows/patch-add-fixture.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 1576, "height": 1076 },
+			"viewport": {
+				"width": 1576,
+				"height": 1076
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -445,7 +573,10 @@
 			"file": "workflows/show-load-revisions.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 650, "height": 564 },
+			"viewport": {
+				"width": 650,
+				"height": 564
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -455,7 +586,10 @@
 			"file": "workflows/show-menu.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 720, "height": 494 },
+			"viewport": {
+				"width": 720,
+				"height": 494
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -465,7 +599,10 @@
 			"file": "workflows/stage-settings.png",
 			"source": "live-app",
 			"storyId": null,
-			"viewport": { "width": 520, "height": 514 },
+			"viewport": {
+				"width": 520,
+				"height": 514
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -475,7 +612,10 @@
 			"file": "panes/groups-tile-counts.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--group-counts",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -485,7 +625,10 @@
 			"file": "panes/groups-tile-markers.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--group-markers",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -495,7 +638,10 @@
 			"file": "panes/presets-color-details.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--color-preview-counts",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -505,7 +651,10 @@
 			"file": "panes/presets-position-details.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--position-previews",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -515,7 +664,10 @@
 			"file": "panes/playback-tile-details.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--playback-cue-and-solo",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
@@ -525,11 +677,204 @@
 			"file": "panes/playback-tile-shallow.png",
 			"source": "storybook",
 			"storyId": "tosklight-windows-tile-details--playback-shallow",
-			"viewport": { "width": 1000, "height": 420 },
+			"viewport": {
+				"width": 1000,
+				"height": 420
+			},
 			"theme": "dark",
 			"mode": "software",
 			"interactions": [],
 			"captureSelector": "[data-help-capture=\"playback-details\"]"
+		},
+		{
+			"file": "workflows/desk-setup-sound-input.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-configured-setup--sound-input",
+			"viewport": {
+				"width": 1200,
+				"height": 860
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": ".sound-input-settings"
+		},
+		{
+			"file": "workflows/desk-setup-native-extensions.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-configured-setup--native-extensions",
+			"viewport": {
+				"width": 1200,
+				"height": 860
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+				{
+					"action": "click",
+					"selector": ".native-extension-status summary"
+				}
+			],
+			"captureSelector": ".native-extension-status"
+		},
+		{
+			"file": "workflows/desk-setup-matter-bridge.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-configured-setup--matter-bridge",
+			"viewport": {
+				"width": 1200,
+				"height": 860
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": ".matter-desk-settings"
+		},
+		{
+			"file": "workflows/desk-setup-dmx-routes.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-configured-setup--dmx-routes",
+			"viewport": {
+				"width": 1200,
+				"height": 860
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": ".output-routes-setup"
+		},
+		{
+			"file": "workflows/desk-setup-usb-dmx.png",
+			"source": "storybook",
+			"storyId": "tosklight-windows-configured-setup--usb-dmx",
+			"viewport": {
+				"width": 1200,
+				"height": 860
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [
+				{
+					"action": "click",
+					"selector": ".output-routes-setup button:has-text(\"Edit route\")"
+				}
+			],
+			"captureSelector": ".output-route-editor"
+		},
+		{
+			"storyId": "tosklight-media-server--media",
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-administration.png",
+			"source": "storybook"
+		},
+		{
+			"storyId": "tosklight-media-server--media",
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-playback.png",
+			"source": "storybook"
+		},
+		{
+			"storyId": "tosklight-media-server--library-help",
+			"viewport": {
+				"width": 1440,
+				"height": 760
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-library.png",
+			"source": "storybook"
+		},
+		{
+			"storyId": "tosklight-media-server--settings-outputs",
+			"viewport": {
+				"width": 1440,
+				"height": 560
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-outputs.png",
+			"source": "storybook",
+			"captureSelector": ".media-settings-window"
+		},
+		{
+			"storyId": "tosklight-media-server--audio",
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-audio.png",
+			"source": "storybook",
+			"captureSelector": ".media-route-window"
+		},
+		{
+			"storyId": "tosklight-media-server--settings-network-and-inputs",
+			"viewport": {
+				"width": 1440,
+				"height": 680
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-network-inputs.png",
+			"source": "storybook",
+			"captureSelector": ".media-settings-window"
+		},
+		{
+			"storyId": "tosklight-media-server--dmx-diagnostics",
+			"viewport": {
+				"width": 1440,
+				"height": 620
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"file": "workflows/pixel-dmx-diagnostics.png",
+			"source": "storybook",
+			"captureSelector": ".media-operator-workspace"
+		},
+		{
+			"file": "workflows/architect-cad.png",
+			"source": "native-still",
+			"storyId": null,
+			"viewport": {
+				"width": 1440,
+				"height": 900
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"reason": "Architect uses its native CAD surface; this capture comes from the real Showcase Venue application.",
+			"sourceFile": "docs/marketing/assets/stills/architect-cad.png"
+		},
+		{
+			"file": "workflows/pixel-library-import.png",
+			"source": "storybook",
+			"storyId": "tosklight-media-server-import-progress--converting",
+			"viewport": {
+				"width": 1100,
+				"height": 600
+			},
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [],
+			"captureSelector": "article[aria-label=\"Import\"]"
 		}
 	]
 }

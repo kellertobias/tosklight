@@ -2,207 +2,94 @@
 
 ## Quick guide
 
-- **Record:** press `[REC]`, then touch a target. Groups and Presets normally merge into existing contents. Their tiles show **REC MRG**; empty targets show **REC**. A Cuelist with one Cue asks what to do; an empty Cuelist records its first Cue directly, and one with two or more Cues shows **REC CUE** and adds the next Cue.
-- **Update:** press `[^REC]`, then touch an existing Group, Preset, or Cuelist to inspect the Update preview. Confirm **Update** to apply the selected mode. Update changes stored programming; Record Merge adds to it. Choose **Update All** when new fixtures or attributes should also be included.
-- **Dynamic symbols:** read the four parts around the X: top **I** = Intensity, left **P** = Position, right **C** = Color, bottom **O** = Other. Coloured parts identify configured lanes; grey parts are absent. The bottom-left fixture count tells you whether the Dynamic is running.
+- **Record:** press `[REC]`, then a target. Groups and Presets normally merge; **REC MRG** identifies that choice. A multi-Cue list shows **REC CUE** to add the next Cue. A one-Cue list asks how to record.
+- **Update:** press `[^REC]`, then an existing Group, Preset, or Cuelist. Review and confirm **Update**. Use **Update All** when new fixtures or attributes should also be included.
+- **Selection:** Stage, Fixtures, Groups, and the command line share the same ordered selection. PREV/NEXT steps through it and ALL restores it.
 
-The rules above describe the normal defaults. An explicitly chosen Record or Update mode takes priority. See [Record and Update options](../20-Programmer-and-Cues/01-command-line.md) for one-off choices and saved desk defaults.
+An explicitly chosen Record/Update mode takes priority over defaults. See [Command Line Reference](../20-Programmer-and-Cues/01-command-line.md).
 
 ## Working with the pools
 
-Use the window that gives the clearest view of the current task; all of them operate on the same user programmer.
+Select fixtures, set values, then store reusable selections in Groups, values in Presets, or looks in Cues. Pool panes are different views onto the same desk Programmer.
 
-| Window | Primary use |
-| --- | --- |
-| Stage | Spatial selection, 2D/3D visualization, and Preload following. |
-| Fixtures | Fixture/head rows, attributes, source ownership, ordering, and active/Cuelist filters. |
-| Channels | Channel-oriented value and source inspection. |
-| Groups | Reusable ordered selections, references, projection, and phase ranking. |
-| Presets | Mixed, Intensity, Color, Position, and Beam pools. |
-| Dynamics | Numbered Dynamic pool, Lanes, Phase, Speed, targets, and running state. |
-| Cuelists / Cues | Cue content, order, timing, triggers, tracking, and execution. |
-| DMX | Final universe output and diagnostic overrides. |
+With no selection, tapping a populated Preset first selects its stored fixtures; a second tap recalls it. Missing fixtures are skipped, and unpatched fixtures remain usable. Record, Update, and Set take priority over this shortcut.
 
-Selections made in Stage, Fixtures, Groups, Presets, or the command line are the same actual programmer selection. Activating [Highlight and Step Through](../20-Programmer-and-Cues/02-selecting-and-setting-values.md#highlight-and-step-through) freezes that ordered selection as its original set. PREV and NEXT replace the actual selection with one original member; ALL restores the whole frozen set. Preset, encoder, dialog, and other value changes use that actual focus and immediately reveal the real value for each touched attribute.
+For Dynamics, **Take Selection** stores the target. A single Group remains live; other selections are frozen. **Projection** places fixtures in a plane, cylinder, or sphere for spatial ordering; **Phase** distributes the animation across that order. Inherit uses a live Group's mapping; Override edits it locally. Linear follows selection order and Random ignores spatial positions.
 
-In the Dynamics Speed view, the large tempo button taps the chosen Speed Group. While the Dynamic follows a Speed Group, the circle in the button's upper-right corner lights at the start of every beat of that group as the desk runs it, so it follows taps, tempo changes, and changes made on another surface or over OSC. It stays amber while the group is paused, and turns to a dashed outline when the desk is not answering. The Programmer's Dynamics Speed page shows no lane chooser, because Speed applies to every lane of the Dynamic alike.
-
-In the Dynamics Speed view, choose **Loop** to repeat until Off or **One-shot** to run one complete effective cycle and stop automatically. Run Mode is separate from Start now, Join sync now, and Next boundary, which determine when and where the cycle begins. A completed one-shot does not restart merely because its Cue, Programmer, or Playback value remains active; trigger it again with a new deliberate activation.
-
-The Dynamics editor separates target ordering from phase distribution. **Projection** places
-fixtures in a 2D plane and nothing else; **Phase** turns that plane into the one-dimensional order
-each lamp takes its phase from.
-
-**Projection** starts from the saved live Group's mapping. **Inherit** follows the Group;
-**Override** enables the local controls and a **Projection** toggle choosing Planar, Cylindrical,
-or Spherical. All three are placed by one position and one direction, and each offers only what it
-reads: Planar takes a direction and a Rotation and reads no position, while Cylindrical and
-Spherical take a position and are aimed by Azimuth, Elevation, and Rotation — Azimuth swings the
-direction, Elevation lifts it, and Rotation is the roll about the result that decides where the
-spread starts. Angles are set in whole degrees. A simplified Stage view beside the values shows the
-shape, its axis, and where the spread starts, with the selected lamps as dots — or every lamp when
-nothing is selected — so the shape can be placed against the real rig; drag it to orbit. Changes are saved
-as they are made, so there is no Apply button; if the Dynamic changed elsewhere, authority reloads
-and your values are kept. Frozen or targetless Dynamics instead show **Selection order (no Group
-mapping)**. On the encoders, projection takes two pages: the kind and its position, then its
-direction and rotation.
-
-**Phase** owns the ordering — **Inherit**, Linear, Grid, Radial, Radar, or Random — alongside
-offset, span, anchors, blocks, repeats, wings, and uniform/per-lane phase behavior. **Inherit**
-takes the Group's ordering and appears only for a Dynamic bound to a live Group, because anything
-else has nothing to inherit from. **Linear** follows source selection order even when the
-Group has a spatial mapping. In per-lane mode, ordering edits affect only the selected lane;
-Projection remains shared. **Random** ignores fixture positions and projection.
-
-With an empty programmer selection, the first ordinary tap on a populated Preset selects every
-fixture or logical head for which that Preset stores a value; it does not recall values. Tap the
-Preset again to recall it onto that selection. The selection is immediately shared with Stage,
-Fixtures, the command line, OSC, and attached controls. Unpatched fixtures remain selectable.
-Targets that no longer exist are skipped and reported without substituting another fixture. An
-empty Preset slot remains inactive unless a recording workflow is armed. Record/Store, Update, and
-Set keep priority over this selection shortcut.
+In **Speed**, tap the large tempo button to tap its Speed Group. Its beat indicator flashes on beats, stays amber while paused, and becomes dashed if the desk cannot be read. **Loop** repeats until Off; **One-shot** runs one effective cycle. Start-now/sync/boundary options separately decide when it begins.
 
 ## Reading pool tiles
 
-The name starts at the top left; the grid number is at the top right. Long names wrap without an inner scrollbar. The number and bottom-right icon or preview have backgrounds with faded edges so they remain readable above the name.
+Names are top-left and numbers top-right. The lower-left information depends on the pool:
 
-| Pool | Bottom-left information |
+| Pool | Lower-left information |
 | --- | --- |
-| Cuelists | Number of Cues, with a small play symbol when running on any playback. |
-| Groups | Fixture count, or selected/total when some members are selected. |
-| Presets | Number of fixtures currently on that Preset. |
+| Cuelists | Cue count and a play marker when running. |
+| Groups | Members, or selected/total for a partial selection. |
+| Presets | Fixtures currently on that Preset. |
 | Timecode | Unarmed, Armed, or Playing. |
-| Dynamics | Number of fixtures currently running that Dynamic. |
+| Dynamics | Fixtures currently running the Dynamic. |
 
-While Record is armed, a red rounded badge with bold black text spans the bottom of the tile above its other contents. **REC** means Record, **REC MRG** means Record Merge, and **REC CUE** means record the next Cue. The badge describes the current target and chosen mode. A one-Cue Cuelist showing **REC** still asks Add, Merge, or Overwrite when touched; the label is not permission to overwrite automatically.
+Record/Update overlays identify the armed operation without moving the underlying tile layout. **REC**, **REC MRG**, and **REC CUE** mean Record, Merge, and next Cue. They do not bypass confirmations.
 
-Update has its own bottom overlay and target eligibility feedback. Switching between normal, Record, and Update modes leaves the name, number, and information in the same positions. An armed overlay can cover bottom information temporarily. Dynamics are operated or edited through their own controls; their lane symbol does not make them an ordinary Record or Update target.
+See the close-up examples in [Groups and Presets](../20-Programmer-and-Cues/03-groups-and-presets.md) and [Virtual Playbacks](../20-Programmer-and-Cues/14-virtual-playbacks.md).
 
 ## Dynamic lanes
 
-**At a glance:** tile names use the tile's text area without an inner scrollbar, so long
-names such as **Beam Auxiliary Show Circle** and **Beam Auxiliary Show Waterfall** stay
-distinguishable. The top-right number and bottom-right artwork sit above the name with
-backgrounds that fade into the tile.
+The Dynamics tile's X divides its symbol into **I** (Intensity), **P** (Position), **C** (Color), and **O** (Other). Filled sectors mean configured lane families, even while stopped; the fixture count indicates running use.
 
-The symbol at the bottom right of a Dynamics tile shows its lane families.
-The diagonal X divides it into four parts: **I** at the top for Intensity, **P** on the left
-for Position, **C** on the right for Color, and **O** at the bottom for Other. Filled parts
-use the Dynamic's colour; grey parts mean that family has no lane. Several filled parts
-show a combination. The bottom-left number is still the count of fixtures currently running
-that Dynamic.
+Tap an empty tile or **+ Add Lane** to choose an attribute. Pan/Tilt and Zoom use degrees; Hue uses degrees, Temperature uses kelvin, and level-like controls use percentages. Enter values in the displayed units.
 
-The symbol follows the configured lanes, including when the Dynamic is stopped. Pan, Tilt
-and Target lanes belong to Position; all colour lanes belong to Color. Other covers lane
-families such as Focus, Zoom, Beam and Gobo. Editing lanes updates the symbol automatically;
-you do not need to choose an icon for the pool tile. For example, a Pan/Tilt Dynamic fills **P**, a colour chase fills **C**, and a Dynamic combining dimming with movement fills **I** and **P**. A coloured sector means the lane exists, not that it is currently outputting or running. Any saved custom artwork remains stored, but the Dynamics pool uses this automatic lane symbol.
+A new Pan/Tilt lane animates around **Current** and adds a partner axis that holds Current. For a circle, add Pan and Tilt, then choose **Cosinus** for Tilt. Current follows the underlying aim, including a moving Point; releasing the Dynamic restores that aim. A missing target holds its angles rather than jumping.
 
-Each lane of a Dynamic animates one attribute. Tap an empty Dynamics tile, or **+ Add Lane** in the
-editor, to open the lane chooser: it lists attribute groups first, and the attributes sit inside
-their group.
-
-Position, Color and Zoom lanes are fixture-independent, like every other Position, Color and Zoom
-value: **Pan** and **Tilt** animate Angles in degrees, **Zoom** the beam opening in degrees, and
-the Color group offers **Red**, **Green**, **Blue** and **Amber** recipe components, **Hue** in
-degrees, **Saturation**, **White Blend**, **Temperature** in kelvin and **UV**. The same Dynamic
-therefore runs on any mover or colour mixing system. Other attributes, such as Intensity or Focus,
-run between 0 and 100 %. The lane encoders, keyframe values and curves show each lane in its own
-units, so a Pan amplitude reads `45°`, not a percentage; enter a value in those units on the
-encoder's value modal.
-
-A new Pan or Tilt lane swings around **Current** on a Sinus: 45° for Pan, 30° for Tilt. Every
-Angle Dynamic moves Pan and Tilt together, so adding Pan also adds a **Tilt** lane that follows
-Current, and adding Tilt adds a Pan lane. To animate that partner, select it and choose a curve
-function, or add the axis yourself with **+ Add Lane**, which replaces the partner. For a circle:
-add Pan, add Tilt, select the Tilt lane and choose **Cosinus**.
-
-**Current** is the fixture's Position before the Dynamic, read again on every frame. When the
-fixtures aim at a Target (Point or X/Y/Z), Current is the Pan and Tilt that aim at it, so the circle
-runs around the Target. The Programmer keeps the Target: move the Point or edit X, Y or Z while the
-Dynamic runs, and the circle's centre follows. Releasing the Dynamic shows the Target's own aim.
-If the Target cannot be reached, for example because its Point was deleted, the Dynamic holds its
-Pan and Tilt instead of guessing.
-
-Within one Dynamic, the Red, Green, Blue and Amber recipe lanes and the Hue and Saturation lanes
-are two different ways of writing the base colour; a Dynamic uses one of them. White Blend,
-Temperature and UV combine with either.
+RGB/Amber and Hue/Saturation are alternative base-color recipes within one Dynamic. White Blend, Temperature, and UV can accompany either.
 
 ## Return Position fixtures home
 
-Open **Position → Special Dialog** and press **Return Home** below the Aim joystick to return the current ordered selection to its home pose: **Pan 0°** and **Tilt 0°**, the centre of each fixture's travel, where its Position physical data points the beam. Every selected head with Position goes home, including a selection whose angles differ, and a Target is replaced by those angles. Fixtures without Position are skipped. A selected group is addressed as that group. With no selection, or when the selected fixtures are **Unsupported** (see below), Return Home is disabled and never addresses every moving light in the show.
+Open **Position > Special Dialog > Return Home** to set selected supported heads to **Pan 0° / Tilt 0°**. This is the fixture's home pose, not necessarily straight down. It replaces a Target with angles, follows the current Programmer mode/fade, and can be undone with **UND**.
 
-Return Home is one normal programmer gesture. It follows Programmer Fade and the current Blind, Preview, or Preload mode, and one **UND** restores the preceding programmer values. Record or Update the result when it should become show data. Return Home itself does not edit fixture profiles or save values into a Cue or Preset.
+Nothing selected means nothing moves. Record or Update explicitly if home should be stored in a Cue or Preset.
 
 ## Position encoders and Special Dialog
 
-Position programs fixture-independent angles and targets instead of raw Pan and Tilt channel levels. A show that still holds Pan and Tilt as channel percentages is not opened; see [Shows programmed before fixture-independent programming](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming).
+Position uses angles or Targets. Pan/Tilt edits select angle mode; Point/X/Y/Z edits select Target mode. Switching encoder pages alone sends nothing.
 
-**Encoders.** Position has two encoder pages. Page 1 holds **Pan** and **Tilt** in degrees; page 2 holds **Point**, **X**, **Y** and **Z**, with the offsets in metres. Press the **Position** family button again to switch pages. Switching pages only changes what the encoders show; it never activates Angle or Target and sends nothing. Software encoders, the keyboard, attached hardware and OSC `encode/N` controls all make the same edit: up and down move one step (1° or 0.1 m), and the coarse direction moves ten. Typing a range such as `270 [THRU] −270 [THRU] 270` in an encoder's value modal spreads that angle or offset over the ordered selection, exactly as an intensity range does; the encoder then shows the range, for example `-270°...270°`.
+| Page | Controls |
+| --- | --- |
+| 1 | **Pan / Tilt** in degrees. |
+| 2 | **Point / X / Y / Z**, with offsets in metres. |
 
-**Readouts.** **Point** shows the active Target reference: **Origin** or the 3D Point's name. **X**, **Y** and **Z** show the Target offsets in metres, for example `0.3 m`. At the Origin these are stage coordinates; at a Point they are relative to the Point. The values update with every encoder step, on screen and on an attached hardware desk. They read the same whether you selected fixtures or a group, and whether the fixtures are patched or not. When the Programmer holds no Position but a Cue or Preset aims at a Target, the encoders show that Target. Before any Target is active, Point, X, Y and Z read **—**; while the show holds no 3D Point, Point reads **No Points** instead. When the selected fixtures hold different numbers, the encoder shows the lowest and highest, for example `-12.5°...31°`.
+Press the Position family again to switch pages. Enter a THRU range to spread values in selection order. Mixed values read as a minimum–maximum range.
 
-**Choosing and creating Points.** Turning **Point** steps through **Origin** and then every 3D Point of the show in fixture ID order, patched or not, and back to Origin; the encoder names the chosen Point by its fixture ID and name. Tap the middle of the Point encoder, or touch the Point display on a hardware-connected desk, to pick a Point by name; the current one is marked. The picker also offers **Create Point**, which opens **Show > Show Patch > Points** with a new aim Point, and **Manage Points**, which opens the same view (see [Points](../10-Show-Setup/12-patch-fixtures-and-scenery.md#points)). A Point that was deleted while the Programmer, a Cue or a Preset still aims at it reads **Missing point**: the reference is kept, never silently replaced, and the next Point step goes on to the Points that exist.
+### Choose a Point
 
-Angle and Target are exclusive. Turning Point, X, Y or Z while the selection holds Angles, or has no semantic Position value yet, activates Target at the Origin, or at the chosen Point, and applies that offset in the same edit. Turning Pan or Tilt while Target is active switches back to Angles.
+Turn **Point** through Origin and the show's Points, or touch it to choose by name. **Create Point** and **Manage Points** open [Show Patch > Points](../10-Show-Setup/12-patch-fixtures-and-scenery.md#points). At Origin, X/Y/Z are stage coordinates; at a Point they are offsets from it.
 
-**Special Dialog.** Open **Position → Special Dialog** for the modal Position editor:
+**No Points** means the show has none. **Missing point** preserves an aim reference whose Point was deleted; choose another rather than expecting a replacement.
 
-- the Pan circle sits above the Tilt fader on the left;
-- the square Aim joystick sits on the right.
+### Aim with the Special Dialog
 
-The modal has no Point or X/Y/Z controls; use encoder page 2 for those. **Return Home** sits below the joystick (see [Return Position fixtures home](#return-position-fixtures-home)). Opening, focusing or closing it changes nothing. **Escape** and the close button close it.
+- **Pan circle:** drag for continuous turns; ±90° makes a quarter-turn and Reset sets only Pan to zero.
+- **Tilt fader:** drag or use arrow/Page keys.
+- **Aim joystick:** hold away from centre to keep moving; release or return to centre to stop. Movement also stops when focus is lost or the dialog closes.
+- **Return Home:** returns both axes to zero.
 
-- **Pan circle.** Pan is unwrapped. Dragging around the circle keeps adding turns, and the turn readout below shows the count; the stored angle never wraps to ±180°. **−90°** and **+90°** move Pan by a quarter turn. **Reset** sets Pan to 0° and leaves Tilt unchanged; at 0° it changes nothing.
-- **Tilt fader.** Drag, or use the arrow and Page keys, to set Tilt.
-- **Aim joystick.** Hold the joystick away from its centre to keep Pan and Tilt moving, even without moving the pointer. Movement near the centre is gentle: there is a small dead zone, then speed rises with the square of the deflection, up to full speed at the edge. Arrow keys on the focused joystick move it the same way until released.
-- **Stopping.** Movement stops immediately when you return to the centre, release, or when the pointer is cancelled or lost. It also stops when the desk window loses focus or is hidden, when you close the dialog, or when an angle reaches its limit.
+Point/X/Y/Z remain on encoder page 2 rather than in this modal.
 
-**Resolved values.** While Target is active, Pan and Tilt in the dialog and on encoder page 1 show the commanded angles of the output you see. They are marked with where they come from:
+**From XYZ**, **From Point**, and **From Target** identify target-derived angles. **Resolved** shows the current commanded pose before an angle edit. The first edit takes over that displayed pose. For differing fixture poses, **Relative** edits preserve their differences rather than averaging them.
 
-- **From XYZ** when the selection aims at the Origin with X/Y/Z offsets;
-- **From Point** when it aims at one 3D Point;
-- **From Target** when the fixtures aim at different Points, or some at a Point and some at the Origin.
-
-Without a Target, read-back angles are marked **Resolved**, for example before the first Position edit. Watching them changes nothing. The first real Pan, Tilt or joystick edit takes over that exact displayed pose once, then applies the edit. It never takes a newer pose that you had not seen.
-
-When the selected fixtures point differently, the encoder shows the range of their angles, lowest first, for example `-31.2°...12°`. Nothing is averaged. The dialog then marks the values **Relative**, with the Target they come from, and moves every fixture by the same amount, keeping their differences.
-
-Each press-and-release, key step or button press is one gesture and one **UND** step. The gesture follows the current mode: Normal programmer edits apply immediately, and Preload edits use Programmer Fade. A selected group is addressed as that group.
-
-**Unsupported fixtures.** Programming Pan, Tilt or a Target needs Position physical data: which channel turns which axis, in degrees. A mover whose fixture type carries none is given a nominal one from its Pan and Tilt channels when it is patched, so it is programmed in degrees as well; its angles are estimated, not calibrated (see [Fixture types and GDTF](../10-Show-Setup/11-fixture-types-and-gdtf.md)). A Position Dynamic applied to fixtures that have no Position programmed starts from each fixture's default pose, so you do not need to set a Position first. A Cue that fades a Position in over a fixture with no previous Position fades from that default pose too, and the first encoder turn after a show opens edits from the pose the fixture is about to output. Only fixtures that cannot be described this way, such as a Tilt-only fixture, are Unsupported. When none of the selected fixtures has Position data and nothing is programmed yet, encoder page 1 reads *Pan · Unsupported* and *Tilt · Unsupported*, the dialog shows **Unsupported** under the angles, and the encoders, joystick and buttons send nothing, on the screen, on a hardware desk and over OSC. No error interrupts you. Once a Position value is programmed for those fixtures, for example by recalling a preset, the encoders edit it again. The shipped **Cameo AURO SPOT Z300**, **JB-Lighting JBLED A7**, **ROBE Robin DLS Profile** and **Martin MAC 300** carry authored data.
-
-The approved interaction defaults apply until fixture data publishes its own values. The joystick moves at most 120°/s Pan and 90°/s Tilt. The dialog offers −720° to +720° Pan and −135° to +135° Tilt, widened to include the current value. These are interaction limits only; each fixture still applies its own physical range.
+Each gesture is one Undo step and follows Normal, Blind, Preview, or Preload. Fixture ranges still depend on the profile; estimated Position data is not calibrated aiming. Unsupported fixtures show that state and disable unavailable controls. See [Fixture Types and GDTF](../10-Show-Setup/11-fixture-types-and-gdtf.md) for calibration, and [Recovery](../10-Show-Setup/05-users-sessions-and-recovery.md#shows-programmed-before-fixture-independent-programming) for incompatible older percentage programming.
 
 ## Run fixture control actions
 
-Open **Control → Special Dialog** to run the selected fixtures' authored control actions. The familiar Lamp, Reset, and Fan buttons apply only where a fixture profile provides the matching action; the Fixture controls row exposes every authored action by its profile name, including Custom actions. Momentary actions remain active only while held, timed actions release on the fixture profile's timer, and latched actions toggle on and off.
+Open **Control > Special Dialog** for the selected fixtures' Lamp, Reset, Fan, and other authored actions. Momentary actions require holding, timed actions release on their timer, and latched actions toggle.
 
-Control actions are live fixture overrides, not recordable encoder values. Use **Generate portable presets** in the same dialog when fixed or indexed fixture functions should become portable Preset choices for the selected fixtures.
+These are live overrides, not recordable encoder values. **Generate portable presets** creates Presets for supported fixed/indexed choices.
 
 ## Spread a Color range
 
-Open **Color → Special Dialog** to set one colour for the current selection. To spread a range, hold
-Shift on the keyboard, the on-screen **SHIFT** or the attached hardware, touch the first value, then
-the last; holding Shift for one drag from the first to the last value does the same. The first touch
-only marks endpoint **1**; nothing is written until the last endpoint completes the range. The
-markers **1** and **2** and the value readout then show the range.
+In **Color > Special Dialog**, hold Shift and touch the first and last values, or Shift-drag between them. The first touch marks endpoint 1; the second applies the range. First and last selected fixtures receive the endpoints, with equal steps between them in selection order.
 
-The first selected fixture receives the first value, the last receives the last, and the fixtures
-between receive equal steps in the current selection order. Endpoints keep the order they were
-touched, so Saturation 80% to 20% runs downwards. Hue takes the shorter way round the colour wheel:
-350° to 10° passes through red, never through cyan, and a range of exactly half the wheel turns
-clockwise, towards increasing hue. Equal endpoints give every fixture the same value. Touching a
-control again without Shift returns only that control to one value and keeps every other range.
-Reversing the selection reverses which fixtures receive the steps.
+Hue takes the shorter path around the wheel, so 350° → 10° passes through red. Reversing selection reverses distribution. Touching without Shift resets only that control to one value. The edit follows normal Programmer modes and is one Undo step.
 
-Each touch or drag is one normal Programmer gesture and one Undo step. Blind, Preview, Preload,
-Record, and Update use the same programmer behavior as other Color edits. With nothing selected the
-dialog changes nothing and shows no message.
-
-The Fixture Sheet is also the on-desk Highlight-state view: original-set rows remain subtly selected while the active step is prominent, including on multi-head rows and master rows shown while subheads are hidden. The command bar replaces its DMX-rate text with `Highlight` while HIGH is active but adds no separate status panel; neither does the hardware simulator.
-
-Pane settings are local to that pane. A Stage pane can follow Preload while another shows live output; a Preset pane can remain on Position while another shows Color.
-
-See [Channel Faders](07-channel-faders.md) for the current Channels workflow. Use Dynamics for
-animated Programmer values and Dynamic Playback assignments; use a Live or Preload-following Stage
-window to inspect their authoritative output.
+Use a Live or Follow Preload Stage to inspect the result. See [Channel Faders](07-channel-faders.md) for direct fixture levels.

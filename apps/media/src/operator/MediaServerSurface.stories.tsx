@@ -315,8 +315,21 @@ function StatefulPixelMap() {
 	);
 }
 
-function StatefulLibrary() {
-	const [catalog, setCatalog] = useState<CatalogView>(storyCatalog);
+function StatefulLibrary({ compact = false }: { compact?: boolean }) {
+	const [catalog, setCatalog] = useState<CatalogView>(() =>
+		compact
+			? {
+					...storyCatalog,
+					folders: storyCatalog.folders.map((folder) => ({
+						...folder,
+						items: folder.items.map((item, index) => ({
+							...item,
+							file: index + 1,
+						})),
+					})),
+				}
+			: storyCatalog,
+	);
 	return (
 		<Frame active="library">
 			<LibraryBrowserView
@@ -796,6 +809,7 @@ export const Media: Story = {
 	render: () => <StatefulPlayback />,
 };
 export const Library: Story = { render: () => <StatefulLibrary /> };
+export const LibraryHelp: Story = { render: () => <StatefulLibrary compact /> };
 export const Visualizers: Story = { render: () => <StatefulVisualizers /> };
 export const Text: Story = { render: () => <StatefulText /> };
 export const Audio: Story = {

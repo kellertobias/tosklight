@@ -174,7 +174,11 @@ export function ProgrammerSurface({
 			),
 		programmerActions: null,
 	} as unknown as ParameterController;
-	return render ? render(controller) : <ParameterControlView controller={controller} />;
+	return render ? (
+		render(controller)
+	) : (
+		<ParameterControlView controller={controller} />
+	);
 }
 
 const playbackKinds = [
@@ -245,17 +249,34 @@ function playbackModel(
 	};
 }
 
-function PlaybackSurface({ hardware }: { hardware: boolean }) {
+function PlaybackSurface({
+	hardware,
+	count = 16,
+}: {
+	hardware: boolean;
+	count?: 8 | 16;
+}) {
 	const [values, setValues] = useState([
-		72, 48, 100, 62, 35, 100, 24, 0, 72, 48, 100, 62, 35, 100, 24, 0,
+		...[72, 48, 100, 62, 35, 100, 24, 0, 72, 48, 100, 62, 35, 100, 24, 0].slice(
+			0,
+			count,
+		),
 	]);
 	return (
 		<PlaybackBankView
 			mode={hardware ? "hardware" : "touch"}
 			columns={8}
-			rowWeights={hardware ? [1, 2] : [1, 4]}
+			rowWeights={count === 8 ? [1] : hardware ? [1, 2] : [1, 4]}
 			items={values.map((_, index) => ({
-				model: playbackModel(index, Math.floor(index / 8), hardware, values),
+				model: {
+					...playbackModel(
+						index,
+						count === 8 ? 1 : Math.floor(index / 8),
+						hardware,
+						values,
+					),
+					row: count === 8 ? 0 : Math.floor(index / 8),
+				},
 				cueRows:
 					hardware && index % 8 === 0 ? (
 						<HardwareCueRowsView
@@ -461,6 +482,8 @@ export function HardwareToolsFixture() {
 
 export interface CommandSectionFixtureProps {
 	initialMode?: CommandLineMode;
+	/** Documentation can show one legible bank without changing normal story coverage. */
+	playbackCount?: 8 | 16;
 	hardware?: boolean;
 	clearState?: ProgrammerClearState;
 	previousEnabled?: boolean;
@@ -480,6 +503,7 @@ export interface CommandSectionFixtureProps {
 
 function CommandSectionFixtureContent({
 	initialMode = "programmer",
+	playbackCount = 16,
 	hardware = false,
 	clearState = "idle",
 	previousEnabled = true,
@@ -519,7 +543,7 @@ function CommandSectionFixtureContent({
 					/>
 				)
 			}
-			playbacks={<PlaybackSurface hardware={hardware} />}
+			playbacks={<PlaybackSurface hardware={hardware} count={playbackCount} />}
 			programmerTools={
 				<ProgrammerToolsFixture
 					clearState={clearState}
@@ -528,7 +552,11 @@ function CommandSectionFixtureContent({
 				/>
 			}
 			playbackTools={<PlaybackToolsFixture />}
-			hardwareTools={typeof hardwareTools === "function" ? hardwareTools(mode) : hardwareTools ?? <HardwareToolsFixture />}
+			hardwareTools={
+				typeof hardwareTools === "function"
+					? hardwareTools(mode)
+					: (hardwareTools ?? <HardwareToolsFixture />)
+			}
 		/>
 	);
 }

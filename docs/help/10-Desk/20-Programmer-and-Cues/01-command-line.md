@@ -1,4 +1,4 @@
-# Command Line Reference & Programming your Show
+# Command Line Reference
 
 ## Quick summary
 
@@ -8,29 +8,23 @@
 - An undotted playback number uses the visibly selected surface's effective page. Use `page.playback` when you need an explicit page.
 - For timing, explicit per-value TIME takes priority over Cue timing unless **Force Cue Timing** is enabled. [Cue timing and triggers](#cue-timing-and-triggers) explains which Cue owns each time.
 
-## Intro
-You can program the entire desk from the command line or mixed with touch commands in the UI, encoder changes and inputs from the command line.
+## Notation and button roles
 
-### Command Types
-Commands can be of the following types:
+`[BTN]` names a desk key, `{TOUCH}` a touchscreen action, and `#> TEXT` the displayed command.
+`<selection>` and `<value>` are placeholders. `12.34` means pressing `[1][2][.][3][4]`.
+`[KBD:KEY]` marks a computer shortcut.
 
-- Selecting Fixtures (many commands start with selecting fixtures, in the following sections we often abbreviate this with `<selection>`)
-- Programmer Actions (setting values or presets. If the value isn't relevant for explaination, we show `<value>` here in the manual.)
-- Altering Show Stage (e.g. recording, updating, deleting presets, cues and other things)
-- Altering Playback State
+| Gesture | Notation | Example |
+| --- | --- | --- |
+| Press | `[GRP]` | Enters GROUP. |
+| Double press | `[GRP][GRP]` | Enters DEGROUP. |
+| Shift-press | `[^GRP]` | Hold Shift and press GRP for FIXTURE. |
+| Hold | `[PRELOAD+]` | Opens the pending Preload for inspection. |
 
-### Notation & Multiple Button Roles
-In the following, we indicate hardware buttons with `[BTN]`, touch commands with `{TOUCH}` and the text that then is shown on the command line `#> FIXTURE`. Defined blocks that usually represent multiple commands are denoted as `<section>`. Values are shown as regular text for simplicity. `12.34` means `[1][2][.][3][4]`. Computer-Keyboard keys are marked by `[KBD:KEY]`.
+Keep Shift held across consecutive shifted keys if convenient. `[^GRP][^GRP]` enters DMX.
+Read the command field to confirm the active meaning before entering an address.
 
-Another important concept to understand is that every button can have multiple functions depending on how often and long they are pressed and wether they are pressed together with shift.
-- Regular Press: You hold down and release a button in a regular typing speed, e.g. `[GRP]`. Once you held down the button the action is shown in the command line `#> GROUP`
-- Double-Press: If a button is pressed twice, it's indicated twice in this manual, e.g. `[GRP][GRP]`. The command line indicates the actual intention. When you press `[GRP]` the first time, it shows `#> GROUP`, once you pressed it the second time, it shows `#> DEGROUP`
-- Shift-Press: If a button is to be pressed with shift, we access the second function on that button. These are indicated with `[^GRP]`. You hold down shift, then press the desired button, then let go shift. The action is performed, once you click the actual button. If you need to press multiple buttons with shift directly after each other, you do not need to release shift in between. e.g. `[^GRP][^GRP]` can be either entered by holding down shift, then pressing `[GRP]`, then releasing shift, then holding down shift again, pressing `[GRP]` again, then releasing shift again; or you can hold down shift, press `[GRP]` twice and then release shift; the outcome is the same. The command line again indicates the intention: `[^GRP]` is `#> FIXTURE`, while `[^GRP][^GRP]` is `#> DMX`. Use the DMX form to address the fixture at a physical `universe.address`—a fast way to find it while quick-patching.
-- Long-Press/ Hold: If a button is pressed long, it's indicated with a plus, e.g. `[PRELOAD+]` (which opens the pending Preload for inspection and editing). Long presses do not need to be confirmed and directly trigger an action, such as opening a modal or resetting a value.
-
-> [!danger] Missing graphic
-> Add a command-grammar diagram showing selection or source, action, target or value, confirmation, and the press, double-press, Shift-press, and hold notations.
-
+![A command combines its target selection, action and confirmation](../../assets/diagrams/command-grammar.svg)
 
 ### Command Line Abbreviations
 Entries in the command line are also sometimes abbreviated especially for `#> FIXTURE`, `#> GROUP`, `#> DEGROUP`, `#> DMX` (`#> F7`, `#> G1`, `#> g4`, `#> D2.4`). They abbreviate once the number gets typed.
@@ -132,8 +126,9 @@ The following table shows the second layer assignment, the user can reach with h
 
 ### Software (Touch) and suggested Hardware layout
 
-> [!danger] Missing graphic
-> Add labelled software-keypad and suggested hardware-layout diagrams showing every primary and Shift-layer button assignment.
+![Software keypad; shifted key assignments are listed in the preceding table](../../assets/screenshots/software-keypad.png)
+
+Hardware layouts vary; the key names and primary/Shift assignments above are the common contract.
 
 
 ## Selecting fixtures and Groups
@@ -148,7 +143,7 @@ After you have selected your fixtures and groups with touch, you can directly se
 ### Selecting Ranges, Adding, Subtracting
 
 You can select either single fixtures `[1][ENT]`, multiple explicit fixtures `[1][+][3]`, ranges `[1][THRU][5]` or a combination of them.
-A `THRU` always has the highest specifitiy, meaning values always assume they belong to the `THRU` first:  `[1][THRU][3][+][11][THRU][13]` selects fixtures 1,2,3,11,12 and 13 in that order. `[5][THRU][1]` selects them in the descending order: 5,4,3,2,1.
+A `THRU` always has the highest specificity, meaning values always assume they belong to the `THRU` first:  `[1][THRU][3][+][11][THRU][13]` selects fixtures 1,2,3,11,12 and 13 in that order. `[5][THRU][1]` selects them in the descending order: 5,4,3,2,1.
 
 You can also subtract from a selection: `[1][THRU][5][-][2]` selects fixtures 1,3,4,5 and `[1][THRU][9]-[3][THRU][7]` selects 1,2,8,9. You can also add back to a selection: `[1][THRU][9]-[3][THRU][7][+][5]` selects 1,2,8,9,5 or subtract multiple ranges: `[1][THRU][9]-[3][THRU][4][-][6][-][7]` selects 1,2,5,8,9.
 
@@ -229,7 +224,7 @@ Press `[CLR]` once to clear the current selection explicitly without clearing it
 
 ## Setting Values and Recording Presets
 
-Now that you understand how we can make a selection and record groups, we use `<selection>` for all the different types we can make a selection and can start assigning values to the lamps. The easiest way is assinging intensity (dimmer) values: `#> <selection> AT <intensity>`, e.g. `[1][AT][100][ENT]` this sets fixture 1 to 100% dimmer value. You can also set fractal values, e.g. `#> <selection> At 12.34` which sets the intensity to 12.34%
+Use `<selection> [AT] <intensity> [ENT]` to set Intensity. For example, `1 [AT] 100 [ENT]` sets fixture 1 to full; `1 [AT] 12.34 [ENT]` sets 12.34%.
 
 Alternatively, you can also select the fixtures or groups and then turn the intensity encoder. This sets the value as well. Encoders work incrementally/ decrementally; They do not set the absolute value of all fixtures, but usually increase the value the fixture currently has by 1 per ratchet. If you want to do finer adjustments, hold `[^]` while turning the encoder. Increasing / Decreasing intensity also works via command line: `<selection>[AT][+] 10` adds 10% to the current values of intensity of the selected fixtures, while `<selection>[AT][-] 10` removes 10%.
 
@@ -243,7 +238,7 @@ Whenever you changed a value, the selection phase of the command is over and whe
 
 ### Setting Non-Intensity values
 
-The default after `[AT]` is the intensity value. You however also can set other values directly. This works by typing `<selection> [AT][^2] <red>[DIV]<green>[DIV]<blue>`. The order is always the same as the encoders. Values you do not want to change can be left empty (e.g. `<selection> [AT][^2] [DIV][DIV]100` only sets blue to 100%) Which number is which encoder group can be taken from [[Second Layer Assignment]].
+The default after `[AT]` is the intensity value. You however also can set other values directly. This works by typing `<selection> [AT][^2] <red>[DIV]<green>[DIV]<blue>`. The order is always the same as the encoders. Values you do not want to change can be left empty (e.g. `<selection> [AT][^2] [DIV][DIV]100` only sets blue to 100%) Which number is which encoder group can be taken from [Second Layer Assignment](#second-layer-assignment).
 
 Here you can also increase/ decrease: `<selection> [AT][^2] [+] 10 [DIV][+] 0 [DIV][-] 10` adds 10 to red, does not change green and subtracts 10 from blue.
 
@@ -279,23 +274,19 @@ For example, if an earlier Cue gives a fixture 100% intensity and a later Cue co
 
 ### Recording a Preset
 
-Now that we have created a look, we might want to be able to recall this look later. For this, we can use presets.
-
 There are two different types of presets:
 - "All Presets" store all attribute types that are currently in the programmer. This can be used to store full looks.
 - "Attribute Group Presets" (e.g. a Color Preset or Intensity Preset) only store attributes of the given attribute group. That means that e.g. a color preset only stores color values, but never intensity values. A color preset stores either a Color Intent or a Direct recipe, exactly as programmed (see [Direct Color](07-direct-color.md)).
 
 After setting the values you want to store, press `[REC]` and touch a Preset tile, or use `[REC][^2] 22` to record Color Preset 22. With the normal **Smart** desk default, recording an existing Preset merges the Programmer into its stored values and its tile shows **REC MRG**; an unused slot shows **REC** and creates a Preset. A saved alternative Record default or a one-off option still applies. `[REC][+][^2] 22` explicitly merges. To replace the entire existing Preset, choose one-off **Smart**, touch its tile, then choose **Overwrite**; the command `RECORD SMART 2.22` explicitly overwrites Color Preset 22. See [Groups and Presets](03-groups-and-presets.md) for the recording options.
 
-You can also remove the current values from a preset. `[REC][-][^2] 22` this removes the active attribues from the given preset.
+You can also remove the current values from a preset. `[REC][-][^2] 22` this removes the active attributes from the given preset.
 
 More about the preset pool can be found in the chapter about the preset pane.
 
 ### Recalling a Preset
 
-Once you have stored your look into a preset, you can recall that preset.
-
-You can recall a preset for only your current selection by pressing the preset after you have a selection. This applies the preset to all fixtures from your selection for which you have recorded that preset. This also works from the command line by pressing the corresponding attribute group button twice: `[^2][^2]` shows then `#> COLOR PRESET` you now can enter the number of the preset you want, e.g. `#> <selection> AT COLOR PRESET 22` followed by `[ENT]`. The list of attribute group button mappings can be found in [[Second Layer Assignment]].
+You can recall a preset for only your current selection by pressing the preset after you have a selection. This applies the preset to all fixtures from your selection for which you have recorded that preset. This also works from the command line by pressing the corresponding attribute group button twice: `[^2][^2]` shows then `#> COLOR PRESET` you now can enter the number of the preset you want, e.g. `#> <selection> AT COLOR PRESET 22` followed by `[ENT]`. The list of attribute group button mappings can be found in [Second Layer Assignment](#second-layer-assignment).
 
 You can also spread preset ranges: `#> <selection> AT COLOR PRESET 22 THRU 24 [ENT]` if e.g. color preset 22 is red and 24 is green, the selected fixtures now produces a stable gradient from red to green. The command means: take values from 22 and 24 and interpolate a gradient. It does not mean trigger preset 22, 23 and 24. This also works with touch: once you have your selection, touch the first preset, then press the `[THRU]` button, then the next preset. You can chain multiple of these and they are applied immediately and do not require `[ENT]`.
 
@@ -347,8 +338,7 @@ If the Cuelist contains exactly one Cue, the desk asks what you want to do:
 
 The same choice appears when recording onto a playback whose assigned Cuelist contains exactly one Cue. Once the Cuelist contains two or more Cues, recording onto the Cuelist or playback always chooses **Add Cue** and appends at the end.
 
-> [!danger] Missing graphic
-> Add a Record-target diagram comparing the touch playback area, the attached desk's topmost playback button, a buttonless playback's visible screen area, and the excluded fader.
+![Record targets on touch and attached hardware](../../assets/diagrams/record-targets.svg)
 
 ### Choosing How to Record: `[REC][REC]`
 

@@ -1,104 +1,42 @@
 # Surfaces, Sessions, and Recovery
 
-The desk has one Programmer. Every surface showing it is a view onto that one, not a copy.
-
 ## One desk, many surfaces
 
-Whoever is standing at the desk — at the main window, an optional screen, a browser session, an
-OSC wing, the keyboard — is operating the same command line, the same ordered selection, the same
-Programmer values. A value confirmed on one surface is on all of them, because there is only one
-place for it to be. Typing `GROUP 7` on a wing shows `G7` on the main screen, and finishing it
-there finishes it everywhere.
-
-There is no operator to switch to and none to add. What differs between surfaces is not who is
-behind them but what they are allowed to do.
+The main window, optional screens, connected browser sessions, keyboard, and attached controls share one command line, ordered fixture selection, and Programmer. A command started on one surface can be finished on another. There is no separate Programmer or operator identity to switch to.
 
 ## Guest surfaces
 
-Sometimes somebody else needs to work a light while you are programming. Two ways to let them,
-neither of which gives them a Programmer of their own:
+In a screen's settings, set **Programming** to **Not editable** for a monitor or guest surface. It can display the rig and run Playbacks, Macros, and Timecodes, but cannot record, update, or assign.
 
-**Mark a screen Not Editable.** In a screen's settings, set **Programming** to *Not editable*. That
-screen still shows the fixture sheet, the Stage and the desk's values, and still runs playbacks,
-macros and timecodes — it simply cannot record, update or assign. Use it for a repeater in the
-foyer, a monitor by the stage door, or a tablet somebody is holding.
-
-**Connect an OSC remote on the remote-control path.** A surface that subscribes on `remote` works
-playbacks and nothing else; one that subscribes on `desk` is a desk button and takes the full
-command set including Record, Update and Assign. See [OSC](../../90-Protocols/01-osc.md).
-
-A guest working a fader while you have Record armed moves the fader. It does not become the target
-of your Record, because the guest never reaches the Programmer at all.
-
-## Programmer routes
-
-The desk's Programmer answers on `/api/v2/programmer/…` — values, capture mode, priority, Preload.
-Those routes name no operator, because there is one Programmer to name.
-
-The spellings from when a desk could hold several — `/api/v2/users/{id}/…` — are retired. They were
-a compatibility path while saved configuration might still have carried an identity; nothing does.
+OSC remote-control guests operate Playbacks only. An OSC desk surface has the full desk button set. See [OSC Protocol](../../90-Protocols/01-osc.md) for the connection choices. A guest moving a fader while Record is armed moves that fader; it does not become a Record target.
 
 ## Desk Lock
 
-Desk Lock is one lock over the whole installation. Locking the desk in front of you locks every
-screen and every attached control surface with it, including an OSC wing. Running output is
-unaffected; only input is held.
+Desk Lock blocks input on every screen and attached control surface. Running output continues. Configure its message, unlock control, and optional wallpaper under **Screens & playback > Configure desk lock**; apply it with **Show > Lock Desk**.
 
 ## Shows and recovery
 
-**Shows & recovery** displays the active show, library count, server state, and autosave status. Set the autosave interval from 5-3600 seconds (30 by default) to control how often the desk writes an automatic recovery checkpoint of the active show while you program. **Open show** opens the same **Load Show** picker as **Show menu > Load**, starting with Internal shows. Select **Load Latest** or a named revision to load using the safe-blackout transition; cancelling returns to Setup without loading a show. **Open File Manager** separately opens the desk file tools. Show mutations autosave to the portable `.show` file. Named revisions are explicit restore points; they do not disable later autosaves.
+**Desk Setup > Shows & recovery** displays the active show, library, server state, and autosave status.
 
-**Audio Player media library** selects the folder the Internal Audio Players read from. That folder is also offered in the File Manager as its own location beside **Shows**, named **Audio Library**, so audio files can be browsed, renamed, and copied without leaving the desk. Selecting a different folder replaces the location; clearing the selection removes it. A location configured under File Manager roots that already points at the same folder is not repeated.
+- Set the recovery checkpoint interval from 5–3600 seconds; the default is 30 seconds.
+- **Open show** opens the normal Load Show picker. Choose **Load Latest** or a named revision; loading uses a safe-blackout transition.
+- **Open File Manager** opens the desk's file tools.
+- **Audio Player media library** chooses the folder used by Internal Audio Players. It also appears as **Audio Library** in File Manager.
 
-![Desk show and recovery status](../../assets/screenshots/workflows/desk-setup-shows-recovery.png)
+Show edits autosave to the portable `.show` file. Named revisions are separate restore points and do not stop later autosaves. Keep both the show files and desk data when backing up an installation.
 
-The desk database stores the show-library index, active-show choice, configuration, desk
-interaction state, and the desk's durable Programmer. Portable show files are stored separately.
-Keep both when backing up an installation.
+![Show library and recovery settings](../../assets/screenshots/workflows/desk-setup-shows-recovery.png)
 
-An installation from before the desk had one Programmer may hold several. On first start the desk
-keeps the one touched most recently and writes the rest, whole, to `backups/desk-collapse-*.json`
-under the data directory, so nothing programmed is lost. The log says what it kept and where the
-rest went.
+### Recover a show that will not load
 
-If startup reports an invalid show, preserve the affected file, load a known revision or other show, and inspect diagnostics before overwriting anything. See [Shows, Revisions, and MVR](10-shows-revisions-and-mvr.md).
+Preserve the affected file before trying repairs. In recovery, the failed show remains named but the desk runs an empty show with no fixture output. It does not overwrite the failed file, and editing that show is blocked.
 
-While the desk is in show recovery, the show that could not be loaded is still named, but none of
-it runs: the desk shows and outputs an empty show, with no fixtures, Groups, Presets, Cues,
-Playbacks, Schedules, Timecodes or Cue previews. Nothing changes that show's file. Recording,
-editing, patching, importing into it, renaming it, or changing its description is refused with
-**The active show could not be loaded; load the built-in default or a new empty show first**. Desk
-settings, sessions and the show library keep working. Choose **Load Clean Built-in Default**,
-**Initialize New Empty Show**, or open another show to leave recovery; the damaged file stays in
-the library exactly as it was.
+Load another show, choose **Load Clean Built-in Default**, or choose **Initialize New Empty Show** to resume work. Restore a known revision where available. Keep the original file for diagnosis; see [Shows, Revisions, and MVR](10-shows-revisions-and-mvr.md).
 
 ### Shows programmed before fixture-independent programming
 
-The desk programs Position in degrees and targets, Color as one fixture-independent colour, and
-Zoom in degrees. A show, a stored Programmer, or a saved Playback or Dynamics state from an earlier
-build can still hold the old values:
-- Pan and Tilt as percentages of the fixture's channel;
-- Red, Green, Blue and the other single colour channels as separate values;
-- Zoom as a percentage.
+Older ToskLight builds stored Pan, Tilt, and Zoom as channel percentages. Current builds store Position and Zoom in degrees and Color as a fixture-independent value, so the same programming can be used across supported fixture types.
 
-The desk never converts these old values. A percentage is not reinterpreted as degrees or as a
-colour. What happens instead depends on where the old values are:
+A show containing incompatible old values is refused with a list of affected objects; it is not silently converted. Keep the original and open it in its earlier build, or re-record the affected programming with current controls. An Undo or Redo that would restore incompatible values is also refused without changing the current state.
 
-- **A show** with old values is not opened. The message names the affected Presets, Cues, Groups
-  or Dynamics. The show file is left exactly as it was, and the desk settings are unaffected.
-  Open or create a different show to keep working. To use the old show, open it in the earlier
-  build, or re-record that programming with the current Color, Position and Zoom controls.
-- **A stored Programmer, Playback or Dynamics state** with old values is not restored. The desk
-  starts in recovery. The original data is kept, and a copy is written to
-  `backups/runtime-recovery-*.json` under the data directory.
-- **Undo or Redo** that would bring back a version recorded with old values is refused. The
-  current version stays as it is, and the message says to re-record it instead.
-- **New old-style values are not stored either.** A value sent to a single colour channel, to Pan or
-  Tilt as a percentage, or to Zoom as a percentage — from an integration, a FixAT such as
-  `ATTRIBUTE pan FixAT 50`, or a Preset, Cue, Group or Dynamic written to the show — is refused with a message and changes nothing.
-  Where the meaning is the same, the desk converts instead: a Red, Green, Blue, Amber, UV,
-  Saturation or White Blend percentage becomes that part of the fixture's colour, exactly as the
-  Color encoder sets it, and Release of Position or Color releases the whole Position or Color.
-
-A show saved by this desk carries a programming-contract marker. An earlier build refuses that
-show instead of misreading it.
+If saved temporary Programmer or Playback state is incompatible, the desk enters recovery and preserves a recovery copy. Load a usable show before continuing. Shows saved by the current build may be refused by older builds; retain a compatible backup before upgrading a production desk.

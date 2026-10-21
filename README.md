@@ -81,7 +81,7 @@ it does not rebuild or stop an already-ready server.
 | Run the headless development server | `npm run dev:headless` | Embedded browser UI at `http://127.0.0.1:5000` |
 
 See [Build and test commands](docs/engineering/build-and-test-commands.md) for the complete command
-catalog and [Manual and help screenshots](docs/help/99-Development/04-manual-and-help-screenshots.md)
+catalog and [Manual and help screenshots](docs/engineering/manual-and-help-screenshots.md)
 for the documentation workflow.
 
 ### Supported operating systems

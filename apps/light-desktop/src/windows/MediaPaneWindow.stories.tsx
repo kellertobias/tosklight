@@ -108,7 +108,7 @@ function folderItems(folders: DummyMediaFolder[]): MediaLibraryItem[] {
 		id: folder.id,
 		kind: "folder" as const,
 		name: folder.name,
-		detail: `${folder.assets.length} mock files`,
+		detail: `${folder.assets.length} ${folder.assets.length === 1 ? "file" : "files"}`,
 	}));
 }
 
