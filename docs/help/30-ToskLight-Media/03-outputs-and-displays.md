@@ -1,6 +1,6 @@
 # Configure Outputs and Displays
 
-Open **Settings → Outputs**, choose the output and set its display destination. Check the actual
+Open **Settings > Outputs**, choose the output and set its display destination. Check the actual
 screen with the test pattern after changing a display, cable, resolution, rate or fullscreen state.
 
 ![Pixel output configuration](../assets/screenshots/workflows/pixel-outputs.png)
@@ -8,7 +8,7 @@ screen with the test pattern after changing a display, cable, resolution, rate o
 ## Picture destination
 
 Choose a monitor or **Off-screen (no window)**. Set render resolution independently of desktop
-scaling, then select the supported presentation mode and frame rate. **Settings → Picture → Monitor**
+scaling, then select the supported presentation mode and frame rate. **Settings > Picture > Monitor**
 can move a running output without a restart; the choice is saved for next launch.
 
 On Windows, double-click a fullscreen picture or press **Ctrl+Shift+−** to return it to a normal
@@ -44,7 +44,7 @@ sample Left 0 / Right 0.05 and Left 0.95 / Right 1 on separate universes.
 Choose the actual sound-output device for media carrying audio and rehearse it with the production
 hardware. A system-default device can change when another interface connects.
 
-Open **Settings → Network & DMX** for listeners and each output's protocol, universe, address and
+Open **Settings > Network & DMX** for listeners and each output's protocol, universe, address and
 personality. Match these to the desk patch. **2 layers** occupies 158 slots; **8 layers** occupies
 512 and must start at address 1. Each layer uses 59 slots, followed by one 40-slot Master.
 

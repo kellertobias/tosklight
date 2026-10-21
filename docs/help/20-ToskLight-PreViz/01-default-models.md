@@ -2,7 +2,7 @@
 
 A fixture uses the 3D model supplied by its profile. When no model is supplied, Architect chooses
 a packaged model from its fixture type and channels. You can choose a specific body under
-**Show Setup → Fixture Library → Simulation → Body**; see the
+**Show Setup > Fixture Library > Simulation > Body**; see the
 [Model Catalogue](../99-Appendix/01-model-catalogue.md).
 
 ## Check the physical rig

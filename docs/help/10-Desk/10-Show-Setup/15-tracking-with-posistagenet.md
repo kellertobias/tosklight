@@ -10,7 +10,7 @@ The sender provides positions; ToskLight applies them only to explicitly bound P
 
 ## Set up the source
 
-1. Open **⚙ > Tracking** in Show Patch.
+1. Open **Settings > Tracking** in Show Patch.
 2. Match the sender's **Multicast group** and **Port**; defaults are `236.10.10.10` and `56565`.
 3. Set **Stale after (ms)** for lost-input reporting and press **Apply tracking settings**.
 4. Enable **Receive PosiStageNet** on the Tracking tab.

@@ -23,7 +23,7 @@ switches mode from the currently resolved pose rather than jumping to a default.
 
 ## Align future encoder changes
 
-Select fixtures in the intended order and choose **Align → Left, Right, Out or In**. The next
+Select fixtures in the intended order and choose **Align > Left, Right, Out or In**. The next
 encoder movement applies these weights to each fixture's own starting value:
 
 | Mode | Distribution |

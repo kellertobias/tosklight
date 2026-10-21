@@ -7,7 +7,7 @@ program Cues and Playbacks. The editor's lighting preview checks a rig without c
 
 ## Open Demo Show
 
-Choose **Show → New Show → Open Demo Show** for a complete rig with fixtures, scenery and media
+Choose **Show > New Show > Open Demo Show** for a complete rig with fixtures, scenery and media
 surfaces. Every press creates a writable copy named **Demo Show**, **Demo Show 2**, and so on;
 the bundled template is never changed. A new installation opens a copy automatically.
 
@@ -57,10 +57,10 @@ is active on that desk again. **Save As** creates an independent document withou
 
 Changes to different fields are kept together. If both operators change the same field,
 Control's version remains visible until you resolve the conflict; your version is retained.
-**Work offline** pauses communication; **Reconnect** catches up. Control shows **⇄ Architect**
+**Work offline** pauses communication; **Reconnect** catches up. Control shows an **Architect** synchronization indicator
 beside its show name while Architect follows it.
 
-On Control, **Load Show → Load from Visualizer** imports and opens the editor's current document.
+On Control, **Load Show > Load from Visualizer** imports and opens the editor's current document.
 An editor without an open document has nothing to offer.
 
 ## MCP integration
@@ -71,17 +71,17 @@ before running them; the CAD and patch update with accepted changes.
 
 ## Configure fixtures
 
-Open **Settings → Library** to choose a manufacturer, fixture and mode, inspect its specifications,
+Open **Settings > Library** to choose a manufacturer, fixture and mode, inspect its specifications,
 or use **Create Fixture** / **Edit as new revision**. The library belongs to this computer.
 A show keeps its embedded profile revisions until you explicitly update its fixtures.
 See [Fixture Types and GDTF](../10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md) for profile editing.
 
-The **Patch → Sheet** tab lists DMX fixtures. Turn on **Show all** to include visual-only Venue
+The **Patch > Sheet** tab lists DMX fixtures. Turn on **Show all** to include visual-only Venue
 objects. Selecting a Venue object in CAD also turns it on. **+ Add fixture** adds from the library;
 **+ Import 3D model** imports a venue model.
 
 Click a column header to sort; click again to reverse. Empty values sort last. Shift selections
-follow the displayed order. Under the title's **Settings (⚙) → Columns**, choose columns or a
+follow the displayed order. Under the title's **Settings > Columns**, choose columns or a
 **Patch**, **Visualization** or **Compact** quick view. Changing individual columns produces **Custom**.
 
 Right-click a value to edit it. If that fixture is selected, the edit applies to the selection;
@@ -105,7 +105,7 @@ DMX addresses. Locked-layer fixtures are excluded from a multi-fixture deletion.
 
 ### Repatch on the DMX grid
 
-Open **Patch → DMX**. Each fixture's occupied cells share an outline; orange cells indicate address
+Open **Patch > DMX**. Each fixture's occupied cells share an outline; orange cells indicate address
 overlap. Select a cell for the owner, attribute, patch range and DIP-switch setting.
 
 With **Show sidebar** on, drag a block to another address or patched universe. Each split or
@@ -126,7 +126,7 @@ to the editor preview. The status line identifies preview, waiting and live-inpu
 
 ## Receive live DMX
 
-Open **Settings → DMX → Network**:
+Open **Settings > DMX > Network**:
 
 1. Choose an **Art-Net interface** and **sACN interface**, independently. **All interfaces** is the
    default. A missing chosen interface shows **not connected** and does not fall back silently.
@@ -149,13 +149,13 @@ Settings overrides apply only when following a desk or an independently opened s
 ## Work in CAD
 
 The title contains **Undo**, **Redo**, placement tools, drawing tools, **Plans**, **Elements** and
-**Settings (⚙)**. Hover or focus an icon for its name and shortcut.
+**Settings**. Hover or focus an icon for its name and shortcut.
 
 ### Place stage and scenery
 
 Use **Add truss**, **Add stage element**, **Add scenery**, **Add primitive**, or **Add venue element**.
 A button places its current part; its caret chooses another. A placed object is selected, ready for
-**Info → Placement** to set position, rotation, size and options. Venue objects receive `0.N` IDs
+**Info > Placement** to set position, rotation, size and options. Venue objects receive `0.N` IDs
 and have no DMX address.
 
 - **Place Multiple**, beside a truss or stage deck, previews a complete arrangement before **Place**.
@@ -176,7 +176,7 @@ directions. Hold Shift to disable corner, wall, angle and loop-closure snapping.
 
 Use its dropdown for windows, doors, pillars and stairs. With a window or door active, hover a
 wall to preview the opening, then click to attach it. Escape ends repeated placement.
-Select the wall or opening and use **Info → Placement**:
+Select the wall or opening and use **Info > Placement**:
 
 | Object | Main settings |
 | --- | --- |
@@ -231,7 +231,7 @@ selected elements rotate around their shared centre. During a move, type a coord
 with `+`/`−` for a relative distance. Tab changes axis during a free move; Enter commits. Typed
 moves do not snap or spread. Escape clears typed input, then cancels the drag.
 
-With **Settings → Enable snapping** on, the gizmo snaps compatible truss connectors, stage edges,
+With **Settings > Enable snapping** on, the gizmo snaps compatible truss connectors, stage edges,
 curtain rails/ends, handrail feet and fixture mounting clips. Only movable axes change. Shift
 suppresses snapping and automatic fixture mounting. A plan drag cannot snap a floor fixture to a
 truss far above it; use an elevation to set height.
@@ -243,7 +243,7 @@ fixture in CAD moves its copies together. Notes and scale are shared across copi
 
 ### Group venue objects
 
-Under **Elements → Objects**, select at least two Venue elements and choose **Group** (Cmd/Ctrl+G).
+Under **Elements > Objects**, select at least two Venue elements and choose **Group** (Cmd/Ctrl+G).
 Clicking any member selects the group; Shift selects individual members. Violet outlines mark a
 whole selected group, blue an individual element. **Ungroup** (Shift+Cmd/Ctrl+G) dissolves touched
 groups without moving their parts. Each element belongs to at most one group.
@@ -265,12 +265,12 @@ and centres. Escape cancels unfinished work; a second Escape returns to Select. 
 Alt pans. Drawing tools are unavailable while print pages are open.
 
 **1–5** selects the five plan/elevation views, **+/−** zooms and **W/A/S/D** pans. Shortcuts are
-ignored while typing. **Settings → Grid** controls visibility, colour, automatic/fixed spacing and
+ignored while typing. **Settings > Grid** controls visibility, colour, automatic/fixed spacing and
 the quarter-step sub-grid. These preferences belong to this computer.
 
 ## Import a venue drawing
 
-Open **Elements → Drawings → + → Import drawing (DXF, SVG)…**. Check the reported units, dimensions
+Open **Elements > Drawings > + > Import drawing (DXF, SVG)…**. Check the reported units, dimensions
 and line count, set its view axis, origin, scale and rotation, then **Place Drawing**. Verify a
 known distance, such as stage width. Drawings travel inside the show; no original file is needed.
 Supported geometry includes lines, polylines, circles, arcs, ellipses and blocks. Text, dimensions,
@@ -298,7 +298,7 @@ slice. Each page also chooses which drawings on its axis to print.
 
 ## Place your own venue models
 
-Use **Add primitive → Load model…**, **Elements → + → Import 3D model…**, or the Patch import action.
+Use **Add primitive > Load model…**, **Elements > + > Import 3D model…**, or the Patch import action.
 The imported model is placed at the stage origin and selected. Set its placement and scale in Info.
 It travels inside the show and can be placed again from **Imported models**.
 

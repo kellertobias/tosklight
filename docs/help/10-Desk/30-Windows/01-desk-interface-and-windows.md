@@ -48,7 +48,7 @@ Groups, Presets, Cuelists, Dynamics, Macros, Timecode, Media pools, and free-reg
 | **Patch** | Configure fixtures, addresses, and placement. |
 | **Desk Setup / Help** | Configure the installation and read the manual. |
 
-**Running** is pane-only: add it through Open Window. Hold **Shift** in BUILT-INS for alternatives: Stage → Media, Fixtures → Groups, Cuelists → Timecode, Dynamics → Macros, Channels → DMX. Timecode and Macros are also available through Open Window.
+**Running** is pane-only: add it through Open Window. Hold **Shift** in BUILT-INS for alternatives: Stage > Media, Fixtures > Groups, Cuelists > Timecode, Dynamics > Macros, Channels > DMX. Timecode and Macros are also available through Open Window.
 
 See the [Pane Reference](index.md) for individual settings.
 

@@ -32,7 +32,7 @@ Use `[^TIME]` for the `SPD GRP` command-line workflow documented in [Command Lin
 
 ## Sound to Light
 
-1. Choose the microphone under **Desk Setup → Network & Inputs → Inputs** and grant permission.
+1. Choose the microphone under **Desk Setup > Network & Inputs > Sound > Sound input** and grant permission.
    This browser remembers it for the desk; it does not travel with the show.
 2. Switch the lower section to Playbacks. Hold, Shift-click or right-click Speed Group **A–E**
    for its settings. An ordinary tap performs tap tempo instead.

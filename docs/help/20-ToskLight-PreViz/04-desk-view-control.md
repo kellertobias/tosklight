@@ -13,10 +13,10 @@ same order:
 | --- | --- |
 | **3D Full** | Everything the renderer can do: beams, haze, shadows and bloom |
 | **Top Down** | The stage plan |
-| **Front → Back** | The elevation from the audience |
-| **Left → Right**, **Right → Left** | The elevations from the wings |
+| **Front > Back** | The elevation from the audience |
+| **Left > Right**, **Right > Left** | The elevations from the wings |
 | **3D Simple** | A fast 3D picture for previsualization |
-| **Back → Front** | The elevation from upstage |
+| **Back > Front** | The elevation from upstage |
 | **3D Lines** | Bodies and aim lines, no beams |
 
 Pressing one sends it. The Visualizer takes the view and frames the rig in it, so **Top

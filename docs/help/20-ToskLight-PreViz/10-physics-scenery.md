@@ -3,7 +3,7 @@
 Compatible scenery packages respond to their documented DMX **Hold**, **Release** and **Reset**
 values. Release is latched: once a body falls, a DMX interruption or reconnect does not put it back.
 
-Use its explicit Reset value, or **Running & Output → Visualizer → Reset physics scenery**, to
+Use its explicit Reset value, or **Running & Output > Visualizer > Reset physics scenery**, to
 return it to the authored pose. Selecting another view is not a reset. Check the selected renderer
 target before sending the reset.
 

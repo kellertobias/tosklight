@@ -15,7 +15,7 @@ The compact pane shows Values for the first two universes. The full built-in als
 | **Conflict** | Another source sends the same universe. Change one source or route. |
 | **Error / Unavailable** | Read the reason and check the route, interface, or transport. |
 
-Rows identify protocol, delivery mode, direction, address, and universe. Configured routes show logical → destination universe. Select a row for details. ToskLight's own applications are named so they can be distinguished from another console.
+Rows identify protocol, delivery mode, direction, address, and universe. Configured routes show logical > destination universe. Select a row for details. ToskLight's own applications are named so they can be distinguished from another console.
 
 Configure routes under **Desk Setup > Outputs**, rather than in this monitor. See [DMX Output and Universe Routes](../10-Show-Setup/04-dmx-output.md).
 

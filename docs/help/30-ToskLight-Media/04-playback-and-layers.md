@@ -39,6 +39,6 @@ content address.
 ## Clip loading
 
 During a content change, the layer can hold the old clip until the new one's first frame is ready.
-**Settings → Libraries → Clip switch** sets that maximum wait from 0–10,000 ms, default 500 ms.
+**Settings > Libraries > Clip switch** sets that maximum wait from 0–10,000 ms, default 500 ms.
 Zero disables the hold. If the new clip is still loading after the limit, the layer becomes
 transparent until ready. Blank, disabled, deleted or failed content becomes transparent immediately.

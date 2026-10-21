@@ -21,13 +21,13 @@ For a multi-split mode, **Independent split patches** provides an address for ea
 
 Venue scenery uses reserved `0.x` IDs and has no DMX address. It appears in Patch and Stage, rather than the Fixture Sheet. Place separate Venue objects for separate physical pieces.
 
-Click a table header to sort; click again to reverse it. Shift ranges follow that displayed order. Use **⚙ Settings > Columns** to hide columns; at least one remains visible.
+Click a table header to sort; click again to reverse it. Shift ranges follow that displayed order. Use **Settings > Columns** to hide columns; at least one remains visible.
 
 ![Fixture and mode selection](../../assets/screenshots/workflows/patch-add-fixture.png)
 
 ## Importing a CSV Patch List
 
-Open **Show Patch > ⚙ Settings > Import CSV**. Import adds fixtures without changing existing ones.
+Open **Show Patch > Settings > Import CSV**. Import adds fixtures without changing existing ones.
 
 1. **Columns:** select a comma-, semicolon-, or tab-separated file. Choose whether it has headings and whether positions use metres or millimetres. Map its patch, fixture ID/name/type, manufacturer, mode, position, and rotation columns; ignore unused columns.
 2. **Fixture types:** confirm each manufacturer's product and mode. Exact unambiguous matches are suggested. Select a profile for unmatched rows, or choose **Skip these rows**.
@@ -54,7 +54,7 @@ Points can remain unpatched for desk-only use. Their optional Position/Full 16-,
 
 ## Show Patch views
 
-The top-right tabs are **Fixtures**, **Points**, **Media Servers**, and **Tracking**. **⚙** opens settings for the current view. For tracking setup, see [Tracking with PosiStageNet](15-tracking-with-posistagenet.md).
+The top-right tabs are **Fixtures**, **Points**, **Media Servers**, and **Tracking**. **Settings** opens settings for the current view. For tracking setup, see [Tracking with PosiStageNet](15-tracking-with-posistagenet.md).
 
 ## Points
 
@@ -66,7 +66,7 @@ Change its fixture ID or address in **Fixtures**. Delete asks for confirmation. 
 
 **Media Servers** lists each patched server's type, protocol, IP address, CITP port, and connection state. Choose **Apply** after changing its endpoint, then **Check connection**. **Off** pauses network control without deleting the fixture.
 
-**Refresh Thumbnails** reloads one server's media. **Start live preview** shows its output. If library images are stale, use **⚙ > Media Servers > Clear Thumbnail Cache**, then refresh the affected server.
+**Refresh Thumbnails** reloads one server's media. **Start live preview** shows its output. If library images are stale, use **Settings > Media Servers > Clear Thumbnail Cache**, then refresh the affected server.
 
 ## Discovering a ToskLight Pixel Media Server
 

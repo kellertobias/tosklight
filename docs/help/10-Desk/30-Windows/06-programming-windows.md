@@ -90,6 +90,6 @@ These are live overrides, not recordable encoder values. **Generate portable pre
 
 In **Color > Special Dialog**, hold Shift and touch the first and last values, or Shift-drag between them. The first touch marks endpoint 1; the second applies the range. First and last selected fixtures receive the endpoints, with equal steps between them in selection order.
 
-Hue takes the shorter path around the wheel, so 350° → 10° passes through red. Reversing selection reverses distribution. Touching without Shift resets only that control to one value. The edit follows normal Programmer modes and is one Undo step.
+Hue takes the shorter path around the wheel, so 350° > 10° passes through red. Reversing selection reverses distribution. Touching without Shift resets only that control to one value. The edit follows normal Programmer modes and is one Undo step.
 
 Use a Live or Follow Preload Stage to inspect the result. See [Channel Faders](07-channel-faders.md) for direct fixture levels.

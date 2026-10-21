@@ -41,7 +41,7 @@ Use move, swap and parking operations to reorganize. **Compact files** on a fold
 while preserving file order and metadata. These operations change numeric addresses: rehearse any
 desk Cues using them afterward.
 
-To move the library to another disk, use **Settings → Libraries → Media library directory**, copy
+To move the library to another disk, use **Settings > Libraries > Media library directory**, copy
 its contents and metadata yourself, then restart. **Revert to current directory** cancels a pending
 change. Changing the setting does not move files.
 

@@ -5,8 +5,8 @@ connection supplies Pixel's native controls and media Cue pictures. Check each c
 
 ## Patch Pixel on Control
 
-1. In **Show → Show Patch**, add **ToskLight → Media Server**, in the **2-layer** or **8-layer** mode.
-2. On Pixel, open **Settings → Network & DMX** and match personality, protocol, universe and address.
+1. In **Show > Show Patch**, add **ToskLight > Media Server**, in the **2-layer** or **8-layer** mode.
+2. On Pixel, open **Settings > Network & DMX** and match personality, protocol, universe and address.
 3. Configure Control's real output route to Pixel's reachable address or multicast universe.
 4. Raise the desired layer's Intensity, select its Folder/File and keep Master raised.
 5. Release Pixel's browser takeover and verify the physical output.
@@ -16,7 +16,7 @@ Master homes at full; layers home at zero. Unpatching retains programming but st
 
 ## Configure names and previews
 
-Open **Show Patch → Media Servers**, enter **IP address** and **CITP port** (normally 4809), then
+Open **Show Patch > Media Servers**, enter **IP address** and **CITP port** (normally 4809), then
 **Apply**. For a ToskLight Media row, enter its **HTTP port** too (normally 8080). Custom ports must
 match the running server; CITP does not advertise the HTTP port.
 
@@ -35,7 +35,7 @@ colour controls. Negative scale mirrors the output. Layers provide their own con
 
 ## Follow a Control Speed Group
 
-1. On Pixel, set **Settings → Network & DMX → Speed Groups** to a listen address such as
+1. On Pixel, set **Settings > Network & DMX > Speed Groups** to a listen address such as
    `0.0.0.0:4810`.
 2. For each output, set **Synchronized playback follows** to Control Speed Group **A–E**.
 3. Keep Pixel's reachable endpoint configured on Control.
@@ -46,7 +46,7 @@ as lost; reconnection resumes following. Otherwise synchronized play modes use t
 
 ## Program effects
 
-Configure the numbered preset on Pixel's **Library → Effects**, then program its **Select**,
+Configure the numbered preset on Pixel's **Library > Effects**, then program its **Select**,
 **Strength** and four parameter channels in either ordered bank. Zero uses the preset's parameter
 value; 1–255 sweeps its range. Preset edits affect every bank recalling that number.
 The four **Visualizer Parameters** are separate channels, named for the shown visualizer when
@@ -67,7 +67,7 @@ working DMX, check CITP and HTTP endpoints. Apply pending restart-required setti
 
 ## Connect another console
 
-On Pixel's **DMX → Connect to Console**, download both **ToskLight Pixel Layer** and
+On Pixel's **DMX > Connect to Console**, download both **ToskLight Pixel Layer** and
 **ToskLight Pixel Master** for MagicQ, grandMA2, grandMA3 or GDTF. Patch one 59-slot Layer fixture
 per configured layer, followed by one 40-slot Master—not one Master per layer.
 
@@ -85,7 +85,7 @@ personality; protocol/universe/address changes apply immediately.
   add the configured Layer count and one Master. Rescan/restart if absent. An existing show keeps
   its old personality: replace that head or test in a new show.
 - **grandMA2:** copy XML files to `gma2/library` and import fixture types in
-  **Setup → Patch & Fixture Schedule**.
+  **Setup > Patch & Fixture Schedule**.
 - **grandMA3 / GDTF:** import both GDTF fixture types in the console's patch interface.
 
 Match the console's output protocol/universe. sACN universes start at 1; Art-Net consoles may show
@@ -93,8 +93,8 @@ a zero-based wire universe, so verify the actual mapping.
 
 ### MagicQ names and live preview
 
-In **SETUP → View System → Media**, check **CITP MSEX**, first Layer head and **Layers** count.
-Set Pixel's IP/CITP port, **Thumb con → Enabled**, **Live prev → Yes**, then **GET THUMBS**.
+In **SETUP > View System > Media**, check **CITP MSEX**, first Layer head and **Layers** count.
+Set Pixel's IP/CITP port, **Thumb con > Enabled**, **Live prev > Yes**, then **GET THUMBS**.
 Importing a personality does not configure these settings for you.
 
 The normal Media preview is the program output. Hold **SHIFT** and press **VIEW SERVERS**
@@ -115,14 +115,14 @@ These encoder pages belong to every Layer head; unused positions remain blank:
 | Visualizer | Vis Param 1 | Vis Param 2 | Vis Param 3 | Vis Param 4 | | | | |
 | Beam page 5 | Mask Position X | Mask Position Y | Mask Scale X | Mask Scale Y | Mask Invert | Mask Opacity | Mask Folder | Mask File |
 
-Pixel's mask controls are on **BEAM → PAGE 5**, not MagicQ's built-in Frame tile. Folder/File
+Pixel's mask controls are on **BEAM > PAGE 5**, not MagicQ's built-in Frame tile. Folder/File
 encoders are indexed one value at a time. With **Activate Chans/Head = Chans**, changing one does
 not activate its partner: set both Folder and File before recording their Cue.
 
 ### Same computer or separate computers
 
 For both applications on one machine, enable Pixel's **Same computer** preset and restart for
-CITP. In MagicQ, use **Net host options → Normal + Loopback IP** (older name: **Send to applications
+CITP. In MagicQ, use **Net host options > Normal + Loopback IP** (older name: **Send to applications
 on this PC**), with `127.0.0.1` as the explicit DMX and CITP destination.
 
 For separate computers, disable that preset, bind Pixel to the lighting interface or `0.0.0.0`,

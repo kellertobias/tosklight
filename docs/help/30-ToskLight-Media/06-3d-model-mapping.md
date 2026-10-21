@@ -5,7 +5,7 @@ content, tint, effects, mask and dimmer follow the model's UV coordinates.
 
 ## Choose or import a model
 
-Open **Library → Models**. Slots **1–255** keep stable numbers for Cue recall. A new server includes
+Open **Library > Models**. Slots **1–255** keep stable numbers for Cue recall. A new server includes
 Plane, Cube, Sphere, Cylinder and Pyramid in slots 1–5. Existing imported slots are not replaced.
 Clear a built-in slot before replacing it; choosing a built-in for an imported slot deletes its
 stored model file.
@@ -26,7 +26,7 @@ picture. The imported object is centred and normalized; use layer scale to size 
 
 ## Put it on a layer
 
-On **Frame → 3D model**, choose **Model**, **Pan** and **Tilt**. On Control these are Media attributes
+On **Frame > 3D model**, choose **Model**, **Pan** and **Tilt**. On Control these are Media attributes
 **3D Model**, **Model Pan** and **Model Tilt**, separate from lighting Pan/Tilt.
 
 - **0 / Flat** is the default. Pan/Tilt can turn that flat card; return both to zero for the usual

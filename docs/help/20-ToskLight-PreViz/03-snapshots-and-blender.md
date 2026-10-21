@@ -1,6 +1,6 @@
 # Snapshots and Blender
 
-Press **Cmd+S** (Ctrl+S on Windows/Linux) or **File → Take Snapshot** in the Visualizer to capture
+Press **Cmd+S** (Ctrl+S on Windows/Linux) or **File > Take Snapshot** in the Visualizer to capture
 the current rig, fixture values and camera. The status line confirms it without interrupting output.
 A snapshot stores the scene, not a screenshot.
 

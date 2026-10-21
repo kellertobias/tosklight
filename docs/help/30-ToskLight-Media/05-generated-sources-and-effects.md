@@ -8,7 +8,7 @@ in Cues, just like uploaded media. Moving or replacing a slot changes what exist
 Use folders **200–249**. Configure words and appearance on the **Text** page, then recall its
 folder/file address on a layer. Keep the chosen fonts installed on the production server.
 
-**Settings → Libraries → Server time** sets the fixed UTC offset used by clocks and countdowns,
+**Settings > Libraries > Server time** sets the fixed UTC offset used by clocks and countdowns,
 in minutes east of UTC (−840 to +840). Changes apply immediately. A clock can use its **Own UTC
 offset**. The server offset does not change automatically for daylight saving.
 
@@ -27,12 +27,12 @@ to verify the instrument lamps and meters before tuning the visualizer.
 ![Pixel audio analysis shows the signal driving reactive content](../assets/screenshots/workflows/pixel-audio.png)
 
 On macOS, use **Request microphone access** if shown. After a denial, allow Pixel in **System
-Settings → Privacy & Security → Microphone**, then **Check microphone access**. **Start audio input**
+Settings > Privacy & Security > Microphone**, then **Check microphone access**. **Start audio input**
 opens an allowed but inactive stream.
 
 **Audio gain** affects how strongly one visualizer hears levels and spectrum: 0 is silence, 1 is
 the monitored input, maximum 8. **Reactivity** instead scales the motion linked to audio. Some kinds
-also offer **React to → Beat** or **Spawn stars → On beat** for tempo-driven motion. Check each
+also offer **React to > Beat** or **Spawn stars > On beat** for tempo-driven motion. Check each
 kind's live preview rather than assuming every kind reacts to the same instrument.
 
 Useful examples include spectra/waveforms, geometric patterns, tunnels, landscapes and particles.
@@ -44,7 +44,7 @@ assignments become empty without moving other sources.
 ## Effects and masks
 
 A layer has an independent mask and two ordered effect banks: **Bank 1**, then **Bank 2**.
-Configure numbered presets on **Library → Effects**:
+Configure numbered presets on **Library > Effects**:
 
 1. Select slot **1–255**, choose its effect, name it and set parameters.
 2. On a layer, select that slot in an effect bank and raise **Effect Strength**.
@@ -95,7 +95,7 @@ zero dimmer at the chosen beat ratio. It does not rewrite their stored dimmers.
 plays the whole clip. Loop, bounce and single-pass modes stay within that range. Stills, text and
 visualizers ignore it.
 
-Enter `mm:ss.ff` using the frame rate in **Settings → Libraries → In and Out points** (default
+Enter `mm:ss.ff` using the frame rate in **Settings > Libraries > In and Out points** (default
 25 fps, adjustable 1–120). For example, 250 frames at 25 fps means 10 seconds, regardless of the
 source clip's frame rate. Changes to this server-wide rate apply immediately to playing layers.
 
@@ -108,7 +108,7 @@ Each layer has four **Visualizer Parameter** channels, separate from both effect
 visualizer supplies their names and ranges. **0** keeps that layer's tuning, or the configured
 visualizer value; **1–255** sweeps the range. Unused channels do nothing.
 
-On **Effects → Visualizer**, settings above those channels tune this layer only. **Reset parameters**
+On **Effects > Visualizer**, settings above those channels tune this layer only. **Reset parameters**
 restores the configured values. An ordinary media layer ignores all four Visualizer Parameters.
 
 ## Mirror the output

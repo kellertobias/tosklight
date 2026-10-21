@@ -11,7 +11,7 @@ A show programs colour in one of two ways, chosen per show:
 
 ## Choosing the model
 
-**Setup → Attributes & encoders → Color model** shows and switches the model of the show that is
+**Setup > Attributes & encoders > Color model** shows and switches the model of the show that is
 open. The model is stored in the show and travels with it.
 
 Switching a show that already holds programming first lists what the switch changes about the
@@ -28,7 +28,7 @@ colour it stores:
 A switch that would lose colour needs **Switch to …** to be pressed in that list. The switch itself
 rewrites no stored value.
 
-**Setup → Defaults → New shows** chooses the model copied into each show this desk creates. It is
+**Setup > Defaults > New shows** chooses the model copied into each show this desk creates. It is
 a starting point only: changing it later never changes a show that already exists.
 
 ## Programming a colour
@@ -57,7 +57,7 @@ selected and the desk describes what they achieve (see below).
 
 ### Easy and Advanced
 
-**Setup → Attributes & encoders → Color model → Color controls on this desk** chooses which Color
+**Setup > Attributes & encoders > Color model > Color controls on this desk** chooses which Color
 controls this desk's encoders offer. It belongs to the desk, not to the show, and switching it never
 changes programmed colour:
 

@@ -12,7 +12,7 @@ using it on stage.
 
 ## Prove the output
 
-1. Open **Settings → Outputs**, select Main and choose the display or off-screen target.
+1. Open **Settings > Outputs**, select Main and choose the display or off-screen target.
 2. Check fullscreen, resolution and presentation rate. Apply any restart-required changes.
 3. Show the **test pattern** and check the physical display.
 4. Turn the pattern off. In **Library**, upload one recognizable file into a numbered slot.
@@ -28,7 +28,7 @@ With valid DMX and no visible content, the normal output is black.
 
 ## Keep configuration and media together
 
-Under **Settings → Libraries**, **Show folder on Media Server** reveals the portable data folder.
+Under **Settings > Libraries**, **Show folder on Media Server** reveals the portable data folder.
 Copy the whole folder, including configuration, media and metadata, when moving to another machine.
 Stop Pixel before replacing a destination folder.
 

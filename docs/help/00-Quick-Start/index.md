@@ -19,7 +19,7 @@ The ToskLight bundle contains three operator products:
 Control and Architect use the same portable `.show` format. **Get Show from Running ToskLight Control**
 and **Load from Visualizer** transfer a copy, not a shared live file. For live visualization, send the matching
 Art-Net or sACN universe to Architect. For Pixel, patch the Media fixture and configure its CITP
-address under **Show Patch → Media Servers**; numeric control remains available without CITP.
+address under **Show Patch > Media Servers**; numeric control remains available without CITP.
 
 ```mermaid
 flowchart LR
