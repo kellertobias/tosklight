@@ -15,6 +15,11 @@ secret of the same name. The value is a JSON object whose keys must all be non-e
 
 The build stops with an error naming the missing or empty keys; it never prints the values.
 
+Email and telephone details render as ordinary, selectable text without `mailto:` or `tel:` links.
+Encoded text fragments and hidden separators discourage basic bulk scrapers while keeping the
+visible address and number intact for readers and assistive technology. This is a modest obstacle,
+not protection against a scraper that renders the page.
+
 For a local build, use the fictitious example data:
 
 ```sh

@@ -41,9 +41,19 @@ assembling the public Pages site. Marketing screenshots remain separate from
 their own manifest. Help can also preserve real native Stage stills; it never
 substitutes an unavailable browser canvas for a Stage illustration.
 
-On pushes to `main`, the Pages assembly job downloads that generated artifact and,
-immediately beside its GitHub Pages artifact upload, uploads the same PNG files to
-S3. Configure these GitHub Actions secrets:
+The release documentation workflow downloads that generated artifact into Pages and
+uses it for every screenshot, including native captures. It must never substitute a
+tracked still while assembling the site. Detail sections each name a unique image or
+show text alone; they do not cycle through a gallery.
+
+Reviewed native inputs are transferred through a SHA256-pinned GitHub release capture
+archive (`HELP_NATIVE_CAPTURE_RELEASE`, `HELP_NATIVE_CAPTURE_ASSET`, and
+`HELP_NATIVE_CAPTURE_SHA256` repository variables). Refresh that archive when adding
+or recapturing a native surface.
+
+The same workflow uploads the generated PNG files to the S3 preview prefix. Explicit
+`promote_marketing` dispatch promotes that preview to the live S3 prefix; GitHub Pages
+always uses its own generated artifact and does not depend on this promotion. Configure these GitHub Actions secrets:
 
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`

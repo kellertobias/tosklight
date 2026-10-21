@@ -58,7 +58,7 @@ test("validation errors name keys but never echo values", () => {
 test("the Impressum renders every contact field with the required statements", () => {
 	const { contact } = parseImprintContact(EXAMPLE_RAW);
 	const html = renderImpressum(contact);
-	const visible = decodeEntities(html);
+	const visible = decodeEntities(html.replace(/<span hidden aria-hidden="true">contact<\/span>/gu, "").replace(/<[^>]*>/gu, ""));
 	for (const key of IMPRINT_CONTACT_KEYS) assert.ok(visible.includes(EXAMPLE[key].replace(/&/gu, "&amp;")), key);
 	assert.match(html, /Angaben gemäß § 5 DDG/u);
 	assert.doesNotMatch(html, /TMG|Telemediengesetz/u);
@@ -66,10 +66,12 @@ test("the Impressum renders every contact field with the required statements", (
 	assert.match(html, /nicht bereit und nicht verpflichtet/u);
 	assert.doesNotMatch(html, /ec\.europa\.eu\/consumers\/odr|Umsatzsteuer|Handelsregister|Kammer/u);
 	assert.match(html, /German version prevails/u);
-	// The address is obfuscated in the markup but stays a working mailto link.
 	assert.ok(!html.includes(EXAMPLE.email));
-	assert.ok(visible.includes(`href="mailto:${EXAMPLE.email}"`));
-	assert.match(html, /href="tel:\+490000000000"/u);
+	assert.ok(!html.includes(EXAMPLE.phone));
+	assert.doesNotMatch(decodeEntities(html), /mailto:|tel:/u);
+	assert.match(html, /class="legal-contact"/u);
+	assert.match(html, /name="format-detection" content="telephone=no,email=no"/u);
+	assert.match(html, /<span hidden aria-hidden="true">contact<\/span>/u);
 	assert.match(html, /href="\.\.\/impressum\/"/u);
 	assert.match(html, /href="\.\.\/datenschutz\/"/u);
 });
@@ -78,6 +80,9 @@ test("the Datenschutzerklärung covers controller, GitHub Pages and the data-sub
 	const { contact } = parseImprintContact(EXAMPLE_RAW);
 	const html = renderDatenschutz(contact);
 	assert.ok(html.includes(contact.name));
+	assert.doesNotMatch(decodeEntities(html), /mailto:|tel:/u);
+	assert.ok(!html.includes(contact.email));
+	assert.ok(!html.includes(contact.phone));
 	for (const expected of [
 		/GitHub, Inc\., 88 Colin P\. Kelly Jr\. Street, San Francisco, CA 94107, USA/u,
 		/IP-Adresse/u,

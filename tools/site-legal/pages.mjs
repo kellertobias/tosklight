@@ -19,18 +19,23 @@ export const escapeHtml = (value) =>
 		.replace(/"/gu, "&quot;")
 		.replace(/'/gu, "&#39;");
 
-// Every character as a numeric reference: browsers show and follow the address normally, while
-// scrapers that grep the raw HTML for "name@host" find nothing.
+// Keep contact details readable and selectable without contact URI links. Numeric entities and
+// hidden separators discourage basic source/text scrapers; a browser-aware scraper can still read
+// public contact details. `hidden` also keeps the separators out of selection and accessibility.
 const encodeEntities = (value) =>
-	[...value].map((character) => `&#x${character.codePointAt(0).toString(16)};`).join("");
+	[...value]
+		.map((character) => `&#x${character.codePointAt(0).toString(16)};`)
+		.join("");
 
-export function emailLink(email) {
-	return `<a href="${encodeEntities(`mailto:${email}`)}">${encodeEntities(email)}</a>`;
-}
-
-export function phoneLink(phone) {
-	const dial = phone.replace(/\(0\)/gu, "").replace(/[^\d+]/gu, "");
-	return `<a href="tel:${escapeHtml(dial)}">${escapeHtml(phone)}</a>`;
+function contactText(value) {
+	const chunks = [...value].reduce((result, character, index) => {
+		if (index % 2 === 0) result.push(character);
+		else result[result.length - 1] += character;
+		return result;
+	}, []);
+	return `<span class="legal-contact">${chunks
+		.map((chunk) => `<span>${encodeEntities(chunk)}</span>`)
+		.join('<span hidden aria-hidden="true">contact</span>')}</span>`;
 }
 
 /** The footer every published page carries; `prefix` leads from the page back to the site root. */
@@ -45,13 +50,16 @@ const postalAddress = (contact) =>
 	`${escapeHtml(contact.street)}<br />${escapeHtml(contact.postalCode)} ${escapeHtml(contact.city)}<br />${escapeHtml(contact.country)}`;
 
 function page({ title, description, heading, lede, toc, body }) {
-	const tocLinks = toc.map(([id, label]) => `<a href="#${id}">${escapeHtml(label)}</a>`).join("\n          ");
+	const tocLinks = toc
+		.map(([id, label]) => `<a href="#${id}">${escapeHtml(label)}</a>`)
+		.join("\n          ");
 	return `<!doctype html>
 <html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#07090d" />
+    <meta name="format-detection" content="telephone=no,email=no" />
     <meta name="description" content="${escapeHtml(description)}" />
     <title>${escapeHtml(title)} — ToskLight</title>
     <link rel="icon" href="../icon.png" type="image/png" />
@@ -112,8 +120,8 @@ export function renderImpressum(contact) {
 			"",
 			"Kontakt",
 			`<dl class="legal-details">
-              <div><dt>E-Mail</dt><dd>${emailLink(contact.email)}</dd></div>
-              <div><dt>Telefon</dt><dd>${phoneLink(contact.phone)}</dd></div>
+              <div><dt>E-Mail</dt><dd>${contactText(contact.email)}</dd></div>
+              <div><dt>Telefon</dt><dd>${contactText(contact.phone)}</dd></div>
             </dl>`,
 		),
 		section(
@@ -146,7 +154,8 @@ export function renderImpressum(contact) {
 	].join("\n");
 	return page({
 		title: "Impressum",
-		description: "Impressum der ToskLight-Webseite: Anbieterkennzeichnung nach § 5 DDG und § 18 MStV.",
+		description:
+			"Impressum der ToskLight-Webseite: Anbieterkennzeichnung nach § 5 DDG und § 18 MStV.",
 		heading: "Impressum.",
 		lede: "Anbieterkennzeichnung für die öffentliche ToskLight-Webseite mit Produktinformationen, Handbuch und Test-Downloads.",
 		toc: [
@@ -172,7 +181,7 @@ export function renderDatenschutz(contact) {
               ${escapeHtml(contact.name)}<br />
               ${postalAddress(contact)}
             </address>
-            <p>E-Mail: ${emailLink(contact.email)} · Telefon: ${phoneLink(contact.phone)}</p>`,
+            <p>E-Mail: ${contactText(contact.email)} · Telefon: ${contactText(contact.phone)}</p>`,
 		),
 		section(
 			"ueberblick",
@@ -257,7 +266,8 @@ export function renderDatenschutz(contact) {
 	].join("\n");
 	return page({
 		title: "Datenschutzerklärung",
-		description: "Datenschutzerklärung der ToskLight-Webseite nach Art. 13 DSGVO.",
+		description:
+			"Datenschutzerklärung der ToskLight-Webseite nach Art. 13 DSGVO.",
 		heading: "Datenschutz&shy;erklärung.",
 		lede: "Welche personenbezogenen Daten beim Besuch dieser Webseite verarbeitet werden, zu welchem Zweck und welche Rechte Sie haben.",
 		toc: [

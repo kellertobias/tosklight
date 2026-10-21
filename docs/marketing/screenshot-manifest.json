@@ -60,12 +60,18 @@
 			"caption": "Set up a change while the current look remains live.",
 			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
 			"viewport": {
-				"width": 1180,
+				"width": 1600,
 				"height": 720
 			},
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureClip": {
+				"x": 24,
+				"y": 24,
+				"width": 1552,
+				"height": 235
+			}
 		},
 		{
 			"file": "control-stage.png",
@@ -134,12 +140,18 @@
 			"caption": "See what comes from the current cue, what the Programmer changes, and what is prepared next, so you can build a new look without losing the one on stage.",
 			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
 			"viewport": {
-				"width": 1180,
+				"width": 1600,
 				"height": 720
 			},
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"captureClip": {
+				"x": 24,
+				"y": 24,
+				"width": 1552,
+				"height": 235
+			}
 		},
 		{
 			"file": "application-overview.png",
@@ -257,6 +269,13 @@
 			"theme": "dark"
 		},
 		{
+			"file": "architect-elevation.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-elevation.png",
+			"title": "Rig elevation",
+			"caption": "Inspect the measured hanging rig, stairs, and balconies from the side before preparing the production plan.",
+			"theme": "dark"
+		},
+		{
 			"file": "fixture-library.png",
 			"title": "Fixture library",
 			"caption": "Find, inspect, and import fixture profiles so real hardware is ready to patch into a show.",
@@ -351,6 +370,20 @@
 			"interactions": []
 		},
 		{
+			"file": "control-media-pane.png",
+			"title": "Media at the desk",
+			"caption": "Choose Pixel layers, browse media, and shape the live picture from a configurable Control pane.",
+			"storyId": "tosklight-windows-media-pane--configurable-desktop-pane",
+			"viewport": {
+				"width": 1440,
+				"height": 840
+			},
+			"captureSelector": ".media-pane-surface",
+			"theme": "dark",
+			"mode": "software",
+			"interactions": []
+		},
+		{
 			"file": "timecode-timeline.png",
 			"title": "Timecode timeline",
 			"caption": "Arrange markers, audio, speed changes, and cue-list clips on a frame-addressed timeline for repeatable playback.",
@@ -431,7 +464,7 @@
 		{
 			"file": "media-server-text.png",
 			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200\u2013249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
 			"storyId": "tosklight-media-server--text",
 			"viewport": {
 				"width": 1440,

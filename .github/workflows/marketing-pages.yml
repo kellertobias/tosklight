@@ -1,0 +1,135 @@
+name: Publish current marketing gallery
+
+# Publish reviewed, source-bound captures without waiting for a new binary release. Preserve the
+# current manual, Storybook and code tour from the last successful Pages artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      capture_release:
+        description: Release containing the source-bound generated capture archive
+        type: string
+        required: true
+      capture_asset:
+        description: Capture ZIP asset name
+        type: string
+        required: true
+      capture_sha256:
+        description: Expected capture archive SHA256
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-documentation
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Marketing / Verify captures and refresh public site
+    runs-on: ubuntu-22.04
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Download and verify source-bound captures
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CAPTURE_RELEASE: ${{ inputs.capture_release }}
+          CAPTURE_ASSET: ${{ inputs.capture_asset }}
+          CAPTURE_SHA256: ${{ inputs.capture_sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$CAPTURE_ASSET" =~ ^manual-captures-[a-f0-9]{40}\.zip$ ]]
+          [[ "$CAPTURE_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          mkdir -p .artifacts/tmp/marketing-publication
+          gh release download "$CAPTURE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern "$CAPTURE_ASSET" --dir .artifacts/tmp/marketing-publication
+          archive=".artifacts/tmp/marketing-publication/$CAPTURE_ASSET"
+          printf '%s  %s\n' "$CAPTURE_SHA256" "$archive" | sha256sum --check
+          python3 tools/manual-captures.py restore "$archive"
+      - name: Reuse the last successful published site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_run=""
+          while read -r candidate; do
+            conclusion="$(gh run view "$candidate" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)"
+            if [[ "$conclusion" == success ]]; then base_run="$candidate"; break; fi
+          done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=github-pages&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[].workflow_run.id')
+          test -n "$base_run"
+          mkdir -p .artifacts/tmp/marketing-publication/pages-base .artifacts/generated/pages
+          gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --name github-pages --dir .artifacts/tmp/marketing-publication/pages-base
+          tar -xf .artifacts/tmp/marketing-publication/pages-base/artifact.tar -C .artifacts/generated/pages
+          test -f .artifacts/generated/pages/index.html
+          test -f .artifacts/generated/pages/manual/index.html
+          test -f .artifacts/generated/pages/storybook/index.html
+          test -f .artifacts/generated/pages/safari/index.html
+          test -f .artifacts/generated/pages/performance/status.json
+          version="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          echo "LIGHT_RELEASE_VERSION=${version#v}" >> "$GITHUB_ENV"
+          echo "MARKETING_BASE_RUN=$base_run" >> "$GITHUB_ENV"
+      - name: Render current marketing pages and contact details
+        env:
+          LIGHT_PERFORMANCE_STATUS_FILE: .artifacts/generated/pages/performance/status.json
+          TOSKLIGHT_IMPRINT_CONTACT: ${{ secrets.TOSKLIGHT_IMPRINT_CONTACT }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -R docs/site/. .artifacts/generated/pages/
+          node tools/render-landing-page.mjs .artifacts/generated/pages/index.html
+          node tools/site-legal/cli.mjs write .artifacts/generated/pages
+      - name: Record published image provenance
+        env:
+          CAPTURE_SHA256: ${{ inputs.capture_sha256 }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          root = Path('.artifacts/generated/pages')
+          manifest = json.loads(Path('docs/marketing/screenshot-manifest.json').read_text())
+          files = [root / 'screenshots' / entry['file'].replace('/', '-') for entry in manifest['entries']]
+          report = {
+              'sourceCommit': os.environ['GITHUB_SHA'],
+              'captureArchiveSHA256': os.environ['CAPTURE_SHA256'],
+              'basePagesRun': os.environ['MARKETING_BASE_RUN'],
+              'files': {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
+          }
+          (root / 'marketing-publication.json').write_text(json.dumps(report, indent=2) + '\n')
+          PY
+      - name: Publish refreshed marketing PNGs to preview and live
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          MARKETING_SCREENSHOTS_S3_BUCKET: ${{ secrets.MARKETING_SCREENSHOTS_S3_BUCKET }}
+          MARKETING_SCREENSHOTS_S3_BASE_PATH: ${{ secrets.MARKETING_SCREENSHOTS_S3_BASE_PATH }}
+        run: |
+          bash tools/upload-marketing-screenshots.sh preview
+          bash tools/upload-marketing-screenshots.sh ''
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: .artifacts/generated/pages
+  deploy:
+    name: Marketing / Deploy current gallery to GitHub Pages
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4

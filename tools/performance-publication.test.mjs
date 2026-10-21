@@ -541,6 +541,20 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(downloadsPage, /href="\.\.\/license\/"/u);
 		assert.match(downloadsPage, /href="\.\.\/impressum\/"/u);
 		assert.match(downloadsPage, /href="\.\.\/datenschutz\/"/u);
+        // Pages must use the exact capture artifact, including native surfaces. The tracked
+        // still may predate the reviewed capture restored by CI.
+        assert.equal(readFileSync(resolve(directory, "screenshots/architect-renderer-ultra.png"), "utf8"), "fixture image");
+        for (const product of ["control", "pixel", "architect"]) {
+            const html = readFileSync(resolve(directory, product, "index.html"), "utf8");
+            const shots = [...html.matchAll(/src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
+            assert.equal(shots.length, new Set(shots).size, `${product} repeats a screenshot`);
+            assert.ok(shots.length >= 3, `${product} needs representative screenshots`);
+        }
+        const controlPage = readFileSync(resolve(directory, "control/index.html"), "utf8");
+        assert.match(controlPage, /screenshots\/dynamics\.png/u);
+        assert.match(controlPage, /screenshots\/control-media-pane\.png/u);
+        assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
+        assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
 		const landingPage = readFileSync(target, "utf8");
 		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
 		assert.match(landingPage, /Open source lighting control desk/u);

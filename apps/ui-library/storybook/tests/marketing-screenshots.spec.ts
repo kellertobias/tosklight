@@ -35,6 +35,7 @@ interface MarketingScreenshotEntry {
 	storyId?: string;
 	viewport?: { width: number; height: number };
 	captureSelector?: string;
+	captureClip?: { x: number; y: number; width: number; height: number };
 	theme: "dark";
 	mode: "software" | "hardware";
 	interactions: ScreenshotInteraction[];
@@ -164,10 +165,35 @@ test("captures the reviewed Storybook marketing gallery and preserves static sti
 			? page.locator(entry.captureSelector)
 			: page;
 		if (entry.captureSelector) await expect(captureTarget).toBeVisible();
-		const actual = await captureTarget.screenshot({
-			animations: "disabled",
-		});
+		// A fixture sheet continues below the visible rows. An explicit viewport crop
+		// keeps the populated part clear without inventing a bottom edge for the pane.
+		if (entry.captureClip) {
+			const sheet = page.locator(".fixture-window");
+			await expect(sheet).toBeVisible();
+			const bounds = await sheet.boundingBox();
+			if (!bounds) throw new Error(`${entry.file} has no fixture-sheet bounds`);
+			expect(bounds.y + bounds.height).toBeGreaterThan(
+				entry.captureClip.y + entry.captureClip.height,
+			);
+			await expect(page.locator(".fixture-table .fixture-name")).toHaveCount(4);
+		}
+		if (entry.file === "control-media-pane.png") {
+			await expect(page.locator(".media-layer-tile").first()).toBeVisible();
+			await expect(page.locator(".media-pane-dummy-notice")).toHaveCount(0);
+		}
+		const actual = entry.captureClip
+			? await page.screenshot({
+					animations: "disabled",
+					clip: entry.captureClip,
+				})
+			: await captureTarget.screenshot({ animations: "disabled" });
 		const actualDimensions = pngDimensions(actual);
+		if (entry.captureClip) {
+			expect(actualDimensions).toEqual({
+				width: entry.captureClip.width,
+				height: entry.captureClip.height,
+			});
+		}
 		expect(
 			actualDimensions.width,
 			`${entry.file} capture width`,
@@ -218,6 +244,22 @@ function validateEntry(entry: MarketingScreenshotEntry, storyIds: Set<string>) {
 	expect(Array.isArray(entry.interactions)).toBe(true);
 	if (entry.captureSelector)
 		expect(entry.captureSelector.trim().length).toBeGreaterThan(0);
+	if (entry.captureClip) {
+		expect(
+			entry.captureSelector,
+			"captureClip uses page coordinates",
+		).toBeUndefined();
+		for (const key of ["x", "y"] as const)
+			expect(entry.captureClip[key]).toBeGreaterThanOrEqual(0);
+		for (const key of ["width", "height"] as const)
+			expect(entry.captureClip[key]).toBeGreaterThan(0);
+		expect(entry.captureClip.x + entry.captureClip.width).toBeLessThanOrEqual(
+			entry.viewport?.width,
+		);
+		expect(entry.captureClip.y + entry.captureClip.height).toBeLessThanOrEqual(
+			entry.viewport?.height,
+		);
+	}
 	expect(entry.storyId).toBeTruthy();
 	expect(
 		storyIds.has(entry.storyId as string),
