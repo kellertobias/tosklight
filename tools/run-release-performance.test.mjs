@@ -444,8 +444,7 @@ test("CLI accepts a parsed measured failure but rejects invalid JSON", () => {
 			(scenario) =>
 				scenario.requested_rate_hz ===
 					(scenario.case_id === "dense_rig" ? 40 : 60) &&
-				scenario.below_target_hz ===
-					Math.min(44, scenario.requested_rate_hz) &&
+				scenario.below_target_hz === Math.min(44, scenario.requested_rate_hz) &&
 				Number.isFinite(scenario.resources.application_cpu_average_percent),
 		),
 	);
@@ -543,7 +542,7 @@ test("scheduled publication separates release delivery from performance and Page
 	for (const expensiveJob of [manual, storybook, liveBuild]) {
 		assert.match(
 			expensiveJob,
-			/needs: \[release-metadata, release-performance\]/u,
+			/needs: \[release-metadata, release-performance(?:, help-screenshots)?\]/u,
 		);
 	}
 	assert.doesNotMatch(
@@ -611,14 +610,9 @@ test("the dense rig is measured at the rate it is scheduled at, not the release 
 	dense.scenarios[0].universes = 16;
 	dense.scenarios[0].fixtures_per_universe = 170;
 	dense.scenarios[0].fixture_count = 2720;
-	const status = statusDocument(
-		options,
-		stage(report(), 0),
-		null,
-		null,
-		null,
-		[{ case_id: "dense_rig", stage: stage(dense, 0) }],
-	);
+	const status = statusDocument(options, stage(report(), 0), null, null, null, [
+		{ case_id: "dense_rig", stage: stage(dense, 0) },
+	]);
 	const [scenario] = status.benchmark_scenarios;
 	assert.equal(scenario.case_id, "dense_rig");
 	assert.equal(scenario.requested_rate_hz, 40);

@@ -111,3 +111,41 @@ test("repeated ignored invocations have independent groups even on the same bran
 		resolvedGroup(completedRun(9, fields)),
 	);
 });
+
+test("handbook consumes the complete fresh gallery before rendering", () => {
+	const manual = source.match(/^  manual:\n([\s\S]*?)(?=^  [\w-]+:)/m)?.[1];
+	assert.ok(manual);
+	assert.match(
+		manual,
+		/needs: \[release-metadata, release-performance, help-screenshots\]/,
+	);
+	assert.ok(
+		manual.indexOf("name: help-screenshots") <
+			manual.indexOf("run: npm run manual"),
+	);
+	for (const name of ["help-screenshots-storybook", "help-screenshots-live"]) {
+		assert.match(
+			source,
+			new RegExp(`name: ${name}\\n          path: \\.artifacts/tmp/${name}`),
+		);
+	}
+});
+
+test("current manual publication verifies source-bound captures and preserves the site", async () => {
+	const workflow = await readFile(
+		new URL("../.github/workflows/manual-pages.yml", import.meta.url),
+		"utf8",
+	);
+	assert.ok(
+		workflow.indexOf("manual-captures.py restore") <
+			workflow.indexOf("run: npm run manual"),
+	);
+	assert.match(workflow, /sha256sum --check/);
+	assert.match(workflow, /group: nightly-documentation/);
+	assert.match(workflow, /manual-publication\.json/);
+	assert.match(
+		workflow,
+		/cp -R \.artifacts\/generated\/manual\/html\/tosklight-manual \.artifacts\/generated\/pages\/manual/,
+	);
+	assert.doesNotMatch(workflow, /rm -rf \.artifacts\/generated\/pages\n/);
+});

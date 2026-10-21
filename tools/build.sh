@@ -79,6 +79,7 @@ build_manual() {
   ensure_manual_dependencies
   generate_attribute_reference
   "$MANUAL_PYTHON" "$ROOT/tools/generate_icon_contact_sheets.py"
+  "$MANUAL_PYTHON" "$ROOT/tools/render-help-diagrams.py"
   run_manual_renderer build \
     --source "$ROOT/docs/help" \
     --config "$MANUAL_CONFIG" \

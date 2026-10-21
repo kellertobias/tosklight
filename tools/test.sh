@@ -88,6 +88,7 @@ architecture(){
   architecture_check "Programmer action timing" node --test "$ROOT/tools/programmer-action-timing.test.mjs"
   architecture_check "Performance publication" node --test "$ROOT/tools/performance-publication.test.mjs"
   architecture_check "Documentation publication concurrency" node --test "$ROOT/tools/documentation-workflow.test.mjs"
+  architecture_check "Documentation capture transfer" python3 "$ROOT/tools/manual-captures.test.py"
   architecture_check "Public site legal pages" node --test "$ROOT/tools/site-legal/site-legal.test.mjs"
   architecture_check "Release performance runner" node --test "$ROOT/tools/run-release-performance.test.mjs"
   architecture_check "Desktop performance diagnostics" node --test "$ROOT/tools/run-desktop-performance.test.mjs"

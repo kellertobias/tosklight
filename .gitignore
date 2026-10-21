@@ -45,6 +45,9 @@ __pycache__
 *.profraw
 *.profdata
 
-# The stable Help screenshot set is tracked because release builds embed it without running a
-# browser capture. Marketing candidates remain generated and are published by documentation CI.
+# Existing Help PNGs remain for compatibility. Refreshed Help/marketing captures are generated,
+# reviewed and uploaded by the documentation workflow rather than committed.
 /docs/marketing/assets/screenshots/
+
+# Authored diagram SVGs are source; manual-build raster copies are generated.
+/docs/help/assets/diagrams/*.png

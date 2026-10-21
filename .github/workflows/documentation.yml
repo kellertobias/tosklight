@@ -201,7 +201,7 @@ jobs:
   manual:
     name: Documentation / Build handbook PDF and HTML
     if: needs.release-metadata.outputs.run == 'true'
-    needs: [release-metadata, release-performance]
+    needs: [release-metadata, release-performance, help-screenshots]
     runs-on: ubuntu-22.04
     env:
       GH_TOKEN: ${{ github.token }}
@@ -257,6 +257,12 @@ jobs:
           done
           exit 1
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: help-screenshots
+          path: docs/help/assets/screenshots
+
+      - run: node tools/check-help-screenshot-set.mjs
       - run: npm run manual
 
       - name: Attach the handbook to the exact release
@@ -324,6 +330,21 @@ jobs:
       - name: Build Storybook once and refresh its screenshot candidates
         run: bash tools/test.sh documentation-screenshots
 
+      - name: Stage only captures owned by this job
+        run: |
+          python3 - <<'PY_CAPTURE'
+          import json, shutil
+          from pathlib import Path
+          root = Path('docs/help/assets/screenshots')
+          output = Path('.artifacts/tmp/help-screenshots-storybook')
+          entries = json.loads(Path('docs/help/screenshot-manifest.json').read_text())['entries']
+          for entry in entries:
+              if entry['source'] in ('storybook', 'native-still'):
+                  target = output / entry['file']
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(root / entry['file'], target)
+          PY_CAPTURE
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: storybook-static
@@ -333,7 +354,7 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: help-screenshots-storybook
-          path: docs/help/assets/screenshots
+          path: .artifacts/tmp/help-screenshots-storybook
           if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -466,10 +487,25 @@ jobs:
       - run: chmod +x .artifacts/build/cargo/debug/light-headless
       - run: bash tools/test.sh help-screenshots-live
 
+      - name: Stage only captures owned by this job
+        run: |
+          python3 - <<'PY_CAPTURE'
+          import json, shutil
+          from pathlib import Path
+          root = Path('docs/help/assets/screenshots')
+          output = Path('.artifacts/tmp/help-screenshots-live')
+          entries = json.loads(Path('docs/help/screenshot-manifest.json').read_text())['entries']
+          for entry in entries:
+              if entry['source'] == 'live-app':
+                  target = output / entry['file']
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  shutil.copyfile(root / entry['file'], target)
+          PY_CAPTURE
+
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: help-screenshots-live
-          path: docs/help/assets/screenshots
+          path: .artifacts/tmp/help-screenshots-live
           if-no-files-found: error
 
   help-screenshots:

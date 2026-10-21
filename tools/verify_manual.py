@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -50,8 +51,10 @@ def verify(path: Path) -> None:
     positions = [full_text.index(title) for title in required]
     if positions != sorted(positions):
         fail("manual sections are not in the required order")
-    if "[!danger]" in full_text or "Missing graphic" not in full_text:
+    if "[!danger]" in full_text:
         fail("Obsidian danger callouts were not rendered correctly")
+    if re.search(r"missing\s+(?:graphic|diagram|screenshot)", full_text, re.IGNORECASE):
+        fail("manual still contains an unresolved illustration notice")
     if not reader.outline:
         fail("manual has no PDF outline/bookmarks")
     image_count = 0

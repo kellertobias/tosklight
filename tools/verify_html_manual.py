@@ -99,6 +99,8 @@ def verify(site: Path, archive: Path) -> None:
     missing = [text for text in required if text not in source]
     if missing:
         fail(f"HTML manual is missing: {', '.join(missing)}")
+    if re.search(r"missing\s+(?:graphic|diagram|screenshot)", source, re.IGNORECASE):
+        fail("HTML manual still contains an unresolved illustration notice")
     known_ids = set(parser.ids)
     for href in parser.hrefs:
         if href.startswith("#") and href[1:] not in known_ids:
