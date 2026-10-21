@@ -240,7 +240,10 @@
 .defaults-record-update > article:first-child > .ui-form-layout {
 	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
 }
-.defaults-record-update > article:first-child > .ui-form-layout > .ui-form-field:nth-child(2) {
+.defaults-record-update
+	> article:first-child
+	> .ui-form-layout
+	> .ui-form-field:nth-child(2) {
 	grid-row: span 2;
 }
 /* The attribute tabs render several sibling cards, so the panel itself must not become a box. */
@@ -449,7 +452,10 @@
 }
 .default-screen-compact-row {
 	display: grid;
-	grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(220px, 1fr) auto;
+	grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1fr) minmax(
+			220px,
+			1fr
+		) auto;
 	/* Top-aligned so multi-line field information never shifts neighbouring controls. */
 	align-items: start;
 	gap: 10px;
@@ -1063,4 +1069,12 @@
 }
 .patch-table tr.pending td {
 	opacity: 0.62;
+}
+
+.sound-input-settings > div:first-child {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 0.5rem 1rem;
 }
