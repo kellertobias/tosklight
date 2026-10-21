@@ -359,7 +359,7 @@
 			"file": "dynamics.png",
 			"sourceFile": "docs/marketing/assets/stills/dynamics-lanes.png",
 			"title": "Lanes and lamps",
-			"caption": "Edit the stored Spots Circle Dynamic against the selected stage fixtures in the live Control application.",
+			"caption": "Edit Pan and Tilt lanes against all 24 selected stage spots in the production Control application.",
 			"theme": "dark"
 		},
 		{

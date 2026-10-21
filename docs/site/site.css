@@ -373,6 +373,7 @@ footer { padding: 4rem 0; border-top: 1px solid rgb(255 255 255 / .08); }
   .product-identity > img { width: 3.8rem; height: 3.8rem; }
   .product-gallery { grid-template-columns: 1fr; }
   .product-detail-gallery { grid-template-columns: 1fr; padding-bottom: 4.5rem; }
+  .product-detail-story article { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
   .product-detail-section-gallery { grid-template-columns: 1fr; }
   .product-detail-title-row { align-items: flex-start; }
   .product-detail-gallery .shot:first-child { grid-column: auto; }
