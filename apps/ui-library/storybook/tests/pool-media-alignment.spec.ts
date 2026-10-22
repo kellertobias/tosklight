@@ -6,9 +6,9 @@ const STORY =
 test("pool artwork stays vertically and horizontally centered without clipping", async ({
 	page,
 }) => {
-	await page.setViewportSize({ width: 1200, height: 1900 });
+	await page.setViewportSize({ width: 1200, height: 2200 });
 	await page.goto(STORY);
-	await expect(page.locator(".pool-card-media")).toHaveCount(72);
+	await expect(page.locator(".pool-card-media")).toHaveCount(108);
 	await page.evaluate(async () => {
 		await document.fonts.ready;
 		await Promise.all(
@@ -43,8 +43,10 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 				const idBox = id.getBoundingClientRect();
 				return {
 					titleGap: outer.top - titleBottom,
+					titleLeftGap: outer.left - title.getBoundingClientRect().right,
 					countGap: outer.left - countBox.right,
 					idGap: outer.top - idBox.bottom,
+					idLeftGap: idBox.left - outer.right,
 					mediaWidth: outer.width,
 					mediaHeight: outer.height,
 					expectedRatio: media.classList.contains("pool-card-media-image")
@@ -81,9 +83,15 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 			);
 			expect(measurement.mediaWidth, context).toBeGreaterThanOrEqual(32 - 0.1);
 		}
-		expect(measurement.titleGap, context).toBeGreaterThanOrEqual(-0.6);
+		expect(
+			Math.max(measurement.titleGap, measurement.titleLeftGap),
+			context,
+		).toBeGreaterThanOrEqual(-0.6);
 		expect(measurement.countGap, context).toBeGreaterThanOrEqual(0);
-		expect(measurement.idGap, context).toBeGreaterThanOrEqual(0);
+		expect(
+			Math.max(measurement.idGap, measurement.idLeftGap),
+			context,
+		).toBeGreaterThanOrEqual(0);
 		expect(
 			Math.abs(
 				measurement.mediaWidth -
@@ -118,6 +126,24 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		expect(widthFor("large")).toBeGreaterThan(widthFor("square") * 1.5);
 		expect(widthFor("square")).toBeGreaterThan(widthFor("tiny") * 1.3);
 	}
+	// Selection changes the border, never the size-query mode or artwork position.
+	for (const measurement of measurements.filter(
+		(item) => item.selected === "false",
+	)) {
+		const selected = measurements.find(
+			(item) =>
+				item.shape === measurement.shape &&
+				item.name === measurement.name &&
+				item.selected === "true",
+		);
+		if (!selected) throw new Error("Missing selected tile pair");
+		expect(
+			Math.abs(selected.mediaWidth - measurement.mediaWidth),
+		).toBeLessThanOrEqual(0.1);
+		expect(
+			Math.abs(selected.mediaHeight - measurement.mediaHeight),
+		).toBeLessThanOrEqual(0.1);
+	}
 	const expectedWidths: Record<string, number> = {
 		square: 96,
 		large: 180,
@@ -125,8 +151,18 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		rectangular: 160,
 		group: 124,
 		preset: 210,
+		"shallow-color": 98,
+		"shallow-group": 100,
+		boundary: 100,
+	};
+	const expectedHeights: Record<string, number> = {
+		"shallow-color": 36,
+		"shallow-group": 53,
+		boundary: 58,
 	};
 	for (const measurement of measurements) {
+		const height = expectedHeights[measurement.shape ?? ""];
+		if (height !== undefined) expect(measurement.tileHeight).toBe(height);
 		const width = expectedWidths[measurement.shape ?? ""];
 		if (width === undefined) throw new Error("Unexpected tile shape");
 		expect(Math.abs(measurement.tileWidth - width)).toBeLessThanOrEqual(0.6);

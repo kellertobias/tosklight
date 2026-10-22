@@ -50,6 +50,9 @@ export const SquareAndConfiguredTiles: Story = {
 				{ label: "rectangular", width: 160, height: 68 },
 				{ label: "group", width: 124, height: 78 },
 				{ label: "preset", width: 210, height: 119 },
+				{ label: "shallow-color", width: 98, height: 36 },
+				{ label: "shallow-group", width: 100, height: 53 },
+				{ label: "boundary", width: 100, height: 58 },
 			].map(({ label, width, height }) =>
 				[false, true].map((selected) => (
 					<div
@@ -63,6 +66,7 @@ export const SquareAndConfiguredTiles: Story = {
 								key={String(model.primary)}
 								style={{
 									width,
+									minHeight: 0,
 									...(height ? { height, aspectRatio: "auto" } : {}),
 								}}
 								model={{

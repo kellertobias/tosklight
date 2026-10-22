@@ -1637,21 +1637,61 @@
 	min-width: 0;
 	aspect-ratio: 1;
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) min(100%, max(32px, 56%));
-	grid-template-rows: minmax(0, 1fr) auto
-		clamp(0px, max(32px, 56%), calc(100% - 16px));
-	grid-template-areas: "name name" "status status" "information media";
 	container-type: inline-size;
-	gap: 3px 4px;
 	overflow: hidden;
-	/* Keep border + padding constant when selection or workflow thickens the border. */
-	padding: calc(var(--pool-card-inset) + 1px - var(--pool-card-border-width));
+	padding: 0;
 	border: 1px solid
 		color-mix(in srgb, var(--pool-card-resolved-color) 68%, var(--line2));
 	border-radius: var(--pool-card-radius);
 	--pool-card-background: color-mix(in srgb, var(--pool-card-resolved-color) 8%, var(--bg));
 	background: var(--pool-card-background);
 	text-align: left;
+}
+
+.pool-card-layout {
+	position: absolute;
+    /* Query the same area through selected and workflow border widths. */
+	inset: calc(1px - var(--pool-card-border-width));
+	container-type: size;
+}
+
+.pool-card-layout-content {
+	position: absolute;
+	inset: var(--pool-card-inset);
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) min(100%, max(32px, 56%));
+	grid-template-rows: minmax(0, 1fr) auto
+		clamp(0px, max(32px, 56%), calc(100% - 16px));
+	grid-template-areas: "name name" "status status" "information media";
+	gap: 3px 4px;
+}
+
+/* Short configured cells use the full height for artwork beside their labels. */
+@container (max-height: 60px) {
+	.pool-card.has-media .pool-card-layout-content {
+        --pool-card-compact-inset: 1px;
+        inset: var(--pool-card-compact-inset);
+        grid-template-columns: minmax(0, 1fr)
+            min(45%, calc(100cqh - 2 * var(--pool-card-compact-inset))) auto;
+		grid-template-rows: minmax(0, 1fr) auto auto;
+		grid-template-areas: "name media number" "status media number" "information media number";
+		row-gap: 0;
+	}
+
+	.pool-card.has-media .pool-card-name {
+		grid-area: name;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		padding-right: 0;
+	}
+
+	.pool-card.has-media .pool-card-name::before {
+		display: none;
+	}
+
+	.pool-card.has-media .number {
+		grid-area: number;
+	}
 }
 
 /*
@@ -1712,7 +1752,7 @@
 	opacity: 0.55;
 }
 
-.pool-card > .number {
+.pool-card .number {
 	position: static;
 	inset: auto;
 	grid-area: 1 / 2;
@@ -1748,14 +1788,14 @@
 
 /* Very small tiles keep one readable title line above the minimum artwork box. */
 @container (max-width: 64px) {
-	.pool-card.has-media > .pool-card-name {
+	.pool-card.has-media .pool-card-name {
 		grid-area: name;
 		padding-right: var(--pool-card-number-space, 31px);
 		white-space: nowrap;
 		text-overflow: ellipsis;
 	}
 
-	.pool-card.has-media > .pool-card-name::before {
+	.pool-card.has-media .pool-card-name::before {
 		display: none;
 	}
 }
@@ -1822,7 +1862,7 @@
 		.move-target,
 		.delete-target
 	)
-	> :is(.number, .pool-card-name, .pool-card-information) {
+	:is(.number, .pool-card-name, .pool-card-information) {
 	opacity: 0.45;
 }
 
@@ -2065,7 +2105,7 @@
 }
 
 /* Tiles narrower than the pool's default width show their text at 80%. */
-.pool-grid-narrow .pool-card > .number {
+.pool-grid-narrow .pool-card .number {
 	font-size: 8px;
 }
 

@@ -93,13 +93,17 @@ export function PoolCard({
 			style={poolCardStyle(model, props.style, empty)}
 			{...interactions}
 		>
-			<PoolCardContents
-				model={model}
-				workflow={workflow}
-				hasStatus={hasStatus}
-				hasMedia={hasMedia}
-				color={color}
-			/>
+			<span className="pool-card-layout">
+				<span className="pool-card-layout-content">
+					<PoolCardContents
+						model={model}
+						workflow={workflow}
+						hasStatus={hasStatus}
+						hasMedia={hasMedia}
+						color={color}
+					/>
+				</span>
+			</span>
 			{cornerIndicator}
 		</Button>
 	);

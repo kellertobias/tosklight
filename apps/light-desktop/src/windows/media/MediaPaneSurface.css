@@ -639,13 +639,13 @@
 	background: color-mix(in srgb, #788b96 18%, #0b0e12);
 }
 
-.media-file-pool-grid .pool-card > .number,
-.media-file-pool-grid .pool-card > .pool-card-name {
+.media-file-pool-grid .pool-card .number,
+.media-file-pool-grid .pool-card .pool-card-name {
 	z-index: 4;
 	text-shadow: 0 1px 3px #000;
 }
 
-.media-file-pool-grid .pool-card > .pool-card-name {
+.media-file-pool-grid .pool-card .pool-card-name {
 	top: 7px;
 	right: 38px;
 	white-space: nowrap;
@@ -657,6 +657,8 @@
 }
 
 /* Full-card media thumbnails retain their dedicated header/image layout. */
+.media-file-pool-grid .pool-card-layout,
+.media-file-pool-grid .pool-card-layout-content,
 .media-file-pool-grid .pool-card-media-slot {
 	display: contents;
 }
