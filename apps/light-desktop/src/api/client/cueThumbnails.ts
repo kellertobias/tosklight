@@ -62,7 +62,11 @@ export class CueThumbnailApiClient {
 	async imageUrl(showId: string, cueId: string): Promise<string> {
 		const image = await this.transport.blob(
 			`/api/v2/cues/${encodeURIComponent(cueId)}/thumbnail`,
-			{ headers: { "x-tosk-show": showId } },
+			{
+				headers: { "x-tosk-show": showId },
+				// A new capture can replace this picture without changing the cue values or URL.
+				cache: "no-store",
+			},
 		);
 		return URL.createObjectURL(image);
 	}
@@ -88,14 +92,13 @@ export class CueThumbnailApiClient {
 			request_id: crypto.randomUUID(),
 			thumbnails,
 		});
-		const outcome =
-			await this.transport.request<WireCueThumbnailUpdateOutcome>(
-				"/api/v2/cues/thumbnails/update",
-				{
-					...request,
-					headers: { ...request.headers, "x-tosk-show": showId },
-				},
-			);
+		const outcome = await this.transport.request<WireCueThumbnailUpdateOutcome>(
+			"/api/v2/cues/thumbnails/update",
+			{
+				...request,
+				headers: { ...request.headers, "x-tosk-show": showId },
+			},
+		);
 		return {
 			stored: outcome.stored,
 			skippedCueIds: outcome.skipped_cue_ids,
