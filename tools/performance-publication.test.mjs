@@ -644,6 +644,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(architectPage, /Crowd simulation<\/strong><p>Being improved/u);
         assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
         assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
+        assert.match(architectPage, /Ultra Rendering Quality/u);
+        assert.match(architectPage, /Adjust the rendering quality to suit your computer’s graphics performance/u);
+        assert.doesNotMatch(architectPage, /A warm look for the venue|venue and DJ rig/u);
 		const landingPage = readFileSync(target, "utf8");
         const homeCardTitles = [...landingPage.matchAll(/<figcaption><strong>([^<]+)<\/strong>/gu)].map(match => match[1]);
         assert.deepEqual(homeCardTitles, ["Dynamic Screen Layouts", "Track every change", "Desk-style Effect Engine", "Up to Eight Layers", "Library Management Built In", "Control via DMX or in the Browser", "Live 3D Visualizer", "Generate Your Venue Plans", "Patch Your Fixtures"]);
