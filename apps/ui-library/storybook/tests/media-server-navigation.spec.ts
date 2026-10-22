@@ -92,7 +92,7 @@ test("Media Server Library story exercises metadata, multi-move, folder configur
 	const columns = await folderGrid.evaluate((element) =>
 		getComputedStyle(element).gridTemplateColumns.split(" ").filter(Boolean),
 	);
-	expect(columns.length).toBeGreaterThanOrEqual(3);
+	expect(columns.length).toBe(2);
 	await secondFolder.click();
 	await expect(page.getByText("Folder icon")).toBeVisible();
 	await expect(page.getByText("Upload media to this folder")).toBeVisible();

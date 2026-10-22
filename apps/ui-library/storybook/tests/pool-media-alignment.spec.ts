@@ -202,32 +202,38 @@ test("taller compact tiles wrap operator names without touching the fixture coun
 	);
 	await expect(page.locator(".pool-card")).toHaveCount(12);
 	await page.evaluate(() => document.fonts.ready);
-	const names = await page.locator(".pool-card").evaluateAll((cards) =>
-		cards.map((card) => {
-			const name = card.querySelector(".pool-card-name");
-			const count = card.querySelector(".pool-card-information");
-			if (!name || !count) throw new Error("Missing compact tile labels");
-			const range = document.createRange();
-			range.selectNodeContents(name);
-			const lines = Array.from(range.getClientRects());
-			const bounds = name.getBoundingClientRect();
-			return {
-				label: name.textContent,
-				lineCount: lines.length,
-				right: Math.max(...lines.map((line) => line.right)),
-				availableRight: bounds.right,
-				bottom: Math.max(...lines.map((line) => line.bottom)),
-				countTop: count.getBoundingClientRect().top,
-			};
-		}),
-	);
-	for (const name of names) {
-		expect(name.lineCount, name.label ?? "").toBe(2);
-		expect(name.right, name.label ?? "").toBeLessThanOrEqual(
-			name.availableRight + 0.6,
+	// Leave font-metric headroom for platform fallbacks as well as the native font.
+	for (const tracking of ["normal", "0.2px"]) {
+		await page.addStyleTag({
+			content: `.pool-card-name { letter-spacing: ${tracking}; }`,
+		});
+		const names = await page.locator(".pool-card").evaluateAll((cards) =>
+			cards.map((card) => {
+				const name = card.querySelector(".pool-card-name");
+				const count = card.querySelector(".pool-card-information");
+				if (!name || !count) throw new Error("Missing compact tile labels");
+				const range = document.createRange();
+				range.selectNodeContents(name);
+				const lines = Array.from(range.getClientRects());
+				const bounds = name.getBoundingClientRect();
+				return {
+					label: name.textContent,
+					lineCount: lines.length,
+					right: Math.max(...lines.map((line) => line.right)),
+					availableRight: bounds.right,
+					bottom: Math.max(...lines.map((line) => line.bottom)),
+					countTop: count.getBoundingClientRect().top,
+				};
+			}),
 		);
-		expect(name.bottom, name.label ?? "").toBeLessThanOrEqual(
-			name.countTop + 0.6,
-		);
+		for (const name of names) {
+			expect(name.lineCount, name.label ?? "").toBe(2);
+			expect(name.right, name.label ?? "").toBeLessThanOrEqual(
+				name.availableRight + 0.6,
+			);
+			expect(name.bottom, name.label ?? "").toBeLessThanOrEqual(
+				name.countTop + 0.6,
+			);
+		}
 	}
 });

@@ -5,6 +5,7 @@ import "./media/MediaPaneSurface.css";
 
 const meta: Meta = {
 	title: "ToskLight/Windows/Pool media alignment",
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 };
 export default meta;
