@@ -575,6 +575,13 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(dynamicsSection, /joins the running sync phase/u);
         assert.match(dynamicsSection, /next beat or four-beat bar/u);
         assert.match(controlPage, /screenshots\/control-media-pane\.png/u);
+        const hardwareSection = controlPage.split('<p class="eyebrow">Hardware</p>')[1]?.split('</article>')[0];
+        assert.ok(hardwareSection, "Control needs its hardware and software playback workflow");
+        assert.match(hardwareSection, /OSC control surface/u);
+        assert.match(hardwareSection, /Custom hardware bridges/u);
+        assert.match(hardwareSection, /--gallery-columns:1/u, "playback comparisons must stay full width");
+        assert.deepEqual([...hardwareSection.matchAll(/<img src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]), ["../screenshots/control-playbacks-software.png", "../screenshots/control-playbacks-hardware.png"]);
+
 
         assert.doesNotMatch(controlPage, /A stage view built in/u);
         assert.match(controlPage, /lightweight plan and wireframe Stage views/u);
@@ -593,6 +600,18 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(pixelPage, /DMX output and multiple outputs<\/strong><p>Public beta/u);
         const architectPage = readFileSync(resolve(directory, "architect/index.html"), "utf8");
         assert.match(architectPage, /export clear PDF plans/u);
+        const architectSections = [...architectPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
+        assert.deepEqual(architectSections.slice(0, 3), ["Visualization", "Interchange", "CAD"]);
+        const firstArchitectImage = [...architectPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
+        assert.equal(firstArchitectImage, "../screenshots/architect-renderer-warm-ultra.png");
+        assert.match(architectPage, /Simulate your venue and rig\./u);
+        assert.match(architectPage, /Build the rig\. Export the PDF plan\./u);
+        const interchangeSection = architectPage.split('<p class="eyebrow">Interchange</p>')[1]?.split('</article>')[0];
+        assert.ok(interchangeSection);
+        assert.match(interchangeSection, /Bring the rig in\. Take the rig out\./u);
+        assert.match(interchangeSection, /screenshots\/architect-show-transfer\.png/u);
+        assert.doesNotMatch(interchangeSection, /architect-renderer-/u);
+
         assert.match(architectPage, /screenshots\/architect-patch\.png/u);
         assert.doesNotMatch(architectPage, /screenshots\/architect-elevation\.png/u);
         const lasersSection = architectPage.split('<p class="eyebrow">Lasers</p>')[1]?.split('</article>')[0];
@@ -603,6 +622,12 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const patchSection = architectPage.split('<p class="eyebrow">Patch</p>')[1]?.split('</article>')[0];
         assert.ok(patchSection);
         assert.match(patchSection, /screenshots\/architect-patch\.png/u);
+        const movingSection = architectPage.split('<p class="eyebrow">Moving scenes</p>')[1]?.split('</article>')[0];
+        assert.ok(movingSection);
+        assert.match(movingSection, /screenshots\/control-position-reference\.png/u);
+        assert.match(movingSection, /Control’s Patch sheet for the same portable Show/u);
+        assert.match(movingSection, /relative to a shared 3D point/u);
+
         assert.match(lasersSection, /screenshots\/architect-laser-code\.png/u);
         assert.match(lasersSection, /screenshots\/architect-laser-output\.png/u);
         assert.match(architectPage, /Mostly complete, with further improvements in progress/u);
@@ -622,6 +647,10 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(landingPage, /screenshots\/tracked-programming\.png/u);
 		assert.match(landingPage, /screenshots\/media-server-playback\.png/u);
 		assert.match(landingPage, /screenshots\/architect-renderer-ultra\.png/u);
+        assert.equal([...landingPage.matchAll(/src="screenshots\/architect-renderer-ultra\.png"/gu)].length, 1, "green laser render is reserved for the top hero");
+        assert.match(landingPage, /screenshots\/architect-renderer-white-ultra\.png/u);
+        assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-(?:white-)?ultra\.png/u);
+
 		assert.match(landingPage, /screenshots\/architect-cad\.png/u);
 		assert.doesNotMatch(landingPage, /screenshots\/media-server-dashboard\.png/u);
 		assert.match(landingPage, /href="downloads\/"/u);

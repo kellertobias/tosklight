@@ -414,14 +414,14 @@
 		{
 			"file": "media-server-text.png",
 			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200\u2013249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/media-server-text.png"
 		},
 		{
 			"file": "media-server-outputs.png",
 			"title": "Media Server outputs",
-			"caption": "Output settings keep picture target, presentation, orientation, and sound routing together without nesting another window inside Settings.",
+			"caption": "Configure the output target, resolution, and frame rate. This actual example uses an off-screen 1280 × 720 output.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/media-server-outputs.png"
 		},
@@ -476,6 +476,48 @@
 			"theme": "dark",
 			"mode": "software",
 			"interactions": []
+		},
+		{
+			"file": "architect-renderer-white-ultra.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-white-ultra.png",
+			"title": "The rig in white",
+			"caption": "A distinct native Ultra render of the Showcase rig with white stage lighting.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-warm-ultra.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-warm-ultra.png",
+			"title": "A warm look for the venue",
+			"caption": "Preview the actual Showcase venue and DJ rig under warm stage lighting in Ultra rendering quality.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-show-transfer.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-show-transfer.png",
+			"title": "Import and export the rig",
+			"caption": "Architect’s actual Show page provides the production’s import and export controls.",
+			"theme": "dark"
+		},
+		{
+			"file": "control-playbacks-software.png",
+			"sourceFile": "docs/marketing/assets/stills/control-playbacks-software.png",
+			"title": "Playbacks without a hardware surface",
+			"caption": "Operate the actual show from Control’s software playback layout.",
+			"theme": "dark"
+		},
+		{
+			"file": "control-playbacks-hardware.png",
+			"sourceFile": "docs/marketing/assets/stills/control-playbacks-hardware.png",
+			"title": "Playbacks with an OSC controller",
+			"caption": "Control’s actual compact playback layout with an OSC controller attached, including eight playback channels and Speed Groups.",
+			"theme": "dark"
+		},
+		{
+			"file": "control-position-reference.png",
+			"sourceFile": "docs/marketing/assets/stills/control-position-reference.png",
+			"title": "Shared position references",
+			"caption": "ToskLight Control’s Patch sheet for the same portable Show: stage washes share 3D point 950 as their position reference.",
+			"theme": "dark"
 		}
 	]
 }

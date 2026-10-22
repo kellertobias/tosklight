@@ -35,13 +35,13 @@ const GALLERY = marketingManifest.entries;
 
 const PRODUCT_GALLERIES = {
 	control: ["application-overview.png", "tracked-programming.png", "dynamics.png"],
-	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-patch.png"],
+	architect: ["architect-renderer-white-ultra.png", "architect-cad.png", "architect-patch.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-visualizers.png", "media-server-playback.png"],
 };
 const DETAIL_GALLERIES = {
-	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
+	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
-	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-patch.png", null, ["architect-laser-code.png", "architect-laser-output.png"], null],
+	architect: ["architect-renderer-warm-ultra.png", "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));
@@ -279,6 +279,7 @@ const productPages = [
 			["Output", "Connect over the network or USB.", "Send DMX through Art-Net, sACN, or supported USB DMX interfaces. Explicit output routes keep the show independent of the network or adapter used at tonight’s venue.", "Frames go out on a fixed schedule, keeping the output rate consistent while you program and run the show."],
 			["Dynamics", "Shape movement. Keep it on the beat.", "Build effects for intensity, color, position, and other supported parameters using functions or editable keyframes. Distribute them across the rig in 3D, then shape their ordering and phase to create coordinated movement.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
 			["Media Server", "Keep your media server close to the desk.", "Browse media and control layers from a compatible media server in your Control workspace. CITP/MSEX supplies names, thumbnails, and previews where supported.", "Use Pixel or another compatible server, and arrange the Media pane alongside your fixtures, presets, and playbacks."],
+			["Hardware", "Choose the controls that suit your show.", "Run the desk from its software playbacks or connect an OSC control surface. The attached surface shares Control’s Programmer, command line, and playback pages.", "Custom hardware bridges can use the documented OSC controls and feedback. The software layout adapts when hardware connects, keeping the same show and playback addressing."],
 		],
 		coming: [["Position / PSN support", "Public beta"], ["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"]],
 	},
@@ -323,10 +324,11 @@ const productPages = [
 		images: DETAIL_GALLERIES.architect,
 		manual: "../manual/#page-20-tosklight-previz-index-md",
 		sections: [
+			["Visualization", "Simulate your venue and rig.", "See the actual fixture models, beams, gobos, haze, and venue geometry together before the rig is flown. Choose the camera angle and rendering quality that help you judge the look.", "Architect runs the full lighting visualization separately from Control’s lightweight Stage, so you can close the renderer while programming and reopen it when you need the complete picture."],
 			["Interchange", "Bring the rig in. Take the rig out.", "Import and export MVR so a production can move its rig between planning tools without rebuilding it by hand. Architect also supports GDTF fixture files, including their modes and physical information.", "GDTF fixtures are mapped to the default 3D models shipped with Architect, or they can carry their own images and 3D models when the fixture package provides them."],
-			["CAD", "Look at the plan from the angle the job needs.", "Build the venue and rig in CAD, inspect them from the angle the job needs, and export clear PDF plans for the production.", "Export whole plans or cutaway sections, so each crew member can take the PDF that covers their part of the venue."],
+			["CAD", "Build the rig. Export the PDF plan.", "Build the venue and rig in CAD, inspect them from the angle the job needs, and export clear PDF plans for the production.", "Export whole plans or cutaway sections, so each crew member can take the PDF that covers their part of the venue."],
 			["Patch", "Keep the rig ready to connect.", "Inspect fixture types, modes, universes, and addresses in the Patch sheet alongside the same rig you draw in CAD.", "Check and adjust the patch before the show moves to Control, so the physical plan and the lighting desk start from the same fixture data."],
-			["Moving scenes", "Make the scene move with the fixture.", "Set a fixture, represented as a 3D point, as the master for other fixtures or scene elements. When that master is controlled through PSN or DMX, the connected elements follow its movement.", "This makes it possible to build moving scenes and keep surrounding objects in the visualizer connected to the same control that moves the real fixture."],
+			["Moving scenes", "Make the scene move with the fixture.", "Store fixture and scene positions relative to a shared 3D point. When that point is controlled through PSN or DMX, its connected elements follow the movement while retaining their relative placement.", "Position references travel in the same portable Show between Control and Architect. The Control Patch sheet shown here exposes those references for the rig that Architect visualizes."],
 			["Lasers", "Simulate the path, not just the beam.", "Architect can simulate lasers from a scan path produced by a JavaScript function supplied by the user. The function receives DMX input and returns the path that the renderer draws.", "That gives the designer control over the laser's shape, brightness, scan speed, and position, and leaves room to build a laser effect that matches the specific production."],
 			["Early prototypes", "See the right trigger, with more to come.", "Architect includes early prototypes for physical elements such as falling curtains and pyro elements such as flame jets and sparklers. They are intentionally rudimentary today.", "They are useful for confirming that the intended DMX channel was triggered, not yet for final visual realism. These elements may become more detailed as the application grows."],
 		],
@@ -355,7 +357,8 @@ for (const product of productPages) {
 			const { width, height } = screenshotSize(file);
 			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
 		}).join("");
-		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" style="--gallery-columns:${files.length}" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
+		const galleryColumns = label === "Hardware" ? 1 : files.length;
+		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" style="--gallery-columns:${galleryColumns}" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
 		return `<article><div class="product-detail-copy"><p class="eyebrow">${escapeHtml(label)}</p><h2>${escapeHtml(title)}</h2></div><div class="product-detail-text"><p>${escapeHtml(first)}</p><p>${escapeHtml(second)}</p></div>${figure}</article>`;
 	}).join("")}</section>`;
 	const coming = product.coming ? `<section class="product-detail-coming shell"><p class="eyebrow">What is coming</p><h2>Still moving forward.</h2><div>${product.coming.map(([title, status]) => `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(status)}</p></article>`).join("")}</div></section>` : "";
