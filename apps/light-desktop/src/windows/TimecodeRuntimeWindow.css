@@ -1128,12 +1128,12 @@
 	color: #dce7fa;
 }
 .timecode-editor-lane.lane-cue_list {
-	height: 148px;
-	min-height: 148px;
+	height: 160px;
+	min-height: 160px;
 }
 .timecode-editor-lane.cue-expanded {
-	height: 340px;
-	min-height: 340px;
+	height: 280px;
+	min-height: 280px;
 }
 .timecode-timeline-item.item-clip {
 	--timecode-clip-handle-height: 24px;
@@ -1166,7 +1166,7 @@
 .timecode-cue-envelope-hit {
 	position: absolute;
 	top: 30px;
-	height: 76px;
+	height: 86px;
 	padding: 0;
 	background: transparent;
 	border: 0;
@@ -1179,7 +1179,7 @@
 }
 .timecode-cue-name {
 	position: absolute;
-	top: 106px;
+	top: 112px;
 	z-index: 5;
 	display: block;
 	overflow: hidden;
@@ -1221,7 +1221,9 @@
 }
 .timecode-cue-trigger-label {
 	position: absolute;
-	top: 141px;
+	top: 28px;
+	margin-left: 26px;
+	z-index: 7;
 	max-width: 240px;
 	padding: 2px 5px;
 	white-space: nowrap;
@@ -1269,42 +1271,28 @@
 	border-radius: 5px;
 }
 .timecode-cue-edit-rail {
-	position: absolute;
-	left: 0;
-	right: 0;
-	height: 58px;
-	border-top: 1px solid #3b4c5b;
+ position: absolute; inset: 0; pointer-events: none;
 }
-.timecode-cue-edit-rail.in {
-	top: 190px;
-}
-.timecode-cue-edit-rail.out {
-	top: 264px;
-}
-.timecode-cue-edit-rail small {
-	position: sticky;
-	left: 6px;
-	top: 2px;
-	font-size: 0.65rem;
-	color: #a9dfee;
-}
-.timecode-cue-edit-rail.out small {
-	color: #edbb88;
-}
-.timecode-cue-edit-line {
-	position: absolute;
-	top: 24px;
-	height: 2px;
-	background: #78c4da;
-}
-.timecode-cue-edit-rail.out .timecode-cue-edit-line {
-	background: #d49c65;
-}
+.timecode-cue-edit-rail:not(.reference) small:not(.timecode-cue-point-caption),
+.timecode-cue-edit-rail:not(.reference) .timecode-cue-edit-line { display: none; }
 .timecode-cue-edit-rail.reference {
-	border-top-style: dashed;
-	background: #57402b22;
+ top: 282px; bottom: auto; height: 62px; border-top: 1px dashed #6f5b46;
+ background: #57402b22; pointer-events: auto; overflow-x: auto; overflow-y: hidden;
 }
-
+.timecode-cue-edit-rail.reference small:not(.timecode-cue-point-caption) { position: sticky; left: 8px; top: 0; color: #edbb88; font-size: .65rem; }
+.timecode-cue-edit-rail.reference .timecode-cue-edit-line { position: absolute; top: 28px; height: 1px; background: #d49c65; }
+.timecode-cue-fade-guide { fill: none; stroke: #a9e3f0; stroke-width: 2; }
+.timecode-cue-fade-guide.out { stroke: #edbb88; }
+.timecode-cue-point-caption { position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); color: #c3dfe7; font-size: .65rem; white-space: nowrap; pointer-events: none; }
+.timecode-cue-point-leader { position: absolute; left: 21px; width: 0; border-left: 1px solid #8bb5c4; pointer-events: none; }
+.timecode-cue-point.out .timecode-cue-point-leader { border-color: #d49c65; }
+.timecode-cue-point.displaced .timecode-cue-point-caption { top: 12px; bottom: auto; left: 42px; transform: none; }
+.timecode-cue-point.out .timecode-cue-point-caption { color: #edbb88; }
+.timecode-cue-point.trigger .timecode-cue-point-caption { display: none; }
+.timecode-cue-point.trigger::after { content: ""; position: absolute; top: 28px; left: 21px; height: 160px; border-left: 1px dashed #d9a62c; pointer-events: none; }
+.timecode-cue-clip-contents.expanded .timecode-cue-timing:not(.selected) { opacity: .35; }
+.timecode-editor-lane.cue-expanded:has(.has-out-reference) { height: 354px; min-height: 354px; }
+.timecode-cue-edit-rail.reference .timecode-cue-point-caption { bottom: auto; top: 26px; }
 @media (max-width: 700px) {
 	.timecode-editor-inspector {
 		flex-basis: 230px;
@@ -1312,7 +1300,7 @@
 }
 
 .timecode-cue-edit-rail.reference { overflow-x: auto; overflow-y: hidden; pointer-events: auto; }
-.timecode-cue-reference-axis { display: block; position: relative; height: 58px; }
+.timecode-cue-reference-axis { display: block; position: relative; height: 100%; }
 .timecode-editor-lane.cue-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
 .timecode-editor-lane-label .timecode-cue-close { width: calc(100% - 16px); height: 36px; min-height: 36px; margin: 0 8px; align-self: center; }
 
@@ -1321,3 +1309,24 @@
 .timecode-timeline-heading { position: sticky; top: 0; z-index: 8; height: 2rem; background: #171823; pointer-events: none; }
 .timecode-editor-lane.main-audio { position: sticky; top: 2rem; z-index: 7; background: #1d2030; box-shadow: 0 2px 0 #50586b; }
 .timecode-lane-select.main-audio-label.ui-button { cursor: default; }
+
+/* Grouped timeline navigation retains the same time axis at every level. */
+.timecode-section-row { position: relative; min-height: 40px; border-bottom: 1px solid #393b49; background: #171c25; }
+.timecode-section-row > .timecode-editor-lane-label { position: sticky; min-height: 40px; z-index: 5; }
+.timecode-section-toggle.ui-button { display: flex; gap: 7px; width: 100%; min-height: 40px; height: 100%; justify-content: flex-start; border: 0; border-radius: 0; padding: 8px; background: transparent; text-align: left; }
+.timecode-section-toggle strong { font-weight: 600; }
+.timecode-section-toggle small { margin-left: auto; color: #9ca4b4; }
+.timecode-section-row.collapsed { display: flex; align-items: stretch; }
+.timecode-section-row.collapsed > .timecode-editor-lane-label { flex: 0 0 var(--timecode-lane-header-width); height: auto; }
+.timecode-section-summary { flex: 1; min-width: 0; display: grid; }
+.timecode-section-miniature.ui-button { position: relative; display: block; width: 100%; min-height: 28px; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; text-align: left; overflow: hidden; }
+.timecode-section-miniature.ui-button:hover { background: rgb(88 212 239 / 8%); }
+.timecode-section-miniature svg { position: absolute; inset: 6px 0; width: 100%; height: calc(100% - 12px); }
+.timecode-section-miniature polyline { fill: none; stroke: #d4ac58; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.timecode-section-miniature polygon, .timecode-section-miniature rect { fill: rgb(88 180 210 / 20%); stroke: #78bbce; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.timecode-section-miniature span { position: relative; display: inline-block; margin-left: 8px; padding: 2px 4px; color: #d3d9e2; background: #171c25; font-size: 0.72rem; }
+.timecode-editor-lane.lane-speed_group.lane-expanded { height: 170px; min-height: 170px; max-height: 170px; }
+.timecode-editor-lane.lane-speed_group:not(.lane-expanded) .timecode-timeline-item { visibility: hidden; }
+.timecode-editor-lane.lane-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
+
+@media (pointer: coarse) { .timecode-section-miniature.ui-button { min-height: 44px; } }

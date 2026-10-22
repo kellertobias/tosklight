@@ -2,10 +2,15 @@ import { Button } from "@tosklight/ui";
 import type { CSSProperties } from "react";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
 import type { CueClipTimingRow } from "./cueClipTiming";
+
+export { envelopePoints } from "./cueEnvelopeGeometry";
+import { envelopePoints } from "./cueEnvelopeGeometry";
+
 export function CueEnvelope({
 	row,
 	index,
 	isSelected,
+	expanded = false,
 	last,
 	position,
 	width,
@@ -15,6 +20,7 @@ export function CueEnvelope({
 	row: CueClipTimingRow;
 	index: number;
 	isSelected: boolean;
+	expanded?: boolean;
 	last: boolean;
 	position(frame: number): number;
 	width: number;
@@ -24,13 +30,25 @@ export function CueEnvelope({
 	const left = position(row.startFrame);
 	const right = position(last ? clip.end_frame : row.outFade.endFrame);
 	const label = `Cue ${row.cue.number} ${row.cue.name || "Untitled"}`;
-	const inStart = Math.min(width, position(row.inFade.startFrame));
-	const inEnd = Math.min(width, position(row.inFade.endFrame));
+	const inStart = position(row.inFade.startFrame);
+	const inEnd = position(row.inFade.endFrame);
 	const outStart = last
-		? width
-		: Math.min(width, position(row.outFade.startFrame));
-	const outEnd = Math.min(width, right);
-	const points = `${left},65 ${inStart},65 ${inEnd},8 ${Math.max(inEnd, outStart)},8 ${outEnd},65`;
+		? Math.max(width, inEnd)
+		: position(row.outFade.startFrame);
+	const outEnd = last ? outStart : right;
+	const base = expanded ? 196 : 80;
+	const peak = expanded ? 28 : 12;
+	const points = envelopePoints(
+		left,
+		inStart,
+		inEnd,
+		outStart,
+		outEnd,
+		base,
+		peak,
+		0,
+		width,
+	);
 	return (
 		<span
 			key={row.cue.id ?? index}
@@ -40,10 +58,24 @@ export function CueEnvelope({
 			<svg
 				className="timecode-cue-envelope"
 				width={width}
-				height="76"
+				height={expanded ? 202 : 86}
 				aria-hidden="true"
 			>
 				<polygon points={points} />
+				{isSelected && (
+					<>
+						<polyline
+							className="timecode-cue-fade-guide in"
+							points={`${inStart},${base} ${inEnd},${peak}`}
+						/>
+						{!last && (
+							<polyline
+								className="timecode-cue-fade-guide out"
+								points={`${outStart},${peak} ${outEnd},${base}`}
+							/>
+						)}
+					</>
+				)}
 			</svg>
 			<Button
 				variant="ghost"
@@ -55,6 +87,7 @@ export function CueEnvelope({
 				style={{
 					left,
 					width: Math.max(20, Math.min(width, right) - left),
+					height: expanded ? 202 : 86,
 					clipPath: `polygon(0 100%, ${Math.max(0, inEnd - left)}px 0, 100% 0, 100% 100%)`,
 				}}
 				onPointerDown={(event) => event.stopPropagation()}
@@ -73,6 +106,7 @@ export function CueEnvelope({
 				style={{
 					left,
 					maxWidth: Math.max(28, position(row.handoverFrame) - left - 4),
+					top: expanded ? 234 : 112,
 				}}
 				onPointerDown={(event) => event.stopPropagation()}
 				onClick={(event) => {

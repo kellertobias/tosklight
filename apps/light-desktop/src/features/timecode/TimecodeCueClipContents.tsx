@@ -331,7 +331,7 @@ export function CueListClipContents({
 	return (
 		<>
 			<span
-				className={`timecode-cue-clip-contents ${expanded ? "expanded" : ""}`}
+				className={`timecode-cue-clip-contents ${expanded ? "expanded" : ""} ${selected?.outFadeReference ? "has-out-reference" : ""}`}
 				aria-busy={saving}
 			>
 				{projected.rows.map((row, index) => {
@@ -341,6 +341,7 @@ export function CueListClipContents({
 							row={row}
 							index={index}
 							isSelected={expanded && row.cue.id === selectedCueId}
+							expanded={expanded}
 							last={index === projected.rows.length - 1}
 							position={position}
 							width={width}

@@ -72,7 +72,14 @@ export function LaneLabel({
 	onCloseCue?(): void;
 	pinned?: boolean;
 }) {
-	const kind = lane.content.kind.replaceAll("_", " ");
+	const kind =
+		lane.content.kind === "speed_group"
+			? `Speed Group ${lane.content.group}`
+			: lane.content.kind === "cue_list"
+				? "Cuelist"
+				: lane.content.kind === "audio_player"
+					? "Audio Player"
+					: "Audio volume";
 	return (
 		<div className="timecode-editor-lane-label">
 			<Button
@@ -100,7 +107,11 @@ export function LaneLabel({
 					size="compact"
 					onPointerDown={(event) => event.stopPropagation()}
 					onClick={onCloseCue}
-					aria-label="Close cue editor"
+					aria-label={
+						lane.content.kind === "speed_group"
+							? "Close speed group editor"
+							: "Close cue editor"
+					}
 				>
 					Close
 				</Button>

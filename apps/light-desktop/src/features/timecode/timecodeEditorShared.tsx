@@ -150,13 +150,21 @@ export function AudioLaneFileName({ name }: { name?: string | null }) {
 	return <span className="timecode-audio-lane-file">{name}</span>;
 }
 
-/** Main audio stays first in both timeline and overview without rewriting the show. */
+/** Stable display sections do not rewrite the portable show's lane order. */
 export function displayedTimecodeLanes(definition: TimecodeDefinition) {
-	return definition.audio
-		? [...definition.lanes].sort(
-				(left, right) =>
-					Number(right.content.kind === "audio_volume") -
-					Number(left.content.kind === "audio_volume"),
-			)
-		: definition.lanes;
+	const rank = (
+		kind: TimecodeDefinition["lanes"][number]["content"]["kind"],
+	) =>
+		kind === "audio_volume"
+			? definition.audio
+				? 0
+				: 4
+			: kind === "speed_group"
+				? 1
+				: kind === "cue_list"
+					? 2
+					: 3;
+	return [...definition.lanes].sort(
+		(left, right) => rank(left.content.kind) - rank(right.content.kind),
+	);
 }

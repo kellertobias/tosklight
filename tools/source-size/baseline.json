@@ -2,7 +2,6 @@
   "version": 1,
   "limits": {"file":1200,"function":150},
   "files": {
-    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1588,
     "crates/media/adapters/library/src/storage.rs": 1215
   },
@@ -12,7 +11,6 @@
     "apps/light-desktop/src/components/modals/VisualizationPaneSettings.tsx::javascript:function:WidgetEditor:6778b594cf10:1": 271,
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,
-    "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimelineOverview:16fafd302031:1": 211,
     "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 190,
     "apps/light-desktop/src/windows/cuelistWindow/CuelistPool.tsx::javascript:function:useCuelistPoolActions:58fe5a3d2a5d:1": 164,
     "apps/light-desktop/src/windows/cuelistWindow/CueProperties.tsx::javascript:function:CuePropertyModal:960359513099:1": 243,

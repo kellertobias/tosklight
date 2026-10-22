@@ -572,7 +572,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(
 			[
 				...view.container.querySelectorAll(
-					".timecode-editor-lane-label strong",
+					".timecode-editor-lane .timecode-editor-lane-label strong",
 				),
 			].map((label) => label.textContent),
 		).toEqual(["Audio", "Second Lane", "First Lane"]);
@@ -692,7 +692,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(lane).toHaveClass("selected");
 		expect(
 			within(lane as HTMLElement).getByRole("button", {
-				name: /Opening.*cue list/i,
+				name: /Opening.*Cuelist/i,
 			}),
 		).toBeInTheDocument();
 		const clip = within(lane as HTMLElement).getByTitle(
@@ -1566,7 +1566,7 @@ it("pins main audio first without rewriting stored lane order or allowing its he
  const stored={...definition,lanes:[other,audio]};
  const commit=vi.fn(), preview=vi.fn(), begin=vi.fn();
  const view=render(<TimecodeTimelineEditor definition={stored} frame={0} fps={44} cueLists={[]} audioPlayers={[]} onScrub={vi.fn()} onCommit={commit} onPreview={preview} onBeginGesture={begin} onEndGesture={vi.fn()}/>);
- expect([...view.container.querySelectorAll(".timecode-editor-lane-label strong")].map(n=>n.textContent)).toEqual(["Audio","Other"]);
+ expect([...view.container.querySelectorAll(".timecode-editor-lane .timecode-editor-lane-label strong")].map(n=>n.textContent)).toEqual(["Audio","Other"]);
  const header=screen.getByRole("button",{name:/Audio.*Pinned main audio/});
  fireEvent.pointerDown(header,{pointerId:55,button:0,clientY:40});
  fireEvent.pointerMove(window,{pointerId:55,clientX:100,clientY:200});

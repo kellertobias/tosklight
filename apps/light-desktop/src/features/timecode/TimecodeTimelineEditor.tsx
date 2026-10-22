@@ -1,3 +1,17 @@
+import {
+	useTimelineSections,
+	useTimelineSelectedLane,
+} from "./useTimelineSections";
+import { TimelineOverview } from "./TimecodeTimelineOverview";
+import {
+	TIMECODE_LANE_SECTIONS,
+	TimecodeLaneSection,
+} from "./TimecodeLaneSection";
+import {
+	speedKeyframePositions,
+	speedGroupLinePoints,
+} from "./speedLaneGeometry";
+export { speedGroupLinePoints } from "./speedLaneGeometry";
 import { Ruler } from "./TimecodeRuler";
 import { timelineSelectionContext } from "./timelineSelectionContext";
 import {
@@ -62,7 +76,7 @@ import {
 	TIMECODE_SPEED_GROUPS,
 	TimecodeSpeedGroupChooser,
 } from "./TimecodeSpeedGroupChooser";
-import { clearTimecodeEncoderDeck } from "./timecodeEncoderBridge";
+import { useTimelineEncoderOwner } from "./useTimelineEncoderOwner";
 import { useTimecodeEncoderSlots } from "./timecodeEncoderSlots";
 import {
 	useTimelineActions,
@@ -103,6 +117,8 @@ export interface TimecodeTimelineEditorHandle {
 }
 
 function TimelineCanvas(props: {
+	collapsedSections: Record<string, boolean>;
+	onToggleSection(kind: string): void;
 	definition: TimecodeDefinition;
 	frame: number;
 	fps: number;
@@ -151,7 +167,6 @@ function TimelineCanvas(props: {
 	): void;
 	onCueTimingError?(message: string): void;
 }) {
-	const displayedLanes = displayedTimecodeLanes(props.definition);
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return;
 		scrubAt(event.clientX, event.currentTarget);
@@ -202,9 +217,7 @@ function TimelineCanvas(props: {
 						Settings.
 					</p>
 				)}
-				{displayedLanes.map((lane) => (
-					<EditorLane key={lane.id} {...props} lane={lane} />
-				))}
+				<TimelineLanes {...props} />
 				{props.items
 					.filter((item) => item.kind === "marker")
 					.map((item) => (
@@ -241,215 +254,38 @@ function TimelineCanvas(props: {
 	);
 }
 
-function TimelineOverview({
-	definition,
-	items,
-	duration,
-	scrollLeft,
-	viewportWidth,
-	totalWidth,
-	scrollRef,
-	viewportId,
-	minimumVisibleFraction,
-	onScrollLeftChange,
-	onVisibleRangeChange,
-}: {
-	definition: TimecodeDefinition;
-	items: readonly TimelineItem[];
-	duration: number;
-	scrollLeft: number;
-	viewportWidth: number;
-	totalWidth: number;
-	scrollRef: RefObject<HTMLDivElement | null>;
-	viewportId: string;
-	minimumVisibleFraction: number;
-	onScrollLeftChange(scrollLeft: number): void;
-	onVisibleRangeChange(startFraction: number, endFraction: number): void;
-}) {
-	const maximumScroll = Math.max(0, totalWidth - viewportWidth);
-	const visibleWidth = Math.min(100, (viewportWidth / totalWidth) * 100);
-	const visibleLeft = Math.min(
-		100 - visibleWidth,
-		Math.max(0, (scrollLeft / totalWidth) * 100),
-	);
-	const visibleStart = visibleLeft / 100;
-	const visibleEnd = (visibleLeft + visibleWidth) / 100;
-	const drag = useRef<{
-		pointerId: number;
-		mode: "start" | "end" | "pan";
-		grabOffset: number;
-	} | null>(null);
-	const fractionAt = (clientX: number, overview: HTMLElement) => {
-		const bounds = overview.getBoundingClientRect();
-		return Math.max(
-			0,
-			Math.min(1, (clientX - bounds.left) / Math.max(1, bounds.width)),
-		);
-	};
-	const panTo = (leftFraction: number) => {
-		const next = Math.max(
-			0,
-			Math.min(maximumScroll, leftFraction * totalWidth),
-		);
-		if (scrollRef.current) scrollRef.current.scrollLeft = next;
-		onScrollLeftChange(next);
-	};
-	const beginDrag = (
-		event: ReactPointerEvent<HTMLDivElement>,
-		overview: HTMLElement,
-	) => {
-		const fraction = fractionAt(event.clientX, overview);
-		const edge =
-			event.target instanceof Element
-				? event.target.closest<HTMLElement>("[data-overview-edge]")?.dataset
-						.overviewEdge
-				: undefined;
-		if (edge === "start" || edge === "end") {
-			drag.current = {
-				pointerId: event.pointerId,
-				mode: edge,
-				grabOffset: 0,
-			};
-			return;
-		}
-		const inside = fraction >= visibleStart && fraction <= visibleEnd;
-		const grabOffset = inside ? fraction - visibleStart : visibleWidth / 200;
-		drag.current = {
-			pointerId: event.pointerId,
-			mode: "pan",
-			grabOffset,
-		};
-		panTo(fraction - grabOffset);
-	};
-	const moveDrag = (clientX: number, overview: HTMLElement) => {
-		const current = drag.current;
-		if (!current) return;
-		const fraction = fractionAt(clientX, overview);
-		if (current.mode === "start") {
-			onVisibleRangeChange(
-				Math.max(0, Math.min(visibleEnd - minimumVisibleFraction, fraction)),
-				visibleEnd,
-			);
-			return;
-		}
-		if (current.mode === "end") {
-			onVisibleRangeChange(
-				visibleStart,
-				Math.min(1, Math.max(visibleStart + minimumVisibleFraction, fraction)),
-			);
-			return;
-		}
-		panTo(fraction - current.grabOffset);
-	};
-	const lanes = [
-		...(definition.audio ? [{ id: "main-audio", kind: "audio" }] : []),
-		...displayedTimecodeLanes(definition).map((lane) => ({
-			id: lane.id,
-			kind: lane.content.kind,
-		})),
-	];
-	const laneCount = Math.max(1, lanes.length);
-	const laneHeight = Math.max(1, Math.min(3, Math.floor(44 / laneCount)));
-	const laneGap = laneHeight * laneCount + laneCount - 1 <= 44 ? 1 : 0;
+function TimelineLanes(props: Parameters<typeof TimelineCanvas>[0]) {
+	const displayedLanes = displayedTimecodeLanes(props.definition);
 	return (
-		<div
-			className="timecode-timeline-overview"
-			role="scrollbar"
-			aria-label="Timeline overview"
-			aria-controls={viewportId}
-			aria-orientation="horizontal"
-			aria-valuemin={0}
-			aria-valuemax={Math.round(maximumScroll)}
-			aria-valuenow={Math.round(scrollLeft)}
-			tabIndex={0}
-			onPointerDown={(event) => {
-				event.currentTarget.setPointerCapture(event.pointerId);
-				beginDrag(event, event.currentTarget);
-			}}
-			onPointerMove={(event) => {
-				if (event.currentTarget.hasPointerCapture(event.pointerId))
-					moveDrag(event.clientX, event.currentTarget);
-			}}
-			onPointerUp={(event) => {
-				if (drag.current?.pointerId === event.pointerId) drag.current = null;
-			}}
-			onPointerCancel={(event) => {
-				if (drag.current?.pointerId === event.pointerId) drag.current = null;
-			}}
-			onKeyDown={(event) => {
-				if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-				event.preventDefault();
-				const direction = event.key === "ArrowRight" ? 1 : -1;
-				if (scrollRef.current)
-					panTo(
-						(scrollRef.current.scrollLeft + direction * viewportWidth * 0.1) /
-							totalWidth,
-					);
-			}}
-		>
-			<div
-				className="timecode-timeline-overview-lanes"
-				style={
-					{
-						"--timecode-overview-lane-height": `${laneHeight}px`,
-						"--timecode-overview-lane-gap": `${laneGap}px`,
-					} as CSSProperties
-				}
-				data-lane-height={laneHeight}
-				aria-hidden="true"
-			>
-				{lanes.map((lane) => (
-					<span
-						key={lane.id}
-						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
-					>
-						{items
-							.filter((item) => item.laneId === lane.id)
-							.map((item) => (
-								<i
-									key={item.selection.itemId}
-									style={{
-										left: `${(item.frame / duration) * 100}%`,
-										width: item.endFrame
-											? `${Math.max(0.25, ((item.endFrame - item.frame) / duration) * 100)}%`
-											: undefined,
-									}}
-								/>
-							))}
-					</span>
-				))}
-			</div>
-			{definition.markers.map((marker) => (
-				<i
-					key={marker.id}
-					className="timecode-timeline-overview-marker"
-					style={{
-						left: `${(marker.frame / duration) * 100}%`,
-						background: markerColorOption(marker.color).value,
-					}}
-					aria-hidden="true"
+		<>
+			{" "}
+			{props.definition.audio &&
+				displayedLanes
+					.filter((lane) => lane.content.kind === "audio_volume")
+					.map((lane) => <EditorLane key={lane.id} {...props} lane={lane} />)}
+			{TIMECODE_LANE_SECTIONS.map((section) => (
+				<TimecodeLaneSection
+					key={section.kind}
+					{...section}
+					lanes={displayedLanes.filter(
+						(lane) => lane.content.kind === section.kind,
+					)}
+					collapsed={Boolean(props.collapsedSections[section.kind])}
+					duration={props.duration}
+					cueLists={props.cueLists}
+					timingDefaults={props.timingDefaults}
+					onToggle={() => props.onToggleSection(section.kind)}
+					onSelect={(laneId) => props.onSelectLane(laneId)}
+					renderLane={(lane) => (
+						<EditorLane key={lane.id} {...props} lane={lane} />
+					)}
 				/>
 			))}
-			<span
-				className="timecode-timeline-overview-visible"
-				style={{ left: `${visibleLeft}%`, width: `${visibleWidth}%` }}
-			>
-				<i
-					className="timecode-timeline-overview-handle handle-start"
-					data-overview-edge="start"
-					role="separator"
-					aria-label="Resize timeline overview from start"
-					aria-orientation="vertical"
-				/>
-				<i
-					className="timecode-timeline-overview-handle handle-end"
-					data-overview-edge="end"
-					role="separator"
-					aria-label="Resize timeline overview from end"
-					aria-orientation="vertical"
-				/>
-			</span>
-		</div>
+			{!props.definition.audio &&
+				displayedLanes
+					.filter((lane) => lane.content.kind === "audio_volume")
+					.map((lane) => <EditorLane key={lane.id} {...props} lane={lane} />)}
+		</>
 	);
 }
 
@@ -471,7 +307,7 @@ function EditorLane(
 			: undefined;
 	return (
 		<div
-			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
+			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
 			data-lane-id={lane.id}
 			onPointerDown={(event) => {
 				const target = event.target as Element;
@@ -519,7 +355,8 @@ function EditorLane(
 				consumeLaneDragClick={props.consumeLaneDragClick}
 				onSelectLane={props.onSelectLane}
 				expanded={
-					props.selectedLaneId === lane.id && Boolean(props.selectedCueId)
+					props.selectedLaneId === lane.id &&
+					(Boolean(props.selectedCueId) || lane.content.kind === "speed_group")
 				}
 				onCloseCue={props.onCloseCue}
 			/>
@@ -733,50 +570,6 @@ function TimelineItemButton({
 	);
 }
 
-type SpeedKeyframe = Extract<
-	TimecodeDefinition["lanes"][number]["content"],
-	{ kind: "speed_group" }
->["keyframes"][number];
-
-function speedKeyframePositions(
-	keyframes: readonly SpeedKeyframe[],
-): Map<string, number> {
-	if (!keyframes.length) return new Map();
-	const bpms = keyframes.map((keyframe) => keyframe.bpm);
-	const minimum = Math.min(...bpms);
-	const maximum = Math.max(...bpms);
-	const span = maximum - minimum;
-	return new Map(
-		keyframes.map((keyframe) => [
-			keyframe.id,
-			span === 0 ? 50 : 88 - ((keyframe.bpm - minimum) / span) * 76,
-		]),
-	);
-}
-
-export function speedGroupLinePoints(
-	keyframes: readonly SpeedKeyframe[],
-	durationFrames: number,
-): string {
-	const sorted = [...keyframes].sort((left, right) => left.frame - right.frame);
-	const first = sorted[0];
-	if (!first) return "";
-	const positions = speedKeyframePositions(sorted);
-	const duration = Math.max(1, durationFrames);
-	const point = (frame: number, keyframe: SpeedKeyframe) =>
-		`${Math.max(0, Math.min(100, (frame / duration) * 100))},${positions.get(keyframe.id) ?? 50}`;
-	const points = [point(0, first), point(first.frame, first)];
-	for (let index = 1; index < sorted.length; index += 1) {
-		const previous = sorted[index - 1];
-		const current = sorted[index];
-		if (!previous || !current) continue;
-		points.push(point(current.frame, previous), point(current.frame, current));
-	}
-	const last = sorted.at(-1);
-	if (last) points.push(point(duration, last));
-	return points.join(" ");
-}
-
 function useLaneReorder({
 	definition,
 	onPreview,
@@ -817,6 +610,13 @@ function useLaneReorder({
 						(lane.id === targetLane || lane.id === current.laneId) &&
 						lane.content.kind === "audio_volume",
 				)
+			)
+				return;
+			if (
+				latest.current.lanes.find((lane) => lane.id === targetLane)?.content
+					.kind !==
+				latest.current.lanes.find((lane) => lane.id === current.laneId)?.content
+					.kind
 			)
 				return;
 			const next = reorderTimelineLane(
@@ -890,10 +690,12 @@ export const TimecodeTimelineEditor = forwardRef<
 ) {
 	type Selection = TimecodeEditorSelection | null;
 	const [selection, setSelection] = useState<Selection>(null);
+
 	const [cueInspectorHost, setCueInspectorHost] =
 		useState<HTMLDivElement | null>(null);
 	const [selectedCueId, setSelectedCueId] = useSelectedCue(selection);
-	const [selectedLaneId, setSelectedLaneId] = useState<string | null>(null);
+	const [selectedLaneId, setSelectedLaneId] =
+		useTimelineSelectedLane(selection);
 	const [speedGroup, setSpeedGroup] = useState("A");
 	const [speedGroupChooserOpen, setSpeedGroupChooserOpen] = useState(false);
 	const [cueListChooserOpen, setCueListChooserOpen] = useState(false);
@@ -926,7 +728,17 @@ export const TimecodeTimelineEditor = forwardRef<
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const activeLaneId =
 		selection && "laneId" in selection ? selection.laneId : selectedLaneId;
-	const encoderOwner = useRef(Symbol("timecode-editor")).current;
+	const { collapsedSections, onToggleSection, onSelectLane, onCloseCue } =
+		useTimelineSections({
+			definition,
+			activeLaneId,
+			items,
+			setSelection,
+			setSelectedLaneId,
+			setSelectedCueId,
+			prepareInspectorClose,
+		});
+	const encoderOwner = useTimelineEncoderOwner();
 	const {
 		keyframeItems,
 		laneIndex,
@@ -937,9 +749,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		speedKeyframe,
 		volumeKeyframe,
 	} = timelineSelectionContext(definition, items, selection, activeLaneId);
-	useEffect(() => {
-		if (selection && "laneId" in selection) setSelectedLaneId(selection.laneId);
-	}, [selection]);
 
 	const startDrag = useTimelineDrag({
 		definition,
@@ -1069,7 +878,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		onScrub,
 		onCommit,
 	});
-	useEffect(() => () => clearTimecodeEncoderDeck(encoderOwner), [encoderOwner]);
 
 	const { placeCueStart, setClipFade, moveClip } = clipEditors(
 		definition,
@@ -1102,6 +910,8 @@ export const TimecodeTimelineEditor = forwardRef<
 					<TimelineCanvas
 						{...{
 							definition,
+							collapsedSections,
+							onToggleSection,
 							frame,
 							fps,
 							waveformPeaks,
@@ -1122,18 +932,10 @@ export const TimecodeTimelineEditor = forwardRef<
 							onSelectCue: setSelectedCueId,
 							inspectorHost: cueInspectorHost,
 							onMoveClip: moveClip,
-							onCloseCue: () => {
-								prepareInspectorClose();
-								setSelectedCueId(null);
-								setSelection(null);
-							},
+							onCloseCue,
 							onScroll: setScrollLeft,
 							viewportId,
-							onSelectLane: (laneId: string) => {
-								setSelectedLaneId(laneId);
-								const first = items.find((item) => item.laneId === laneId);
-								setSelection(first?.selection ?? null);
-							},
+							onSelectLane,
 							selectedLaneId: activeLaneId,
 							cueLists,
 							timingDefaults,

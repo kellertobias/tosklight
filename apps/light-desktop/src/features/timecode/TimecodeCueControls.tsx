@@ -15,6 +15,8 @@ export function FrameHandle({
 	onCommit,
 	onBegin,
 	className = "",
+	caption,
+	anchorTop,
 }: {
 	label: string;
 	frame: number;
@@ -27,6 +29,8 @@ export function FrameHandle({
 	onCommit(frame: number): void;
 	onBegin?(event: ReactPointerEvent): void;
 	className?: string;
+	caption?: string;
+	anchorTop?: number;
 }) {
 	const origin = useRef<{ pointerId: number; x: number; frame: number } | null>(
 		null,
@@ -98,7 +102,20 @@ export function FrameHandle({
 			}}
 		>
 			{" "}
-			<span aria-hidden="true" />{" "}
+			<span aria-hidden="true" />
+			{anchorTop !== undefined && top !== undefined && anchorTop !== top && (
+				<i
+					className="timecode-cue-point-leader"
+					aria-hidden="true"
+					style={{
+						top: 22 + Math.min(0, anchorTop - top),
+						height: Math.abs(anchorTop - top),
+					}}
+				/>
+			)}
+			{caption && (
+				<small className="timecode-cue-point-caption">{caption}</small>
+			)}{" "}
 		</span>
 	);
 }

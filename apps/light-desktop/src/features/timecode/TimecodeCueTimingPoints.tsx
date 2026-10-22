@@ -41,6 +41,43 @@ interface CueTimingPointsProps {
 	): void;
 }
 
+/** Keep touching 44px targets separate while leaders preserve the true time/corner. */
+function pointPlacement(
+	selected: CueClipTimingRow,
+	kind: CueFadeKind,
+	edge: CueFadeEdge,
+	pixelsPerFrame: number,
+) {
+	const upperCollision =
+		!selected.outFadeReference &&
+		Math.abs(
+			(selected.inFade.endFrame - selected.outFade.startFrame) * pixelsPerFrame,
+		) < 44;
+	const lowerCollision =
+		!selected.outFadeReference &&
+		Math.abs(
+			(selected.inFade.startFrame - selected.outFade.endFrame) * pixelsPerFrame,
+		) < 44;
+
+	const reference = kind === "out" && selected.outFadeReference;
+	const anchorTop = reference
+		? edge === "start"
+			? 14
+			: 44
+		: (kind === "in") === (edge === "start")
+			? 226
+			: 58;
+	const displaced =
+		!reference &&
+		((kind === "out" && edge === "start" && upperCollision) ||
+			(kind === "in" && edge === "start" && lowerCollision));
+	return {
+		anchorTop,
+		displaced,
+		pointTop: anchorTop + (displaced ? (kind === "out" ? 48 : -48) : 0),
+	};
+}
+
 export function CueTimingPoints({
 	selected,
 	cueList,
@@ -70,6 +107,7 @@ export function CueTimingPoints({
 			</span>
 			<FrameHandle
 				label={`Cue ${selected.cue.number} Trigger`}
+				caption="Trigger"
 				frame={triggerPreview ?? selected.startFrame}
 				minimum={first ? 0 : (triggerBounds?.minimum ?? selected.startFrame)}
 				maximum={
@@ -78,7 +116,7 @@ export function CueTimingPoints({
 						: (triggerBounds?.maximum ?? selected.startFrame)
 				}
 				left={position(triggerPreview ?? selected.startFrame)}
-				top={162}
+				top={38}
 				disabled={!canMoveTrigger}
 				onPreview={setTriggerPreview}
 				onCommit={placeTrigger}
@@ -117,6 +155,7 @@ export function CueTimingPoints({
 							</small>
 							<span
 								className="timecode-cue-edit-line"
+								aria-hidden="true"
 								style={{
 									left: x(range.startFrame),
 									width: Math.max(
@@ -136,6 +175,13 @@ export function CueTimingPoints({
 									kind,
 									edge,
 								);
+								const { anchorTop, pointTop, displaced } = pointPlacement(
+									selected,
+									kind,
+									edge,
+									pixelsPerFrame,
+								);
+
 								return (
 									<FrameHandle
 										key={edge}
@@ -144,13 +190,8 @@ export function CueTimingPoints({
 										minimum={bounds?.minimum ?? frame}
 										maximum={bounds?.maximum ?? frame}
 										left={x(frame)}
-										top={
-											range.startFrame === range.endFrame
-												? edge === "start"
-													? 10
-													: 42
-												: 24
-										}
+										top={pointTop}
+										anchorTop={anchorTop}
 										disabled={
 											saving ||
 											!editable ||
@@ -159,7 +200,8 @@ export function CueTimingPoints({
 										}
 										onBegin={(event) => begin(event, selected, kind, edge)}
 										onCommit={(target) => commit(selected, kind, edge, target)}
-										className={`${kind} ${edge}`}
+										className={`${kind} ${edge} ${displaced ? "displaced" : ""}`}
+										caption={`${kind === "in" ? "In" : "Out"} ${edge === "start" ? "start" : "end"}`}
 									/>
 								);
 							})}

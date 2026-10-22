@@ -67,7 +67,10 @@ Tap a Macro to run it; right-click or use **SET** to edit it. The editor provide
 
 ## Timecode
 
-Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output. When a main audio file is linked, its waveform and volume lane stay at the top below the ruler while you scroll the other lanes; horizontal scrolling and zoom keep every lane aligned.
+Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output. Linked main audio stays pinned below the ruler while other lanes scroll. All lanes share the same horizontal scrolling and zoom.
+
+**Speed Groups** appear first below the main audio, followed by **Cuelists** and **Audio Players**. Tap a section heading to fold its lanes into one combined preview row; tap again to reveal them. Tap a Speed Group preview or lane name to enlarge it for editing. **Close** on the left restores its compact height.
+
 
 Scrubbing the ruler or dragging the playhead inspects a position without seeking live output. The **Playhead** encoder shows that editor position; press the title's transport position button to seek explicitly.
 
@@ -79,7 +82,7 @@ Select a clip to edit its Cue range, start/end behavior, or audio folder/file, r
 
 All Cues of a Cuelist share one lane as overlapping envelopes, with their names at the bottom. Tap an envelope or its name to expand that lane downward. Only the selected Cue's four **In delay**, **In fade**, **Out delay**, and **Out fade** points appear. Tap another Cue to edit it; **Close cue editor** on the left restores the compact lane. Exact settings are on the right. Opening or closing these settings keeps the timeline's zoom and left-hand position unchanged; use the overview or explicit Fit action to change the visible range.
 
-Drag the timing points to change the Cuelist's actual delays and fades, snapped to frames. Out delay begins at the handover to the next Cue. Dragging a linked Out timing explicitly replaces its link with independent timing. An In fade of zero inherits the desk's **Cue Fade**; an explicit Out fade of zero is immediate.
+Drag the timing points to change the Cuelist's actual delays and fades, snapped to frames. Out delay begins at the handover to the next Cue. When timing points meet, short connectors separate their handles so each remains draggable. Dragging a linked Out timing explicitly replaces its link with independent timing. An In fade of zero inherits the desk's **Cue Fade**; an explicit Out fade of zero is immediate.
 
 The labelled **Trigger** control and exact time show when a Cue advances. The first Cue starts with the clip. A manual-GO Cue's Trigger can be placed inside the clip without changing its manual trigger for ordinary playback. Until placed, it follows its predecessor's completion. Moving the clip carries the placement with it. Follow, Wait, Link, and Timecode triggers remain derived from the Cuelist; selecting a Cue does not convert them to manual placements. Trigger movement stops at legal neighbouring Cue boundaries.
 

@@ -66,12 +66,13 @@ export function CueListClipBody({
 		<>
 			<span
 				className="timecode-clip-handle"
+				title="Drag to move the Cuelist clip"
 				onPointerDown={(event) => {
 					event.stopPropagation();
 					startDrag(event, item.selection, item.frame, undefined, startVolume);
 				}}
 			>
-				<b>{item.label}</b>
+				<b>{cueList?.name ?? item.label}</b>
 				{cueList?.number !== undefined && <small>{cueList.number}</small>}
 			</span>
 			{onSetClipFade && (

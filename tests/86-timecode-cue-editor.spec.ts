@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import type { APIRequestContext, Locator, Page } from "@playwright/test";
 import type { CueList } from "../apps/light-desktop/src/api/types";
 import type { TimecodeDefinition } from "../apps/light-desktop/src/api/types/timecode";
 import type { ApiDriver } from "./bench/core/api";
@@ -14,7 +14,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await desk.open(api.baseUrl);
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
-		const envelope = editor.getByRole("button", { name: "Cue 1 First", exact: true });
+		const envelope = editor.getByRole("button", { name: "Cue 1 House out", exact: true });
 		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
 		await expect(envelope).toBeVisible();
 		await zoomIn(page, editor);
@@ -23,8 +23,9 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toBeVisible();
 		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
 		await page.screenshot({ path: testInfo.outputPath("timecode-cue-editor.png") });
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-cue-editor-detail.png") });
 		expect(await geometry(editor, viewport, envelope)).toEqual(before);
-		await editor.getByRole("button", { name: "Edit Cue 2 Second", exact: true }).tap();
+		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap();
 		await expect(editor.getByRole("slider", { name: "Cue 2 In fade", exact: true })).toBeVisible();
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toHaveCount(0);
 		await editor.getByRole("button", { name: "Close cue editor", exact: true }).tap();
@@ -36,7 +37,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 
 		// Closing a sidebar widens the viewport. At the right edge this must not let the browser
 		// clamp scrollLeft and move the left-hand time origin, even though the content is wider.
-		await editor.getByRole("button", { name: "Edit Cue 2 Second", exact: true }).tap();
+		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap();
 		const box = await viewport.boundingBox();
 		if (!box) throw new Error("Missing timeline viewport");
 		await page.mouse.move(box.x + box.width / 2, box.y + 25);
@@ -57,7 +58,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
-		await editor.getByRole("button", { name: "Cue 1 First", exact: true }).click();
+		await editor.getByRole("button", { name: "Cue 1 House out", exact: true }).click();
 		const readCue = async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[0];
 		for (const [label, field] of [
 			["In delay", "delay_millis"],
@@ -76,7 +77,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await page.reload();
 		await openEditor(page);
 		await zoomIn(page, editor);
-		await editor.getByRole("button", { name: "Cue 1 First", exact: true }).click();
+		await editor.getByRole("button", { name: "Cue 1 House out", exact: true }).click();
 		const frameOf = (millis: number | null | undefined) => Math.round((millis ?? 0) * 44 / 1000);
 		for (const [label, frame] of [
 			["In delay", 44 + frameOf(saved.delay_millis)],
@@ -108,7 +109,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
-		await editor.getByRole("button", { name: "Cue 2 Second", exact: true }).click();
+		await editor.getByRole("button", { name: "Cue 2 Verse wash", exact: true }).click();
 		const trigger = editor.getByRole("slider", { name: "Cue 2 Trigger", exact: true });
 		await expect(trigger).toBeVisible();
 		await dragFrames(page, editor, trigger, 300);
@@ -124,7 +125,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect.poll(async () => (await clip()).cue_starts.find((start) => start.cue_id === rig.list.cues[1].id)?.offset_frame).toBe(1);
 		await page.reload();
 		await openEditor(page);
-		await editor.getByRole("button", { name: "Cue 2 Second", exact: true }).click();
+		await editor.getByRole("button", { name: "Cue 2 Verse wash", exact: true }).click();
 		await expect(editor.getByRole("slider", { name: "Cue 2 Trigger", exact: true })).toHaveAttribute("aria-valuenow", "45");
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues.map((cue) => cue.trigger.type)).toEqual(["manual", "manual", "manual"]);
 	});
@@ -134,7 +135,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
-		await editor.getByRole("button", { name: "Cue 1 First", exact: true }).tap();
+		await editor.getByRole("button", { name: "Cue 1 House out", exact: true }).tap();
 		const readCue = async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[0];
 		const initial = await readCue();
 		const handle = editor.getByRole("slider", { name: "Cue 1 In fade", exact: true });
@@ -159,13 +160,13 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
-		await editor.getByRole("button", { name: "Cue 1 First", exact: true }).click();
+		await editor.getByRole("button", { name: "Cue 1 House out", exact: true }).click();
 		await dragFrames(page, editor, editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true }), 44);
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).start_frame).toBe(88);
 		const moved = await readClip(api, show.id, rig.definition.id);
 		expect(moved.end_frame).toBe(660);
 		expect(moved.cue_starts).toEqual(rig.definition.lanes[0].content.kind === "cue_list" ? rig.definition.lanes[0].content.clips[0].cue_starts : []);
-		await editor.getByRole("button", { name: "Edit Cue 3 Last", exact: true }).click();
+		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click();
 		await expect(editor.locator(".timecode-cue-edit-rail.out.reference")).toContainText("Cue Out · next handover reference");
 		const details = editor.locator(".timecode-cue-editor-details");
 		await expect(details).toContainText("It is not played at this clip’s end.");
@@ -177,33 +178,11 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 	});
 
 	test("TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll", async ({ api, show, desk, page, request }, testInfo) => {
-		const rig = await seedEditor(api, show.id);
-		const imported = await request.post(`${api.baseUrl}/api/v2/timecodes/audio/import?name=sticky-reference.wav`, {
-			headers: { authorization: `Bearer ${api.session!.token}`, "x-tosk-show": show.id, "content-type": "audio/wav" },
-			data: referenceWav(),
-		});
-		expect(imported.ok()).toBe(true);
-		const asset = await imported.json() as { asset_id: string; asset_revision: number };
-		const speedLanes: TimecodeDefinition["lanes"] = Array.from({ length: 12 }, (_, index) => ({
-			id: crypto.randomUUID(), name: `Ordinary lane ${index + 1}`,
-			content: { kind: "speed_group", group: "A", keyframes: [{ id: crypto.randomUUID(), frame: 220, bpm: 120, phase: 0 }] },
-		}));
-		const audioLaneId = crypto.randomUUID();
-		const lanes: TimecodeDefinition["lanes"] = [...rig.definition.lanes, ...speedLanes, {
-			id: audioLaneId, name: "Main audio", content: { kind: "audio_volume", keyframes: [
-				{ id: crypto.randomUUID(), frame: 220, value: 0.8, fade_frames: 0, curve: "linear" },
-			] },
-		}];
-		const current = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
-		await api.request("POST", "/api/v2/timecodes/actions", {
-			request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id,
-				expected_revision: current.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision,
-				patch: { audio: { asset_id: asset.asset_id, asset_revision: asset.asset_revision, file_name: "sticky-reference.wav" }, lanes },
-			},
-		}, true, undefined, { showId: show.id });
+		const { rig, speedLanes, audioLaneId, lanes } = await seedAudioEditor(api, show.id, request, ["Movement", "Chase", "Colour", "Stage movement", "Audience movement", "Stage chase", "Audience chase", "Colour pulse", "Colour sweep", "Accent movement", "Accent chase", "Accent colour"]);
 		await desk.open(api.baseUrl);
 		await openEditor(page);
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		await expandSpeedGroups(editor);
 		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
 		const ruler = editor.locator(".timecode-timeline-heading");
 		const audio = editor.locator(".timecode-editor-lane.lane-audio_volume.main-audio");
@@ -214,7 +193,8 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const speed = ordinary.locator(".timecode-timeline-item.item-speed");
 		await expect(waveform.locator("path")).toHaveAttribute("d", /.+/);
 		await expect(editor.locator(".timecode-editor-lane").first()).toHaveAttribute("data-lane-id", audioLaneId);
-		await expect(label).toContainText("sticky-reference.wav");
+		await expect(label).toContainText("Show Opener.wav");
+		await ordinary.locator(".timecode-lane-select").click();
 		await zoomIn(page, editor);
 		const point = (locator: Locator) => locator.evaluate((node) => {
 			const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height };
@@ -244,25 +224,129 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await page.screenshot({ path: testInfo.outputPath("timecode-sticky-main-audio.png") });
 	});
 
+	test("TIMECODE-001 @ui › grouped Speed navigation previews every group and enlarges only the selected lane", async ({ api, show, desk, page, request }, testInfo) => {
+		const names = ["Movement", "Chase", "Colour"];
+		const { rig, speedLanes, audioLaneId, lanes } = await seedAudioEditor(api, show.id, request, names);
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+		const audio = editor.locator(".timecode-editor-lane.main-audio");
+		const section = editor.locator(".timecode-speed-section");
+		const toggle = section.getByRole("button", { name: "Speed Groups", exact: true });
+		const summary = section.locator(".timecode-speed-summary");
+		const cueLane = editor.locator(`.timecode-editor-lane[data-lane-id="${rig.definition.lanes[0].id}"]`);
+		const speedLane = (index: number) => editor.locator(`.timecode-editor-lane[data-lane-id="${speedLanes[index].id}"]`);
+		await expect(editor.locator(".timecode-editor-lane").first()).toHaveAttribute("data-lane-id", audioLaneId);
+		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		await toggle.tap();
+		await expect(toggle).toHaveAttribute("aria-expanded", "false");
+		await expect(summary).toBeVisible();
+		for (const [index, name] of names.entries()) {
+			const preview = summary.locator(`[data-lane-id="${speedLanes[index].id}"]`);
+			await expect(preview).toBeVisible();
+			await expect(preview).toContainText(name);
+		}
+		const bottom = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().bottom);
+		const top = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().top);
+		expect(await top(section)).toBeGreaterThanOrEqual(await bottom(audio));
+		expect(await top(cueLane)).toBeGreaterThanOrEqual(await bottom(section));
+		await editor.getByRole("button", { name: "Cuelists", exact: true }).tap();
+		await expect(editor.getByRole("button", { name: "Cuelists", exact: true })).toHaveAttribute("aria-expanded", "false");
+		await page.screenshot({ path: testInfo.outputPath("timecode-grouped-overview.png") });
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-grouped-overview-detail.png") });
+		await toggle.tap();
+		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		await expect(summary).toBeHidden();
+		const compactHeight = await speedLane(1).evaluate((node) => node.getBoundingClientRect().height);
+		await toggle.tap();
+		await expect(toggle).toHaveAttribute("aria-expanded", "false");
+		// The miniature is also a touch navigation target: choose Movement directly from it.
+		await summary.locator(`[data-lane-id="${speedLanes[0].id}"]`).tap();
+		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		await expect(speedLane(0)).toHaveClass(/lane-expanded/);
+		await expect(editor.locator(".lane-speed_group.lane-expanded")).toHaveCount(1);
+		expect(await speedLane(0).evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(compactHeight);
+		await speedLane(1).locator(".timecode-lane-select").tap();
+		await expect(speedLane(1)).toHaveClass(/lane-expanded/);
+		await expect(speedLane(0)).not.toHaveClass(/lane-expanded/);
+		await expect(editor.locator(".lane-speed_group.lane-expanded")).toHaveCount(1);
+		await zoomIn(page, editor);
+		const point = speedLane(1).locator(".timecode-timeline-item.item-speed");
+		const before = await geometry(editor, viewport, point);
+		await point.click();
+		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
+		expect(await geometry(editor, viewport, point)).toEqual(before);
+		await page.screenshot({ path: testInfo.outputPath("timecode-speed-group-editor.png") });
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-speed-group-editor-detail.png") });
+		await editor.getByRole("button", { name: "Close selection settings", exact: true }).click();
+		expect(await geometry(editor, viewport, point)).toEqual(before);
+		await speedLane(1).getByRole("button", { name: "Close speed group editor", exact: true }).tap();
+		await expect(editor.locator(".lane-speed_group.lane-expanded")).toHaveCount(0);
+		await toggle.tap();
+		await expect(toggle).toHaveAttribute("aria-expanded", "false");
+		await expect(summary).toBeVisible();
+		for (const name of names) await expect(summary).toContainText(name);
+		const collection = await api.request<{ objects: Array<{ definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		expect(collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.lanes.map((lane) => lane.id)).toEqual(lanes.map((lane) => lane.id));
+	});
+
+	test("TIMECODE-001 @ui › coincident In end and Out start remain independently editable by mouse and touch", async ({ api, show, desk, page }) => {
+		// Follow 0 with zero Out delay puts the handover exactly at the incoming fade's end.
+		const rig = await seedEditor(api, show.id, true);
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		await zoomIn(page, editor);
+		await editor.getByRole("button", { name: "Cue 1 House out", exact: true }).tap();
+		const incoming = editor.getByRole("slider", { name: "Cue 1 In fade", exact: true });
+		const outgoing = editor.getByRole("slider", { name: "Cue 1 Out delay", exact: true });
+		const readCue = async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[0];
+		await expect(incoming).toHaveAttribute("aria-valuenow", "132");
+		await expect(outgoing).toHaveAttribute("aria-valuenow", "132");
+		await dragFrames(page, editor, incoming, 4);
+		await expect.poll(async () => (await readCue()).fade_millis).toBeGreaterThan(1000);
+		expect((await readCue()).out_delay_millis).toBe(0);
+		const inFadeAfterMouse = (await readCue()).fade_millis;
+		await dragFrames(page, editor, outgoing, 4);
+		await expect.poll(async () => (await readCue()).out_delay_millis).toBeGreaterThan(0);
+		expect((await readCue()).fade_millis).toBe(inFadeAfterMouse);
+
+		const inEndFrame = Number(await incoming.getAttribute("aria-valuenow"));
+		const exactOutStart = editor.locator(".timecode-cue-editor-details").getByLabel("Out start", { exact: true });
+		await exactOutStart.fill(frameText(inEndFrame));
+		await exactOutStart.press("Tab");
+		await expect.poll(async () => (await readCue()).out_delay_millis).toBe(0);
+		await expect(outgoing).toHaveAttribute("aria-valuenow", String(inEndFrame));
+		await touchDragFrames(page, editor, incoming, -4);
+		await expect.poll(async () => (await readCue()).fade_millis).toBe(1000);
+		expect((await readCue()).out_delay_millis).toBe(0);
+		await expect(incoming).toHaveAttribute("aria-valuenow", "132");
+		await expect(outgoing).toHaveAttribute("aria-valuenow", "132");
+		await touchDragFrames(page, editor, outgoing, 4);
+		await expect.poll(async () => (await readCue()).out_delay_millis).toBeGreaterThan(0);
+		expect((await readCue()).fade_millis).toBe(1000);
+	});
+
 });
 
-async function seedEditor(api: ApiDriver, showId: string) {
+async function seedEditor(api: ApiDriver, showId: string, coincident = false) {
 	const list: CueList = {
-		id: crypto.randomUUID(), name: "Envelope acceptance", mode: "sequence", priority: 0, looped: false,
-		cues: ["First", "Second", "Last"].map((name, index) => ({
+		id: crypto.randomUUID(), name: "Stage Looks", mode: "sequence", priority: 0, looped: false,
+		cues: ["House out", "Verse wash", "Chorus"].map((name, index) => ({
 			id: crypto.randomUUID(), number: String(index + 1), name,
-			fade_millis: 1000, delay_millis: 1000, out_delay_millis: 500, out_fade_millis: 1000,
-			trigger: { type: "manual" as const }, changes: [],
+			fade_millis: 1000, delay_millis: 1000, out_delay_millis: coincident && index === 0 ? 0 : 500, out_fade_millis: 1000,
+			trigger: coincident && index === 1 ? { type: "follow", delay_millis: 0 } : { type: "manual" as const }, changes: [],
 		})),
 	};
 	await api.seedShowObject(showId, "cue_list", list.id, list);
 	const definition: TimecodeDefinition = {
 		id: crypto.randomUUID(), number: 86, name: "Cue editor acceptance", duration_frame: 880,
 		transport_offset_frame: 0, auto_start: false, audio: null, markers: [],
-		lanes: [{ id: crypto.randomUUID(), name: "All stage Cues", content: { kind: "cue_list", cue_list_id: list.id, clips: [{
+		lanes: [{ id: crypto.randomUUID(), name: "Stage Looks", content: { kind: "cue_list", cue_list_id: list.id, clips: [{
 			id: crypto.randomUUID(), start_frame: 44, end_frame: 616, start_cue_id: list.cues[0].id!, end_cue_id: list.cues[2].id!,
 			start_behavior: "state", end_behavior: "release", in_fade_frames: 0, out_fade_frames: 0,
-			cue_starts: [{ cue_id: list.cues[1].id!, offset_frame: 176 }, { cue_id: list.cues[2].id!, offset_frame: 352 }],
+			cue_starts: [...(coincident ? [] : [{ cue_id: list.cues[1].id!, offset_frame: 176 }]), { cue_id: list.cues[2].id!, offset_frame: 352 }],
 		}] } }],
 	};
 	await api.request("POST", "/api/v2/timecodes/actions", { request_id: crypto.randomUUID(), action: { type: "create", definition } }, true, undefined, { showId });
@@ -356,4 +440,43 @@ function referenceWav() {
 		buffer.writeInt16LE(Math.round(Math.sin(index / sampleRate * 2 * Math.PI * 440) * envelope * 24000), 44 + index * 2);
 	}
 	return buffer;
+}
+
+async function seedAudioEditor(api: ApiDriver, showId: string, request: APIRequestContext, names: string[]) {
+	const rig = await seedEditor(api, showId);
+	const imported = await request.post(`${api.baseUrl}/api/v2/timecodes/audio/import?name=Show%20Opener.wav`, {
+		headers: { authorization: `Bearer ${api.session!.token}`, "x-tosk-show": showId, "content-type": "audio/wav" },
+		data: referenceWav(),
+	});
+	expect(imported.ok()).toBe(true);
+	const asset = await imported.json() as { asset_id: string; asset_revision: number };
+	const speedLanes: TimecodeDefinition["lanes"] = names.map((name, index) => ({
+		id: crypto.randomUUID(), name,
+		content: { kind: "speed_group", group: String.fromCharCode(65 + index), keyframes: [{ id: crypto.randomUUID(), frame: 220, bpm: [96, 128, 72][index % 3], phase: 0 }] },
+	}));
+	const audioLaneId = crypto.randomUUID();
+	const lanes: TimecodeDefinition["lanes"] = [...rig.definition.lanes, ...speedLanes, {
+		id: audioLaneId, name: "Main audio", content: { kind: "audio_volume", keyframes: [
+			{ id: crypto.randomUUID(), frame: 220, value: 0.8, fade_frames: 0, curve: "linear" },
+		] },
+	}];
+	const current = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId });
+	await api.request("POST", "/api/v2/timecodes/actions", {
+		request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id,
+			expected_revision: current.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision,
+			patch: { audio: { asset_id: asset.asset_id, asset_revision: asset.asset_revision, file_name: "Show Opener.wav" }, lanes },
+		},
+	}, true, undefined, { showId });
+	return { rig, speedLanes, audioLaneId, lanes };
+}
+
+async function expandSpeedGroups(editor: Locator) {
+	const toggle = editor.getByRole("button", { name: "Speed Groups", exact: true });
+	if (await toggle.getAttribute("aria-expanded") === "false") await toggle.click();
+}
+
+function frameText(frame: number) {
+	const totalSeconds = Math.floor(frame / 44);
+	const pad = (value: number) => String(value).padStart(2, "0");
+	return `${pad(Math.floor(totalSeconds / 3600))}:${pad(Math.floor(totalSeconds / 60) % 60)}:${pad(totalSeconds % 60)}.${pad(frame % 44)}`;
 }

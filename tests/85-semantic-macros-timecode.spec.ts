@@ -423,7 +423,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		// once a lane is there to insert into.
 		const speedGroups = page.getByRole("dialog", { name: "Choose Speed Group" });
 		await speedGroups.getByRole("button", { name: "Add lane", exact: true }).click();
-		await editor.getByRole("button", { name: /^Speed Group A · speed group/ }).click();
+		await editor.getByRole("button", { name: /^Speed Group A ·/ }).click();
 		await editor.getByRole("button", { name: "Insert Keyframe" }).click();
 
 		const viewport = editor.getByLabel("Timecode timeline viewport");
