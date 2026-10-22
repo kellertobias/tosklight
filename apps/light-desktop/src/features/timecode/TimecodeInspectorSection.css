@@ -12,3 +12,12 @@
 	color: #dce7fa;
 }
 .timecode-editor-inspector .timecode-inspector-section-content { padding: 0 10px 4px; }
+.timecode-editor-inspector .timecode-selection-inspector:has(> .timecode-inspector-section) {
+	display: block;
+	padding: 0;
+	border-top: 0;
+}
+.timecode-editor-inspector .timecode-selection-inspector > .timecode-inspector-section {
+	width: 100%;
+	box-sizing: border-box;
+}

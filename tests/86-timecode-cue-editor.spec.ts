@@ -351,6 +351,16 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(await opacity(active)).toBe(1);
 		expect(await opacity(editor.locator(".main-audio"))).toBe(1);
 		const inspector = editor.locator(".timecode-editor-inspector");
+		const sectionHeaders = await inspector.locator("summary").evaluateAll((nodes) => nodes.map((node) => {
+			const box = node.getBoundingClientRect();
+			return { name: node.textContent, left: box.left, width: box.width, height: box.height };
+		}));
+		expect(sectionHeaders.map((header) => header.name)).toEqual(["Cue In", "Cue Out", "Cuelist"]);
+		for (const header of sectionHeaders) {
+			expect(Math.abs(header.left - sectionHeaders[0].left)).toBeLessThanOrEqual(1);
+			expect(Math.abs(header.width - sectionHeaders[0].width)).toBeLessThanOrEqual(1);
+			expect(header.height).toBeGreaterThanOrEqual(44);
+		}
 		for (const name of ["Cue In", "Cue Out", "Cuelist"]) {
 			const detail = inspector.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${name}$`) }) });
 			const summary = inspector.locator("summary").filter({ hasText: new RegExp(`^${name}$`) });
@@ -358,9 +368,10 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 			await summary.tap();
 			if (wasOpen === null) await expect(detail).toHaveAttribute("open", "");
 			else await expect(detail).not.toHaveAttribute("open", "");
-			await summary.tap();
+			await summary.click();
 		}
 		await inspector.locator("summary").filter({ hasText: /^Cue In$/ }).tap();
+		await inspector.locator("summary").filter({ hasText: /^Cue Out$/ }).tap();
 		const panel = (await inspector.boundingBox())!;
 		await page.mouse.move(panel.x + panel.width / 2, panel.y + panel.height / 2);
 		await page.mouse.wheel(0, -10000);
