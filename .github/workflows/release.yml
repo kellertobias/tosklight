@@ -9,6 +9,12 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      rebuild_version:
+        description: One-off 1.0.0 rebuild for review; does not publish a release
+        type: string
+        required: false
+        default: ""
 
 permissions:
   actions: read
@@ -61,7 +67,7 @@ jobs:
 
   metadata:
     name: Release / Select version
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.rebuild_version != '')
     runs-on: ubuntu-22.04
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -86,8 +92,18 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref }}
+          REBUILD_VERSION: ${{ inputs.rebuild_version }}
         run: |
           set -euo pipefail
+          if [[ -n "$REBUILD_VERSION" ]]; then
+            if [[ "$EVENT_NAME" != workflow_dispatch || "$REF_NAME" != refs/heads/main || "$REBUILD_VERSION" != 1.0.0 ]]; then
+              echo "::error::The rebuild override accepts only version 1.0.0 in a manual dispatch on main." >&2
+              exit 2
+            fi
+            echo "version=1.0.0" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           latest_tag="$(git tag --list 'v[0-9]*' --sort=-version:refname | head -1)"
           if [[ -n "$latest_tag" ]]; then
             version="${latest_tag#v}"
@@ -604,7 +620,7 @@ jobs:
 
   demo-show:
     name: Release / Generate default demo show
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.rebuild_version == '1.0.0'))
     needs: [metadata, e2e-build]
     runs-on: ubuntu-22.04
     env:
@@ -740,10 +756,10 @@ jobs:
 
   documentation:
     name: Checks / Storybook and operator manual
-    needs: [frontends, help-assets]
+    needs: [metadata, frontends, help-assets]
     # PRs/feature pushes do not build the E2E server. Keep their Storybook/manual checks;
     # only main/dispatch jobs consume a complete, freshly captured release gallery.
-    if: always() && !cancelled() && needs.frontends.result == 'success' && (needs.help-assets.result == 'success' || needs.help-assets.result == 'skipped')
+    if: always() && !cancelled() && needs.frontends.result == 'success' && (needs.help-assets.result == 'success' || needs.help-assets.result == 'skipped') && (needs.metadata.result == 'success' || needs.metadata.result == 'skipped')
     # Every documentation input used to be validated only by the nightly workflow, which builds
     # the last published release. A story or help link broken here therefore surfaced after the
     # release that carried it, on a commit no longer fixable by a rerun. These are the two cheap
@@ -891,7 +907,15 @@ jobs:
         env:
           RUSTC_WRAPPER: ""
           SCCACHE_GHA_ENABLED: "false"
+          LIGHT_MANUAL_VERSION: ${{ needs.metadata.outputs.version }}
         run: npm run manual
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.rebuild_version == '1.0.0'
+        with:
+          name: one-off-1.0.0-manual-${{ github.sha }}
+          path: .artifacts/generated/manual
+          if-no-files-found: error
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
@@ -902,7 +926,7 @@ jobs:
 
   build:
     name: Build / Platform bundle / ${{ matrix.label }}
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.rebuild_version == '1.0.0'))
     # Help is embedded into the server at compile time. Wait only for its bounded captures,
     # while the comprehensive Storybook/manual checks continue beside the platform builds.
     needs: [metadata, frontends, help-assets]

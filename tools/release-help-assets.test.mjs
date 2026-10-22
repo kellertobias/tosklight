@@ -150,6 +150,7 @@ test("PRs and feature branches retain documentation checks when release captures
 					always: () => true,
 					cancelled: () => false,
 					needs: {
+						metadata: { result: "skipped" },
 						frontends: { result: frontends },
 						"help-assets": { result: gallery },
 					},
@@ -158,7 +159,11 @@ test("PRs and feature branches retain documentation checks when release captures
 			expected,
 		);
 	}
-	assert.deepEqual(documentation.needs, ["frontends", "help-assets"]);
+	assert.deepEqual(documentation.needs, [
+		"metadata",
+		"frontends",
+		"help-assets",
+	]);
 	for (const name of [
 		"Resolve generated Help gallery path",
 		"Download exact-commit Help gallery",
@@ -392,4 +397,166 @@ test("documentation restores reviewed native inputs before every Storybook captu
 		encoding: "utf8",
 	});
 	assert.equal(syntax.status, 0, syntax.stderr);
+});
+
+test("the one-off rebuild selects exactly 1.0.0 before inspecting historical tags", () => {
+	const metadata = workflow.jobs.metadata;
+	const select = byName(metadata, "Select the build and release version");
+	assert.equal(select.env.REBUILD_VERSION, "${{ inputs.rebuild_version }}");
+	fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+	const scratch = fs.mkdtempSync(
+		path.join(artifactPaths.tmp, "one-off-release-version-"),
+	);
+	try {
+		const bin = path.join(scratch, "bin");
+		fs.mkdirSync(bin);
+		// Simulate the still-existing 2.x tags. An explicit rebuild must not calculate from them.
+		fs.writeFileSync(
+			path.join(bin, "git"),
+			'#!/bin/bash\nprintf "v2.6.2\\n"\n',
+		);
+		fs.writeFileSync(
+			path.join(bin, "npm"),
+			'#!/bin/bash\nprintf "version=2.6.3\\nrelease=true\\n" >> "$LIGHT_RELEASE_OUTPUT"\n',
+		);
+		for (const name of ["git", "npm"])
+			fs.chmodSync(path.join(bin, name), 0o755);
+		const run = (event, ref, version) => {
+			const output = path.join(scratch, "outputs");
+			fs.writeFileSync(output, "");
+			const result = spawnSync("bash", ["-c", select.run], {
+				encoding: "utf8",
+				env: {
+					...process.env,
+					PATH: `${bin}:${process.env.PATH}`,
+					EVENT_NAME: event,
+					REF_NAME: ref,
+					REBUILD_VERSION: version,
+					GITHUB_OUTPUT: output,
+				},
+			});
+			return { ...result, outputs: fs.readFileSync(output, "utf8") };
+		};
+		const rebuild = run("workflow_dispatch", "refs/heads/main", "1.0.0");
+		assert.equal(rebuild.status, 0, rebuild.stderr);
+		assert.equal(rebuild.outputs, "version=1.0.0\nrelease=false\n");
+		for (const [event, ref, version] of [
+			["workflow_dispatch", "refs/heads/main", "2.0.0"],
+			["workflow_dispatch", "refs/heads/main", "1.0.0; echo unsafe"],
+			["workflow_dispatch", "refs/heads/feature", "1.0.0"],
+			["push", "refs/heads/main", "1.0.0"],
+		]) {
+			const invalid = run(event, ref, version);
+			assert.notEqual(invalid.status, 0, `${event} ${ref} ${version}`);
+			assert.equal(
+				invalid.outputs,
+				"",
+				"invalid overrides must emit no version",
+			);
+		}
+		const normal = run("push", "refs/heads/main", "");
+		assert.equal(normal.status, 0, normal.stderr);
+		assert.equal(
+			normal.outputs,
+			"version=2.6.2\nrelease=false\nversion=2.6.3\nrelease=true\n",
+		);
+		const checks = run("workflow_dispatch", "refs/heads/main", "");
+		assert.equal(checks.status, 0, checks.stderr);
+		assert.equal(checks.outputs, "version=2.6.2\nrelease=false\n");
+	} finally {
+		fs.rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test("the explicit rebuild exports platform, demo and manual artifacts without publishing", () => {
+	const eligible = (job, event, ref, version = "") =>
+		vm.runInNewContext(
+			job.if,
+			{
+				github: { event_name: event, ref },
+				inputs: { rebuild_version: version },
+			},
+			{ timeout: 100 },
+		);
+	for (const name of ["build", "demo-show"]) {
+		const job = workflow.jobs[name];
+		assert.equal(
+			eligible(job, "workflow_dispatch", "refs/heads/main", "1.0.0"),
+			true,
+		);
+		assert.equal(eligible(job, "workflow_dispatch", "refs/heads/main"), false);
+		assert.equal(
+			eligible(job, "workflow_dispatch", "refs/heads/main", "2.0.0"),
+			false,
+		);
+		assert.equal(
+			eligible(job, "workflow_dispatch", "refs/heads/feature", "1.0.0"),
+			false,
+		);
+		assert.equal(eligible(job, "push", "refs/heads/main"), true);
+	}
+	assert.equal(
+		eligible(
+			workflow.jobs.metadata,
+			"workflow_dispatch",
+			"refs/heads/feature",
+			"1.0.0",
+		),
+		true,
+		"the selector must run and reject an explicit override on another branch",
+	);
+	assert.equal(
+		eligible(
+			workflow.jobs.release,
+			"workflow_dispatch",
+			"refs/heads/main",
+			"1.0.0",
+		),
+		false,
+	);
+	assert.equal(
+		eligible(workflow.jobs.release, "push", "refs/heads/main"),
+		true,
+	);
+	assert.equal(
+		build.env.LIGHT_RELEASE_VERSION,
+		"${{ needs.metadata.outputs.version }}",
+	);
+	assert.ok(documentation.needs.includes("metadata"));
+	const manual = byName(documentation, "Build and verify the operator manual");
+	assert.equal(
+		manual.env.LIGHT_MANUAL_VERSION,
+		"${{ needs.metadata.outputs.version }}",
+	);
+	const upload = documentation.steps.find(
+		(step) => step.with?.name === "one-off-1.0.0-manual-${{ github.sha }}",
+	);
+	assert.ok(upload);
+	assert.equal(
+		eligible(upload, "workflow_dispatch", "refs/heads/main", "1.0.0"),
+		true,
+	);
+	assert.equal(eligible(upload, "push", "refs/heads/main"), false);
+	assert.equal(
+		eligible(upload, "workflow_dispatch", "refs/heads/feature", "1.0.0"),
+		false,
+	);
+	assert.equal(
+		vm.runInNewContext(
+			documentation.if.replaceAll("needs.help-assets", 'needs["help-assets"]'),
+			{
+				always: () => true,
+				cancelled: () => false,
+				needs: {
+					metadata: { result: "failure" },
+					frontends: { result: "success" },
+					"help-assets": { result: "success" },
+				},
+			},
+		),
+		false,
+		"rejected override must prevent manual publication artifacts",
+	);
+	assert.equal(upload.with.path, ".artifacts/generated/manual");
+	assert.equal(upload.with["if-no-files-found"], "error");
 });

@@ -817,8 +817,8 @@ test("non-main branch pushes run validation without release work", () => {
 	}
 	assert.match(
 		workflow,
-		/\n {2}build:\n[\s\S]*?\n {4}if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/u,
-		"platform bundles should be main-push-only",
+		/\n {2}build:\n[\s\S]*?\n {4}if: github\.ref == 'refs\/heads\/main' && \(github\.event_name == 'push' \|\| \(github\.event_name == 'workflow_dispatch' && inputs\.rebuild_version == '1\.0\.0'\)\)/u,
+		"platform bundles require a main push or the explicit main 1.0.0 review rebuild",
 	);
 	assert.match(
 		workflow,
@@ -838,7 +838,7 @@ test("non-main branch pushes run validation without release work", () => {
 	);
 });
 
-test("manual branch dispatch runs comprehensive validation without publishing", () => {
+test("manual dispatch validates branches and only the main 1.0.0 override builds review bundles without publishing", () => {
 	const workflow = read(".github/workflows/release.yml");
 	const jobCondition = (job) => {
 		const body = new RegExp(
@@ -848,12 +848,64 @@ test("manual branch dispatch runs comprehensive validation without publishing", 
 		assert.ok(body, `${job} must exist`);
 		return /^    if: (.+)$/mu.exec(body)?.[1];
 	};
-	const enabled = (condition, ref, event) =>
-		condition.split(" || ").some((term) => {
-			const parsed = /^github\.(ref|event_name) == '([^']+)'$/u.exec(term);
-			assert.ok(parsed, `Unexpected condition: ${term}`);
-			return (parsed[1] === "ref" ? ref : event) === parsed[2];
-		});
+	// Evaluate the actual guarded expressions rather than assuming their string order.
+	// This deliberately small parser accepts only the identifiers and operators used here.
+	const enabled = (condition, ref, event, version = "") => {
+		const tokenPattern =
+			/github\.(?:ref|event_name)|inputs\.rebuild_version|==|!=|&&|\|\||[()]|'[^']*'/gu;
+		const tokens = condition.match(tokenPattern) ?? [];
+		assert.equal(
+			tokens.join(""),
+			condition.replace(/\s+/gu, ""),
+			`Unexpected condition: ${condition}`,
+		);
+		const values = {
+			"github.ref": ref,
+			"github.event_name": event,
+			"inputs.rebuild_version": version,
+		};
+		let cursor = 0;
+		const atom = () => {
+			if (tokens[cursor] === "(") {
+				cursor++;
+				const result = or();
+				assert.equal(tokens[cursor++], ")");
+				return result;
+			}
+			const identifier = tokens[cursor++];
+			assert.ok(
+				Object.hasOwn(values, identifier),
+				`Unexpected identifier: ${identifier}`,
+			);
+			const operator = tokens[cursor++];
+			assert.ok(operator === "==" || operator === "!=");
+			const literal = tokens[cursor++];
+			assert.match(literal, /^'[^']*'$/u);
+			const equal = values[identifier] === literal.slice(1, -1);
+			return operator === "==" ? equal : !equal;
+		};
+		const and = () => {
+			let value = atom();
+			while (tokens[cursor] === "&&") {
+				cursor++;
+				const right = atom();
+				value = value && right;
+			}
+			return value;
+		};
+		const or = () => {
+			let value = and();
+			while (tokens[cursor] === "||") {
+				cursor++;
+				const right = and();
+				value = value || right;
+			}
+			return value;
+		};
+		const result = or();
+		assert.equal(cursor, tokens.length);
+		return result;
+	};
 	for (const job of ["workspace", "e2e-build", "e2e"]) {
 		const condition = jobCondition(job);
 		assert.ok(condition);
@@ -870,12 +922,37 @@ test("manual branch dispatch runs comprehensive validation without publishing", 
 				`${job}: ${ref} ${event}`,
 			);
 	}
-	for (const job of ["build", "demo-show", "release"]) {
-		assert.equal(
-			jobCondition(job),
-			"github.event_name == 'push' && github.ref == 'refs/heads/main'",
-		);
+	const buildCases = [
+		["refs/heads/main", "push", "", true],
+		["refs/heads/main", "workflow_dispatch", "1.0.0", true],
+		["refs/heads/main", "workflow_dispatch", "", false],
+		["refs/heads/main", "workflow_dispatch", "1.0", false],
+		["refs/heads/main", "workflow_dispatch", "1.0.1", false],
+		["refs/heads/main", "workflow_dispatch", "2.6.1", false],
+		["refs/heads/codex/acceptance", "workflow_dispatch", "1.0.0", false],
+		["refs/heads/codex/acceptance", "push", "", false],
+		["refs/tags/v1.0.0", "workflow_dispatch", "1.0.0", false],
+		["refs/pull/42/merge", "pull_request", "1.0.0", false],
+		["refs/heads/main", "pull_request", "1.0.0", false],
+	];
+	for (const job of ["build", "demo-show"]) {
+		const condition = jobCondition(job);
+		assert.ok(condition);
+		for (const [ref, event, version, expected] of buildCases)
+			assert.equal(
+				enabled(condition, ref, event, version),
+				expected,
+				`${job}: ${ref} ${event} ${version}`,
+			);
 	}
+	const releaseCondition = jobCondition("release");
+	assert.ok(releaseCondition);
+	for (const [ref, event, version] of buildCases)
+		assert.equal(
+			enabled(releaseCondition, ref, event, version),
+			event === "push" && ref === "refs/heads/main",
+			`release: ${ref} ${event} ${version}`,
+		);
 	assert.match(workflow, /workflow_dispatch:/u);
 	assert.match(
 		workflow,
