@@ -1,0 +1,13 @@
+{
+	"name": "tosklight-manual-tooling",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Locked build-only operator manual renderer; installed only by npm run manual.",
+	"dependencies": {
+		"@tobisk/markdown-manuals": "1.3.4"
+	},
+	"overrides": {
+		"puppeteer": "25.7.0",
+		"puppeteer-core": "25.7.0"
+	}
+}

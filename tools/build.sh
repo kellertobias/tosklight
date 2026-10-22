@@ -17,7 +17,7 @@ MANUAL_REQUIREMENTS="$ROOT/docs/help/.tooling/requirements.txt"
 MANUAL_VENV_DIR="$LIGHT_ARTIFACTS_DIR/cache/manual-venv"
 MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
 MANUAL_CONFIG="$ROOT/docs/help/manual.config.json"
-MANUAL_RENDERER_PACKAGE="${LIGHT_MANUAL_RENDERER_PACKAGE:-@tobisk/markdown-manuals@1.3.4}"
+MANUAL_TOOLING="$ROOT/docs/help/.tooling"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
 DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
@@ -99,28 +99,22 @@ generate_attribute_reference() {
       "$ROOT/docs/help/99-Appendix/02-default-attributes.md"
 }
 
-# npx fetches the renderer from the registry on every run, and a single ECONNRESET there has
-# failed the whole documentation build. The download is retried on its own so that the renderer
-# itself still runs exactly once: a manual that genuinely fails to render must not be retried.
-prefetch_manual_renderer() {
-  local attempt
-  for attempt in 1 2 3; do
-    if npm cache add "$MANUAL_RENDERER_PACKAGE" >/dev/null 2>&1; then
-      return 0
-    fi
-    echo "manual renderer download attempt $attempt failed; retrying." >&2
-    sleep $((attempt * 5))
-  done
-  echo "warning: could not pre-fetch $MANUAL_RENDERER_PACKAGE; trying npx anyway." >&2
-}
-
+# Renderer dependencies are isolated from the desktop workspace and installed from their
+# reviewed lockfile only when building a manual. Puppeteer's install hook provisions its
+# matching browser if it is not already cached; ordinary root npm ci never runs it.
 run_manual_renderer() {
-  require npx
   require node
   require npm
-  prefetch_manual_renderer
+  local -a renderer_command
+  if [[ -n "${LIGHT_MANUAL_RENDERER_PACKAGE:-}" ]]; then
+    require npx
+    renderer_command=(npx --yes --package "$LIGHT_MANUAL_RENDERER_PACKAGE" markdown-manual)
+  else
+    npm ci --prefix "$MANUAL_TOOLING" --no-audit --no-fund
+    renderer_command=("$MANUAL_TOOLING/node_modules/.bin/markdown-manual")
+  fi
   LIGHT_MANUAL_VERSION="${LIGHT_MANUAL_VERSION:-$(node -p "require(process.argv[1]).version" "$ROOT/package.json")}" \
-    npx --yes --package "$MANUAL_RENDERER_PACKAGE" markdown-manual "$@"
+    "${renderer_command[@]}" "$@"
 }
 
 build_icon_contact_sheets() {

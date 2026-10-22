@@ -7,12 +7,12 @@ import {
 	rmSync,
 	writeFileSync,
 } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { artifactPaths } from "./artifact-paths.mjs";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { artifactPaths } from "./artifact-paths.mjs";
 
 const source = await readFile(
 	process.env.LIGHT_DOCUMENTATION_WORKFLOW_TEST_SOURCE ??
@@ -262,5 +262,94 @@ if [[ "$1" == api ]]; then printf '101\n100\n99\n'; elif [[ "$1 $2 $3" == 'run v
 		assert.equal(selected.stdout, "100");
 	} finally {
 		rmSync(scratch, { recursive: true, force: true });
+	}
+});
+
+test("manual renderer and browser dependencies are reviewed exact lockfile inputs", async () => {
+	const tooling = JSON.parse(
+		await readFile(
+			new URL("../docs/help/.tooling/package.json", import.meta.url),
+			"utf8",
+		),
+	);
+	const lock = JSON.parse(
+		await readFile(
+			new URL("../docs/help/.tooling/package-lock.json", import.meta.url),
+			"utf8",
+		),
+	);
+	assert.equal(tooling.private, true);
+	assert.equal(tooling.dependencies["@tobisk/markdown-manuals"], "1.3.4");
+	assert.deepEqual(tooling.overrides, {
+		puppeteer: "25.7.0",
+		"puppeteer-core": "25.7.0",
+	});
+	assert.deepEqual(lock.packages[""].dependencies, tooling.dependencies);
+	assert.equal(
+		lock.packages["node_modules/@tobisk/markdown-manuals"].version,
+		"1.3.4",
+	);
+	for (const name of ["puppeteer", "puppeteer-core"]) {
+		const packages = Object.entries(lock.packages).filter(
+			([key]) =>
+				key.endsWith(`/node_modules/${name}`) || key === `node_modules/${name}`,
+		);
+		assert.ok(packages.length, `locked ${name} must exist`);
+		for (const [, entry] of packages) {
+			assert.equal(entry.version, "25.7.0");
+			assert.match(entry.integrity, /^sha512-/);
+		}
+	}
+});
+
+test("manual runner installs its isolated lock and uses its binary, preserving explicit overrides", async () => {
+	const build = await readFile(new URL("./build.sh", import.meta.url), "utf8");
+	const runner = build.match(/^run_manual_renderer\(\) \{[\s\S]*?^\}/m)?.[0];
+	assert.ok(runner);
+	mkdirSync(artifactPaths.tmp, { recursive: true });
+	const cwd = mkdtempSync(join(artifactPaths.tmp, "manual-runner-"));
+	try {
+		const bin = join(cwd, "node_modules/.bin");
+		mkdirSync(bin, { recursive: true });
+		const executable = join(bin, "markdown-manual");
+		writeFileSync(
+			executable,
+			'#!/usr/bin/env bash\nprintf "manual:%s|%s\\n" "$*" "$LIGHT_MANUAL_VERSION" >> "$TRACE"\n',
+		);
+		chmodSync(executable, 0o755);
+		for (const override of [null, "@example/reviewed-renderer@2.0.0"]) {
+			const trace = join(cwd, override ? "override" : "default");
+			const env = {
+				...process.env,
+				MANUAL_TOOLING: cwd,
+				LIGHT_MANUAL_VERSION: "1.0.0",
+				TRACE: trace,
+			};
+			delete env.LIGHT_MANUAL_RENDERER_PACKAGE;
+			if (override) env.LIGHT_MANUAL_RENDERER_PACKAGE = override;
+			const result = spawnSync(
+				"bash",
+				[
+					"-c",
+					`set -euo pipefail
+require(){ :; }
+npm(){ printf 'npm:%s\\n' "$*" >> "$TRACE"; }
+npx(){ printf 'npx:%s\\n' "$*" >> "$TRACE"; }
+${runner}
+run_manual_renderer build --source example`,
+				],
+				{ env, encoding: "utf8" },
+			);
+			assert.equal(result.status, 0, result.stderr);
+			const calls = await readFile(trace, "utf8");
+			assert.equal(
+				calls,
+				override
+					? `npx:--yes --package ${override} markdown-manual build --source example\n`
+					: `npm:ci --prefix ${cwd} --no-audit --no-fund\nmanual:build --source example|1.0.0\n`,
+			);
+		}
+	} finally {
+		rmSync(cwd, { recursive: true, force: true });
 	}
 });
