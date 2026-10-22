@@ -1,3 +1,4 @@
+import { cueBoundaryFrames } from "./cueEditorLayout";
 import {
 	cueClipTimingWithTriggerPreview,
 	cueTriggerSource,
@@ -257,6 +258,23 @@ function useCueFadeDrag({
 	return { activeBody, begin, commit, dragError, saving };
 }
 
+interface CueListClipContentsProps {
+	cueList: TimecodeCueListOption & { body: CueList };
+	clip: TimecodeCueListClip;
+	pixelsPerFrame: number;
+	timingDefaults: CueClipTimingDefaults;
+	onSaveCueList?(id: string, body: CueList): Promise<CueList>;
+	onPlaceCueStart?(clipId: string, cueId: string, offset: number): void;
+	onMoveClip?(clipId: string, startFrame: number): void;
+	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
+	onSetClipFade?(clipId: string, kind: "in" | "out", frames: number): void;
+	onError?(message: string): void;
+	selectedCueId?: string | null;
+	onSelectCue?(cueId: string): void;
+	expanded?: boolean;
+	inspectorHost?: HTMLElement | null;
+}
+
 export function CueListClipContents({
 	cueList,
 	clip,
@@ -272,22 +290,7 @@ export function CueListClipContents({
 	onSelectCue,
 	expanded = false,
 	inspectorHost = null,
-}: {
-	cueList: TimecodeCueListOption & { body: CueList };
-	clip: TimecodeCueListClip;
-	pixelsPerFrame: number;
-	timingDefaults: CueClipTimingDefaults;
-	onSaveCueList?(id: string, body: CueList): Promise<CueList>;
-	onPlaceCueStart?(clipId: string, cueId: string, offset: number): void;
-	onMoveClip?(clipId: string, startFrame: number): void;
-	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
-	onSetClipFade?(clipId: string, kind: "in" | "out", frames: number): void;
-	onError?(message: string): void;
-	selectedCueId?: string | null;
-	onSelectCue?(cueId: string): void;
-	expanded?: boolean;
-	inspectorHost?: HTMLElement | null;
-}) {
+}: CueListClipContentsProps) {
 	const [triggerPreview, setTriggerPreview] = useState<number | null>(null);
 	const { activeBody, begin, commit, dragError, saving } = useCueFadeDrag({
 		cueList,
@@ -308,8 +311,15 @@ export function CueListClipContents({
 		Math.max(0, frame - clip.start_frame) * pixelsPerFrame;
 	const width = (clip.end_frame - clip.start_frame) * pixelsPerFrame;
 	const { selected, first, triggerBounds, canMoveTrigger, placeTrigger } =
-		cueTriggerEditing(clip, activeBody, timingDefaults, projected.rows,
-			selectedCueId, onMoveClip, onPlaceCueStart);
+		cueTriggerEditing(
+			clip,
+			activeBody,
+			timingDefaults,
+			projected.rows,
+			selectedCueId,
+			onMoveClip,
+			onPlaceCueStart,
+		);
 	const source = cueTriggerSource(selected, first);
 
 	return (
@@ -337,8 +347,11 @@ export function CueListClipContents({
 
 				{expanded && (
 					<CueDividerHandles
-						rows={projected.rows} clip={clip} body={activeBody}
-						defaults={timingDefaults} position={position}
+						rows={projected.rows}
+						clip={clip}
+						body={activeBody}
+						defaults={timingDefaults}
+						position={position}
 						disabled={saving}
 						onSelect={onSelectCue}
 						onPreviewTrigger={setTriggerPreview}
@@ -352,7 +365,7 @@ export function CueListClipContents({
 						cueList={activeBody}
 						timingDefaults={timingDefaults}
 						selected={selected}
-						dividerFrames={projected.rows.filter((row, index) => index === 0 || row.transition).map(row => row.startFrame)}
+						dividerFrames={cueBoundaryFrames(projected.rows)}
 						clip={clip}
 						position={position}
 						pixelsPerFrame={pixelsPerFrame}

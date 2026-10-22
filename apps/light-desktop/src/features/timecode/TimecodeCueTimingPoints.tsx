@@ -1,5 +1,5 @@
 import { useCueReferenceScroll } from "./useCueReferenceScroll";
-import { HEADER, PEAK_Y, BASE_Y, DIVIDER_CENTER } from "./cueEditorLayout";
+import { HEADER, PEAK_Y, BASE_Y, DIVIDER_CENTER, END_GRIP_CENTER } from "./cueEditorLayout";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -57,6 +57,7 @@ function pointPlacement(
 	const anchorTop = (kind === "in") === (edge === "start") ? BASE_Y : PEAK_Y;
 	const occupied = [
 		{ x: selected.startFrame * pixelsPerFrame, y: PEAK_Y },
+		{ x: clip.end_frame * pixelsPerFrame - 22, y: END_GRIP_CENTER },
 		...dividerFrames.map((frame) => ({
 			x: frame * pixelsPerFrame,
 			y: DIVIDER_CENTER,

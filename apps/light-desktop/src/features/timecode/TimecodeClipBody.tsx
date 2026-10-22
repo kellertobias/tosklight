@@ -1,3 +1,4 @@
+import { ClipEndHandle } from "./TimecodeClipEndHandle";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -34,6 +35,10 @@ export function CueListClipBody({
 	inspectorHost = null,
 	onMoveClip,
 	onPreviewMoveClip,
+	onSetClipEnd,
+	onPreviewClipEnd,
+	clipEndMinimum,
+	clipEndMaximum,
 }: {
 	item: TimelineItem;
 	clip: TimecodeCueListClip;
@@ -63,6 +68,10 @@ export function CueListClipBody({
 	inspectorHost?: HTMLElement | null;
 	onMoveClip?(clipId: string, startFrame: number): void;
 	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
+	onSetClipEnd?(clipId: string, frame: number): void;
+	onPreviewClipEnd?(clipId: string, frame: number | null): void;
+	clipEndMinimum?: number;
+	clipEndMaximum?: number;
 }) {
 	return (
 		<>
@@ -109,6 +118,21 @@ export function CueListClipBody({
 					onSetClipFade={onSetClipFade}
 				/>
 			)}
+			<ClipEndHandle
+				clip={clip}
+				pixelsPerFrame={pixelsPerFrame}
+				expanded={expanded}
+				minimum={clipEndMinimum}
+				maximum={clipEndMaximum}
+				onCommit={
+					onSetClipEnd ? (frame) => onSetClipEnd(clip.id, frame) : undefined
+				}
+				onPreview={
+					onPreviewClipEnd
+						? (frame) => onPreviewClipEnd(clip.id, frame)
+						: undefined
+				}
+			/>
 			<span
 				className="timecode-clip-edge start"
 				aria-hidden="true"

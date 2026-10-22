@@ -1,3 +1,6 @@
+import { KeyframeSidebarValue, MarkerSidebarActions } from "./TimecodeSidebarValueControls";
+import { useCueClipBoundarySlots } from "./CueClipBoundaryContext";
+import { TimecodeInspectorSection } from "./TimecodeInspectorSection";
 import type { Ref } from "react";
 import { Button, CheckboxField, NumberField, SelectField } from "@tosklight/ui";
 import type { TimecodeDefinition } from "../../api/types/timecode";
@@ -18,8 +21,11 @@ interface SelectionInspectorProps {
 	definition: TimecodeDefinition;
 	selection: TimecodeEditorSelection | null;
 	selectedLabel?: string;
+	cueTimingActive?: boolean;
 	cueLists: readonly TimecodeCueListOption[];
 	fps: number;
+	frame?: number;
+	onScrub?(frame: number): void;
 	onCommit(definition: TimecodeDefinition): void;
 }
 
@@ -97,9 +103,13 @@ export function SelectionProperties(
 		<>
 			{selection.kind === "clip" ? (
 				<SelectedClipInspector key={selection.itemId} {...props} />
-			) : selection.kind !== "marker" ? (
-				<SelectionInspector {...props} />
-			) : null}
+			) : selection.kind === "marker" ? (
+				<MarkerSidebarActions definition={definition} selection={selection} frame={props.frame}
+					fps={fps} items={items} onSelect={onSelect} onCommit={onCommit} onScrub={props.onScrub} />
+			) : (
+				<><KeyframeSidebarValue definition={definition} selection={selection} onCommit={onCommit} />
+				<SelectionInspector {...props} /></>
+			)}
 
 			<Button
 				size="compact"
@@ -127,7 +137,7 @@ export function SelectionProperties(
 						? "marker"
 						: "keyframe"}
 			</Button>
-			{(selection.kind === "clip" || selection.kind === "marker") && (
+			{selection.kind === "marker" && (
 				<Button
 					size="compact"
 					onClick={() => {
@@ -218,6 +228,7 @@ function SelectedClipInspector({
 	definition,
 	selection,
 	selectedLabel,
+	cueTimingActive,
 	cueLists,
 	onCommit,
 }: SelectionInspectorProps) {
@@ -263,6 +274,7 @@ function SelectedClipInspector({
 			<ClipInspector
 				label={selectedLabel}
 				clip={clip}
+				cueTimingActive={cueTimingActive}
 				cues={cues}
 				duration={Math.min(
 					definition.duration_frame ?? Infinity,
@@ -561,6 +573,7 @@ type CueClip = Extract<
 function ClipInspector({
 	label,
 	clip,
+	cueTimingActive,
 	cues,
 	duration,
 	minimumStart,
@@ -568,11 +581,13 @@ function ClipInspector({
 }: {
 	label?: string;
 	clip: CueClip;
+	cueTimingActive?: boolean;
 	cues: readonly { id: string; number: string; name: string }[];
 	duration?: number | null;
 	minimumStart: number;
 	update(patch: Partial<CueClip>): void;
 }) {
+	const boundaries = useCueClipBoundarySlots();
 	// Offering only Cues that keep the clip order valid removes the "end Cue is
 	// before its start Cue" error instead of reporting it after the fact.
 	const startIndex = Math.max(
@@ -586,20 +601,13 @@ function ClipInspector({
 	return (
 		<div className="timecode-selection-inspector">
 			<strong>{label}</strong>
-			<InspectorNumber
-				label="Start frame"
-				value={clip.start_frame}
-				min={minimumStart}
-				max={clip.end_frame - 1}
-				onValue={(start_frame) => update({ start_frame })}
-			/>
-			<InspectorNumber
-				label="End frame"
-				value={clip.end_frame}
-				min={clip.start_frame + 1}
-				max={duration ?? undefined}
-				onValue={(end_frame) => update({ end_frame })}
-			/>
+			{!cueTimingActive && boundaries && (
+				<>
+					<TimecodeInspectorSection title="Cue In" defaultOpen>{boundaries.inControl}</TimecodeInspectorSection>
+					<TimecodeInspectorSection title="Cue Out" defaultOpen>{boundaries.outControl}</TimecodeInspectorSection>
+				</>
+			)}
+			<TimecodeInspectorSection title="Cuelist">
 			<CueSelect
 				label="Start Cue"
 				value={clip.start_cue_id}
@@ -632,6 +640,7 @@ function ClipInspector({
 					{ value: "hold", label: "Hold" },
 				]}
 			/>
+			</TimecodeInspectorSection>
 		</div>
 	);
 }

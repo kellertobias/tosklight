@@ -78,7 +78,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const rightEdge = await geometry(editor, viewport, envelope);
 		await editor.getByRole("button", { name: "Close selection settings", exact: true }).tap();
 		expect(await geometry(editor, viewport, envelope)).toEqual(rightEdge);
-		await editor.getByRole("button", { name: "Fit timeline", exact: true }).click();
+		await page.getByRole("button", { name: "Fit timeline", exact: true }).click();
 		await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBe(0);
 		await expect.poll(() => viewport.evaluate((node) => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
 		await expect.poll(async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))?.body.cues.map((cue) => cue.trigger.type)).toEqual(["manual", "manual", "manual"]);
@@ -318,6 +318,102 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).out_fade_frames).toBe(44);
 		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(660);
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(originalCues);
+	});
+
+	test("TIMECODE-001 @ui › open Speed Groups retain context and Cue focus dims only other editing lanes", async ({ api, show, desk, page, request }, testInfo) => {
+		const { rig, speedLanes } = await seedAudioEditor(api, show.id, request, ["Movement", "Chase", "Colour"]);
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		const window = page.locator(".timecode-window.timecode-editor");
+		await expect(editor.getByLabel("Selected lane and keyframe actions")).toHaveCount(0);
+		const section = editor.locator(".timecode-speed-section");
+		const movement = editor.locator(`[data-lane-id="${speedLanes[0].id}"].timecode-editor-lane`);
+		const chase = editor.locator(`[data-lane-id="${speedLanes[1].id}"].timecode-editor-lane`);
+		const color = (lane: Locator) => lane.evaluate((node) => getComputedStyle(node).backgroundColor);
+		await movement.getByRole("button", { name: /^Movement/ }).tap();
+		await expect(movement).toHaveClass(/lane-expanded/);
+		expect(await color(movement)).not.toBe(await color(chase));
+		await window.getByRole("button", { name: "Next Keyframe", exact: true }).tap();
+		await expect(movement.locator(".timecode-timeline-item.selected")).toHaveCount(1);
+		await editor.getByRole("button", { name: "Close speed group editor", exact: true }).tap();
+		await expect(section).toHaveClass(/section-expanded/);
+		await expect(movement).not.toHaveClass(/lane-expanded/);
+		expect(await color(movement)).toBe(await color(chase));
+		expect(await color(movement)).not.toBe("rgba(0, 0, 0, 0)");
+		await window.screenshot({ path: testInfo.outputPath("timecode-speed-context-detail.png") });
+		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click({ position: { x: 32, y: 18 } });
+		const active = editor.locator(`[data-lane-id="${rig.definition.lanes[0].id}"].timecode-editor-lane`);
+		const other = editor.locator(".lane-cue_list").nth(1);
+		const opacity = (lane: Locator) => lane.evaluate((node) => Number(getComputedStyle(node).opacity));
+		expect(await opacity(section)).toBeLessThan(0.5);
+		expect(await opacity(other)).toBeLessThan(0.5);
+		expect(await opacity(active)).toBe(1);
+		expect(await opacity(editor.locator(".main-audio"))).toBe(1);
+		const inspector = editor.locator(".timecode-editor-inspector");
+		for (const name of ["Cue In", "Cue Out", "Cuelist"]) {
+			const detail = inspector.locator("details").filter({ has: page.locator("summary").filter({ hasText: new RegExp(`^${name}$`) }) });
+			const summary = inspector.locator("summary").filter({ hasText: new RegExp(`^${name}$`) });
+			const wasOpen = await detail.getAttribute("open");
+			await summary.tap();
+			if (wasOpen === null) await expect(detail).toHaveAttribute("open", "");
+			else await expect(detail).not.toHaveAttribute("open", "");
+			await summary.tap();
+		}
+		await inspector.locator("summary").filter({ hasText: /^Cue In$/ }).tap();
+		const panel = (await inspector.boundingBox())!;
+		await page.mouse.move(panel.x + panel.width / 2, panel.y + panel.height / 2);
+		await page.mouse.wheel(0, -10000);
+		await window.screenshot({ path: testInfo.outputPath("timecode-focus-sidebar-detail.png") });
+	});
+
+	test("TIMECODE-001 @ui › the last Cue end grip preserves earlier triggers and retains a refused autosave draft", async ({ api, show, desk, page }, testInfo) => {
+		const rig = await seedEditor(api, show.id);
+		const originalCues = structuredClone((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues);
+		const originalClip = await readClip(api, show.id, rig.definition.id);
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click({ position: { x: 32, y: 18 } });
+		const end = editor.getByRole("slider", { name: "Extend last Cue", exact: true });
+		await dragFrames(page, editor, end, 44);
+		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).end_frame).toBe(660);
+		await touchDragFrames(page, editor, end, 44);
+		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).end_frame).toBe(704);
+		expect((await readClip(api, show.id, rig.definition.id)).cue_starts).toEqual(originalClip.cue_starts);
+		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(originalCues);
+		await page.route("**/api/v2/timecodes/actions", (route) => route.request().method() === "POST" ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: { code: "save_refused", message: "Refused end extension" } }) }) : route.continue());
+		await dragFrames(page, editor, end, 4);
+		await expect(page.getByText(/Refused end extension|503/).first()).toBeVisible();
+		await expect(page.getByText("Not saved", { exact: true })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Retry autosave", exact: true })).toBeVisible();
+		await expect(end).toHaveAttribute("aria-valuenow", "708");
+		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(704);
+		await page.unroute("**/api/v2/timecodes/actions");
+		await page.reload();
+		await openEditor(page);
+		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click({ position: { x: 32, y: 18 } });
+		await expect(end).toHaveAttribute("aria-valuenow", "704");
+		const collection = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		await api.request("POST", "/api/v2/timecodes/actions", { request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id, expected_revision: collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision, patch: { duration_frame: 704 } } }, true, undefined, { showId: show.id });
+		await page.reload();
+		await openEditor(page);
+		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click({ position: { x: 32, y: 18 } });
+		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+		const scrollBox = (await viewport.boundingBox())!;
+		await page.mouse.move(scrollBox.x + scrollBox.width / 2, scrollBox.y + scrollBox.height / 2);
+		await page.mouse.wheel(100000, 0);
+		await expect.poll(() => end.evaluate((node) => {
+			const target = node.getBoundingClientRect();
+			const scroll = node.closest(".timecode-timeline-scroll")!;
+			const box = scroll.getBoundingClientRect();
+			return target.width === 44 && target.left >= box.left && target.right <= box.left + scroll.clientLeft + scroll.clientWidth + 1;
+		})).toBe(true);
+		await touchDragFrames(page, editor, end, -4, true);
+		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(704);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-end-grabber-detail.png") });
+		await page.getByRole("button", { name: "Delete clip", exact: true }).click();
+		await expect(editor.locator(".timecode-cue-block")).toHaveCount(0);
 	});
 
 	test("TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll", async ({ api, show, desk, page }) => {

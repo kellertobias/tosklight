@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **436 root cases across 134 files**.
+Default catalog: **438 root cases across 134 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -406,6 +406,8 @@ Default catalog: **436 root cases across 134 files**.
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › manual Trigger drags stop at neighbours and survive reopening without changing trigger type | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › touch drags each timing point and cancelling a touch restores the unsaved preview | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › first Trigger moves the whole clip and the final Cue explains its separate Clip Out | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › open Speed Groups retain context and Cue focus dims only other editing lanes | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the last Cue end grip preserves earlier triggers and retains a refused autosave draft | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › grouped Speed navigation previews every group and enlarges only the selected lane | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |

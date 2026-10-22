@@ -1,9 +1,13 @@
+import { useTimecodeEditorHandle } from "./useTimecodeEditorHandle";
+import { cueStatusForItem } from "./cueLaneClipStatus";
+import { overviewResizer } from "./timelineOverviewResize";
+import { createCueClipEndWriter } from "./extendCueClipEnd";
 import {
 	useTimelineSections,
 	useTimelineSelectedLane,
 } from "./useTimelineSections";
 import { useExpandedLaneVisibility } from "./useExpandedLaneVisibility";
-import { useClipTriggerPreview } from "./useClipTriggerPreview";
+import { useCueLaneView } from "./useCueLaneView";
 import { TimelineOverview } from "./TimecodeTimelineOverview";
 import {
 	TIMECODE_LANE_SECTIONS,
@@ -21,6 +25,15 @@ import {
 	TARGET_MAX_PIXELS_PER_FRAME,
 } from "./useTimelineGeometry";
 export { timelineZoomGeometry } from "./useTimelineGeometry";
+import { useCueClipBoundaryResize } from "./useCueClipBoundaryResize";
+import {
+	useTimelineTitleActions,
+	type TimelineTitleState,
+} from "./useTimelineTitleActions";
+import {
+	CueClipBoundaryProvider,
+	cueClipBoundarySlots,
+} from "./CueClipBoundaryContext";
 import { SelectionSidebar } from "./TimecodeSelectionInspector";
 import { Button } from "@tosklight/ui";
 import {
@@ -30,7 +43,6 @@ import {
 	type RefObject,
 	useEffect,
 	useId,
-	useImperativeHandle,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -53,15 +65,20 @@ import {
 	withPlacedCueStart,
 } from "./editorModel";
 import { type ClipFadeKind, CueListClipBody } from "./TimecodeClipBody";
-import { LaneLabel, AudioVolumeLaneBackground } from "./TimecodeLaneParts";
+import {
+	LaneLabel,
+	AudioVolumeLaneBackground,
+	SpeedGroupLaneBackground,
+	lanePointerSelection,
+} from "./TimecodeLaneParts";
 import { CueListClipStatus } from "./TimecodeCueClipContents";
 import {
-	KeyframeActionStrip,
 	scaleClipCueTimings,
+	cueRangeOfSelectedClip,
 	useCueEncoderContext,
 	useSelectedCue,
 } from "./TimecodeKeyframeActions";
-import { CueListChooser } from "./TimecodeCueListChooser";
+import { TimelineLaneChoosers } from "./TimecodeLaneChoosers";
 import {
 	formatFrame,
 	displayedTimecodeLanes,
@@ -76,7 +93,6 @@ import {
 } from "./timecodeEditorShared";
 import {
 	TIMECODE_SPEED_GROUPS,
-	TimecodeSpeedGroupChooser,
 } from "./TimecodeSpeedGroupChooser";
 import { useTimelineEncoderOwner } from "./useTimelineEncoderOwner";
 import { useTimecodeEncoderSlots } from "./timecodeEncoderSlots";
@@ -112,6 +128,11 @@ export {
 };
 
 export interface TimecodeTimelineEditorHandle {
+	stepKeyframe(delta: -1 | 1): void;
+	deleteSelection(): void;
+	insertKeyframe(): void;
+	addClip(): void;
+	fit(): void;
 	addMarker(): void;
 	chooseSpeedLane(): void;
 	chooseCueListLane(): void;
@@ -147,6 +168,7 @@ function TimelineCanvas(props: {
 	onSelectCue(cueId: string, selection?: TimecodeEditorSelection): void;
 	inspectorHost: HTMLElement | null;
 	onMoveClip(laneId: string, clipId: string, frame: number): void;
+	onSetClipEnd(laneId: string, clipId: string, frame: number): void;
 	onCloseCue(): void;
 	onSelectLane(laneId: string): void;
 	onScroll(scrollLeft: number): void;
@@ -301,32 +323,40 @@ function EditorLane(
 		lane: TimecodeDefinition["lanes"][number];
 	},
 ) {
-	const { displayDefinition, displayItems, previewMoveClip } =
-		useClipTriggerPreview(props.definition, props.items);
-	const lane = displayDefinition.lanes.find(
-		(candidate) => candidate.id === props.lane.id,
-	) ?? props.lane;
+	const cueList = cueListForLane(props.lane, props.cueLists);
+	const {
+		displayDefinition,
+		displayItems,
+		previewMoveClip,
+		previewClipEnd,
+		boundsForClip,
+	} = useCueLaneView(
+		props.definition,
+		props.items,
+		props.lane.id,
+		cueList?.body,
+		props.timingDefaults,
+	);
+	const lane =
+		displayDefinition.lanes.find(
+			(candidate) => candidate.id === props.lane.id,
+		) ?? props.lane;
 	const speedPositions =
 		lane.content.kind === "speed_group"
 			? speedKeyframePositions(lane.content.keyframes)
 			: new Map<string, number>();
-	const cueListId = lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
-	const cueList = cueListForLane(lane, props.cueLists);
-	useExpandedLaneVisibility(props.scrollRef, props.selectedLaneId === lane.id ? lane.id : null, props.selectedCueId);
+	const cueListId =
+		lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
+	useExpandedLaneVisibility(
+		props.scrollRef,
+		props.selectedLaneId === lane.id ? lane.id : null,
+		props.selectedCueId,
+	);
 	return (
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
 			data-lane-id={lane.id}
-			onPointerDown={(event) => {
-				const target = event.target as Element;
-				if (
-					target.closest(
-						".timecode-timeline-item, .timecode-editor-lane-label button",
-					)
-				)
-					return;
-				props.onSelectLane(lane.id);
-			}}
+			onPointerDown={lanePointerSelection(props.onSelectLane, lane.id)}
 		>
 			{lane.content.kind === "audio_volume" && (
 				<AudioVolumeLaneBackground
@@ -336,23 +366,13 @@ function EditorLane(
 					waveformPeaks={props.waveformPeaks}
 				/>
 			)}
-			{lane.content.kind === "speed_group" &&
-				lane.content.keyframes.length > 0 && (
-					<svg
-						className="timecode-speed-keyframe-curve"
-						viewBox="0 0 100 100"
-						preserveAspectRatio="none"
-						role="img"
-						aria-label={`${lane.name} value line`}
-					>
-						<polyline
-							points={speedGroupLinePoints(
-								lane.content.keyframes,
-								props.duration,
-							)}
-						/>
-					</svg>
-				)}
+			{lane.content.kind === "speed_group" && (
+				<SpeedGroupLaneBackground
+					name={lane.name}
+					content={lane.content}
+					duration={props.duration}
+				/>
+			)}
 			<LaneLabel
 				lane={lane}
 				pinned={Boolean(
@@ -406,6 +426,11 @@ function EditorLane(
 						onPreviewMoveClip={(clipId, frame) =>
 							previewMoveClip(lane.id, clipId, frame)
 						}
+						clipEndBounds={boundsForClip(item.selection.itemId)}
+						onPreviewClipEnd={previewClipEnd}
+						onSetClipEnd={(clipId, frame) =>
+							props.onSetClipEnd(lane.id, clipId, frame)
+						}
 						onMoveClip={(clipId, frame) =>
 							props.onMoveClip(lane.id, clipId, frame)
 						}
@@ -429,16 +454,12 @@ function EditorLane(
 							props.onSetClipFade(lane.id, clipId, kind, frames)
 						}
 						onCueTimingError={props.onCueTimingError}
-						clipStatus={
-							lane.content.kind === "cue_list" && item.kind === "clip"
-								? props.clipStatuses.find(
-										(status) =>
-											status.lane_id === lane.id &&
-											status.clip_id === item.selection.itemId &&
-											status.cue_list_id === cueListId,
-									)
-								: undefined
-						}
+						clipStatus={cueStatusForItem(
+							props.clipStatuses,
+							lane,
+							item,
+							cueListId,
+						)}
 					/>
 				))}
 		</div>
@@ -471,6 +492,9 @@ function TimelineItemButton({
 	inspectorHost = null,
 	onMoveClip,
 	onPreviewMoveClip,
+	onSetClipEnd,
+	onPreviewClipEnd,
+	clipEndBounds,
 }: {
 	item: TimelineItem;
 	marker?: boolean;
@@ -500,6 +524,9 @@ function TimelineItemButton({
 	inspectorHost?: HTMLElement | null;
 	onMoveClip?(clipId: string, frame: number): void;
 	onPreviewMoveClip?(clipId: string, frame: number | null): void;
+	onSetClipEnd?(clipId: string, frame: number): void;
+	onPreviewClipEnd?(clipId: string, frame: number | null): void;
+	clipEndBounds?: { minimum: number; maximum: number } | null;
 	onSelectCue?(cueId: string): void;
 	onCloseCue?(): void;
 	expanded?: boolean;
@@ -569,6 +596,10 @@ function TimelineItemButton({
 					inspectorHost={inspectorHost}
 					onMoveClip={onMoveClip}
 					onPreviewMoveClip={onPreviewMoveClip}
+					onSetClipEnd={clipEndBounds ? onSetClipEnd : undefined}
+					onPreviewClipEnd={clipEndBounds ? onPreviewClipEnd : undefined}
+					clipEndMinimum={clipEndBounds?.minimum}
+					clipEndMaximum={clipEndBounds?.maximum}
 				/>
 			)}
 			{marker ? (
@@ -810,16 +841,17 @@ export const TimecodeTimelineEditor = forwardRef<
 		setSelection,
 		setSelectedLane: setSelectedLaneId,
 	});
-	useImperativeHandle(
-		ref,
-		() => ({
-			addMarker,
-			chooseSpeedLane: () => setSpeedGroupChooserOpen(true),
-			chooseCueListLane: () => setCueListChooserOpen(true),
-			addAudioPlayerLane,
-		}),
-		[addAudioPlayerLane, addMarker],
-	);
+	const titleActions = useTimelineTitleActions({
+		definition,
+		selection,
+		laneId: activeLaneId,
+		items,
+		onSelect: setSelection,
+		onCommit,
+		onScrub,
+	});
+	useTimecodeEditorHandle(ref, { titleActions, fitTimeline, activeLaneId, frame, addKeyframe, addClip, addMarker, setSpeedGroupChooserOpen, setCueListChooserOpen, addAudioPlayerLane });
+
 	useOverviewScroll({
 		scrollRef,
 		width,
@@ -828,23 +860,15 @@ export const TimecodeTimelineEditor = forwardRef<
 		setScrollLeft,
 		setOverviewResize,
 	});
-	const resizeOverviewWindow = (startFraction: number, endFraction: number) => {
-		const requestedFraction = Math.max(0.0001, endFraction - startFraction);
-		const requestedPixelsPerFrame = Math.min(
-			TARGET_MAX_PIXELS_PER_FRAME,
-			timelineViewportWidth / requestedFraction / duration,
-		);
-		const nextZoom = Math.max(
-			1,
-			Math.min(maximumZoom, requestedPixelsPerFrame / fitPixelsPerFrame),
-		);
-		setOverviewResize((current) => ({
-			zoom: nextZoom,
-			startFraction,
-			revision: (current?.revision ?? 0) + 1,
-		}));
-		setZoom(nextZoom);
-	};
+	const resizeOverviewWindow = overviewResizer({
+		timelineViewportWidth,
+		duration,
+		maximumZoom,
+		fitPixelsPerFrame,
+		setOverviewResize,
+		setZoom,
+	});
+
 	useEffect(() => {
 		if (!cueLists.some((cueList) => cueList.id === cueListId))
 			setCueListId(cueLists[0]?.id ?? "");
@@ -900,126 +924,125 @@ export const TimecodeTimelineEditor = forwardRef<
 		onCommit,
 	);
 
+	const cueTimingActive = cueRangeOfSelectedClip(
+		activeLane,
+		selection,
+		cueLists,
+	).some((cue) => cue.id === selectedCueId);
+	useEffect(() => {
+		if (selectedCueId && !cueTimingActive) setSelectedCueId(null);
+	}, [selectedCueId, cueTimingActive]);
+	const resizeClip = useCueClipBoundaryResize({
+		definition,
+		cueLists,
+		onBeginGesture,
+		onPreview,
+		onEndGesture,
+		onSaveCueList,
+		onCueTimingError,
+	});
+
 	return (
 		<section
-			className="timecode-timeline-editor"
+			className={`timecode-timeline-editor${cueTimingActive ? " cue-focus" : ""}`}
 			aria-label="Timecode timeline editor"
 		>
-			<div className="timecode-editor-body">
-				<div className="timecode-editor-main">
-					<TimelineOverview
-						definition={definition}
-						items={items}
-						duration={duration}
-						scrollLeft={scrollLeft}
-						viewportWidth={timelineViewportWidth}
-						totalWidth={width}
-						scrollRef={scrollRef}
-						viewportId={viewportId}
-						minimumVisibleFraction={Math.min(
-							1,
-							timelineViewportWidth / (duration * TARGET_MAX_PIXELS_PER_FRAME),
-						)}
-						onScrollLeftChange={setScrollLeft}
-						onVisibleRangeChange={resizeOverviewWindow}
+			<CueClipBoundaryProvider
+				value={cueClipBoundarySlots({
+					definition,
+					selection,
+					onResizeClip: resizeClip,
+				})}
+			>
+				<div className="timecode-editor-body">
+					<div className="timecode-editor-main">
+						<TimelineOverview
+							definition={definition}
+							items={items}
+							duration={duration}
+							scrollLeft={scrollLeft}
+							viewportWidth={timelineViewportWidth}
+							totalWidth={width}
+							scrollRef={scrollRef}
+							viewportId={viewportId}
+							minimumVisibleFraction={Math.min(
+								1,
+								timelineViewportWidth /
+									(duration * TARGET_MAX_PIXELS_PER_FRAME),
+							)}
+							onScrollLeftChange={setScrollLeft}
+							onVisibleRangeChange={resizeOverviewWindow}
+						/>
+						<TimelineCanvas
+							{...{
+								definition,
+								collapsedSections,
+								onToggleSection,
+								frame,
+								fps,
+								waveformPeaks,
+								markersLocked,
+								clipStatuses,
+								duration,
+								width,
+								pixelsPerFrame,
+								items,
+								selection,
+								scrollRef,
+								onScrub,
+								startDrag,
+								startLaneDrag: laneReorder.start,
+								consumeLaneDragClick: laneReorder.consumeClick,
+								onSelectItem: setSelection,
+								selectedCueId,
+								onSelectCue: setSelectedCueId,
+								inspectorHost: cueInspectorHost,
+								onMoveClip: moveClip,
+								onSetClipEnd: createCueClipEndWriter({
+									definition,
+									cueLists,
+									timingDefaults,
+									onCommit,
+								}),
+								onCloseCue,
+								onScroll: setScrollLeft,
+								viewportId,
+								onSelectLane,
+								selectedLaneId: activeLaneId,
+								cueLists,
+								timingDefaults,
+								onSaveCueList,
+								onPlaceCueStart: placeCueStart,
+								onSetClipFade: setClipFade,
+								onCueTimingError,
+							}}
+						/>
+					</div>
+					<SelectionSidebar
+						{...{ definition, selection, cueLists, fps, items, onCommit, frame, onScrub }}
+						onSelect={setSelection}
+						beforeClose={prepareInspectorClose}
+						cueTimingActive={cueTimingActive}
+						inspectorRef={setCueInspectorHost}
 					/>
-					<TimelineCanvas
-						{...{
-							definition,
-							collapsedSections,
-							onToggleSection,
-							frame,
-							fps,
-							waveformPeaks,
-							markersLocked,
-							clipStatuses,
-							duration,
-							width,
-							pixelsPerFrame,
-							items,
-							selection,
-							scrollRef,
-							onScrub,
-							startDrag,
-							startLaneDrag: laneReorder.start,
-							consumeLaneDragClick: laneReorder.consumeClick,
-							onSelectItem: setSelection,
-							selectedCueId,
-							onSelectCue: setSelectedCueId,
-							inspectorHost: cueInspectorHost,
-							onMoveClip: moveClip,
-							onCloseCue,
-							onScroll: setScrollLeft,
-							viewportId,
-							onSelectLane,
-							selectedLaneId: activeLaneId,
-							cueLists,
-							timingDefaults,
-							onSaveCueList,
-							onPlaceCueStart: placeCueStart,
-							onSetClipFade: setClipFade,
-							onCueTimingError,
-						}}
-					/>
-					<KeyframeActionStrip
-						definition={definition}
-						selection={selection}
-						laneId={activeLaneId}
-						frame={frame}
-						fps={fps}
-						items={items}
-						cueLists={cueLists}
-						selectedCueId={selectedCueId}
-						onSelectCue={setSelectedCueId}
-						onSelection={(item) => setSelection(item.selection)}
-						onInsert={() => {
-							if (activeLaneId) addKeyframe(activeLaneId, frame);
-						}}
-						onCommit={onCommit}
-						onAddClip={() => {
-							if (activeLaneId) addClip(activeLaneId);
-						}}
-					>
-						<Button
-							size="compact"
-							onClick={fitTimeline}
-							aria-label="Fit timeline"
-						>
-							Fit
-						</Button>
-					</KeyframeActionStrip>
 				</div>
-				<SelectionSidebar
-					{...{ definition, selection, cueLists, fps, items, onCommit }}
-					onSelect={setSelection}
-					beforeClose={prepareInspectorClose}
-					inspectorRef={setCueInspectorHost}
-				/>
-			</div>
-			{cueListChooserOpen && (
-				<CueListChooser
-					cueLists={cueLists}
-					value={cueListId}
-					onChange={setCueListId}
-					onClose={() => setCueListChooserOpen(false)}
-					onAdd={() => {
-						if (cueListId) addCueListLane(cueListId);
-						setCueListChooserOpen(false);
-					}}
-				/>
-			)}
-			{speedGroupChooserOpen && (
-				<TimecodeSpeedGroupChooser
-					available={availableSpeedGroups}
-					value={speedGroup}
-					onChange={setSpeedGroup}
-					onClose={() => setSpeedGroupChooserOpen(false)}
-					onAdd={() => {
-						if (speedGroup) addSpeedLane(speedGroup);
-						setSpeedGroupChooserOpen(false);
-					}}
-				/>
-			)}
+			</CueClipBoundaryProvider>
+			<TimelineLaneChoosers
+				{...{
+					cueListChooserOpen,
+					cueLists,
+					cueListId,
+					setCueListId,
+					setCueListChooserOpen,
+					addCueListLane,
+					speedGroupChooserOpen,
+					availableSpeedGroups,
+					speedGroup,
+					setSpeedGroup,
+					setSpeedGroupChooserOpen,
+					addSpeedLane,
+				}}
+			/>
 		</section>
 	);
 });

@@ -1366,3 +1366,27 @@
 .timecode-editor-lane.lane-speed_group.lane-expanded { height: 170px; min-height: 170px; max-height: 170px; }
 .timecode-editor-lane.lane-speed_group:not(.lane-expanded) .timecode-timeline-item { visibility: hidden; }
 .timecode-editor-lane.lane-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
+
+/* Section visibility and the actively edited lane are separate operator states. */
+.timecode-speed-section.section-expanded > .timecode-section-row { background: #213b48; box-shadow: inset 0 1px #527687, inset 0 -1px #527687; }
+.timecode-speed-section.section-expanded .timecode-section-toggle { color: #c4e6f1; }
+.timecode-speed-section.section-expanded .lane-speed_group { background: #1b303b; }
+.timecode-speed-section.section-expanded .lane-speed_group .timecode-editor-lane-label { background: #1e3541; color: #c4dbe7; }
+.timecode-editor-lane.selected { background: #244653; box-shadow: inset 0 0 0 1px #69cfe6; }
+.timecode-speed-section.section-expanded .lane-speed_group.selected { background: #244653; box-shadow: inset 0 0 0 1px #69cfe6; }
+.timecode-speed-section.section-expanded .lane-speed_group.selected .timecode-editor-lane-label { background: #285263; color: #dcf7ff; }
+.cue-focus .timecode-speed-section, .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) { opacity: .35; }
+.cue-focus .main-audio, .cue-focus .lane-cue_list.cue-expanded, .cue-focus .lane-cue_list.cue-focus-active { opacity: 1; }
+
+/* Clip ending has its own persistent grip; it extends duration without scaling Cues. */
+.lane-cue_list .timecode-timeline-item.item-clip { overflow: visible; }
+.timecode-cue-point.timecode-clip-end-grab { z-index: 13; color: #d0effa; }
+.timecode-cue-point.timecode-clip-end-grab > span { top: 10px; left: 15px; width: 14px; height: 24px; border: 1px solid #a3d7e8; border-radius: 3px; background: #244958; box-shadow: 0 0 0 2px #101820; }
+.timecode-cue-point.timecode-clip-end-grab > span::before, .timecode-cue-point.timecode-clip-end-grab > span::after { content: ""; position: absolute; top: 4px; width: 2px; height: 14px; background: #b9e5f4; }
+.timecode-cue-point.timecode-clip-end-grab > span::before { left: 3px; }
+.timecode-cue-point.timecode-clip-end-grab > span::after { right: 3px; }
+.timecode-cue-point.timecode-clip-end-grab::after { content: ""; position: absolute; left: 43px; top: 0; height: 44px; border-left: 2px solid #8bcfe7; pointer-events: none; }
+.timecode-cue-point.timecode-clip-end-grab.expanded::after { top: -44px; height: 88px; }
+.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-caption { top: 28px; bottom: auto; left: 10px; transform: translateX(-100%); color: #d0effa; }
+
+.timecode-cue-point.timecode-clip-end-grab[aria-disabled="true"] { pointer-events: none; }

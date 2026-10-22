@@ -202,7 +202,8 @@ describe("TimecodeTimelineEditor", () => {
 			observe() {} disconnect() {}
 		});
 		try {
-			render(<><TimecodeTimelineEditor definition={definition} frame={44} fps={44} cueLists={[]} audioPlayers={[]}
+			const ref = createRef<TimecodeTimelineEditorHandle>();
+			render(<><TimecodeTimelineEditor ref={ref} definition={definition} frame={44} fps={44} cueLists={[]} audioPlayers={[]}
 				onScrub={vi.fn()} onCommit={vi.fn()} onPreview={vi.fn()} onBeginGesture={vi.fn()} onEndGesture={vi.fn()} />
 				<TimecodeEncoderProbe /></>);
 			const viewport = screen.getByLabelText("Timecode timeline viewport");
@@ -230,7 +231,7 @@ describe("TimecodeTimelineEditor", () => {
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
 			expect(viewport.scrollLeft).toBe(850);
 			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + viewportWidth);
-			fireEvent.click(screen.getByRole("button", { name: "Fit timeline" }));
+			act(() => ref.current?.fit());
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
 			expect(viewport.scrollLeft).toBe(0);
 			expect(canvas.style.width).toBe("720px");
@@ -765,17 +766,9 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: /Audio.*audio volume/i }),
 		);
-		expect(
-			screen.getByLabelText("Selected lane and keyframe actions"),
-		).toBeInTheDocument();
-		expect(
-			screen.getByLabelText("Selected lane and keyframe actions"),
-		).toHaveTextContent("Audio");
-		expect(screen.getByRole("button", { name: "Prev Keyframe" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "Next Keyframe" })).toBeTruthy();
-		expect(
-			screen.getByRole("button", { name: "Delete Keyframe" }),
-		).toBeEnabled();
+		expect(screen.queryByLabelText("Selected lane and keyframe actions")).toBeNull();
+		expect(screen.getByLabelText("Selection settings")).toHaveTextContent("Volume");
+		expect(ref.current?.deleteSelection).toBeTypeOf("function");
 		expect(screen.queryByText(/inspect, copy, move, or delete/)).toBeNull();
 		// The envelope is one path, so a high-resolution waveform stays a single element.
 		const waveform = screen.getByLabelText("Linked audio waveform");
@@ -896,6 +889,7 @@ describe("TimecodeTimelineEditor", () => {
 
 	it("creates a clip on a patched Audio Player lane with editable properties", () => {
 		const commits: TimecodeDefinition[] = [];
+		const ref = createRef<TimecodeTimelineEditorHandle>();
 		function Harness() {
 			const [draft, setDraft] = useState<TimecodeDefinition>({
 				...definition,
@@ -914,6 +908,7 @@ describe("TimecodeTimelineEditor", () => {
 			});
 			return (
 				<TimecodeTimelineEditor
+					ref={ref}
 					definition={draft}
 					frame={44}
 					fps={44}
@@ -940,15 +935,13 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.click(
 			screen.getByRole("button", { name: /Audio Player 201.*audio player/i }),
 		);
-		fireEvent.click(
-			screen.getByRole("button", { name: "Add clip at 00:00:01.00" }),
-		);
+		act(() => ref.current?.addClip());
 		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
 		expect(screen.getByLabelText("Audio Folder")).toBeTruthy();
 		expect(
 			screen.queryByRole("button", { name: "Delete Keyframe" }),
 		).toBeNull();
-		expect(screen.getByRole("button", { name: "Delete clip" })).toBeEnabled();
+		expect(ref.current?.deleteSelection).toBeTypeOf("function");
 		const content = commits.at(-1)?.lanes[0].content;
 		expect(content).toMatchObject({
 			kind: "audio_player",
@@ -1057,7 +1050,8 @@ describe("TimecodeTimelineEditor", () => {
 		});
 	});
 
-	it("selects a whole lane and edits keyframes through the compact action strip", () => {
+	it("selects a whole lane and exposes keyframe insertion and deletion to title actions", () => {
+		const ref = createRef<TimecodeTimelineEditorHandle>();
 		function Harness() {
 			const [draft, setDraft] = useState<TimecodeDefinition>({
 				...definition,
@@ -1071,6 +1065,7 @@ describe("TimecodeTimelineEditor", () => {
 			});
 			return (
 				<TimecodeTimelineEditor
+					ref={ref}
 					definition={draft}
 					frame={0}
 					fps={44}
@@ -1093,11 +1088,7 @@ describe("TimecodeTimelineEditor", () => {
 		);
 		expect(lane).toHaveClass("selected");
 		expect(screen.queryByRole("button", { name: "+ keyframe" })).toBeNull();
-		fireEvent.click(
-			screen.getByRole("button", {
-				name: "Insert Keyframe",
-			}),
-		);
+		act(() => ref.current?.insertKeyframe());
 		const keyframe = view.getByTitle(/Main audio volume · 100%/);
 		fireEvent.pointerDown(keyframe, {
 			pointerId: 1,
@@ -1107,7 +1098,7 @@ describe("TimecodeTimelineEditor", () => {
 		fireEvent.pointerMove(window, { clientX: 112, clientY: 132 });
 		fireEvent.pointerUp(window);
 		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
-		fireEvent.click(screen.getByRole("button", { name: "Delete Keyframe" }));
+		act(() => ref.current?.deleteSelection());
 		expect(view.queryByTitle(/Main audio volume · 80%/)).toBeNull();
 	});
 
@@ -1213,8 +1204,8 @@ describe("TimecodeTimelineEditor", () => {
 			clientX: 10,
 		});
 		fireEvent.pointerUp(window);
-		expect(view.getByRole("button", { name: "Prev Cue" })).toBeEnabled();
-		expect(view.getByRole("button", { name: "Next Cue" })).toBeEnabled();
+		expect(view.queryByLabelText("Selected lane and keyframe actions")).toBeNull();
+		expect(view.getByLabelText("Selection settings")).toBeInTheDocument();
 		const canvas = view.container.querySelector<HTMLElement>(
 			".timecode-timeline-canvas",
 		);
@@ -1385,11 +1376,14 @@ describe("TimecodeTimelineEditor", () => {
 });
 
 describe("Timecode selection properties", () => {
+	let selectionEditorRef = createRef<TimecodeTimelineEditorHandle>();
 	function harness(initial: TimecodeDefinition, onCommit = vi.fn()) {
+		selectionEditorRef = createRef<TimecodeTimelineEditorHandle>();
 		function Harness() {
 			const [draft, setDraft] = useState(initial);
 			return (
 				<TimecodeTimelineEditor
+					ref={selectionEditorRef}
 					definition={draft}
 					frame={0}
 					fps={44}
@@ -1451,15 +1445,8 @@ describe("Timecode selection properties", () => {
 				},
 			],
 		});
-		const strip = screen.getByRole("group", {
-			name: "Selected lane and keyframe actions",
-		});
-		expect(
-			within(strip).getByRole("button", { name: "Prev Keyframe" }),
-		).toBeTruthy();
-		expect(
-			within(strip).getByRole("button", { name: "Next Keyframe" }),
-		).toBeTruthy();
+		expect(screen.queryByLabelText("Selected lane and keyframe actions")).toBeNull();
+		fireEvent.click(screen.getByText("Cuelist", { selector: "summary" }));
 		expect(
 			within(screen.getByLabelText("Selection settings")).getByRole("button", { name: "Copy clip" }),
 		).toBeTruthy();
@@ -1478,7 +1465,7 @@ describe("Timecode selection properties", () => {
 		).toBe("cue");
 		fireEvent.click(screen.getByRole("button", { name: "Copy clip" }));
 		expect(commits.mock.lastCall?.[0].lanes[0].content.clips).toHaveLength(2);
-		fireEvent.click(screen.getByRole("button", { name: "Delete clip" }));
+		act(() => selectionEditorRef.current?.deleteSelection());
 		expect(commits.mock.lastCall?.[0].lanes[0].content.clips).toHaveLength(1);
 		expect(
 			screen.queryByRole("group", {

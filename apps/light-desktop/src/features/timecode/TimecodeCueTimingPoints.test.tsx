@@ -18,7 +18,8 @@ const clip: TimecodeCueListClip = {
 	in_fade_frames: 0,
 	out_fade_frames: 0,
 };
-function mount(trigger: "follow" | "wait", pixelsPerFrame: number) {
+function mount(trigger: "follow" | "wait", pixelsPerFrame: number, endFrame = clip.end_frame) {
+	const placedClip = { ...clip, end_frame: endFrame };
 	const cueList = {
 		id: "list",
 		name: "Opening",
@@ -46,14 +47,14 @@ function mount(trigger: "follow" | "wait", pixelsPerFrame: number) {
 			},
 		],
 	} as unknown as CueList;
-	const selected = cueClipTimingRows(clip, cueList, defaults).rows[0];
+	const selected = cueClipTimingRows(placedClip, cueList, defaults).rows[0];
 	const begin = vi.fn();
 	const view = render(
 		<CueTimingPoints
 			selected={selected}
 			cueList={cueList}
 			timingDefaults={defaults}
-			clip={clip}
+			clip={placedClip}
 			position={(frame) => frame * pixelsPerFrame}
 			pixelsPerFrame={pixelsPerFrame}
 			triggerPreview={null}
@@ -371,4 +372,15 @@ it("finds a guaranteed free target beyond densely occupied divider candidates", 
 		inStart,
 		screen.getByRole("slider", { name: "Cue 1 Out fade" }),
 	]);
+});
+
+it("reserves the inset end-grip touch center instead of the clip boundary", () => {
+	mount("follow", 2, 22);
+	const endGrip = { x: 22 * 2 - 22, y: 90 };
+	for (const name of ["In delay", "In fade", "Out delay", "Out fade"]) {
+		const handle = screen.getByRole("slider", { name: `Cue 1 ${name}` });
+		const x = Number.parseFloat(handle.style.left);
+		const y = Number.parseFloat(handle.style.top);
+		expect(Math.abs(x - endGrip.x) >= 44 || Math.abs(y - endGrip.y) >= 44).toBe(true);
+	}
 });

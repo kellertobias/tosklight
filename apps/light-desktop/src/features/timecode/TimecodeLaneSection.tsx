@@ -51,7 +51,8 @@ export function TimecodeLaneSection({
 		);
 	return (
 		<section
-			className={`timecode-lane-section ${className}`}
+			className={`timecode-lane-section ${className} ${!collapsed ? "section-expanded" : ""}`}
+			data-expanded={!collapsed}
 			aria-label={`${title} lanes`}
 		>
 			<div className={`timecode-section-row ${collapsed ? "collapsed" : ""}`}>

@@ -24,7 +24,7 @@ import {
 	SPEED_GROUP_MIN_BPM,
 } from "../speedGroupRuntime/contracts";
 
-function laneWithVolumeCurve(
+export function laneWithVolumeCurve(
 	definition: TimecodeDefinition,
 	laneId: string,
 	keyframeId: string,
@@ -341,7 +341,7 @@ function CueStepButtons({
 }
 
 /// The editors for whichever keyframe kind is selected, or nothing when none is.
-function SelectedKeyframeValue({
+export function SelectedKeyframeValue({
 	speed,
 	volume,
 	onValue,
@@ -377,6 +377,7 @@ function SelectedKeyframeValue({
 			/>
 			<SelectField
 				label="Easing"
+				ariaLabel="Easing"
 				value={volume.curve}
 				onChange={onEasing}
 				options={TIMECODE_EASINGS}

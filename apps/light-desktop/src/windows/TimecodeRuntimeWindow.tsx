@@ -1,3 +1,6 @@
+import { importTimecodeMarkerCsv } from "../features/timecode/importTimecodeMarkerCsv";
+import { EMPTY_TIMELINE_TITLE_STATE, TimelineTitleStateContext } from "../features/timecode/useTimelineTitleActions";
+import { timecodeTimelineTitleActions } from "../features/timecode/timecodeTimelineTitleActions";
 import { formatErrorDetails } from "@tosklight/ui";
 import { ErrorAlert } from "@tosklight/ui";
 import {
@@ -58,7 +61,6 @@ import {
 import type { ShowObject } from "../features/showObjects/contracts";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import {
-	parseMarkerCsv,
 	reconcileAutomaticAudioLane,
 } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
@@ -507,7 +509,7 @@ export function TimecodeEditor({
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
-
+	const [timelineTitleState, setTimelineTitleState] = useState(EMPTY_TIMELINE_TITLE_STATE);
 	const isNew = !record;
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
@@ -573,29 +575,14 @@ export function TimecodeEditor({
 			setError(`Could not close before autosave completed: ${String(reason)}`);
 		}
 	};
-	const importCsv = async (file: File) => {
-		try {
-			const csvSource = await file.text();
-			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
-			setDraft({
-				...latestDraft.current,
-				markers:
-					csvMode === "append"
-						? [...latestDraft.current.markers, ...imported]
-						: imported,
-			});
-			setCsvError(null);
-		} catch (reason) {
-			setCsvError(formatErrorDetails(reason));
-		}
-	};
+	const importCsv = (file: File) => importTimecodeMarkerCsv(file, { fps: FPS, duration, mode: csvMode, latestDraft, setDraft, setError: setCsvError });
+
 	const transportActions = timecodeTransportActions({
 		disabled: isNew || busy || Boolean(saveError),
 		stopDisabled: isNew || actionBusy,
 		state: transport?.state,
 		onAction: act,
 	});
-
 	const addAction = useTimecodeAddAction({
 		timelineRef,
 		draft,
@@ -629,6 +616,7 @@ export function TimecodeEditor({
 				}}
 				groups={[
 					{ id: "timecode-add", actions: [addAction] },
+					{ id: "timecode-selection", actions: timecodeTimelineTitleActions(timelineRef, timelineTitleState) },
 					{
 						id: "timecode-history",
 						actions: [
@@ -717,25 +705,27 @@ export function TimecodeEditor({
 				onRetrySave={retrySave}
 				onRetryWaveform={retryWaveform}
 			/>
-			<TimecodeTimelineEditor
-				ref={timelineRef}
-				definition={draft}
-				frame={frame}
-				fps={FPS}
-				cueLists={effectiveCueLists}
-				audioPlayers={audioPlayers}
-				waveformPeaks={waveformPeaks}
-				markersLocked={markersLocked}
-				clipStatuses={transport?.cue_list_clips}
-				onScrub={scrub}
-				onCommit={setDraft}
-				onPreview={previewDraft}
-				onBeginGesture={beginGesture}
-				onEndGesture={endGesture}
-				timingDefaults={timingDefaults}
-				onSaveCueList={saveCueTiming}
-				onCueTimingError={setError}
-			/>
+			<TimelineTitleStateContext.Provider value={setTimelineTitleState}>
+				<TimecodeTimelineEditor
+					ref={timelineRef}
+					definition={draft}
+					frame={frame}
+					fps={FPS}
+					cueLists={effectiveCueLists}
+					audioPlayers={audioPlayers}
+					waveformPeaks={waveformPeaks}
+					markersLocked={markersLocked}
+					clipStatuses={transport?.cue_list_clips}
+					onScrub={scrub}
+					onCommit={setDraft}
+					onPreview={previewDraft}
+					onBeginGesture={beginGesture}
+					onEndGesture={endGesture}
+					timingDefaults={timingDefaults}
+					onSaveCueList={saveCueTiming}
+					onCueTimingError={setError}
+				/>
+			</TimelineTitleStateContext.Provider>
 		</section>
 	);
 }

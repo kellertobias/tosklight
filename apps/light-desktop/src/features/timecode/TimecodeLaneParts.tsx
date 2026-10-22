@@ -1,3 +1,4 @@
+import { speedGroupLinePoints } from "./speedLaneGeometry";
 import { AudioLaneFileName } from "./timecodeEditorShared";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useMemo } from "react";
@@ -161,4 +162,45 @@ export function AudioVolumeLaneBackground({
 			</svg>
 		</div>
 	);
+}
+
+/** The whole Speed Group lane shares one curve under its editable keyframes. */
+export function SpeedGroupLaneBackground({
+	name,
+	content,
+	duration,
+}: {
+	name: string;
+	content: Extract<TimecodeLane["content"], { kind: "speed_group" }>;
+	duration: number;
+}) {
+	if (!content.keyframes.length) return null;
+	return (
+		<svg
+			className="timecode-speed-keyframe-curve"
+			viewBox="0 0 100 100"
+			preserveAspectRatio="none"
+			role="img"
+			aria-label={`${name} value line`}
+		>
+			<polyline points={speedGroupLinePoints(content.keyframes, duration)} />
+		</svg>
+	);
+}
+
+/** Empty lane space selects its lane; item and label controls retain their own gestures. */
+export function lanePointerSelection(
+	onSelectLane: (id: string) => void,
+	laneId: string,
+) {
+	return (event: ReactPointerEvent<HTMLDivElement>) => {
+		const target = event.target as Element;
+		if (
+			target.closest(
+				".timecode-timeline-item, .timecode-editor-lane-label button",
+			)
+		)
+			return;
+		onSelectLane(laneId);
+	};
 }

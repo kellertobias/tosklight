@@ -1,0 +1,18 @@
+.timecode-editor-inspector .timecode-marker-sidebar .timecode-keyframe-actions {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+	border: 0;
+	padding: 0;
+}
+.timecode-editor-inspector .timecode-marker-sidebar .timecode-keyframe-actions-title {
+	grid-column: 1 / -1;
+	padding: 4px 0;
+}
+.timecode-editor-inspector .timecode-marker-sidebar .timecode-next-keyframe { margin-left: 0; }
+.timecode-editor-inspector .timecode-marker-sidebar .timecode-keyframe-action.ui-button { min-height: 44px; min-width: 0; width: 100%; }
+.timecode-editor-inspector .timecode-keyframe-value-control {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) 4rem;
+}
+.timecode-editor-inspector .timecode-keyframe-value-control > span { grid-column: 1 / -1; }
