@@ -53,6 +53,7 @@ try {
     disposableRemote = mkdtempSync(join(artifactPaths.tmp, "tosklight-semantic-release-"));
     git(["init", "--bare", disposableRemote]);
     git(["push", "--quiet", disposableRemote, "HEAD:refs/heads/main", "--tags"]);
+    git(["--git-dir", disposableRemote, "symbolic-ref", "HEAD", "refs/heads/main"]);
     options.repositoryUrl = pathToFileURL(disposableRemote).href;
     options.plugins = previewPlugins;
     options.dryRun = true;

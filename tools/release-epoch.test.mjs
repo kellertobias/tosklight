@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+	mkdirSync,
+	mkdtempSync,
+	readFileSync,
+	rmSync,
+	symlinkSync,
+	writeFileSync,
+} from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import test from "node:test";
@@ -56,8 +63,9 @@ function fixture() {
 
 async function preview(repo) {
 	const remote = path.join(repo.cwd, "remote.git");
-	repo.git("init", "--bare", remote);
+	repo.git("-c", "init.defaultBranch=master", "init", "--bare", remote);
 	repo.git("push", "--quiet", remote, "HEAD:refs/heads/main", "--tags");
+	repo.git("--git-dir", remote, "symbolic-ref", "HEAD", "refs/heads/main");
 	const script = `
     import semanticRelease from ${JSON.stringify(pathToFileURL(require.resolve("semantic-release")).href)};
     import { createRequire } from "node:module";
@@ -162,6 +170,61 @@ test("a published current-line 1.0.0 resumes ordinary patch, minor and major sem
 		} finally {
 			repo.dispose();
 		}
+	}
+});
+
+test("the production dry-run wrapper supports a master default branch without changing release refs", () => {
+	const repo = fixture();
+	try {
+		repo.commit("fix: first beta with a different Git default branch");
+		const before = repo.git("show-ref", "--tags");
+		const remote = path.join(repo.cwd, "origin.git");
+		repo.git("init", "--bare", "-b", "main", remote);
+		repo.git("push", "--quiet", remote, "HEAD:refs/heads/main", "--tags");
+		repo.git("remote", "add", "origin", remote);
+		symlinkSync(
+			path.dirname(require.resolve("./release-epoch.cjs")),
+			path.join(repo.cwd, "tools"),
+			"dir",
+		);
+		const output = path.join(repo.cwd, "release-output");
+		const env = {
+			...process.env,
+			CI: "true",
+			GITHUB_ACTIONS: "true",
+			GITHUB_REF: "refs/heads/main",
+			GITHUB_SHA: repo.git("rev-parse", "HEAD"),
+			GITHUB_EVENT_NAME: "push",
+			GIT_CONFIG_COUNT: "1",
+			GIT_CONFIG_KEY_0: "init.defaultBranch",
+			GIT_CONFIG_VALUE_0: "master",
+			LIGHT_RELEASE_OUTPUT: output,
+			LIGHT_EXPECTED_RELEASE_VERSION: "1.0.0",
+		};
+		delete env.NODE_TEST_CONTEXT;
+		const result = spawnSync(
+			process.execPath,
+			[require.resolve("./run-semantic-release.mjs"), "--dry-run"],
+			{
+				cwd: repo.cwd,
+				env,
+				encoding: "utf8",
+				timeout: 30_000,
+			},
+		);
+		assert.equal(result.status, 0, result.stdout + result.stderr);
+		assert.equal(readFileSync(output, "utf8"), "version=1.0.0\nrelease=true\n");
+		assert.equal(
+			repo.git("show-ref", "--tags"),
+			before,
+			"dry run preserves every release ref",
+		);
+		assert.equal(
+			repo.git("--git-dir", remote, "symbolic-ref", "HEAD"),
+			"refs/heads/main",
+		);
+	} finally {
+		repo.dispose();
 	}
 });
 
