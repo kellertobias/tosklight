@@ -96,3 +96,39 @@ export const FullCardMediaPreview: Story = {
 		</div>
 	),
 };
+
+export const CompactOperatorNames: Story = {
+	render: () => (
+		<div style={{ display: "grid", gap: 12 }}>
+			{[53, 58].flatMap((height) =>
+				[false, true].map((selected) => (
+					<div
+						key={`${height}-${selected}`}
+						style={{ display: "flex", gap: 8 }}
+					>
+						{["ACL · Rear", "Stage Spots", "Center Stage"].map(
+							(name, index) => (
+								<PoolCard
+									key={name}
+									style={{
+										width: 100,
+										height,
+										minHeight: 0,
+										aspectRatio: "auto",
+									}}
+									model={{
+										...artwork[index === 2 ? 3 : index],
+										primary: name,
+										number: index + 1,
+										secondary: "8",
+										states: selected ? ["selected"] : [],
+									}}
+								/>
+							),
+						)}
+					</div>
+				)),
+			)}
+		</div>
+	),
+};

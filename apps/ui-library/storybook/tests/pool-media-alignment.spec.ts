@@ -193,3 +193,41 @@ test("media library keeps its full-card image beneath the title strip", async ({
 	expect(bounds.top).toBeCloseTo(31, 0);
 	expect(bounds.bottom).toBeCloseTo(1, 0);
 });
+
+test("taller compact tiles wrap operator names without touching the fixture count", async ({
+	page,
+}) => {
+	await page.goto(
+		STORY.replace("square-and-configured-tiles", "compact-operator-names"),
+	);
+	await expect(page.locator(".pool-card")).toHaveCount(12);
+	await page.evaluate(() => document.fonts.ready);
+	const names = await page.locator(".pool-card").evaluateAll((cards) =>
+		cards.map((card) => {
+			const name = card.querySelector(".pool-card-name");
+			const count = card.querySelector(".pool-card-information");
+			if (!name || !count) throw new Error("Missing compact tile labels");
+			const range = document.createRange();
+			range.selectNodeContents(name);
+			const lines = Array.from(range.getClientRects());
+			const bounds = name.getBoundingClientRect();
+			return {
+				label: name.textContent,
+				lineCount: lines.length,
+				right: Math.max(...lines.map((line) => line.right)),
+				availableRight: bounds.right,
+				bottom: Math.max(...lines.map((line) => line.bottom)),
+				countTop: count.getBoundingClientRect().top,
+			};
+		}),
+	);
+	for (const name of names) {
+		expect(name.lineCount, name.label ?? "").toBe(2);
+		expect(name.right, name.label ?? "").toBeLessThanOrEqual(
+			name.availableRight + 0.6,
+		);
+		expect(name.bottom, name.label ?? "").toBeLessThanOrEqual(
+			name.countTop + 0.6,
+		);
+	}
+});

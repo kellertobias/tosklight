@@ -1694,6 +1694,17 @@
 	}
 }
 
+/* Taller compact cells have room to keep two-word operator names legible. */
+@container (min-height: 43px) and (max-height: 60px) {
+	.pool-card.has-media .pool-card-name {
+		white-space: normal;
+		font-size: clamp(9px, 11cqw, 14px);
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+	}
+}
+
 /*
  * Large numbered pools intentionally retain their complete desk address space.
  * Skip off-screen cell contents while preserving every DOM address and square

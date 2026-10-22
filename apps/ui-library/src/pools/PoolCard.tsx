@@ -97,13 +97,20 @@ export function PoolCard({
 				<span className="pool-card-layout-content">
 					<PoolCardContents
 						model={model}
-						workflow={workflow}
 						hasStatus={hasStatus}
 						hasMedia={hasMedia}
 						color={color}
 					/>
 				</span>
 			</span>
+			{workflow && (
+				<span
+					className={`pool-card-workflow ${workflow.kind}`}
+					data-pool-workflow={workflow.kind}
+				>
+					{workflow.label}
+				</span>
+			)}
 			{cornerIndicator}
 		</Button>
 	);
@@ -227,13 +234,11 @@ function poolCardStyle(
 
 function PoolCardContents({
 	model,
-	workflow,
 	hasStatus,
 	hasMedia,
 	color,
 }: {
 	model: PoolCardViewModel;
-	workflow: ReturnType<typeof resolveWorkflow>;
 	hasStatus: boolean;
 	hasMedia: boolean;
 	color: string | undefined;
@@ -254,14 +259,7 @@ function PoolCardContents({
 					))}
 				</span>
 			)}
-			{workflow && (
-				<span
-					className={`pool-card-workflow ${workflow.kind}`}
-					data-pool-workflow={workflow.kind}
-				>
-					{workflow.label}
-				</span>
-			)}
+
 			{hasStatus && (
 				<span className="pool-card-status-row">
 					{model.status != null && (
