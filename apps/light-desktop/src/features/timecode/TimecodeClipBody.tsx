@@ -119,6 +119,7 @@ export function CueListClipBody({
 				/>
 			)}
 			<ClipEndHandle
+				onSelectCue={onSelectCue}
 				clip={clip}
 				pixelsPerFrame={pixelsPerFrame}
 				expanded={expanded}

@@ -387,6 +387,13 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click({ position: { x: 32, y: 18 } });
 		const end = editor.getByRole("slider", { name: "Extend last Cue", exact: true });
+		const divider = editor.getByRole("slider", { name: "Move Cue 3 trigger", exact: true });
+		const centerY = (handle: Locator) => handle.evaluate((node) => { const box = node.getBoundingClientRect(); return box.top + box.height / 2; });
+		expect(Math.abs(await centerY(end) - await centerY(divider))).toBeLessThanOrEqual(1);
+		const nameBand = editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true });
+		const nameBox = (await nameBand.boundingBox())!;
+		expect(await centerY(end)).toBeGreaterThanOrEqual(nameBox.y);
+		expect(await centerY(end)).toBeLessThanOrEqual(nameBox.y + nameBox.height);
 		await dragFrames(page, editor, end, 44);
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).end_frame).toBe(660);
 		await touchDragFrames(page, editor, end, 44);

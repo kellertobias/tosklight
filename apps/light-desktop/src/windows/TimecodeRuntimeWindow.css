@@ -1386,7 +1386,7 @@
 .timecode-cue-point.timecode-clip-end-grab > span::before { left: 3px; }
 .timecode-cue-point.timecode-clip-end-grab > span::after { right: 3px; }
 .timecode-cue-point.timecode-clip-end-grab::after { content: ""; position: absolute; left: 43px; top: 0; height: 44px; border-left: 2px solid #8bcfe7; pointer-events: none; }
-.timecode-cue-point.timecode-clip-end-grab.expanded::after { top: -44px; height: 88px; }
+.timecode-cue-point.timecode-clip-end-grab.expanded::after { top: -88px; height: 132px; }
 .timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-caption { top: 28px; bottom: auto; left: 10px; transform: translateX(-100%); color: #d0effa; }
 
 .timecode-cue-point.timecode-clip-end-grab[aria-disabled="true"] { pointer-events: none; }

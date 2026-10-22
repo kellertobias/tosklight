@@ -376,7 +376,7 @@ it("finds a guaranteed free target beyond densely occupied divider candidates", 
 
 it("reserves the inset end-grip touch center instead of the clip boundary", () => {
 	mount("follow", 2, 22);
-	const endGrip = { x: 22 * 2 - 22, y: 90 };
+	const endGrip = { x: 22 * 2 - 22, y: 134 };
 	for (const name of ["In delay", "In fade", "Out delay", "Out fade"]) {
 		const handle = screen.getByRole("slider", { name: `Cue 1 ${name}` });
 		const x = Number.parseFloat(handle.style.left);
