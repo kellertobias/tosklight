@@ -6,9 +6,9 @@ const STORY =
 test("pool artwork stays vertically and horizontally centered without clipping", async ({
 	page,
 }) => {
-	await page.setViewportSize({ width: 1200, height: 700 });
+	await page.setViewportSize({ width: 1200, height: 1400 });
 	await page.goto(STORY);
-	await expect(page.locator(".pool-card-media")).toHaveCount(20);
+	await expect(page.locator(".pool-card-media")).toHaveCount(48);
 	await page.evaluate(async () => {
 		await document.fonts.ready;
 		await Promise.all(
@@ -20,12 +20,23 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		.evaluateAll((elements) =>
 			elements.map((media) => {
 				const artwork = media.querySelector(
-					".pool-card-icon-image, .pool-card-image, .preset-preview-position, .pool-card-icon",
+					".pool-card-icon-image, .pool-card-image, .preset-preview-position, .pool-card-icon, .pool-card-color",
 				);
 				if (!artwork) throw new Error("Missing tile artwork");
 				const outer = media.getBoundingClientRect();
 				const inner = artwork.getBoundingClientRect();
+				const card = media.closest("button")!.getBoundingClientRect();
+				const slot = media.parentElement!.getBoundingClientRect();
 				return {
+					mediaWidth: outer.width,
+					mediaHeight: outer.height,
+					expectedRatio: media.classList.contains("pool-card-media-image")
+						? 16 / 9
+						: 1,
+					tileWidth: card.width,
+					tileHeight: card.height,
+					slotBottom: slot.bottom - outer.bottom,
+					slotRight: slot.right - outer.right,
 					name: media.closest("button")?.textContent,
 					shape: media
 						.closest("[data-tile-shape]")
@@ -44,9 +55,70 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		);
 	for (const measurement of measurements) {
 		const context = JSON.stringify(measurement);
+		expect(
+			Math.abs(
+				measurement.mediaWidth -
+					measurement.mediaHeight * measurement.expectedRatio,
+			),
+			context,
+		).toBeLessThanOrEqual(0.6);
+		expect(Math.abs(measurement.slotBottom), context).toBeLessThanOrEqual(0.6);
+		expect(Math.abs(measurement.slotRight), context).toBeLessThanOrEqual(0.6);
+		if (measurement.shape !== "rectangular")
+			expect(
+				Math.abs(measurement.tileWidth - measurement.tileHeight),
+				context,
+			).toBeLessThanOrEqual(0.6);
 		expect(Math.abs(measurement.dx), context).toBeLessThanOrEqual(0.6);
 		expect(Math.abs(measurement.dy), context).toBeLessThanOrEqual(0.6);
 		for (const edge of ["left", "top", "right", "bottom"] as const)
 			expect(measurement[edge], context).toBeGreaterThanOrEqual(0.5);
 	}
+	// Automatic square cards retain their width; both artwork dimensions grow with them.
+	for (const selected of ["false", "true"]) {
+		const widthFor = (shape: string) =>
+			measurements.find(
+				(item) =>
+					item.shape === shape &&
+					item.selected === selected &&
+					item.name?.includes("Fixture"),
+			)!.mediaWidth;
+		expect(widthFor("large")).toBeGreaterThan(widthFor("square") * 1.5);
+		expect(widthFor("square")).toBeGreaterThan(widthFor("tiny") * 1.3);
+	}
+	const expectedWidths: Record<string, number> = {
+		square: 96,
+		large: 180,
+		tiny: 64,
+		rectangular: 160,
+	};
+	for (const measurement of measurements) {
+		const width = expectedWidths[measurement.shape!];
+		expect(Math.abs(measurement.tileWidth - width!)).toBeLessThanOrEqual(0.6);
+	}
+});
+
+test("media library keeps its full-card image beneath the title strip", async ({
+	page,
+}) => {
+	await page.goto(
+		STORY.replace("square-and-configured-tiles", "full-card-media-preview"),
+	);
+	const card = page.locator(".pool-card");
+	await expect(card).toBeVisible();
+	const bounds = await card.evaluate((element) => {
+		const card = element.getBoundingClientRect();
+		const media = element
+			.querySelector(".pool-card-media")!
+			.getBoundingClientRect();
+		return {
+			cardWidth: card.width,
+			mediaWidth: media.width,
+			top: media.top - card.top,
+			bottom: card.bottom - media.bottom,
+		};
+	});
+	expect(bounds.mediaWidth).toBeGreaterThan(bounds.cardWidth * 0.98);
+	expect(bounds.top).toBeCloseTo(31, 0);
+	expect(bounds.bottom).toBeCloseTo(1, 0);
 });

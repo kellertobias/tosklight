@@ -284,35 +284,39 @@ function PoolCardContents({
 				</span>
 			)}
 			{hasMedia && (
-				<span className="pool-card-media">
-					{!model.image && color && (
-						<span
-							className="pool-card-color-label"
-							role="img"
-							aria-label={`Configured color ${color}`}
-							title={`Color ${color}`}
-						/>
-					)}
-					{model.image ? (
-						<img
-							className="pool-card-image"
-							src={model.image.src}
-							alt={model.image.alt}
-						/>
-					) : model.preview != null ? (
-						<span className="pool-card-preview">{model.preview}</span>
-					) : catalogIcon?.source === "catalog" ? (
-						<img
-							className="pool-card-icon-image"
-							src={catalogIcon.url}
-							data-icon-value={catalogIcon.value}
-							alt=""
-						/>
-					) : model.icon != null ? (
-						<span className="pool-card-icon">{model.icon}</span>
-					) : (
-						<span className="pool-card-color" style={{ background: color }} />
-					)}
+				<span className="pool-card-media-slot">
+					<span
+						className={`pool-card-media${model.image ? " pool-card-media-image" : ""}`}
+					>
+						{!model.image && color && (
+							<span
+								className="pool-card-color-label"
+								role="img"
+								aria-label={`Configured color ${color}`}
+								title={`Color ${color}`}
+							/>
+						)}
+						{model.image ? (
+							<img
+								className="pool-card-image"
+								src={model.image.src}
+								alt={model.image.alt}
+							/>
+						) : model.preview != null ? (
+							<span className="pool-card-preview">{model.preview}</span>
+						) : catalogIcon?.source === "catalog" ? (
+							<img
+								className="pool-card-icon-image"
+								src={catalogIcon.url}
+								data-icon-value={catalogIcon.value}
+								alt=""
+							/>
+						) : model.icon != null ? (
+							<span className="pool-card-icon">{model.icon}</span>
+						) : (
+							<span className="pool-card-color" style={{ background: color }} />
+						)}
+					</span>
 				</span>
 			)}
 		</>

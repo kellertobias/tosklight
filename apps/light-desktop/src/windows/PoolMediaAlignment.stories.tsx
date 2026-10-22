@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { PoolCard, type PoolCardViewModel } from "@tosklight/ui/pools";
 import { PresetPreviewGlyph } from "../features/presetPreview/PresetPreviewGlyph";
+import "./media/MediaPaneSurface.css";
 
 const meta: Meta = {
 	title: "ToskLight/Windows/Pool media alignment",
@@ -10,7 +11,7 @@ export default meta;
 type Story = StoryObj;
 
 const artwork: Array<
-	Pick<PoolCardViewModel, "primary" | "icon" | "image" | "preview">
+	Pick<PoolCardViewModel, "primary" | "icon" | "image" | "preview" | "color">
 > = [
 	{ primary: "Fixture", icon: "icon:fixture-type/wash-moving-light" },
 	{ primary: "Beam", icon: "icon:gobo/ring" },
@@ -35,6 +36,7 @@ const artwork: Array<
 		),
 	},
 	{ primary: "Symbol", icon: "◇" },
+	{ primary: "Color", color: "#1674ef" },
 ];
 
 /** The same artwork must fit automatic square and configured rectangular pools. */
@@ -42,7 +44,9 @@ export const SquareAndConfiguredTiles: Story = {
 	render: () => (
 		<div style={{ display: "grid", gap: 16 }}>
 			{[
-				{ label: "square", width: 96, height: 96 },
+				{ label: "square", width: 96, height: undefined },
+				{ label: "large", width: 180, height: undefined },
+				{ label: "tiny", width: 64, height: undefined },
 				{ label: "rectangular", width: 160, height: 68 },
 			].map(({ label, width, height }) =>
 				[false, true].map((selected) => (
@@ -50,12 +54,15 @@ export const SquareAndConfiguredTiles: Story = {
 						key={`${label}-${selected}`}
 						data-tile-shape={label}
 						data-selected={String(selected)}
-						style={{ display: "flex", gap: 8 }}
+						style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
 					>
 						{artwork.map((model, index) => (
 							<PoolCard
 								key={String(model.primary)}
-								style={{ width, height, aspectRatio: "auto" }}
+								style={{
+									width,
+									...(height ? { height, aspectRatio: "auto" } : {}),
+								}}
 								model={{
 									...model,
 									number: index + 1,
@@ -68,6 +75,18 @@ export const SquareAndConfiguredTiles: Story = {
 					</div>
 				)),
 			)}
+		</div>
+	),
+};
+
+/** The media library deliberately fills the card beneath its title strip. */
+export const FullCardMediaPreview: Story = {
+	render: () => (
+		<div className="media-file-pool-grid">
+			<PoolCard
+				style={{ width: 180, height: 132, aspectRatio: "auto" }}
+				model={{ ...artwork[2], primary: "Library file", number: 1 }}
+			/>
 		</div>
 	),
 };

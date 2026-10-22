@@ -656,6 +656,11 @@
 	display: none;
 }
 
+/* Full-card media thumbnails retain their dedicated header/image layout. */
+.media-file-pool-grid .pool-card-media-slot {
+	display: contents;
+}
+
 .media-file-pool-grid .pool-card-media {
 	position: absolute;
 	grid-area: auto;
