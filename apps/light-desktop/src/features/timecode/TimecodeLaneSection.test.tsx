@@ -77,10 +77,11 @@ it("folds all Speed Groups into one named preview row and expands only the selec
 		container.querySelectorAll(".timecode-speed-summary [data-lane-id]"),
 	).toHaveLength(3);
 	expect(container.querySelector(".lane-speed_group")).toBeNull();
-	fireEvent.click(
-		screen.getByRole("button", { name: "Expand and edit Movement" }),
-	);
+	fireEvent.click(screen.getByRole("button", { name: "Expand Speed Groups" }));
 	expect(toggle).toHaveAttribute("aria-expanded", "true");
+	fireEvent.click(
+		screen.getByRole("button", { name: /Movement.*Drag to reorder lane/ }),
+	);
 	expect(container.querySelectorAll(".lane-expanded")).toHaveLength(1);
 	expect(container.querySelector(".lane-expanded")).toHaveAttribute(
 		"data-lane-id",
@@ -141,9 +142,7 @@ it("folds Cuelists independently and retains section collapse after closing the 
 		"aria-expanded",
 		"false",
 	);
-	fireEvent.click(
-		screen.getByRole("button", { name: "Expand and edit Stage Looks" }),
-	);
+	fireEvent.click(screen.getByRole("button", { name: "Expand Cuelists" }));
 	expect(container.querySelector(".lane-cue_list")).not.toBeNull();
 	expect(screen.getByRole("button", { name: "Speed Groups" })).toHaveAttribute(
 		"aria-expanded",

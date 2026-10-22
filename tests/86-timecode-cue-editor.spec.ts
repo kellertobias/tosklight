@@ -22,10 +22,32 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await envelope.tap();
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toBeVisible();
 		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
+		const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
+		const names = await editor.locator(".timecode-cue-name").evaluateAll((nodes) => nodes.map((node) => {
+			const box = node.getBoundingClientRect();
+			let opacity = 1;
+			for (let ancestor: Element | null = node; ancestor; ancestor = ancestor.parentElement) opacity *= Number(getComputedStyle(ancestor).opacity);
+			const style = getComputedStyle(node);
+			return { left: box.left, width: box.width, opacity, text: node.textContent,
+				borderLeftWidth: style.borderLeftWidth, borderRadius: style.borderRadius,
+				textAlign: style.textAlign, background: style.backgroundColor };
+
+		}));
+		expect(names).toHaveLength(3);
+		for (const [index, span] of [176, 176, 220].entries()) {
+			expect(Math.abs(names[index].width - span * scale)).toBeLessThanOrEqual(1);
+			expect(names[index].opacity).toBeGreaterThanOrEqual(0.85);
+			expect(names[index].borderLeftWidth).toBe("2px");
+			expect(names[index].borderRadius).toBe("0px");
+			expect(names[index].textAlign).toBe("left");
+			expect(names[index].background).not.toMatch(/^(?:transparent|rgba\(0,\s*0,\s*0,\s*0\))$/);
+			if (index > 0) expect(Math.abs(names[index].left - names[index - 1].left - names[index - 1].width)).toBeLessThanOrEqual(1);
+		}
+		expect(names.map((name) => name.text)).toEqual([expect.stringContaining("House out"), expect.stringContaining("Verse wash"), expect.stringContaining("Chorus")]);
 		await page.screenshot({ path: testInfo.outputPath("timecode-cue-editor.png") });
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-cue-editor-detail.png") });
 		expect(await geometry(editor, viewport, envelope)).toEqual(before);
-		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap();
+		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap({ position: { x: 18, y: 18 } });
 		await expect(editor.getByRole("slider", { name: "Cue 2 In fade", exact: true })).toBeVisible();
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toHaveCount(0);
 		await editor.getByRole("button", { name: "Close cue editor", exact: true }).tap();
@@ -37,7 +59,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 
 		// Closing a sidebar widens the viewport. At the right edge this must not let the browser
 		// clamp scrollLeft and move the left-hand time origin, even though the content is wider.
-		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap();
+		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap({ position: { x: 18, y: 18 } });
 		const box = await viewport.boundingBox();
 		if (!box) throw new Error("Missing timeline viewport");
 		await page.mouse.move(box.x + box.width / 2, box.y + 25);
@@ -239,13 +261,17 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const speedLane = (index: number) => editor.locator(`.timecode-editor-lane[data-lane-id="${speedLanes[index].id}"]`);
 		await expect(editor.locator(".timecode-editor-lane").first()).toHaveAttribute("data-lane-id", audioLaneId);
 		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		await expect(toggle).toContainText("Collapse");
 		await toggle.tap();
 		await expect(toggle).toHaveAttribute("aria-expanded", "false");
+		await expect(toggle).toContainText("Expand");
+		await expect(section.getByRole("button", { name: "Expand Speed Groups", exact: true })).toBeVisible();
+		await expect(summary).toHaveAttribute("aria-description", names.join(", "));
 		await expect(summary).toBeVisible();
 		for (const [index, name] of names.entries()) {
 			const preview = summary.locator(`[data-lane-id="${speedLanes[index].id}"]`);
 			await expect(preview).toBeVisible();
-			await expect(preview).toContainText(name);
+			await expect(preview).toHaveAttribute("data-lane-name", name);
 		}
 		const bottom = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().bottom);
 		const top = (locator: Locator) => locator.evaluate((node) => node.getBoundingClientRect().top);
@@ -253,6 +279,10 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(await top(cueLane)).toBeGreaterThanOrEqual(await bottom(section));
 		await editor.getByRole("button", { name: "Cuelists", exact: true }).tap();
 		await expect(editor.getByRole("button", { name: "Cuelists", exact: true })).toHaveAttribute("aria-expanded", "false");
+		const speedRowHeight = await section.locator(".timecode-section-row.collapsed").evaluate((node) => node.getBoundingClientRect().height);
+		const cueRowHeight = await editor.locator(".timecode-cuelist-section .timecode-section-row.collapsed").evaluate((node) => node.getBoundingClientRect().height);
+		expect(speedRowHeight).toBe(44);
+		expect(cueRowHeight).toBe(speedRowHeight);
 		await page.screenshot({ path: testInfo.outputPath("timecode-grouped-overview.png") });
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-grouped-overview-detail.png") });
 		await toggle.tap();
@@ -261,9 +291,11 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const compactHeight = await speedLane(1).evaluate((node) => node.getBoundingClientRect().height);
 		await toggle.tap();
 		await expect(toggle).toHaveAttribute("aria-expanded", "false");
-		// The miniature is also a touch navigation target: choose Movement directly from it.
-		await summary.locator(`[data-lane-id="${speedLanes[0].id}"]`).tap();
+		// The combined miniature is one full-row touch target; choose a lane after expanding it.
+		await section.getByRole("button", { name: "Expand Speed Groups", exact: true }).tap();
 		await expect(toggle).toHaveAttribute("aria-expanded", "true");
+		await expect(toggle).toContainText("Collapse");
+		await speedLane(0).locator(".timecode-lane-select").tap();
 		await expect(speedLane(0)).toHaveClass(/lane-expanded/);
 		await expect(editor.locator(".lane-speed_group.lane-expanded")).toHaveCount(1);
 		expect(await speedLane(0).evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(compactHeight);
@@ -286,7 +318,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await toggle.tap();
 		await expect(toggle).toHaveAttribute("aria-expanded", "false");
 		await expect(summary).toBeVisible();
-		for (const name of names) await expect(summary).toContainText(name);
+		for (const [index, name] of names.entries()) await expect(summary.locator(`[data-lane-id="${speedLanes[index].id}"]`)).toHaveAttribute("data-lane-name", name);
 		const collection = await api.request<{ objects: Array<{ definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
 		expect(collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.lanes.map((lane) => lane.id)).toEqual(lanes.map((lane) => lane.id));
 	});

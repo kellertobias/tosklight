@@ -101,11 +101,12 @@ export function CueEnvelope({
 				size="compact"
 				type="button"
 				className="timecode-cue-name"
+				contentAlign="left"
 				aria-label={`Edit ${label}`}
 				aria-pressed={isSelected}
 				style={{
 					left,
-					maxWidth: Math.max(28, position(row.handoverFrame) - left - 4),
+					width: Math.max(1, position(row.handoverFrame) - left),
 					top: expanded ? 234 : 112,
 				}}
 				onPointerDown={(event) => event.stopPropagation()}

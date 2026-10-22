@@ -275,7 +275,6 @@ function TimelineLanes(props: Parameters<typeof TimelineCanvas>[0]) {
 					cueLists={props.cueLists}
 					timingDefaults={props.timingDefaults}
 					onToggle={() => props.onToggleSection(section.kind)}
-					onSelect={(laneId) => props.onSelectLane(laneId)}
 					renderLane={(lane) => (
 						<EditorLane key={lane.id} {...props} lane={lane} />
 					)}

@@ -34,7 +34,6 @@ export function TimecodeLaneSection({
 	cueLists,
 	timingDefaults,
 	onToggle,
-	onSelect,
 	renderLane,
 }: {
 	title: string;
@@ -45,7 +44,6 @@ export function TimecodeLaneSection({
 	cueLists: readonly TimecodeCueListOption[];
 	timingDefaults: CueClipTimingDefaults;
 	onToggle(): void;
-	onSelect(laneId: string): void;
 	renderLane(lane: TimecodeLane): ReactNode;
 }) {
 	if (!lanes.length) return null;
@@ -64,33 +62,43 @@ export function TimecodeLaneSection({
 						onClick={onToggle}
 					>
 						<span aria-hidden="true">{collapsed ? "▸" : "▾"}</span>
-						<strong>{title}</strong>
+						<span className="timecode-section-title">
+							<strong>{title}</strong>
+							<span className="timecode-section-hint">
+								{collapsed ? "Expand" : "Collapse"}
+							</span>
+						</span>
 						<small>{lanes.length}</small>
 					</Button>
 				</div>
 				{collapsed && (
-					<div
+					<Button
 						className={`timecode-section-summary ${className === "timecode-speed-section" ? "timecode-speed-summary" : ""}`}
+						aria-label={`Expand ${title}`}
+						aria-description={lanes.map((lane) => lane.name).join(", ")}
+						title={lanes.map((lane) => lane.name).join(" · ")}
+						onClick={onToggle}
+						onPointerDown={(event) => event.stopPropagation()}
 					>
-						{lanes.map((lane) => (
-							<Button
-								key={lane.id}
-								className="timecode-section-miniature"
-								data-lane-id={lane.id}
-								aria-label={`Expand and edit ${lane.name}`}
-								onClick={() => onSelect(lane.id)}
-								onPointerDown={(event) => event.stopPropagation()}
-							>
-								<Miniature
-									lane={lane}
-									duration={duration}
-									cueLists={cueLists}
-									timingDefaults={timingDefaults}
-								/>
-								<span>{lane.name}</span>
-							</Button>
-						))}
-					</div>
+						<span className="timecode-section-miniatures">
+							{lanes.map((lane) => (
+								<span
+									key={lane.id}
+									className="timecode-section-miniature"
+									data-lane-id={lane.id}
+									data-lane-name={lane.name}
+								>
+									<Miniature
+										lane={lane}
+										duration={duration}
+										cueLists={cueLists}
+										timingDefaults={timingDefaults}
+									/>
+								</span>
+							))}
+						</span>
+						<span className="timecode-section-preview-hint">Expand</span>
+					</Button>
 				)}
 			</div>
 			{!collapsed && lanes.map(renderLane)}

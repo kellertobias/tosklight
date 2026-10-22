@@ -69,7 +69,7 @@ Tap a Macro to run it; right-click or use **SET** to edit it. The editor provide
 
 Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output. Linked main audio stays pinned below the ruler while other lanes scroll. All lanes share the same horizontal scrolling and zoom.
 
-**Speed Groups** appear first below the main audio, followed by **Cuelists** and **Audio Players**. Tap a section heading to fold its lanes into one combined preview row; tap again to reveal them. Tap a Speed Group preview or lane name to enlarge it for editing. **Close** on the left restores its compact height.
+**Speed Groups** appear first below the main audio, followed by **Cuelists** and **Audio Players**. Tap a section heading to fold its lanes into one compact preview row. **Expand** reveals the lanes; tap a Speed Group name to enlarge it for editing. **Close** on the left restores its compact height.
 
 
 Scrubbing the ruler or dragging the playhead inspects a position without seeking live output. The **Playhead** encoder shows that editor position; press the title's transport position button to seek explicitly.
