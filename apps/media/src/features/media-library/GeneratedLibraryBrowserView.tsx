@@ -134,7 +134,7 @@ export function GeneratedLibraryBrowserView({
 						<span>Folders</span>
 						<small>{type === "text" ? "200–249" : "250–255"}</small>
 					</div>
-					<ButtonGrid className="media-library-folder-pool" minimum={68}>
+					<ButtonGrid className="media-library-folder-pool" minimum={88}>
 						{folders.map((number) => {
 							const presentation = folderPresentations.find(
 								(candidate) => candidate.folder === number,
