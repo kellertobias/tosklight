@@ -2,6 +2,7 @@ import {
 	useTimelineSections,
 	useTimelineSelectedLane,
 } from "./useTimelineSections";
+import { useExpandedLaneVisibility } from "./useExpandedLaneVisibility";
 import { useClipTriggerPreview } from "./useClipTriggerPreview";
 import { TimelineOverview } from "./TimecodeTimelineOverview";
 import {
@@ -311,6 +312,7 @@ function EditorLane(
 			: new Map<string, number>();
 	const cueListId = lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
 	const cueList = cueListForLane(lane, props.cueLists);
+	useExpandedLaneVisibility(props.scrollRef, props.selectedLaneId === lane.id ? lane.id : null, props.selectedCueId);
 	return (
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}

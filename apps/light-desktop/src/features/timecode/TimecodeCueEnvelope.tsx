@@ -1,3 +1,4 @@
+import { HEADER, ENVELOPE, NAME_TOP, PEAK_Y, BASE_Y } from "./cueEditorLayout";
 import { Button } from "@tosklight/ui";
 import type { CSSProperties } from "react";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -37,8 +38,8 @@ export function CueEnvelope({
 		? Math.max(width, inEnd)
 		: position(row.outFade.startFrame);
 	const outEnd = last ? outStart : right;
-	const base = expanded ? 196 : 80;
-	const peak = expanded ? 28 : 12;
+	const base = BASE_Y - HEADER;
+	const peak = PEAK_Y - HEADER;
 	const points = envelopePoints(
 		left,
 		inStart,
@@ -60,7 +61,7 @@ export function CueEnvelope({
 				<svg
 					className="timecode-cue-envelope"
 					width={width}
-					height={expanded ? 202 : 86}
+					height={ENVELOPE}
 					aria-hidden="true"
 				>
 					<polygon points={points} />
@@ -91,7 +92,7 @@ export function CueEnvelope({
 					style={{
 						left,
 						width: Math.max(20, Math.min(width, right) - left),
-						height: expanded ? 202 : 86,
+						height: ENVELOPE,
 						clipPath: `polygon(0 100%, ${Math.max(0, inEnd - left)}px 0, 100% 0, 100% 100%)`,
 					}}
 					onPointerDown={(event) => event.stopPropagation()}
@@ -101,12 +102,7 @@ export function CueEnvelope({
 					}}
 				/>
 			)}
-			<CueTriggerBoundary
-				row={row}
-				expanded={expanded}
-				left={left}
-				selected={isSelected}
-			/>
+			<CueTriggerBoundary row={row} left={left} selected={isSelected} />
 			<Button
 				variant="ghost"
 				size="compact"
@@ -121,7 +117,7 @@ export function CueEnvelope({
 						1,
 						Math.min(width, position(row.handoverFrame)) - left,
 					),
-					top: expanded ? 234 : 3,
+					top: expanded ? NAME_TOP : 3,
 				}}
 				onPointerDown={(event) => event.stopPropagation()}
 				onClick={(event) => {
@@ -150,12 +146,10 @@ export function CueEnvelope({
 
 function CueTriggerBoundary({
 	row,
-	expanded,
 	left,
 	selected,
 }: {
 	row: CueClipTimingRow;
-	expanded: boolean;
 	left: number;
 	selected: boolean;
 }) {
@@ -166,12 +160,6 @@ function CueTriggerBoundary({
 			style={{ left }}
 			title={`Cue ${row.cue.number} trigger · ${formatFrame(row.startFrame, TIMECODE_FPS)}`}
 			aria-hidden="true"
-		>
-			{expanded && (
-				<small>
-					Cue {row.cue.number} · {formatFrame(row.startFrame, TIMECODE_FPS)}
-				</small>
-			)}
-		</span>
+		></span>
 	);
 }

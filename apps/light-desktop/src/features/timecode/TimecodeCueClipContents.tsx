@@ -4,6 +4,8 @@ import {
 } from "./cueClipTimingPreview";
 import { mergeCueTimingFields } from "./mergeCueTimingFields";
 import { CueTimingInspector } from "./TimecodeCueTimingInspector";
+import { cueTriggerEditing } from "./cueTriggerEditing";
+import { CueDividerHandles } from "./TimecodeCueDividerHandles";
 import { CueTimingPoints } from "./TimecodeCueTimingPoints";
 import { CueEnvelope } from "./TimecodeCueEnvelope";
 import { formatErrorDetails } from "@tosklight/ui";
@@ -23,7 +25,6 @@ import {
 	type CueFadeKind,
 	cueWithDraggedFade,
 	cueFadeEditFrameBounds,
-	cueTransitionFrameBounds,
 } from "./cueClipTiming";
 import type { TimecodeCueListOption } from "./timecodeEditorShared";
 
@@ -303,35 +304,12 @@ export function CueListClipContents({
 		selectedCueId,
 		triggerPreview,
 	);
-	const selected = projected.rows.find((row) => row.cue.id === selectedCueId);
 	const position = (frame: number) =>
 		Math.max(0, frame - clip.start_frame) * pixelsPerFrame;
 	const width = (clip.end_frame - clip.start_frame) * pixelsPerFrame;
-	const triggerBounds = selected?.cue.id
-		? cueTransitionFrameBounds(
-				clip,
-				activeBody,
-				timingDefaults,
-				selected.cue.id,
-			)
-		: null;
-	const first = selected === projected.rows[0];
-	const canMoveTrigger = Boolean(
-		selected && (first ? onMoveClip : triggerBounds && onPlaceCueStart),
-	);
-	const placeTrigger = (frame: number) => {
-		if (!selected?.cue.id) return;
-		if (first) onMoveClip?.(clip.id, Math.max(0, frame));
-		else if (triggerBounds)
-			onPlaceCueStart?.(
-				clip.id,
-				selected.cue.id,
-				Math.max(
-					triggerBounds.minimum,
-					Math.min(triggerBounds.maximum, frame),
-				) - clip.start_frame,
-			);
-	};
+	const { selected, first, triggerBounds, canMoveTrigger, placeTrigger } =
+		cueTriggerEditing(clip, activeBody, timingDefaults, projected.rows,
+			selectedCueId, onMoveClip, onPlaceCueStart);
 	const source = cueTriggerSource(selected, first);
 
 	return (
@@ -356,11 +334,25 @@ export function CueListClipContents({
 						/>
 					);
 				})}
+
+				{expanded && (
+					<CueDividerHandles
+						rows={projected.rows} clip={clip} body={activeBody}
+						defaults={timingDefaults} position={position}
+						disabled={saving}
+						onSelect={onSelectCue}
+						onPreviewTrigger={setTriggerPreview}
+						onPreviewMoveClip={onPreviewMoveClip}
+						onMoveClip={onMoveClip}
+						onPlaceCueStart={onPlaceCueStart}
+					/>
+				)}
 				{selected && expanded && (
 					<CueTimingPoints
 						cueList={activeBody}
 						timingDefaults={timingDefaults}
 						selected={selected}
+						dividerFrames={projected.rows.filter((row, index) => index === 0 || row.transition).map(row => row.startFrame)}
 						clip={clip}
 						position={position}
 						pixelsPerFrame={pixelsPerFrame}

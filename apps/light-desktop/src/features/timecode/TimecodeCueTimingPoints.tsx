@@ -1,3 +1,5 @@
+import { useCueReferenceScroll } from "./useCueReferenceScroll";
+import { HEADER, PEAK_Y, BASE_Y, DIVIDER_CENTER } from "./cueEditorLayout";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -27,6 +29,7 @@ interface CueTimingPointsProps {
 	placeTrigger(frame: number): void;
 	saving: boolean;
 	editable: boolean;
+	dividerFrames?: readonly number[];
 	begin(
 		event: ReactPointerEvent,
 		row: CueClipTimingRow,
@@ -41,48 +44,82 @@ interface CueTimingPointsProps {
 	): void;
 }
 
-/** Keep touching 44px targets separate while leaders preserve the true time/corner. */
+/** Place touch targets without moving any time anchors or changing the lane height. */
 function pointPlacement(
 	selected: CueClipTimingRow,
 	kind: CueFadeKind,
 	edge: CueFadeEdge,
 	pixelsPerFrame: number,
+	dividerFrames: readonly number[],
+	clip: TimecodeCueListClip,
+	referenceScroll: number,
 ) {
-	const near = (left: number, right: number) =>
-		Math.abs((left - right) * pixelsPerFrame) < 44;
-	const reference = kind === "out" && selected.outFadeReference;
-	const anchorTop = reference
-		? edge === "start"
-			? 22
-			: 70
-		: (kind === "in") === (edge === "start")
-			? 226
-			: 58;
-	const inEndTop = near(selected.inFade.endFrame, selected.startFrame)
-		? 86
-		: 58;
-	let outStartTop = near(selected.outFade.startFrame, selected.startFrame)
-		? 86
-		: 58;
-	if (
-		!selected.outFadeReference &&
-		near(selected.inFade.endFrame, selected.outFade.startFrame) &&
-		Math.abs(outStartTop - inEndTop) < 44
-	)
-		outStartTop = inEndTop + 48;
-	let pointTop = anchorTop;
-	if (!reference) {
-		if (kind === "in" && edge === "end") pointTop = inEndTop;
-		if (kind === "out" && edge === "start") pointTop = outStartTop;
-		if (
-			kind === "in" &&
-			edge === "start" &&
-			!selected.outFadeReference &&
-			near(selected.inFade.startFrame, selected.outFade.endFrame)
-		)
-			pointTop = 178;
+	const anchorTop = (kind === "in") === (edge === "start") ? BASE_Y : PEAK_Y;
+	const occupied = [
+		{ x: selected.startFrame * pixelsPerFrame, y: PEAK_Y },
+		...dividerFrames.map((frame) => ({
+			x: frame * pixelsPerFrame,
+			y: DIVIDER_CENTER,
+		})),
+	];
+	const positions = new Map<string, number>();
+	for (const [handleKind, handleEdge] of [
+		["in", "end"],
+		["out", "start"],
+		["in", "start"],
+		["out", "end"],
+	] as const) {
+		const range = handleKind === "in" ? selected.inFade : selected.outFade;
+		const frame = handleEdge === "start" ? range.startFrame : range.endFrame;
+		const isReference = handleKind === "out" && selected.outFadeReference;
+		const x = isReference
+			? (clip.start_frame +
+					(clip.end_frame - clip.start_frame) / 2 +
+					frame -
+					selected.handoverFrame) *
+					pixelsPerFrame +
+				22 -
+				referenceScroll
+			: frame * pixelsPerFrame;
+		const y = isReference
+			? HEADER + (handleEdge === "start" ? 22 : 66)
+			: (handleKind === "in") === (handleEdge === "start")
+				? BASE_Y
+				: PEAK_Y;
+		const candidates = [
+			0, 48, 96, 144, 192, 240, 288, -48, -96, -144, -192, -240, -288,
+		];
+		const inside = candidates.filter(
+			(delta) =>
+				x + delta >= clip.start_frame * pixelsPerFrame + 22 &&
+				x + delta <= clip.end_frame * pixelsPerFrame - 22,
+		);
+		const offset =
+			[...inside, ...candidates].find((delta) =>
+				occupied.every(
+					(point) =>
+						Math.abs(x + delta - point.x) >= 44 || Math.abs(y - point.y) >= 44,
+				),
+			) ??
+			Math.max(
+				x,
+				...occupied
+					.filter((point) => Math.abs(y - point.y) < 44)
+					.map((point) => point.x + 48),
+			) - x;
+		occupied.push({ x: x + offset, y });
+		positions.set(`${handleKind}:${handleEdge}`, offset);
 	}
-	return { anchorTop, pointTop, displaced: pointTop !== anchorTop };
+	const offset = positions.get(`${kind}:${edge}`) ?? 0;
+	const reference = kind === "out" && selected.outFadeReference;
+	const trueTop = reference ? anchorTop - HEADER : anchorTop;
+	const pointTop = reference ? (edge === "start" ? 22 : 66) : anchorTop;
+	return {
+		anchorTop: trueTop,
+		pointTop,
+		offset,
+		displaced: offset !== 0 || pointTop !== trueTop,
+	};
 }
 
 export function CueTimingPoints({
@@ -100,34 +137,27 @@ export function CueTimingPoints({
 	placeTrigger,
 	saving,
 	editable,
+	dividerFrames = [selected.startFrame],
 	begin,
 	commit,
 }: CueTimingPointsProps) {
+	const { referenceRail, referenceScroll, onReferenceScroll } =
+		useCueReferenceScroll(clip.id, selected.cue.id);
 	return (
 		<span className="timecode-cue-edit-points">
-			<span
-				className="timecode-cue-trigger-label"
-				style={{ left: position(triggerPreview ?? selected.startFrame) }}
-			>
-				Trigger ·{" "}
-				{formatFrame(triggerPreview ?? selected.startFrame, TIMECODE_FPS)}
-			</span>
-			<FrameHandle
-				label={`Cue ${selected.cue.number} Trigger`}
-				caption="Trigger"
-				frame={triggerPreview ?? selected.startFrame}
-				minimum={first ? 0 : (triggerBounds?.minimum ?? selected.startFrame)}
-				maximum={
-					first
-						? Number.MAX_SAFE_INTEGER
-						: (triggerBounds?.maximum ?? selected.startFrame)
-				}
-				left={position(triggerPreview ?? selected.startFrame)}
-				top={38}
-				disabled={!canMoveTrigger}
-				onPreview={setTriggerPreview}
-				onCommit={placeTrigger}
-				className="trigger"
+			<CueTriggerPoint
+				{...{
+					selected,
+					triggerPreview,
+					first,
+					triggerBounds,
+					canMoveTrigger,
+					setTriggerPreview,
+					placeTrigger,
+					position,
+					clip,
+					pixelsPerFrame,
+				}}
 			/>
 			{(["in", "out"] as const).map((kind) => {
 				const range = kind === "in" ? selected.inFade : selected.outFade;
@@ -139,6 +169,9 @@ export function CueTimingPoints({
 					<span
 						key={kind}
 						className={`timecode-cue-edit-rail ${kind} ${reference ? "reference" : ""}`}
+						ref={reference ? referenceRail : undefined}
+						onScroll={reference ? onReferenceScroll : undefined}
+						data-reference-scroll={reference ? referenceScroll : undefined}
 					>
 						<span
 							className="timecode-cue-reference-axis"
@@ -155,7 +188,7 @@ export function CueTimingPoints({
 						>
 							<small>
 								{reference
-									? "Cue Out · next handover reference"
+									? "Out · not executed"
 									: kind === "in"
 										? "In"
 										: "Out"}
@@ -182,12 +215,16 @@ export function CueTimingPoints({
 									kind,
 									edge,
 								);
-								const { anchorTop, pointTop, displaced } = pointPlacement(
-									selected,
-									kind,
-									edge,
-									pixelsPerFrame,
-								);
+								const { anchorTop, pointTop, offset, displaced } =
+									pointPlacement(
+										selected,
+										kind,
+										edge,
+										pixelsPerFrame,
+										dividerFrames,
+										clip,
+										referenceScroll,
+									);
 
 								return (
 									<FrameHandle
@@ -196,7 +233,8 @@ export function CueTimingPoints({
 										frame={frame}
 										minimum={bounds?.minimum ?? frame}
 										maximum={bounds?.maximum ?? frame}
-										left={x(frame)}
+										left={x(frame) + offset}
+										anchorLeft={x(frame)}
 										top={pointTop}
 										anchorTop={anchorTop}
 										disabled={
@@ -217,5 +255,60 @@ export function CueTimingPoints({
 				);
 			})}
 		</span>
+	);
+}
+
+function CueTriggerPoint({
+	selected,
+	triggerPreview,
+	first,
+	triggerBounds,
+	canMoveTrigger,
+	setTriggerPreview,
+	placeTrigger,
+	position,
+	clip,
+	pixelsPerFrame,
+}: Pick<
+	CueTimingPointsProps,
+	| "selected"
+	| "triggerPreview"
+	| "first"
+	| "triggerBounds"
+	| "canMoveTrigger"
+	| "setTriggerPreview"
+	| "placeTrigger"
+	| "position"
+	| "clip"
+	| "pixelsPerFrame"
+>) {
+	return (
+		<>
+			{" "}
+			<span
+				className="timecode-cue-trigger-label"
+				hidden={(clip.end_frame - clip.start_frame) * pixelsPerFrame < 220}
+			>
+				Trigger ·{" "}
+				{formatFrame(triggerPreview ?? selected.startFrame, TIMECODE_FPS)}
+			</span>
+			<FrameHandle
+				label={`Cue ${selected.cue.number} Trigger`}
+				caption="Trigger"
+				frame={triggerPreview ?? selected.startFrame}
+				minimum={first ? 0 : (triggerBounds?.minimum ?? selected.startFrame)}
+				maximum={
+					first
+						? Number.MAX_SAFE_INTEGER
+						: (triggerBounds?.maximum ?? selected.startFrame)
+				}
+				left={position(triggerPreview ?? selected.startFrame)}
+				top={PEAK_Y}
+				disabled={!canMoveTrigger}
+				onPreview={setTriggerPreview}
+				onCommit={placeTrigger}
+				className="trigger"
+			/>
+		</>
 	);
 }

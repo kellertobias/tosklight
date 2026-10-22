@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **432 root cases across 134 files**.
+Default catalog: **436 root cases across 134 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -399,10 +399,14 @@ Default catalog: **432 root cases across 134 files**.
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › live editing preserves transport and scrubbing stays independent until explicit seek | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › title actions, Settings autosave, Add menu, CSV, and zoom geometry match the operator contract | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › touch selects one Cue, Close collapses it, and the sidebar preserves exact timeline geometry | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the complete expanded lane fits above the desk controls with an 88px envelope and 44px names | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › tapping an unplaced manual Cue divider never creates a placement or sends a save | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › both visible Cue divider grips move the real Trigger with mouse and touch and persist | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › each timing point saves to the Cuelist and a refused pointer edit rolls back | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › manual Trigger drags stop at neighbours and survive reopening without changing trigger type | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › touch drags each timing point and cancelling a touch restores the unsaved preview | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › first Trigger moves the whole clip and the final Cue explains its separate Clip Out | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › grouped Speed navigation previews every group and enlarges only the selected lane | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › coincident In end and Out start remain independently editable by mouse and touch | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |

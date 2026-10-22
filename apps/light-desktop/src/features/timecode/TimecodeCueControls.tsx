@@ -17,6 +17,7 @@ export function FrameHandle({
 	className = "",
 	caption,
 	anchorTop,
+	anchorLeft,
 }: {
 	label: string;
 	frame: number;
@@ -31,6 +32,7 @@ export function FrameHandle({
 	className?: string;
 	caption?: string;
 	anchorTop?: number;
+	anchorLeft?: number;
 }) {
 	const origin = useRef<{ pointerId: number; x: number; frame: number } | null>(
 		null,
@@ -46,6 +48,8 @@ export function FrameHandle({
 			aria-valuemin={minimum}
 			aria-valuemax={maximum}
 			aria-valuenow={frame}
+			data-time-anchor-x={anchorLeft ?? left}
+			data-time-anchor-y={anchorTop ?? top}
 			aria-valuetext={formatFrame(frame, TIMECODE_FPS)}
 			aria-disabled={disabled || undefined}
 			className={`timecode-cue-point ${className}`}
@@ -56,7 +60,8 @@ export function FrameHandle({
 					return;
 				event.preventDefault();
 				event.stopPropagation();
-				onCommit(clamp(frame + (event.key === "ArrowLeft" ? -1 : 1)));
+				const target = clamp(frame + (event.key === "ArrowLeft" ? -1 : 1));
+				if (target !== frame) onCommit(target);
 			}}
 			onPointerDown={(event) => {
 				if (disabled) return;
@@ -94,7 +99,10 @@ export function FrameHandle({
 				event.stopPropagation();
 				origin.current = null;
 				onPreview?.(null);
-				onCommit(clamp(start.frame + (event.clientX - start.x) / ppf.current));
+				const target = clamp(
+					start.frame + (event.clientX - start.x) / ppf.current,
+				);
+				if (target !== start.frame) onCommit(target);
 			}}
 			onPointerCancel={() => {
 				origin.current = null;
@@ -103,15 +111,25 @@ export function FrameHandle({
 		>
 			{" "}
 			<span aria-hidden="true" />
-			{anchorTop !== undefined && top !== undefined && anchorTop !== top && (
-				<i
+			{((anchorTop !== undefined && top !== undefined && anchorTop !== top) ||
+				(anchorLeft !== undefined && anchorLeft !== left)) && (
+				<svg
 					className="timecode-cue-point-leader"
 					aria-hidden="true"
 					style={{
-						top: 22 + Math.min(0, anchorTop - top),
-						height: Math.abs(anchorTop - top),
+						left: 22 + Math.min(0, (anchorLeft ?? left) - left),
+						top: 22 + Math.min(0, (anchorTop ?? top ?? 0) - (top ?? 0)),
+						width: Math.max(1, Math.abs((anchorLeft ?? left) - left)),
+						height: Math.max(1, Math.abs((anchorTop ?? top ?? 0) - (top ?? 0))),
 					}}
-				/>
+				>
+					<line
+						x1={Math.max(0, left - (anchorLeft ?? left))}
+						y1={Math.max(0, (top ?? 0) - (anchorTop ?? top ?? 0))}
+						x2={Math.max(0, (anchorLeft ?? left) - left)}
+						y2={Math.max(0, (anchorTop ?? top ?? 0) - (top ?? 0))}
+					/>
+				</svg>
 			)}
 			{caption && (
 				<small className="timecode-cue-point-caption">{caption}</small>

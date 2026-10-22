@@ -66,7 +66,7 @@ it("shows a single Cue, inherited In, explicit zero Out reference and separate c
 		top: "22px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 Out fade" })).toHaveStyle({
-		top: "70px",
+		top: "66px",
 	});
 	expect(
 		rendered.container.querySelector(".timecode-cue-edit-rail.out.reference"),
@@ -157,22 +157,22 @@ it("expands Cue envelopes and attaches all four points to their corners", () => 
 	);
 	expect(
 		view.container.querySelector(".timecode-cue-envelope"),
-	).toHaveAttribute("height", "202");
+	).toHaveAttribute("height", "88");
 	expect(screen.getByRole("slider", { name: "Cue 1 In delay" })).toHaveStyle({
-		top: "226px",
+		top: "104px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 In fade" })).toHaveStyle({
-		top: "58px",
+		top: "32px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 Out delay" })).toHaveStyle({
-		top: "58px",
+		top: "32px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 Out fade" })).toHaveStyle({
-		top: "226px",
+		top: "104px",
 	});
 	expect(
 		screen.getByRole("button", { name: "Edit Cue 1 Audience" }),
-	).toHaveStyle({ top: "234px" });
+	).toHaveStyle({ top: "112px" });
 	expect(
 		view.container.querySelector(".timecode-cue-fade-guide.in"),
 	).not.toBeNull();
