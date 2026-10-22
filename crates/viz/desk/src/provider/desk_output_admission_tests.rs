@@ -542,3 +542,54 @@ fn scene_replacement_resets_acceptance_and_a_delta_keeps_the_epoch_order() {
         "only the delta-epoch replay was stale"
     );
 }
+
+/// A title/pane edit can advance the show while the unchanged output publication is retained.
+/// Its matching compiled fixture identities still prove that it belongs to this patch.
+#[test]
+fn non_lighting_show_revisions_keep_compatible_live_output_visible() {
+    for patched in [true, false] {
+        let mut desk = Desk::new(patched);
+        let mut plan = desk.rig.plan();
+        plan.scene.source_show_revision = 9;
+        plan.scene.revision = 2;
+        desk.send(Message::Delta {
+            plan: Box::new(plan.scene),
+            bindings: plan.bindings,
+            external_camera: plan.external_camera,
+            position_points: plan.position_points,
+            mappings: Vec::new(),
+            diagnostics: Box::new(ProviderDiagnostics::default()),
+        });
+        // Output still belongs to show revision 1; it is the actual accepted lighting frame.
+        assert_eq!(desk.deliver([desk.output(Some(stamp(5, 2)), B)]), 1);
+        assert_eq!(desk.point_height(), B.point_z);
+        assert!(desk.colour().iter().any(|channel| *channel > 0.0));
+    }
+}
+
+#[test]
+fn older_revision_output_still_requires_every_current_physical_identity() {
+    for patched in [true, false] {
+        let mut desk = Desk::new(patched);
+        desk.provider.scene.as_mut().unwrap().source_show_revision = 9;
+        let untouched = desk.picture();
+        let mut incompatible = desk.output(Some(stamp(5, 2)), B);
+        incompatible.native.as_mut().unwrap().instances[0].native_identity =
+            "previous patch".into();
+        assert_eq!(desk.deliver([incompatible]), 0);
+        assert_eq!(
+            desk.picture(),
+            untouched,
+            "incompatible DMX/points must also be rejected"
+        );
+        let mut incomplete = desk.output(Some(stamp(6, 2)), B);
+        incomplete.native.as_mut().unwrap().instances.clear();
+        assert_eq!(desk.deliver([incomplete]), 0);
+        assert_eq!(desk.picture(), untouched);
+        let mut other_show = desk.output(Some(stamp(7, 2)), B);
+        other_show.native.as_mut().unwrap().show_id = Some(Uuid::new_v4());
+        assert_eq!(desk.deliver([other_show]), 0);
+        assert_eq!(desk.picture(), untouched);
+        assert_eq!(desk.deliver([desk.output(Some(stamp(8, 2)), B)]), 1);
+    }
+}

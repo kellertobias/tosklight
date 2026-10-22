@@ -27,6 +27,7 @@
 
 use super::{FLOOR_HEIGHT, LaserInstance};
 use glam::{Quat, Vec3};
+use std::collections::HashMap;
 use viz_scene::{LaserOptics, LaserScan, ScanPoint};
 
 /// How far a laser reaches before it is treated as lost in the air.
@@ -49,7 +50,8 @@ const MINIMUM_DRAWN_RADIUS: f32 = 0.012;
 ///
 /// Scan engines emit repeated points freely — as a way of dwelling on a corner, or simply as an
 /// artefact of generating a path — and a zero-length run is both invisible and a degenerate
-/// billboard whose orientation is undefined.
+/// billboard whose orientation is undefined. A whole scan held at one point is handled separately
+/// as one stationary beam, rather than adding a beam for every repeated corner.
 const MINIMUM_RUN_METRES: f32 = 1e-4;
 
 /// How far apart the rays filling a run's fan may be, in beam radii where they land.
@@ -73,6 +75,10 @@ const MAXIMUM_FAN_RAYS: usize = 32;
 /// drawn at anything near the strength of its own figure swamps the rig it is hanging in.
 const AIR_SHARE: f32 = 0.05;
 
+/// Upper bound already used for moving runs that dwell on a very short part of the figure.
+/// A stationary point is the limiting case: its share of the scan stays inside one beam footprint.
+const MAXIMUM_SCAN_DENSITY: f32 = 8.0;
+
 /// Append every visible run of one laser's scan.
 ///
 /// `intensity` is the head's level after persistence of vision, which for a laser is doing real
@@ -87,7 +93,7 @@ pub(super) fn push_laser(
     intensity: f32,
     colour_multiplier: Vec3,
 ) {
-    if scan.points.len() < 2 || intensity <= 0.002 {
+    if scan.points.is_empty() || intensity <= 0.002 {
         return;
     }
     // How many complete passes of this figure land inside one displayed frame. A fast scanner
@@ -107,6 +113,63 @@ pub(super) fn push_laser(
             (origin + direction * distance, distance)
         })
         .collect();
+
+    let whole_scan_stationary = landings
+        .iter()
+        .all(|(point, _)| point.distance(landings[0].0) < MINIMUM_RUN_METRES);
+    let lit_motion = scan
+        .points
+        .windows(2)
+        .zip(landings.windows(2))
+        .any(|(points, ends)| {
+            Vec3::from(points[1].colour).max_element() > 0.002
+                && points[1].dwell > 0.0
+                && ends[1].0.distance(ends[0].0) >= MINIMUM_RUN_METRES
+        });
+    if whole_scan_stationary || !lit_motion {
+        // A dotted fan moves dark to each coordinate, then dwells there with its light on.
+        // Aggregate each held position once; dark travel must never become a connecting fan.
+        // This path is deliberately exclusive to scans without visible movement, so ordinary
+        // repeated corners retain their existing run geometry and brightness.
+        let mut by_position = HashMap::new();
+        let mut held: Vec<(Vec3, f32, Vec3)> = Vec::new();
+        for (index, point) in scan.points.iter().enumerate() {
+            let (landing, distance) = landings[index];
+            if !whole_scan_stationary
+                && (index == 0 || landing.distance(landings[index - 1].0) >= MINIMUM_RUN_METRES)
+            {
+                continue;
+            }
+            let colour = Vec3::from(point.colour);
+            if !landing.is_finite()
+                || !colour.is_finite()
+                || !point.dwell.is_finite()
+                || point.dwell <= 0.0
+                || colour.max_element() <= 0.002
+            {
+                continue;
+            }
+            // Quantise only below the existing minimum drawable run; this also merges signed
+            // zero while keeping grouping linear in the number of scan points.
+            let key = (
+                (landing.x / MINIMUM_RUN_METRES).round() as i64,
+                (landing.y / MINIMUM_RUN_METRES).round() as i64,
+                (landing.z / MINIMUM_RUN_METRES).round() as i64,
+            );
+            let at = *by_position.entry(key).or_insert_with(|| {
+                held.push((landing, distance, Vec3::ZERO));
+                held.len() - 1
+            });
+            held[at].2 += colour.clamp(Vec3::ZERO, Vec3::ONE) * point.dwell;
+        }
+        for (landing, distance, colour_dwell) in held {
+            let radiance = colour_dwell * colour_multiplier * gain * MAXIMUM_SCAN_DENSITY;
+            if radiance.is_finite() && radiance.max_element() > 0.002 {
+                push_stationary(out, origin, landing, distance, optics, radiance);
+            }
+        }
+        return;
+    }
 
     // The total length of everything actually drawn, which is what each run's share is measured
     // against. Using the path's own length rather than an absolute figure is what keeps a small
@@ -152,7 +215,7 @@ pub(super) fn push_laser(
         //
         // The same number serves the beam in the air, because it is the same light: the run and
         // the sheet that swept it are one pass of the scanner seen from two places.
-        let density = (dwell * drawn_length / length.max(0.01)).min(8.0);
+        let density = (dwell * drawn_length / length.max(0.01)).min(MAXIMUM_SCAN_DENSITY);
         let radiance = colour * gain * density;
         push_run(out, from, to, from_distance, to_distance, optics, radiance);
         push_fan(
@@ -164,6 +227,46 @@ pub(super) fn push_laser(
             to_distance,
             optics,
             radiance * AIR_SHARE,
+        );
+    }
+}
+
+/// One held beam and, only where it actually meets the floor, its small landing footprint.
+///
+/// The existing native primitive is a ribbon, whose axis must not be zero length. Its airborne
+/// ray already has the full throw as an axis; the footprint uses one beam diameter across the
+/// floor. This is the spot's finite physical width, not a fabricated scan movement.
+fn push_stationary(
+    out: &mut Vec<LaserInstance>,
+    origin: Vec3,
+    landing: Vec3,
+    distance: f32,
+    optics: &LaserOptics,
+    radiance: Vec3,
+) {
+    // Unlike a fan sample, the scanner stays on this ray: it has a hot core as well as a halo.
+    // Kind 2 retains airborne haze attenuation; kind 1 would falsely treat it as a surface.
+    push_ray(
+        out,
+        origin,
+        landing,
+        distance,
+        optics,
+        radiance * AIR_SHARE,
+        2.0,
+    );
+    // A beam that leaves the room upwards ends at the display's throw limit, not on a surface.
+    // Do not invent a bright dot hanging sixty metres in the air at that limit.
+    if landing.y < origin.y && (landing.y - FLOOR_HEIGHT).abs() < 1e-3 {
+        let radius = drawn_radius(optics, distance);
+        push_run(
+            out,
+            landing - Vec3::X * radius,
+            landing + Vec3::X * radius,
+            distance,
+            distance,
+            optics,
+            radiance,
         );
     }
 }
@@ -205,12 +308,25 @@ fn push_fan(
         let across = (ray as f32 + 0.5) / rays as f32;
         let landing = from.lerp(to, across);
         let distance = from_distance + (to_distance - from_distance) * across;
-        out.push(LaserInstance {
-            start_radius: origin.extend(drawn_radius(optics, 0.0)).to_array(),
-            end_radius: landing.extend(drawn_radius(optics, distance)).to_array(),
-            colour_landing: radiance.extend(0.0).to_array(),
-        });
+        push_ray(out, origin, landing, distance, optics, radiance, 0.0);
     }
+}
+
+/// A fan sample (kind 0) or a held beam (kind 2), both attenuated by the haze they travel through.
+fn push_ray(
+    out: &mut Vec<LaserInstance>,
+    origin: Vec3,
+    landing: Vec3,
+    distance: f32,
+    optics: &LaserOptics,
+    radiance: Vec3,
+    kind: f32,
+) {
+    out.push(LaserInstance {
+        start_radius: origin.extend(drawn_radius(optics, 0.0)).to_array(),
+        end_radius: landing.extend(drawn_radius(optics, distance)).to_array(),
+        colour_landing: radiance.extend(kind).to_array(),
+    });
 }
 
 /// How wide the beam is drawn at a distance: its physical radius, or the floor below which a
@@ -321,7 +437,7 @@ mod tests {
     fn run(points: Vec<ScanPoint>) -> Vec<LaserInstance> {
         drawn(points)
             .into_iter()
-            .filter(|instance| instance.colour_landing[3] > 0.5)
+            .filter(|instance| instance.colour_landing[3] == 1.0)
             .collect()
     }
 
@@ -329,7 +445,7 @@ mod tests {
     fn air(points: Vec<ScanPoint>) -> Vec<LaserInstance> {
         drawn(points)
             .into_iter()
-            .filter(|instance| instance.colour_landing[3] <= 0.5)
+            .filter(|instance| instance.colour_landing[3] != 1.0)
             .collect()
     }
 
@@ -453,7 +569,7 @@ mod tests {
         );
     }
 
-    /// A dark laser draws nothing at all, and neither does a path too short to have a run in it.
+    /// A dark laser and an empty scan draw nothing at all.
     #[test]
     fn nothing_is_drawn_without_light_or_without_a_path() {
         let mut out = Vec::new();
@@ -467,7 +583,6 @@ mod tests {
             Vec3::ONE,
         );
         assert!(out.is_empty(), "a laser at zero drew something");
-        assert!(run(vec![lit(0.0, 0.0, 1.0)]).is_empty());
         assert!(run(Vec::new()).is_empty());
     }
 
@@ -487,7 +602,7 @@ mod tests {
                 1.0,
                 Vec3::ONE,
             );
-            out.retain(|instance| instance.colour_landing[3] > 0.5);
+            out.retain(|instance| instance.colour_landing[3] == 1.0);
             out
         };
         let upright = figure(Quat::IDENTITY);
@@ -517,5 +632,319 @@ mod tests {
             Vec3::ONE,
         );
         assert!(wide.radius_at(20.0) > wide.radius_at(1.0));
+        let ray = out
+            .iter()
+            .find(|instance| instance.colour_landing[3] == 2.0)
+            .expect("a stationary beam must be drawn");
+        assert!(ray.end_radius[3] > ray.start_radius[3]);
+    }
+
+    #[test]
+    fn a_single_point_draws_one_beam_and_one_finite_landing_spot() {
+        let instances = drawn(vec![lit(0.0, 0.0, 1.0)]);
+        assert_eq!(instances.len(), 2);
+        let beam = &instances[0];
+        assert_eq!(beam.colour_landing[3], 2.0);
+        assert!(Vec3::from_slice(&beam.start_radius).abs_diff_eq(WINDOW, 1e-6));
+        assert!((beam.end_radius[1] - FLOOR_HEIGHT).abs() < 1e-3);
+        let spot = &instances[1];
+        assert_eq!(spot.colour_landing[3], 1.0);
+        assert!((spot.start_radius[1] - FLOOR_HEIGHT).abs() < 1e-3);
+        assert!((spot.end_radius[1] - FLOOR_HEIGHT).abs() < 1e-3);
+        for instance in &instances {
+            assert!(
+                instance
+                    .start_radius
+                    .iter()
+                    .chain(&instance.end_radius)
+                    .all(|n| n.is_finite())
+            );
+            assert!(
+                Vec3::from_slice(&instance.start_radius)
+                    .distance(Vec3::from_slice(&instance.end_radius))
+                    > MINIMUM_RUN_METRES
+            );
+        }
+    }
+
+    #[test]
+    fn repeating_a_stationary_point_shares_one_beam_instead_of_duplicating_it() {
+        let single = drawn(vec![lit(0.3, -0.2, 1.0)]);
+        let repeated = drawn(vec![lit(0.3, -0.2, 0.25), lit(0.3, -0.2, 0.75)]);
+        assert_eq!(single.len(), repeated.len());
+        for (one, many) in single.iter().zip(&repeated) {
+            assert_eq!(one.start_radius, many.start_radius);
+            assert_eq!(one.end_radius, many.end_radius);
+            assert_eq!(one.colour_landing, many.colour_landing);
+        }
+    }
+
+    #[test]
+    fn stationary_colour_and_blanking_are_weighted_by_the_actual_dwell() {
+        let mut red = lit(0.0, 0.0, 0.25);
+        red.colour = [1.0, 0.0, 0.0];
+        let mut blue = lit(0.0, 0.0, 0.25);
+        blue.colour = [0.0, 0.0, 1.0];
+        let instances = drawn(vec![red, dark(0.0, 0.0, 0.5), blue]);
+        assert_eq!(instances.len(), 2);
+        let full = drawn(vec![lit(0.0, 0.0, 1.0)]);
+        for (mixed, white) in instances.iter().zip(&full) {
+            assert!((mixed.colour_landing[0] - white.colour_landing[0] * 0.25).abs() < 1e-6);
+            assert_eq!(mixed.colour_landing[1], 0.0);
+            assert!((mixed.colour_landing[2] - white.colour_landing[2] * 0.25).abs() < 1e-6);
+        }
+        assert!(drawn(vec![dark(0.0, 0.0, 1.0)]).is_empty());
+        assert!(drawn(vec![lit(0.0, 0.0, 0.0), lit(0.0, 0.0, -1.0)]).is_empty());
+        assert!(drawn(vec![lit(0.0, 0.0, f32::NAN)]).is_empty());
+        let mut out = Vec::new();
+        push_laser(
+            &mut out,
+            WINDOW,
+            Quat::IDENTITY,
+            &optics(),
+            &scan(vec![lit(0.0, 0.0, 1.0)]),
+            0.0,
+            Vec3::ONE,
+        );
+        push_laser(
+            &mut out,
+            WINDOW,
+            Quat::IDENTITY,
+            &optics(),
+            &scan(vec![lit(0.0, 0.0, 1.0)]),
+            1.0,
+            Vec3::ZERO,
+        );
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn an_upward_stationary_beam_follows_the_fixture_without_an_airborne_landing_dot() {
+        let mut out = Vec::new();
+        push_laser(
+            &mut out,
+            WINDOW,
+            Quat::from_rotation_x(std::f32::consts::PI),
+            &optics(),
+            &scan(vec![lit(0.0, 0.0, 1.0)]),
+            1.0,
+            Vec3::ONE,
+        );
+        assert_eq!(out.len(), 1);
+        let beam = &out[0];
+        assert_eq!(beam.colour_landing[3], 2.0);
+        assert!((beam.end_radius[1] - (WINDOW.y + LASER_THROW_METRES)).abs() < 1e-3);
+        assert!((Vec3::from_slice(&beam.end_radius) - WINDOW).length() > 59.9);
+    }
+
+    #[test]
+    fn repeated_corners_do_not_add_stationary_beams_to_an_ordinary_path() {
+        let plain = drawn(vec![
+            lit(-0.5, 0.0, 0.0),
+            lit(0.0, 0.0, 0.3),
+            lit(0.5, 0.0, 0.5),
+        ]);
+        let repeated = drawn(vec![
+            lit(-0.5, 0.0, 0.0),
+            lit(0.0, 0.0, 0.3),
+            lit(0.0, 0.0, 0.2),
+            lit(0.5, 0.0, 0.5),
+        ]);
+        assert_eq!(plain.len(), repeated.len());
+        for (one, many) in plain.iter().zip(&repeated) {
+            assert_eq!(one.start_radius, many.start_radius);
+            assert_eq!(one.end_radius, many.end_radius);
+            assert_eq!(one.colour_landing, many.colour_landing);
+        }
+        // The first control point does not light an otherwise blanked journey to another point.
+        assert!(drawn(vec![lit(-0.5, 0.0, 0.5), dark(0.5, 0.0, 0.5)]).is_empty());
+    }
+
+    #[test]
+    fn blank_travel_and_lit_dwells_draw_separate_point_beams_without_connecting_fans() {
+        let points = vec![
+            dark(-0.5, 0.0, 0.1),
+            lit(-0.5, 0.0, 0.15),
+            lit(-0.5, 0.0, 0.05),
+            dark(0.0, 0.0, 0.1),
+            lit(0.0, 0.0, 0.2),
+            dark(0.5, 0.0, 0.1),
+            lit(0.5, 0.0, 0.3),
+        ];
+        let instances = drawn(points);
+        let beams: Vec<_> = instances
+            .iter()
+            .filter(|i| i.colour_landing[3] == 2.0)
+            .collect();
+        assert_eq!(
+            beams.len(),
+            3,
+            "each unique lit dwell needs exactly one hot beam"
+        );
+        assert!(
+            !instances.iter().any(|i| i.colour_landing[3] == 0.0),
+            "blank travel cannot produce a connecting fan"
+        );
+        assert_eq!(
+            instances
+                .iter()
+                .filter(|i| i.colour_landing[3] == 1.0)
+                .count(),
+            3
+        );
+        for beam in &beams {
+            assert!(Vec3::from_slice(&beam.start_radius).abs_diff_eq(WINDOW, 1e-6));
+            assert!(
+                Vec3::from_slice(&beam.start_radius).distance(Vec3::from_slice(&beam.end_radius))
+                    > 1.0
+            );
+        }
+        assert!(
+            (beams[0].colour_landing[0] - beams[1].colour_landing[0]).abs() < 1e-6,
+            "repeated same-point dwells must combine their time, not duplicate geometry"
+        );
+        assert!((beams[2].colour_landing[0] - beams[1].colour_landing[0] * 1.5).abs() < 1e-6);
+        assert!(
+            drawn(vec![
+                dark(-0.5, 0.0, 0.5),
+                dark(-0.5, 0.0, 0.1),
+                dark(0.5, 0.0, 0.4)
+            ])
+            .is_empty()
+        );
+    }
+
+    #[test]
+    #[ignore = "requires a native GPU adapter; run explicitly for laser capture verification"]
+    fn stationary_beam_reaches_the_native_pixel_pipeline() {
+        use viz_scene::{
+            EmitterInstance, EmitterKind, EmitterLayoutCells, EmitterOptics, EmitterValues,
+            FixtureInstance, Scene, SceneValues, ViewConfiguration,
+        };
+        let mut scene = Scene::default();
+        scene.fixtures.push(FixtureInstance {
+            position: Vec3::new(0.0, 1.0, 0.0),
+            installed_colour: [1.0; 3],
+            patched: true,
+            ..Default::default()
+        });
+        scene.emitters.push(EmitterInstance {
+            fixture_index: 0,
+            head_index: 0,
+            label: "Stationary laser".into(),
+            local_origin: Vec3::ZERO,
+            tilt_pivot: Vec3::ZERO,
+            local_orientation_degrees: Vec3::new(180.0, 0.0, 0.0),
+            pan: None,
+            tilt: None,
+            beam_angle_degrees: 1.0,
+            field_angle_degrees: 1.0,
+            optics: EmitterOptics::default(),
+            kind: EmitterKind::Laser,
+            cells: EmitterLayoutCells::single(),
+            laser: Some(optics()),
+            effect: None,
+            live_shaper_angle_roles: [false; 4],
+            shaper_roles: [false; 4],
+            live_shaper_rotation_role: false,
+        });
+        scene.recompute_bounds();
+        let mut values = SceneValues {
+            emitters: vec![EmitterValues {
+                intensity: 1.0,
+                colour: [1.0; 3],
+                ..Default::default()
+            }],
+            laser_scans: vec![scan(vec![lit(0.0, 0.0, 1.0)])],
+            ..Default::default()
+        };
+        values.atmosphere.density = 0.16;
+        let mut view = ViewConfiguration::default();
+        view.camera.position = Vec3::new(8.0, 4.0, 8.0);
+        view.camera.target = Vec3::new(0.0, 5.0, 0.0);
+        view.ambient = 0.0;
+        view.show_labels = false;
+        let mut renderer = crate::Renderer::headless(512, 512).expect("native GPU adapter");
+        let image = renderer
+            .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
+            .unwrap();
+        values.emitters[0].intensity = 0.0;
+        let dark_image = renderer
+            .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
+            .unwrap();
+        let changed = image
+            .rgba
+            .chunks_exact(4)
+            .zip(dark_image.rgba.chunks_exact(4))
+            .filter(|(on, off)| (0..3).any(|i| i16::from(on[i]) - i16::from(off[i]) > 8))
+            .count();
+        eprintln!("Stationary native beam changed {changed} pixels");
+        if let Some(directory) = std::env::var_os("VIZ_LASER_CAPTURE_DIR") {
+            std::fs::create_dir_all(&directory).unwrap();
+            let mut ppm = b"P6\n512 512\n255\n".to_vec();
+            for pixel in image.rgba.chunks_exact(4) {
+                ppm.extend_from_slice(&pixel[..3]);
+            }
+            std::fs::write(
+                std::path::Path::new(&directory).join("stationary-native.ppm"),
+                ppm,
+            )
+            .unwrap();
+        }
+        assert!(
+            changed > 100,
+            "the native renderer lost the stationary laser despite valid scan geometry"
+        );
+
+        values.emitters[0].intensity = 1.0;
+        values.atmosphere.density = 0.0;
+        let clear = renderer
+            .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
+            .unwrap();
+        let brightness = |image: &crate::CapturedImage| {
+            image
+                .rgba
+                .chunks_exact(4)
+                .map(|pixel| u64::from(pixel[0]) + u64::from(pixel[1]) + u64::from(pixel[2]))
+                .sum::<u64>()
+        };
+        assert!(
+            brightness(&image) > brightness(&clear),
+            "kind2 is airborne and must still answer haze"
+        );
+        values.atmosphere.density = 0.16;
+        values.laser_scans[0] = scan(vec![
+            dark(-0.8, 0.0, 1.0 / 6.0),
+            lit(-0.8, 0.0, 1.0 / 6.0),
+            dark(0.0, 0.0, 1.0 / 6.0),
+            lit(0.0, 0.0, 1.0 / 6.0),
+            dark(0.8, 0.0, 1.0 / 6.0),
+            lit(0.8, 0.0, 1.0 / 6.0),
+        ]);
+        let fan = renderer
+            .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
+            .unwrap();
+        let fan_pixels = fan
+            .rgba
+            .chunks_exact(4)
+            .zip(dark_image.rgba.chunks_exact(4))
+            .filter(|(on, off)| (0..3).any(|i| i16::from(on[i]) - i16::from(off[i]) > 8))
+            .count();
+        eprintln!("Stationary point fan changed {fan_pixels} native pixels");
+        assert!(
+            fan_pixels > 200,
+            "blank-travel point fan must reach the native pixel pipeline"
+        );
+        if let Some(directory) = std::env::var_os("VIZ_LASER_CAPTURE_DIR") {
+            let mut ppm = b"P6\n512 512\n255\n".to_vec();
+            for pixel in fan.rgba.chunks_exact(4) {
+                ppm.extend_from_slice(&pixel[..3]);
+            }
+            std::fs::write(
+                std::path::Path::new(&directory).join("stationary-point-fan-native.ppm"),
+                ppm,
+            )
+            .unwrap();
+        }
     }
 }

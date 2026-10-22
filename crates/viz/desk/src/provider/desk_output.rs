@@ -76,12 +76,13 @@ impl DeskProvider {
             {
                 return;
             }
-            // Reject the entire source before decoding any universe or point. A current server
-            // may temporarily have no matching source while the patch/show is being replaced.
+            // Reject an incompatible source before decoding any universe or point. Show
+            // revisions also advance for non-lighting edits while output may keep its accepted
+            // publication: compatibility is the show and every compiled physical identity, not
+            // the unrelated revision counter. A repatch/profile change still fails this proof.
             if output.native_protocol > 0
                 && !output.native.as_ref().is_some_and(|lane| {
                     lane.show_id == scene.show_id
-                        && lane.revision >= scene.source_show_revision
                         && decoder.accepts_native_snapshot(
                             lane.instances
                                 .iter()
@@ -129,7 +130,9 @@ impl DeskProvider {
                     true,
                 ),
             ] {
-                if let Some(lane) = lane.filter(|lane| valid_lane(lane)) {
+                if let Some(lane) = lane
+                    .filter(|lane| lane.show_id == scene.show_id && (!preload || valid_lane(lane)))
+                {
                     decoder.apply_native(
                         scene,
                         lane.instances

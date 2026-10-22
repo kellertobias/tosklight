@@ -304,6 +304,7 @@ struct PaneState {
     presented_frames: u64,
     benchmark: Option<BenchmarkDrawWitness>,
     physics: crate::physics::Physics,
+    lasers: crate::lasers::Lasers,
 }
 
 impl PaneState {
@@ -341,6 +342,7 @@ impl PaneState {
             )
             .then(|| BenchmarkDrawWitness::new(embedding.desk.is_some())),
             physics: crate::physics::Physics::with_state_path(physics_state_path),
+            lasers: crate::lasers::Lasers::new(crate::lasers::Lasers::directory(None)),
         })
     }
 
@@ -619,6 +621,26 @@ impl PaneState {
         }
     }
 
+    /// Resolve frame-rate fixture state before deciding whether the picture changed. In
+    /// particular, desk output supplies laser DMX slots, while the packaged scan script must run
+    /// here on the drawing thread, just as it does in the standalone renderer.
+    fn prepare_frame(&mut self, elapsed: f32, time: f32) -> bool {
+        let motion_was_active = self
+            .values
+            .is_time_driven(&viz_scene::PersistencePreference::default());
+        self.values.apply_physical_motion(elapsed);
+        self.values.apply_calibrated_motion(&self.scene, elapsed);
+        self.lasers.run(&self.scene, &mut self.values, time);
+        self.physics.run(
+            &self.scene,
+            &mut self.values,
+            time,
+            self.view.quality,
+            self.view.physics_reset_generation,
+        );
+        motion_was_active
+    }
+
     fn draw(&mut self, epoch: Instant, source: &mut HelperSource) -> Result<(), String> {
         if let Some(benchmark) = self.benchmark.as_mut() {
             benchmark.idle_unchanged = false;
@@ -630,19 +652,8 @@ impl PaneState {
             .as_secs_f32()
             .min(0.25);
         self.last_tick = now;
-        let motion_was_active = self
-            .values
-            .is_time_driven(&viz_scene::PersistencePreference::default());
-        self.values.apply_physical_motion(elapsed);
-        self.values.apply_calibrated_motion(&self.scene, elapsed);
         let time = epoch.elapsed().as_secs_f32();
-        self.physics.run(
-            &self.scene,
-            &mut self.values,
-            time,
-            self.view.quality,
-            self.view.physics_reset_generation,
-        );
+        let motion_was_active = self.prepare_frame(elapsed, time);
         let persistence = viz_scene::PersistencePreference {
             decay_seconds: 0.0,
             ..viz_scene::PersistencePreference::default()
@@ -840,6 +851,64 @@ mod tests {
             desk: None,
             surface_service: None,
         }
+    }
+
+    #[test]
+    fn embedded_frames_resolve_packaged_laser_scans_after_desk_updates() {
+        let Ok(mut state) = PaneState::new(&embedding(64.0, 64.0, 1.0)) else {
+            eprintln!("no GPU here; skipping embedded frame preparation");
+            return;
+        };
+        // Ignore operator script overrides: exercise the portable packaged script.
+        state.lasers = crate::lasers::Lasers::new(None);
+        state.scene = crate::demo::build_scene();
+        let index = state
+            .scene
+            .emitters
+            .iter()
+            .position(|emitter| emitter.kind == viz_scene::EmitterKind::Laser)
+            .expect("the demo carries a packaged laser");
+        let mut desk_values = SceneValues::default();
+        desk_values.resize(state.scene.emitters.len());
+        desk_values.emitters[index].intensity = 1.0;
+        desk_values.emitters[index].held_intensity = 1.0;
+        for frame in 1..=2 {
+            desk_values.frame = frame;
+            assert!(desk_values.laser_scans[index].points.is_empty());
+            adopt_provider_values(&mut state.values, desk_values.clone(), 0);
+            state.prepare_frame(1.0 / 60.0, frame as f32 / 60.0);
+            let scan = &state.values.laser_scans[index];
+            assert_eq!(scan.fault, None);
+            assert!(
+                scan.points.len() > 50,
+                "each desk update needs its scan resolved"
+            );
+            let instances = viz_render::build_instances(
+                &state.scene,
+                &state.values,
+                &viz_render::FrameStyle::default(),
+            );
+            assert!(
+                !instances.lasers.is_empty(),
+                "the embedded frame has actual laser geometry"
+            );
+            assert!(crate::redraw::is_time_driven(
+                &state.values,
+                &state.view,
+                &viz_scene::PersistencePreference::default()
+            ));
+        }
+        let optics = state.scene.emitters[index].laser.as_mut().unwrap();
+        optics.script = Some(std::sync::Arc::from(
+            "export function scan() { throw new Error('broken scan'); }",
+        ));
+        optics.script_key = optics.script_key.wrapping_add(1);
+        state.prepare_frame(1.0 / 60.0, 0.1);
+        assert!(state.values.laser_scans[index].points.is_empty());
+        assert!(
+            state.values.laser_scans[index].fault.is_some(),
+            "script failures remain visible in frame state"
+        );
     }
 
     #[test]

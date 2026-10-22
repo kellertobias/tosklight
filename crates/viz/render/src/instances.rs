@@ -193,9 +193,9 @@ pub struct LaserInstance {
     /// `xyz` where it ends, `w` the beam radius there. Divergence widens the beam down its throw,
     /// so the two differ over a long shot.
     pub end_radius: [f32; 4],
-    /// `xyz` linear radiance already weighted by dwell, `w` whether this run is the figure lying
-    /// on the surface the beam landed on rather than the beam in the air on its way there. Haze is
-    /// what makes the second visible and has nothing to do with the first.
+    /// `xyz` linear radiance already weighted by dwell. `w` is 0 for a fan sample, 1 for the
+    /// figure on the landing surface, or 2 for a stationary airborne beam. The latter has a hot
+    /// core like the figure, but still answers haze like the fan rather than glowing as a surface.
     pub colour_landing: [f32; 4],
 }
 

@@ -40,7 +40,7 @@ struct LaserOutput {
     @location(1) colour: vec3<f32>,
     // World position of this fragment, for depth occlusion.
     @location(2) world: vec3<f32>,
-    // 1 for the figure lying on the surface the beam landed on, 0 for the beam in the air.
+    // 0 = fan sample, 1 = figure on a surface, 2 = stationary beam in the air.
     @location(3) @interpolate(flat) landing: f32,
 };
 
@@ -138,7 +138,9 @@ fn fragment_main(input: LaserOutput) -> @location(0) vec4<f32> {
     // of bright lines across what should be one surface — so they are the halo alone, and their
     // overlap is the sheet.
     let beam = core * (1.0 - HALO_SHARE) + halo * HALO_SHARE;
-    let profile = mix(halo, beam, input.landing);
+    let on_surface = select(0.0, 1.0, input.landing == 1.0);
+    let has_core = select(0.0, 1.0, input.landing >= 1.0);
+    let profile = mix(halo, beam, has_core);
     // Haze is what makes a beam visible in the air at all, so it scales the light on its way to
     // whatever it hits. In clear air that is drawn faintly rather than not at all: the beam is
     // real even when almost nothing is scattering off it, which is why a laser show without haze
@@ -159,7 +161,7 @@ fn fragment_main(input: LaserOutput) -> @location(0) vec4<f32> {
         globals.params5.w,
         globals.params3.z,
     );
-    let visibility = mix(scattered * local_haze, 1.0, input.landing);
+    let visibility = mix(scattered * local_haze, 1.0, on_surface);
 
     // The operator's own strength for every laser in the rig, on top of all of it. It scales the
     // figure and the beam together, because it answers "how strong are the lasers in this

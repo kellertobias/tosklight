@@ -2944,6 +2944,59 @@ fn round_trips_a_laser_scan_script() {
 
 /// A script that is not text cannot be compiled, and the package is the last place that can say so
 /// before a laser fails in front of an audience.
+/// The visual-only laser's additive control overrides must not renumber its pattern
+/// bank or DMX slots, and every new semantic must survive portable-package transfer.
+#[test]
+fn shipped_visualizer_laser_keeps_its_pattern_bank_and_adds_blanked_overrides() {
+    let profile = shipped_profile("tosklight--visualizer-laser.toskfixture");
+    assert_eq!(
+        profile.id.0.to_string(),
+        "5b0f9c21-7d34-4a6e-9f18-2c4a6b8d1e70"
+    );
+    let mode = &profile.modes[0];
+    assert_eq!(mode.splits[0].footprint, 12);
+    let patterns = &mode.channels[1];
+    assert_eq!(&*patterns.attribute.0, "fixture.programs");
+    assert_eq!(patterns.functions.len(), 9);
+    assert_eq!(patterns.functions[0].dmx_from, 0);
+    assert_eq!(patterns.functions[8].dmx_from, 228);
+    assert_eq!(patterns.functions[8].dmx_to, 255);
+    let control = &mode.channels[11];
+    assert_eq!(
+        control.id.to_string(),
+        "dd0ab949-6703-5b66-aaae-e28f61297a5a"
+    );
+    assert_eq!((control.default_raw, control.highlight_raw), (0, 0));
+    let expected = [
+        (0, 84, "standard", 0),
+        (85, 169, "single_point", 85),
+        (170, 212, "segmented_line", 170),
+        (213, 255, "point_fan", 213),
+    ];
+    assert_eq!(control.functions.len(), expected.len());
+    for (function, (from, to, semantic, raw)) in control.functions.iter().zip(expected) {
+        assert_eq!((function.dmx_from, function.dmx_to), (from, to));
+        match &function.behavior {
+            crate::ChannelFunctionBehavior::Fixed {
+                semantic_id,
+                raw_value,
+                ..
+            } => {
+                assert_eq!(semantic_id, semantic);
+                assert_eq!(*raw_value, raw);
+            }
+            _ => panic!("control override must be a stable fixed semantic"),
+        }
+    }
+    let restored = read_fixture_package(&write_fixture_package(&profile).unwrap()).unwrap();
+    assert_eq!(restored.id, profile.id);
+    assert_eq!(
+        serde_json::to_value(&restored.modes).unwrap(),
+        serde_json::to_value(&profile.modes).unwrap()
+    );
+    assert_eq!(restored.laser, profile.laser);
+}
+
 #[test]
 fn rejects_a_scan_script_that_is_not_text() {
     let mut profile = profile();

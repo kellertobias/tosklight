@@ -16,6 +16,17 @@ The **figure** is the path on a surface. The **beam** is the light through the a
 that beam fades while the surface figure remains. Blanked travel moves between lit segments
 without drawing a connecting line. Scan speed affects how continuous the figure appears.
 
+## Choose a beam or a broken line
+
+The supplied **Visualizer Laser** profile adds four **Control** choices: **Standard patterns**
+uses the normal pattern bank, **Single point** holds one beam, and **Segmented line** draws a
+horizontal line with blank gaps. **Dotted line** spreads separate stationary beams across a line.
+**Pattern size** sets the line width within the configured
+scan angle. Use Color for white, cyan, or another supported colour.
+
+Aim a single beam with the installed rotation and Bracket angle. Changing its scan position
+moves the point within the projector’s scan field.
+
 ## Adjust the preview
 
 In **Quick Settings**:

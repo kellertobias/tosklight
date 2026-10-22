@@ -795,7 +795,7 @@ impl Default for CellValue {
 /// list rather than a number, and the decode path clones an emitter's values on every DMX frame.
 #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
 pub struct LaserScan {
-    /// The path, in scan order. Fewer than two points draws nothing.
+    /// The path, in scan order. One lit point holds a stationary beam; an empty path is dark.
     pub points: Vec<ScanPoint>,
     /// Scanner speed for this frame, points per second. Taken from the fixture unless the script
     /// named its own — a script that blanks half its points is moving faster than its rated speed
