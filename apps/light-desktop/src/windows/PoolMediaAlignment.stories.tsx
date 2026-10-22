@@ -48,6 +48,8 @@ export const SquareAndConfiguredTiles: Story = {
 				{ label: "large", width: 180, height: undefined },
 				{ label: "tiny", width: 64, height: undefined },
 				{ label: "rectangular", width: 160, height: 68 },
+				{ label: "group", width: 124, height: 78 },
+				{ label: "preset", width: 210, height: 119 },
 			].map(({ label, width, height }) =>
 				[false, true].map((selected) => (
 					<div

@@ -6,9 +6,9 @@ const STORY =
 test("pool artwork stays vertically and horizontally centered without clipping", async ({
 	page,
 }) => {
-	await page.setViewportSize({ width: 1200, height: 1400 });
+	await page.setViewportSize({ width: 1200, height: 1900 });
 	await page.goto(STORY);
-	await expect(page.locator(".pool-card-media")).toHaveCount(48);
+	await expect(page.locator(".pool-card-media")).toHaveCount(72);
 	await page.evaluate(async () => {
 		await document.fonts.ready;
 		await Promise.all(
@@ -30,7 +30,21 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 				if (!tile || !parent) throw new Error("Missing tile media slot");
 				const card = tile.getBoundingClientRect();
 				const slot = parent.getBoundingClientRect();
+				const title = tile.querySelector(".pool-card-name");
+				const count = tile.querySelector(".pool-card-information");
+				const id = tile.querySelector(".number");
+				const titleRange = document.createRange();
+				if (!title || !count || !id) throw new Error("Missing tile labels");
+				titleRange.selectNodeContents(title);
+				const titleBottom = Math.max(
+					...Array.from(titleRange.getClientRects()).map((rect) => rect.bottom),
+				);
+				const countBox = count.getBoundingClientRect();
+				const idBox = id.getBoundingClientRect();
 				return {
+					titleGap: outer.top - titleBottom,
+					countGap: outer.left - countBox.right,
+					idGap: outer.top - idBox.bottom,
 					mediaWidth: outer.width,
 					mediaHeight: outer.height,
 					expectedRatio: media.classList.contains("pool-card-media-image")
@@ -58,6 +72,18 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		);
 	for (const measurement of measurements) {
 		const context = JSON.stringify(measurement);
+		if (measurement.expectedRatio === 1) {
+			const previousSize =
+				Math.min(measurement.tileWidth - 14.8, measurement.tileHeight - 14.8) *
+				0.28;
+			expect(measurement.mediaWidth, context).toBeGreaterThanOrEqual(
+				previousSize * 2 - 0.1,
+			);
+			expect(measurement.mediaWidth, context).toBeGreaterThanOrEqual(32 - 0.1);
+		}
+		expect(measurement.titleGap, context).toBeGreaterThanOrEqual(-0.6);
+		expect(measurement.countGap, context).toBeGreaterThanOrEqual(0);
+		expect(measurement.idGap, context).toBeGreaterThanOrEqual(0);
 		expect(
 			Math.abs(
 				measurement.mediaWidth -
@@ -67,7 +93,7 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		).toBeLessThanOrEqual(0.6);
 		expect(Math.abs(measurement.slotBottom), context).toBeLessThanOrEqual(0.6);
 		expect(Math.abs(measurement.slotRight), context).toBeLessThanOrEqual(0.6);
-		if (measurement.shape !== "rectangular")
+		if (["square", "large", "tiny"].includes(measurement.shape ?? ""))
 			expect(
 				Math.abs(measurement.tileWidth - measurement.tileHeight),
 				context,
@@ -97,6 +123,8 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		large: 180,
 		tiny: 64,
 		rectangular: 160,
+		group: 124,
+		preset: 210,
 	};
 	for (const measurement of measurements) {
 		const width = expectedWidths[measurement.shape ?? ""];
