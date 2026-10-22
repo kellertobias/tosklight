@@ -35,13 +35,13 @@ const GALLERY = marketingManifest.entries;
 
 const PRODUCT_GALLERIES = {
 	control: ["application-overview.png", "tracked-programming.png", "dynamics.png"],
-	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-elevation.png"],
+	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-patch.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-visualizers.png", "media-server-playback.png"],
 };
 const DETAIL_GALLERIES = {
-	control: [null, "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-stage.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
-	pixel: ["pixel-eight-layer-composite.png", "media-server-text.png", "media-server-visualizers.png", "media-server-outputs.png"],
-	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-elevation.png", null, null],
+	control: [null, "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
+	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
+	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-patch.png", null, ["architect-laser-code.png", "architect-laser-output.png"], null],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));
@@ -54,6 +54,8 @@ for (const [product, files] of Object.entries(PRODUCT_GALLERIES)) {
 }
 
 const REPOSITORY = "kellertobias/tosklight";
+const LIGHTBOX = `<dialog class="lightbox" id="image-lightbox" aria-labelledby="lightbox-caption"><button class="lightbox-close" type="button" aria-label="Close enlarged image">Close</button><figure><img id="lightbox-image" alt=""><figcaption id="lightbox-caption"></figcaption></figure></dialog>`;
+
 
 // Release asset URLs are deterministic: releases/download/<tag>/<file>. Every file name
 // here is one the release workflow's staging step chooses explicitly, so this list and
@@ -260,7 +262,7 @@ const productPages = [
 		category: "Open source lighting control desk",
 		title: "ToskLight Control",
 		intro:
-			"Full tracking, preset and group referencing, a built-in visualizer and GDTF/MVR support, driving DMX over network protocols from your computer.",
+			"Full tracking, preset and group referencing, a built-in visualizer and GDTF/MVR support, driving DMX over network protocols or supported USB interfaces from your computer.",
 		benefits: [
 			["Build a show that survives change.", "Groups and presets keep a look connected. Re-focus a light or correct a house white once, and the cues that use it stay current."],
 			["Program at your own pace.", "Point at fixtures and shape a look directly, then take on the desk-style command line, tracking, and deeper programming when you are ready."],
@@ -274,12 +276,11 @@ const productPages = [
 			["The programmer", "A programmer that works the way desks work.", "Intensity, colour, position, beam, shapers, focus, control and media sit in familiar attribute banks. Everything is reachable through the touch surface or typed on the command line, which becomes the faster path once it is in your fingers.", "Values stay in the Programmer until they are recorded. Blind, preview and highlight let you build the next look while the current one remains live."],
 			["Referencing", "Cues point at groups and presets, not at numbers.", "Groups collect the fixtures you actually talk about during a show and presets hold the looks those groups take. Cues reference those objects instead of storing a fixed value on every fixture.", "Change the house warm preset once and every cue that used it follows. Repatch a group after a fixture fails and the cues keep working."],
 			["Tracking", "Full tracking, so a cue only stores what it changes.", "Each cue stores only what it changes and everything else tracks through from the cues before it. A cue list reads as a sequence of intentions rather than a series of complete stage states.", "That saves the afternoon when a lamp is missing from a look: add it once and it stays in every cue that follows, instead of being pasted into each of them."],
-			["Visualizer", "A stage view built in, not bolted on.", "A 3D view of the rig is built in. Because every fixture has a real position, those positions drive selection: grab what is on stage left instead of remembering fixture numbers.", "Confirm a look, point the moving lights, and see where beams land without standing in the venue or keeping a second copy of the rig in sync."],
-			["Output", "DMX over the network, on a fixed render deadline.", "Logical show universes map to Art-Net or sACN destinations as explicit routes, so a show file stays independent of the network layout it runs on tonight.", "Frames go out on a fixed schedule rather than whenever the engine finishes one, keeping the rate consistent whether the desk is idle or busy."],
-			["Dynamics", "Shape movement. Keep it on the beat.", "Build intensity, color, and position effects as editable lanes, map them onto the rig, and spread their phase across your fixtures.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
-			["Media Server", "Keep Pixel close to the desk.", "Use the Media Server pane to browse media and control the picture from your Control workspace.", "Arrange the pane alongside your fixtures, presets, and playbacks to keep the live show together."],
+			["Output", "Connect over the network or USB.", "Send DMX through Art-Net, sACN, or supported USB DMX interfaces. Explicit output routes keep the show independent of the network or adapter used at tonight’s venue.", "Frames go out on a fixed schedule, keeping the output rate consistent while you program and run the show."],
+			["Dynamics", "Shape movement. Keep it on the beat.", "Build effects for intensity, color, position, and other supported parameters using functions or editable keyframes. Distribute them across the rig in 3D, then shape their ordering and phase to create coordinated movement.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
+			["Media Server", "Keep your media server close to the desk.", "Browse media and control layers from a compatible media server in your Control workspace. CITP/MSEX supplies names, thumbnails, and previews where supported.", "Use Pixel or another compatible server, and arrange the Media pane alongside your fixtures, presets, and playbacks."],
 		],
-		coming: [["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"], ["Position / PSN support", "Public beta"]],
+		coming: [["Position / PSN support", "Public beta"], ["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"]],
 	},
 	{
 		path: "pixel",
@@ -297,12 +298,14 @@ const productPages = [
 		images: DETAIL_GALLERIES.pixel,
 		manual: "../manual/#page-30-tosklight-media-index-md",
 		sections: [
+			["Library", "Prepare every visual for the show.", "Keep videos, transparent images, text, and generated sources together in a visual library. Browse by folder and thumbnail, then choose the content for each layer.", "Pixel prepares imported media for live playback and gives it a predictable address at the lighting desk."],
+			["Visualizers", "Let the music shape the picture.", "Choose a sound-driven visualizer and adjust its appearance to suit the room and the music.", "Live audio analysis drives the visualizer while it remains part of the same layered composition as your media."],
+			["Text", "Doors open in …", "Put a countdown, clock, title, or message into the picture with an editable text layer. For example, count down to doors opening, then switch to the next message for the audience.", "Position and style text alongside video and images, with the same layer controls as the rest of the composition."],
 			["Layers", "Image and video layers, up to eight at once.", "Build a complete visual output from up to eight independently controlled image and video layers. Shape their position, opacity, masks, frames, and effects while keeping the complete composition visible.", "The layers are designed for a live show: each one can be controlled directly in Pixel or reached from the lighting desk over sACN and Art-Net."],
-			["Text", "Text that belongs in the picture.", "A layer can hold editable text created in the application. Use it for a title, a schedule, a timer, a clock, or any other static or dynamic message the show needs.", "Text stays part of the same layered composition as video and images, so it can be placed and shaped as deliberately as every other visual."],
-			["Visualizers", "Sound becomes part of the visual system.", "Pixel includes proof-of-concept visualizers driven by live audio input. They can be freely configured to suit the room, the music, and the rest of the composition.", "The visualizer catalogue will grow as the application develops. Today it provides a configurable starting point rather than claiming a finished library."],
-			["Output", "Map one picture across the real room.", "Map Pixel's output across multiple projection surfaces and DMX-controlled fixtures. Each fixture can be reached remotely from the desk, so a show can send the same fixture on another universe and Pixel merges its media colour information into the result.", "Use Art-Net, sACN, CITP, and MSEX to connect Pixel to the rest of the show and make media choices available where the operator needs them."],
+
+			["Output", "Send the picture to the screen.", "Show Pixel’s output on a connected display or projector, including HDMI. Control layers over Art-Net or sACN, with CITP/MSEX for media names, thumbnails, and live previews.", "DMX pixel output and multiple outputs are in public beta. Configure their mapping for the actual room and check the result on the production hardware."],
 		],
-		coming: [["Output mapping", "Being tested. Single output through the application window is the well-tested path today."], ["More visualizers", "Planned as the visualizer catalogue grows beyond the current proof-of-concept set."]],
+		coming: [["DMX output and multiple outputs", "Public beta"], ["More visualizers", "The visualizer catalogue continues to grow."]],
 	},
 	{
 		path: "architect",
@@ -311,7 +314,7 @@ const productPages = [
 		category: "Open source visualizer and show CAD",
 		title: "ToskLight Architect",
 		intro:
-			"ToskLight Architect gives the production a shared plan: draw the venue, place the rig, print the paperwork, and see the final picture before the first fixture is flown.",
+			"ToskLight Architect gives the production a shared plan: draw the venue, place the rig, export the plans as PDFs, and see the final picture before the first fixture is flown.",
 		benefits: [
 			["Plan and print with confidence.", "Create a measured CAD plan for fixtures, scenery, media surfaces, and installed geometry, then print the information the crew needs."],
 			["Visualise the actual rig.", "Use detailed fixture models, beams, focus, colour, haze, and venue geometry to make creative choices before the audience arrives."],
@@ -321,12 +324,13 @@ const productPages = [
 		manual: "../manual/#page-20-tosklight-previz-index-md",
 		sections: [
 			["Interchange", "Bring the rig in. Take the rig out.", "Import and export MVR so a production can move its rig between planning tools without rebuilding it by hand. Architect also supports GDTF fixture files, including their modes and physical information.", "GDTF fixtures are mapped to the default 3D models shipped with Architect, or they can carry their own images and 3D models when the fixture package provides them."],
-			["CAD", "Look at the plan from the angle the job needs.", "Use the CAD view to inspect the room and rig from different angles, select the relevant section, and print clear paperwork for the production.", "Print whole plans or cutaway sections, so a crew member can take exactly the view they need for the part of the venue they are working on."],
+			["CAD", "Look at the plan from the angle the job needs.", "Build the venue and rig in CAD, inspect them from the angle the job needs, and export clear PDF plans for the production.", "Export whole plans or cutaway sections, so each crew member can take the PDF that covers their part of the venue."],
+			["Patch", "Keep the rig ready to connect.", "Inspect fixture types, modes, universes, and addresses in the Patch sheet alongside the same rig you draw in CAD.", "Check and adjust the patch before the show moves to Control, so the physical plan and the lighting desk start from the same fixture data."],
 			["Moving scenes", "Make the scene move with the fixture.", "Set a fixture, represented as a 3D point, as the master for other fixtures or scene elements. When that master is controlled through PSN or DMX, the connected elements follow its movement.", "This makes it possible to build moving scenes and keep surrounding objects in the visualizer connected to the same control that moves the real fixture."],
 			["Lasers", "Simulate the path, not just the beam.", "Architect can simulate lasers from a scan path produced by a JavaScript function supplied by the user. The function receives DMX input and returns the path that the renderer draws.", "That gives the designer control over the laser's shape, brightness, scan speed, and position, and leaves room to build a laser effect that matches the specific production."],
 			["Early prototypes", "See the right trigger, with more to come.", "Architect includes early prototypes for physical elements such as falling curtains and pyro elements such as flame jets and sparklers. They are intentionally rudimentary today.", "They are useful for confirming that the intended DMX channel was triggered, not yet for final visual realism. These elements may become more detailed as the application grows."],
 		],
-		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Being improved. A real Architect-generated printout will be added here when it is ready to capture."], ["Better crowd simulation", "Planned for a more complete picture of the room in motion."]],
+		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Mostly complete, with further improvements in progress."], ["Crowd simulation", "Being improved."]],
 	},
 ];
 
@@ -351,14 +355,14 @@ for (const product of productPages) {
 			const { width, height } = screenshotSize(file);
 			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
 		}).join("");
-		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
+		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" style="--gallery-columns:${files.length}" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
 		return `<article><div class="product-detail-copy"><p class="eyebrow">${escapeHtml(label)}</p><h2>${escapeHtml(title)}</h2></div><div class="product-detail-text"><p>${escapeHtml(first)}</p><p>${escapeHtml(second)}</p></div>${figure}</article>`;
 	}).join("")}</section>`;
 	const coming = product.coming ? `<section class="product-detail-coming shell"><p class="eyebrow">What is coming</p><h2>Still moving forward.</h2><div>${product.coming.map(([title, status]) => `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(status)}</p></article>`).join("")}</div></section>` : "";
 	mkdirSync(resolve(siteRoot, product.path), { recursive: true });
 	writeFileSync(
 		resolve(siteRoot, product.path, "index.html"),
-		`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="theme-color" content="#07090d"><title>${escapeHtml(product.name)}</title><link rel="icon" href="../icon.png" type="image/png"><link rel="stylesheet" href="../site.css"></head><body class="product-detail-page product-detail-${escapeHtml(product.path)}"><nav class="topbar shell" aria-label="Primary navigation"><a class="wordmark" href="../"><img src="../icon.png" alt=""><span>ToskLight</span></a><div class="nav-links"><a class="is-active" href="../#applications">Applications</a><a href="../performance/">Development</a><a href="../manual/">Manual</a><a class="nav-cta" href="../downloads/">Downloads</a></div></nav><main><header class="product-detail-hero shell"><p class="product-category">${escapeHtml(product.category)}</p><div class="product-detail-title-row"><h1>${escapeHtml(product.title)}</h1><img src="../product-icons/${escapeHtml(product.icon)}" alt="${escapeHtml(product.name)} icon"></div><p>${escapeHtml(product.intro)}</p><div class="actions"><a class="button button-primary" href="../downloads/">Download</a><a class="button" href="${escapeHtml(product.manual)}">Read the manual</a></div></header>${sections}${coming}</main><footer><div class="shell download-footer"><p><a href="../license/">ToskLight Community License</a> · <a href="../third-party-licenses.html">Third-party licenses</a> · <a href="../impressum/">Impressum</a> · <a href="../datenschutz/">Datenschutz</a></p><a href="../">Back to ToskLight</a></div></footer></body></html>`,
+		`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><meta name="theme-color" content="#07090d"><title>${escapeHtml(product.name)}</title><link rel="icon" href="../icon.png" type="image/png"><link rel="stylesheet" href="../site.css"></head><body class="product-detail-page product-detail-${escapeHtml(product.path)}"><nav class="topbar shell" aria-label="Primary navigation"><a class="wordmark" href="../"><img src="../icon.png" alt=""><span>ToskLight</span></a><div class="nav-links"><a class="is-active" href="../#applications">Applications</a><a href="../performance/">Development</a><a href="../manual/">Manual</a><a class="nav-cta" href="../downloads/">Downloads</a></div></nav><main><header class="product-detail-hero shell"><p class="product-category">${escapeHtml(product.category)}</p><div class="product-detail-title-row"><h1>${escapeHtml(product.title)}</h1><img src="../product-icons/${escapeHtml(product.icon)}" alt="${escapeHtml(product.name)} icon"></div><p>${escapeHtml(product.intro)}</p><div class="actions"><a class="button button-primary" href="../downloads/">Download</a><a class="button" href="${escapeHtml(product.manual)}">Read the manual</a></div></header>${sections}${coming}</main><footer><div class="shell download-footer"><p><a href="../license/">ToskLight Community License</a> · <a href="../third-party-licenses.html">Third-party licenses</a> · <a href="../impressum/">Impressum</a> · <a href="../datenschutz/">Datenschutz</a></p><a href="../">Back to ToskLight</a></div></footer>${LIGHTBOX}<script src="../site.js"></script></body></html>`,
 	);
 }
 

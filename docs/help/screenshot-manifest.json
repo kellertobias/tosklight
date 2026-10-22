@@ -16,15 +16,17 @@
 		},
 		{
 			"file": "default-desk-overview.png",
-			"source": "storybook",
-			"storyId": "tosklight-marketing--full-application",
+			"source": "native-still",
+			"storyId": null,
 			"viewport": {
-				"width": 1600,
-				"height": 920
+				"width": 1440,
+				"height": 900
 			},
 			"theme": "dark",
 			"mode": "software",
-			"interactions": []
+			"interactions": [],
+			"sourceFile": "docs/marketing/assets/stills/application-overview.png",
+			"reason": "The current Showcase workspace and its native rig reference are captured from the running Control application."
 		},
 		{
 			"file": "fixture-sheet-programmer.png",

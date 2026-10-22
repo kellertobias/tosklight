@@ -4,10 +4,12 @@ const lightboxCaption = document.getElementById("lightbox-caption");
 
 if (lightbox instanceof HTMLDialogElement && lightboxImage && lightboxCaption) {
 	document.querySelectorAll(".shot-image").forEach((control) => {
-		control.addEventListener("click", () => {
+		control.addEventListener("click", (event) => {
+			if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 			const figure = control.closest(".shot");
 			const thumbnail = figure?.querySelector("img");
 			if (!figure || !thumbnail) return;
+			event.preventDefault();
 			lightboxImage.src = thumbnail.currentSrc || thumbnail.src;
 			lightboxImage.alt = thumbnail.alt;
 			lightboxCaption.textContent = figure.querySelector("figcaption")?.textContent || "";

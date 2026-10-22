@@ -61,6 +61,47 @@ test("marketing timecode uses the production timeline rather than the historical
 	);
 });
 
+test("published marketing surfaces use actual application captures", async () => {
+	const manifest = JSON.parse(
+		await fs.readFile(MANIFEST_PATH, "utf8"),
+	) as MarketingScreenshotManifest;
+	const actualSurfaces = [
+		"application-overview.png",
+		"tracked-programming.png",
+		"control-programmer.png",
+		"control-groups.png",
+		"control-cues.png",
+		"control-output-engine.png",
+		"control-media-pane.png",
+		"media-server-library.png",
+		"media-server-visualizers.png",
+		"media-server-text.png",
+		"media-server-outputs.png",
+		"media-server-playback.png",
+		"pixel-eight-layer-composite.png",
+		"architect-cad.png",
+		"architect-renderer-ultra.png",
+		"architect-patch.png",
+		"architect-laser-code.png",
+		"architect-laser-output.png",
+		"dynamics.png",
+		"dynamics-projection.png",
+		"dynamics-phase.png",
+	];
+	for (const file of actualSurfaces) {
+		const entry = manifest.entries.find((candidate) => candidate.file === file);
+		expect(entry, `${file} needs a declared actual capture`).toBeDefined();
+		expect(
+			entry?.sourceFile,
+			`${file} must come from the running application`,
+		).toMatch(/^docs\/marketing\/assets\/stills\/[a-z0-9-]+\.png$/u);
+		expect(
+			entry?.storyId,
+			`${file} cannot substitute a Storybook composition`,
+		).toBeUndefined();
+	}
+});
+
 test("captures the reviewed Storybook marketing gallery and preserves static stills", async ({
 	page,
 	request,

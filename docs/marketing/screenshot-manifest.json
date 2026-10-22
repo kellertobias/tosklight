@@ -18,41 +18,22 @@
 			"file": "control-programmer.png",
 			"title": "The programmer",
 			"caption": "Familiar attribute banks, encoders, and command-line programming.",
-			"storyId": "tosklight-command-section--programmer-software",
-			"viewport": {
-				"width": 1920,
-				"height": 761
-			},
-			"captureSelector": ".control-section",
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/control-programmer.png"
 		},
 		{
 			"file": "control-groups.png",
 			"title": "Groups",
 			"caption": "Keep the fixture selections you use throughout the show close at hand.",
-			"storyId": "tosklight-marketing--groups-window",
-			"viewport": {
-				"width": 960,
-				"height": 560
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/control-groups.png"
 		},
 		{
 			"file": "control-cues.png",
-			"storyId": "tosklight-marketing--cues-window",
-			"viewport": {
-				"width": 1180,
-				"height": 560
-			},
-			"mode": "software",
-			"interactions": [],
 			"title": "Cues",
 			"caption": "Build a repeatable sequence of intentions for the show.",
-			"theme": "dark"
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/control-cues.png"
 		},
 		{
 			"file": "control-preload-go.png",
@@ -119,52 +100,23 @@
 		{
 			"file": "control-output-engine.png",
 			"title": "Output",
-			"caption": "Map logical universes to Art-Net and streaming ACN routes.",
-			"storyId": "tosklight-marketing--desk-setup-outputs-window",
-			"viewport": {
-				"width": 960,
-				"height": 560
-			},
+			"caption": "Configured Art-Net output routes alongside a disabled USB DMX configuration example.",
 			"theme": "dark",
-			"mode": "software",
-			"interactions": [
-				{
-					"action": "click",
-					"selector": "button[role='tab']:has-text('Routes')"
-				}
-			]
+			"sourceFile": "docs/marketing/assets/stills/control-output-engine.png"
 		},
 		{
 			"file": "tracked-programming.png",
 			"title": "Track every change",
-			"caption": "See what comes from the current cue, what the Programmer changes, and what is prepared next, so you can build a new look without losing the one on stage.",
-			"storyId": "tosklight-windows-fixture-sheet--selected-and-active-steps",
-			"viewport": {
-				"width": 1600,
-				"height": 720
-			},
+			"caption": "Inspect live intensity, color, position, and value ownership for the current rig directly in the Fixture Sheet.",
 			"theme": "dark",
-			"mode": "software",
-			"interactions": [],
-			"captureClip": {
-				"x": 24,
-				"y": 24,
-				"width": 1552,
-				"height": 235
-			}
+			"sourceFile": "docs/marketing/assets/stills/tracked-programming.png"
 		},
 		{
 			"file": "application-overview.png",
 			"title": "Application overview",
 			"caption": "Run the complete desk: select and program fixtures, build looks, store cues, and operate playbacks from one workspace.",
-			"storyId": "tosklight-marketing--full-application",
-			"viewport": {
-				"width": 1600,
-				"height": 920
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/application-overview.png"
 		},
 		{
 			"file": "command-section-touch.png",
@@ -258,7 +210,7 @@
 			"file": "architect-renderer-ultra.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-renderer-ultra.png",
 			"title": "See the finished room",
-			"caption": "Preview the complete rig with detailed fixture models, beams, focus, color, haze, and venue geometry before the audience arrives.",
+			"caption": "Preview the complete rig in Ultra rendering quality, with detailed fixture models, laser fans, beams, haze, and venue geometry.",
 			"theme": "dark"
 		},
 		{
@@ -273,6 +225,27 @@
 			"sourceFile": "docs/marketing/assets/stills/architect-elevation.png",
 			"title": "Rig elevation",
 			"caption": "Inspect the measured hanging rig, stairs, and balconies from the side before preparing the production plan.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-patch.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-patch.png",
+			"title": "The rig, ready to patch",
+			"caption": "Inspect the actual rig’s fixtures, modes, universes, and DMX addresses in Architect’s Patch sheet.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-laser-code.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-laser-code.png",
+			"title": "Author the laser path",
+			"caption": "The packaged JavaScript laser scan source, opened in a real code editor.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-laser-output.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-laser-output.png",
+			"title": "See the laser in the rig",
+			"caption": "Check the generated laser path in the actual venue alongside the rest of the rig.",
 			"theme": "dark"
 		},
 		{
@@ -379,16 +352,9 @@
 		{
 			"file": "control-media-pane.png",
 			"title": "Media at the desk",
-			"caption": "Choose Pixel layers, browse media, and shape the live picture from a configurable Control pane.",
-			"storyId": "tosklight-windows-media-pane--configurable-desktop-pane",
-			"viewport": {
-				"width": 1440,
-				"height": 840
-			},
-			"captureSelector": ".media-pane-surface",
+			"caption": "Browse the connected media server, choose its layers and media, and shape the live picture from the actual Control workspace.",
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/control-media-pane.png"
 		},
 		{
 			"file": "timecode-timeline.png",
@@ -420,7 +386,7 @@
 			"file": "pixel-eight-layer-composite.png",
 			"sourceFile": "docs/marketing/assets/stills/pixel-eight-layer-composite.png",
 			"title": "Eight layers. One deliberate picture.",
-			"caption": "Build a complete output from up to eight independent video layers. The dotted line shows a mask boundary; master shapes finish the picture without losing the layers below.",
+			"caption": "Eight real Pixel layers combine original media, transparent textures, a generated visualizer, and native text into one live output.",
 			"wide": true,
 			"theme": "dark"
 		},
@@ -428,71 +394,36 @@
 			"file": "media-server-playback.png",
 			"title": "Built-in live controls",
 			"caption": "Run Pixel directly with familiar desk-style controls when DMX is not the right control path, then adjust playback, position, masks, frames, and effects while the show is running.",
-			"storyId": "tosklight-media-server--media",
-			"viewport": {
-				"width": 1440,
-				"height": 900
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/media-server-playback.png"
 		},
 		{
 			"file": "media-server-library.png",
 			"title": "Every visual, ready for the show",
 			"caption": "Manage videos, transparent images, live visualizers, and flexible text in one visual library. Pixel prepares imported media for reliable playback and keeps every asset ready at a predictable desk address.",
-			"storyId": "tosklight-media-server--library",
-			"viewport": {
-				"width": 1440,
-				"height": 1100
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": [
-				{
-					"action": "click",
-					"selector": "button:has-text('Golden cloth')"
-				}
-			]
+			"sourceFile": "docs/marketing/assets/stills/media-server-library.png"
 		},
 		{
 			"file": "media-server-visualizers.png",
 			"title": "A visual library that goes beyond files",
 			"caption": "Select a live sound-driven visualizer beside videos, transparent images, and flexible text, then keep every visual asset ready to use from one clear library.",
-			"storyId": "tosklight-media-server--visualizers",
-			"viewport": {
-				"width": 1440,
-				"height": 900
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/media-server-visualizers.png"
 		},
 		{
 			"file": "media-server-text.png",
 			"title": "Media Server library text",
 			"caption": "The Library's Text filter expands through folders 200\u2013249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
-			"storyId": "tosklight-media-server--text",
-			"viewport": {
-				"width": 1440,
-				"height": 900
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/media-server-text.png"
 		},
 		{
 			"file": "media-server-outputs.png",
 			"title": "Media Server outputs",
 			"caption": "Output settings keep picture target, presentation, orientation, and sound routing together without nesting another window inside Settings.",
-			"storyId": "tosklight-media-server--settings-outputs",
-			"viewport": {
-				"width": 1440,
-				"height": 900
-			},
 			"theme": "dark",
-			"mode": "software",
-			"interactions": []
+			"sourceFile": "docs/marketing/assets/stills/media-server-outputs.png"
 		},
 		{
 			"file": "media-server-audio.png",

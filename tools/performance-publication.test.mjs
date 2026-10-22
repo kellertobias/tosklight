@@ -555,6 +555,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
             const shots = [...html.matchAll(/src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
             assert.equal(shots.length, new Set(shots).size, `${product} repeats a screenshot`);
             assert.ok(shots.length >= 3, `${product} needs representative screenshots`);
+            assert.match(html, /<dialog class="lightbox" id="image-lightbox"/u, `${product} enlarges screenshots in place`);
+            assert.match(html, /<script src="\.\.\/site\.js"><\/script>/u);
             const screenshotTags = [...html.matchAll(/<img\b[^>]*src="\.\.\/screenshots\/[^"]+"[^>]*>/gu)].map(match => match[0]);
             for (const image of screenshotTags) assert.match(image, /width="1552" height="265"/u, `${product} must reserve the screenshot's actual dimensions`);
         }
@@ -571,6 +573,35 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(dynamicsSection, /joins the running sync phase/u);
         assert.match(dynamicsSection, /next beat or four-beat bar/u);
         assert.match(controlPage, /screenshots\/control-media-pane\.png/u);
+
+        assert.doesNotMatch(controlPage, /A stage view built in/u);
+        assert.match(controlPage, /Art-Net, sACN, or supported USB DMX/u);
+        assert.match(controlPage, /functions or editable keyframes/u);
+        assert.match(controlPage, /Distribute them across the rig in 3D/u);
+        assert.match(controlPage, /Keep your media server close/u);
+        assert.ok(controlPage.indexOf("Position / PSN support") < controlPage.indexOf("Timecode and timeline editor"));
+        const pixelPage = readFileSync(resolve(directory, "pixel/index.html"), "utf8");
+        const pixelSections = [...pixelPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
+        assert.deepEqual(pixelSections.slice(0, 3), ["Library", "Visualizers", "Text"]);
+        assert.match(pixelPage, /Doors open in/u);
+        assert.match(pixelPage, /including HDMI/u);
+        assert.match(pixelPage, /DMX output and multiple outputs<\/strong><p>Public beta/u);
+        const architectPage = readFileSync(resolve(directory, "architect/index.html"), "utf8");
+        assert.match(architectPage, /export clear PDF plans/u);
+        assert.match(architectPage, /screenshots\/architect-patch\.png/u);
+        assert.doesNotMatch(architectPage, /screenshots\/architect-elevation\.png/u);
+        const lasersSection = architectPage.split('<p class="eyebrow">Lasers</p>')[1]?.split('</article>')[0];
+        assert.ok(lasersSection, "Architect needs its actual laser authoring and output views");
+        assert.equal(lasersSection.match(/<figure class="shot">/gu)?.length, 2);
+        assert.match(lasersSection, /--gallery-columns:2/u);
+        assert.match(dynamicsSection, /--gallery-columns:3/u);
+        const patchSection = architectPage.split('<p class="eyebrow">Patch</p>')[1]?.split('</article>')[0];
+        assert.ok(patchSection);
+        assert.match(patchSection, /screenshots\/architect-patch\.png/u);
+        assert.match(lasersSection, /screenshots\/architect-laser-code\.png/u);
+        assert.match(lasersSection, /screenshots\/architect-laser-output\.png/u);
+        assert.match(architectPage, /Mostly complete, with further improvements in progress/u);
+        assert.match(architectPage, /Crowd simulation<\/strong><p>Being improved/u);
         assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
         assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
 		const landingPage = readFileSync(target, "utf8");
@@ -579,6 +610,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         for (const image of landingImages) assert.match(image, /width="1552" height="265"/u, "landing screenshots including hero images need intrinsic dimensions");
 		assert.doesNotMatch(landingPage, /class="performance-compact"|class="downloads"/u);
 		assert.match(landingPage, /Open source lighting control desk/u);
+        assert.deepEqual([...landingPage.matchAll(/<li><span>0[1-4]<\/span><strong>([^<]+)<\/strong>/gu)].map(match => match[1]), ["Plan", "Program", "Visualize", "Perform"]);
 		assert.match(landingPage, /Open source live media server/u);
 		assert.match(landingPage, /Open source visualizer and show CAD/u);
 		assert.match(landingPage, /screenshots\/application-overview\.png/u);
