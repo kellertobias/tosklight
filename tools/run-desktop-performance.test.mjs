@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { EventEmitter } from "node:events";
 import { createWriteStream } from "node:fs";
@@ -20,7 +21,10 @@ import {
 import {
 	configurePerformanceOutputRoutes,
 	createPerformanceOutputSink,
+	validatePerformanceOutputReceipt,
 } from "./desktop-performance-routes.mjs";
+
+import { preseedPerformanceShow } from "./desktop-performance-show.mjs";
 
 const epochBase = 1_000_000;
 const simulatedDate = (clock) =>
@@ -76,6 +80,7 @@ function load(name, end, extra = {}) {
 		spawnSync: () => ({ status: null, error: { code: "ENOENT" } }),
 		assertRunning: () => {},
 		REQUESTED_RATE_HZ: 40,
+		validatePerformanceOutputReceipt,
 		summarizePatch: summarizePerformancePatch,
 		readPerformanceCounterSample,
 		performanceCounterInterval,
@@ -569,6 +574,11 @@ test("actual case finalization flushes termination logs on success and original 
 		);
 		const run = load("runCase", "\nasync function finalizeCaseEvidence(", {
 			options: { "output-dir": scratch, application: "/isolated/stub.app" },
+			preseedPerformanceShow: async () => ({
+				source_show_sha256: "fixture-hash",
+				source_show_bytes: 100,
+				source_show_loading_mode: "startup-preseed",
+			}),
 			finalizeCaseEvidence: finalize,
 			freePort: async () => 19876,
 			applicationInvocation: () => ({
@@ -604,7 +614,14 @@ test("actual case finalization flushes termination logs on success and original 
 			createPerformanceOutputSink: async () => ({
 				destination: "127.0.0.1:19877",
 				start() {},
-				stop: () => ({ packets_received: 1 }),
+				stop: () => ({
+					protocol: "art_net",
+					payload_slots: 512,
+					packets_received: 1,
+					invalid_datagrams: 0,
+					unexpected_universe_datagrams: 0,
+					universes: [{ universe: 101, packets: 1 }],
+				}),
 				close: async () => {
 					sinkClosed = true;
 				},
@@ -661,12 +678,15 @@ test("actual case finalization flushes termination logs on success and original 
 							? /literal route configuration failure/
 							: /literal liveness failure/,
 			);
-		else
-			assert.equal(
-				(await run({ caseId: "demo", demo: true }, "unrestricted"))
-					.average_completed_hz,
-				40,
+		else {
+			const completed = await run(
+				{ caseId: "demo", demo: true },
+				"unrestricted",
 			);
+			assert.equal(completed.average_completed_hz, 40);
+			assert.equal(completed.source_show_sha256, "fixture-hash");
+			assert.equal(completed.source_show_loading_mode, "startup-preseed");
+		}
 		const e = files[0];
 		const log = await readFile(e.runtimeLog, "utf8");
 		assert.match(log, /termination tail/);
@@ -1595,4 +1615,146 @@ test("owned loopback receiver discards payloads, counts per universe and closes 
 		await sink.close();
 		await sink.close();
 	}
+});
+
+function positivePacketReceipt() {
+	return {
+		protocol: "art_net",
+		payload_slots: 512,
+		packets_received: 7,
+		invalid_datagrams: 0,
+		unexpected_universe_datagrams: 0,
+		universes: [
+			{ universe: 101, packets: 3 },
+			{ universe: 102, packets: 4 },
+		],
+	};
+}
+
+test("performance output receipt requires positive delivery for every expected universe", () => {
+	const positive = positivePacketReceipt();
+	assert.equal(
+		validatePerformanceOutputReceipt(positive, [102, 101]),
+		positive,
+	);
+	for (const mutate of [
+		(r) => {
+			r.packets_received = 0;
+			r.universes.forEach((row) => {
+				row.packets = 0;
+			});
+		},
+		(r) => {
+			r.universes = [r.universes[0]];
+			r.packets_received = 3;
+		},
+		(r) => {
+			r.universes[1].packets = 0;
+			r.packets_received = 3;
+		},
+		(r) => {
+			r.universes.push({ universe: 103, packets: 1 });
+			r.packets_received++;
+		},
+		(r) => {
+			r.universes[1].universe = 101;
+		},
+	]) {
+		const receipt = positivePacketReceipt();
+		mutate(receipt);
+		assert.throws(
+			() => validatePerformanceOutputReceipt(receipt, [101, 102]),
+			/Performance output receipt/,
+		);
+	}
+});
+
+test("performance output receipt rejects invalid or unexpected datagrams and inconsistent counters", () => {
+	for (const mutate of [
+		(r) => {
+			r.invalid_datagrams = 1;
+		},
+		(r) => {
+			r.unexpected_universe_datagrams = 1;
+		},
+		(r) => {
+			r.protocol = "sacn";
+		},
+		(r) => {
+			r.payload_slots = 256;
+		},
+		(r) => {
+			r.packets_received = 8;
+		},
+		(r) => {
+			r.universes[0].packets = -1;
+		},
+		(r) => {
+			r.universes[0].packets = 1.5;
+		},
+		(r) => {
+			delete r.invalid_datagrams;
+		},
+	]) {
+		const receipt = positivePacketReceipt();
+		mutate(receipt);
+		assert.throws(
+			() => validatePerformanceOutputReceipt(receipt, [101, 102]),
+			/Performance output receipt/,
+		);
+	}
+});
+
+test("demo preseed preserves exact immutable SQLite bytes in the owned startup path", async () => {
+	const sourceFile = path.join(scratch, "exact-source.show");
+	const bytes = Buffer.concat([
+		Buffer.from("SQLite format 3\0", "binary"),
+		Buffer.from([0, 255, 13, 10, 42]),
+	]);
+	await writeFile(sourceFile, bytes);
+	const data = path.join(scratch, "preseed-owned-data");
+	const receipt = await preseedPerformanceShow(sourceFile, data);
+	assert.deepEqual(
+		await readFile(path.join(data, "shows", "Default Stage Show.show")),
+		bytes,
+	);
+	assert.deepEqual(await readFile(sourceFile), bytes);
+	assert.equal(
+		receipt.source_show_sha256,
+		createHash("sha256").update(bytes).digest("hex"),
+	);
+	assert.equal(receipt.source_show_bytes, bytes.length);
+	assert.equal(receipt.source_show_loading_mode, "startup-preseed");
+	assert.equal(receipt.source_show_seed_path, "shows/Default Stage Show.show");
+	await assert.rejects(preseedPerformanceShow(sourceFile, data), {
+		code: "EEXIST",
+	});
+});
+
+test("startup demo preparation never imports or switches the active show through the API", async () => {
+	const prepare = load("prepareDemo", "\nasync function prepareMixed(", {
+		createLargeStageDynamicsPlan: () => countingPlan,
+		installDynamics: async () => {},
+	});
+	const calls = [];
+	const api = {
+		request: async (method, route) => {
+			calls.push([method, route]);
+			if (route.endsWith("/bootstrap"))
+				return { active_show: { id: "startup-show" } };
+			assert.equal(route, "/api/v2/patch");
+			return countingPatch();
+		},
+	};
+	const observed = await prepare(api);
+	assert.equal(api.showId, "startup-show");
+	assert.equal(observed.fixtureRecords, 4);
+	assert.equal(observed.parameterCount, 10);
+	assert.equal(
+		calls.some(
+			([method, route]) => method !== "GET" || route.includes("/shows"),
+		),
+		false,
+	);
+	assert.equal(calls.length, 2);
 });

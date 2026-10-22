@@ -16,7 +16,9 @@ import {
 import {
 	configurePerformanceOutputRoutes,
 	createPerformanceOutputSink,
+	validatePerformanceOutputReceipt,
 } from "./desktop-performance-routes.mjs";
+import { preseedPerformanceShow } from "./desktop-performance-show.mjs";
 import {
 	processTreeResourceDelta,
 	readLinuxProcessTree,
@@ -121,6 +123,10 @@ async function runCase(performanceCase, executionMode) {
 			`${performanceCase.caseId}-`,
 		),
 	);
+	const dataDirectory = path.join(temporaryRoot, "data");
+	const sourceShow = performanceCase.demo
+		? await preseedPerformanceShow(options["demo-show"], dataDirectory)
+		: null;
 	const port = await freePort();
 	const reportPath = path.join(temporaryRoot, "fixture-sheet.jsonl");
 	// A bundle launched with a benchmark report runs the benchmark surface instead of the
@@ -137,7 +143,7 @@ async function runCase(performanceCase, executionMode) {
 			...process.env,
 			APPIMAGE_EXTRACT_AND_RUN: "1",
 			LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${port}`,
-			LIGHT_DESKTOP_TEST_DATA_DIR: path.join(temporaryRoot, "data"),
+			LIGHT_DESKTOP_TEST_DATA_DIR: dataDirectory,
 			LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 			LIGHT_STAGE_PACKAGED_BENCH_REPORT: reportPath,
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
@@ -199,13 +205,16 @@ async function runCase(performanceCase, executionMode) {
 			desk_id: null,
 		});
 		api.session = session;
-		const prepared = performanceCase.demo
-			? await prepareDemo(api)
-			: await prepareMixed(
-					api,
-					performanceCase.fixtureRecords,
-					performanceCase.small,
-				);
+		const prepared = {
+			...(performanceCase.demo
+				? await prepareDemo(api)
+				: await prepareMixed(
+						api,
+						performanceCase.fixtureRecords,
+						performanceCase.small,
+					)),
+			...sourceShow,
+		};
 		packetSink = await createPerformanceOutputSink();
 		const outputRouteEvidence = await configurePerformanceOutputRoutes(
 			api,
@@ -242,6 +251,10 @@ async function runCase(performanceCase, executionMode) {
 			evidence.samples,
 		);
 		const receivedPackets = packetSink.stop();
+		validatePerformanceOutputReceipt(
+			receivedPackets,
+			outputRouteEvidence.routed_patch_universes,
+		);
 		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(
 			reportPath,
@@ -258,6 +271,7 @@ async function runCase(performanceCase, executionMode) {
 		state.phase = "complete";
 		result = {
 			case_id: performanceCase.caseId,
+			...sourceShow,
 			case_name: performanceCase.demo
 				? `Demo show — ${prepared.parameterCount.toLocaleString("en-US")} parameters / ${prepared.fixtureRecords.toLocaleString("en-US")} fixtures`
 				: `${prepared.parameterCount.toLocaleString("en-US")} parameters / ${prepared.fixtureRecords.toLocaleString("en-US")} fixtures`,
@@ -522,24 +536,12 @@ function applicationInvocation(application, executionMode) {
 }
 
 async function prepareDemo(api) {
-	const dataBase64 = (
-		await readFile(path.resolve(options["demo-show"]))
-	).toString("base64");
-	const created = await api.request("POST", "/api/v2/shows", {
-		request_id: crypto.randomUUID(),
-		action: {
-			type: "create",
-			name: `Performance demo ${crypto.randomUUID()}`,
-			data_base64: dataBase64,
-			overwrite: false,
-		},
-	});
-	const showId = created?.result?.show?.id;
-	if (!showId) throw new Error("demo import returned no show identity");
-	await api.request("POST", "/api/v2/shows", {
-		request_id: crypto.randomUUID(),
-		action: { type: "open", show_id: showId, transition: "safe_blackout" },
-	});
+	const bootstrap = await api.request("GET", "/api/v2/bootstrap");
+	const showId = bootstrap.active_show?.id;
+	if (!showId)
+		throw new Error(
+			"Startup-preseeded performance demo has no active show identity",
+		);
 	api.showId = showId;
 	const patch = await api.request("GET", "/api/v2/patch");
 	const dynamicFixtureIds = patch.fixtures

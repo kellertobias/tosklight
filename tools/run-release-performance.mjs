@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { validatePerformanceOutputReceipt } from "./desktop-performance-routes.mjs";
 
 const REQUIRED_UNIVERSES = 32;
 const REQUIRED_RATE_HZ = 60;
@@ -584,6 +585,14 @@ function desktopScenarioEvidence(scenario) {
 		!Number.isInteger(scenario?.resources?.application_peak_resident_bytes)
 	)
 		return null;
+	if (scenario.output_route_scope === "all-patched-universes-loopback-artnet") {
+		try {
+			validatePerformanceOutputReceipt(scenario.loopback_packet_receipt, scenario.routed_patch_universes);
+		} catch {
+			return null;
+		}
+	}
+
 	return {
 		...scenario,
 		thresholds:

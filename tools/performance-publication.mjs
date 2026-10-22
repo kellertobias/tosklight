@@ -440,7 +440,7 @@ function renderDetailedScenarioEvidence(performance) {
 export function renderCompactPerformanceSummary(performance) {
 	const { html } = scenarioTable(performance);
 	return (
-		`<div class="performance-summary">${html}` +
+		`<div class="performance-summary"><p class="performance-legend">Measured release: ${value(performance.release?.version)} · ${value(performance.generated_at)}</p>${html}` +
 		`<p class="performance-legend">A row is graded by its slowest sampled window first, then its mean. <span class="legend-healthy">Green</span>: slowest above 38 Hz and mean above 39 Hz · ` +
 		`<span class="legend-warning">Yellow</span>: slowest above 30 Hz and mean above 35 Hz · ` +
 		`<span class="legend-caution">Orange</span>: slowest above 26 Hz and mean above 30 Hz · ` +

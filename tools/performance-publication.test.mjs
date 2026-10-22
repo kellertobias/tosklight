@@ -320,6 +320,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 test("compact landing summary includes only measured runs and explains row colors", () => {
 	const summary = renderCompactPerformanceSummary(measuredStatus("degraded"));
 	assert.equal(summary.match(/class="performance-row /gu)?.length, 3);
+	assert.match(summary, /Measured release: 2\.4\.6/);
 	assert.match(
 		summary,
 		/<th>Test set<\/th><th>Load<\/th><th>Output cadence<\/th><th>Output intervals<\/th><th>CPU and RAM<\/th>/u,

@@ -674,3 +674,13 @@ test("single-universe desktop case is retained and impossible zero-slot cases fa
 	const overflow = statusDocument(options, baseline, null, null, null, [], [{ ...small, universes: 2, parameter_count: 600 }]);
 	assert.equal(overflow.benchmark_scenarios.length, 0);
 });
+
+
+test("loopback-evidenced desktop rows cannot publish without actual packet delivery", () => {
+	const base = { exit_code: 0, fixtures_per_universe: 32, fixture_count: 1024, report: report() };
+	const row = { ...desktopScenario("one_universe"), fixture_count: 24, physical_instance_count: 24, parameter_count: 224, universes: 1, routed_patch_universes: [101], output_route_scope: "all-patched-universes-loopback-artnet", loopback_packet_receipt: { protocol: "art_net", payload_slots: 512, invalid_datagrams: 0, unexpected_universe_datagrams: 0, packets_received: 0, universes: [{ universe: 101, packets: 0 }] } };
+	assert.equal(statusDocument(options, base, null, null, null, [], [row]).benchmark_scenarios.length, 0);
+	row.loopback_packet_receipt.packets_received = 2400;
+	row.loopback_packet_receipt.universes[0].packets = 2400;
+	assert.equal(statusDocument(options, base, null, null, null, [], [row]).benchmark_scenarios.length, 1);
+});

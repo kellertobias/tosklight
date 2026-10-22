@@ -10,7 +10,8 @@ fixes can therefore remeasure an existing release without relabelling its binari
 
 - **Control baseline:** the released Tauri Desk and its actual Fixture Sheet, with
   Dynamics active, requesting 40 output ticks per second. Stage is explicitly off;
-  the harness verifies the mode acknowledgement and renderer absence. The demo
+  the harness verifies the mode acknowledgement and renderer absence. The exact portable demo is copied into the isolated startup-show path before
+  Tauri starts, avoiding an overlapping show switch during frontend bootstrap. The demo
   also runs with the complete application tree restricted to one CPU core.
 - **Engine-only probe:** the released `light-benchmark` executable, without Tauri,
   WebKit or Stage. Its fixture workload and requested cadence are recorded separately.

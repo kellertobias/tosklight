@@ -204,3 +204,49 @@ export async function configurePerformanceOutputRoutes(api, destination) {
 		loopback_output_destination: destination,
 	};
 }
+
+/** A configured route is insufficient: every expected universe must deliver valid DMX. */
+export function validatePerformanceOutputReceipt(receipt, expectedUniverses) {
+	const validCount = (value) => Number.isSafeInteger(value) && value >= 0;
+	if (
+		!Array.isArray(expectedUniverses) ||
+		!expectedUniverses.length ||
+		expectedUniverses.length > 1024 ||
+		new Set(expectedUniverses).size !== expectedUniverses.length ||
+		expectedUniverses.some(
+			(universe) => !validCount(universe) || universe > 32767,
+		)
+	)
+		throw new Error("Invalid expected performance output universe coverage");
+	if (
+		receipt?.protocol !== "art_net" ||
+		receipt.payload_slots !== 512 ||
+		!validCount(receipt.packets_received) ||
+		receipt.packets_received === 0 ||
+		receipt.invalid_datagrams !== 0 ||
+		receipt.unexpected_universe_datagrams !== 0
+	)
+		throw new Error(
+			"Performance output receipt has no valid complete Art-Net delivery",
+		);
+	if (
+		!Array.isArray(receipt.universes) ||
+		!sameUniverses(
+			receipt.universes.map((row) => row?.universe),
+			[...expectedUniverses].sort((a, b) => a - b),
+		) ||
+		receipt.universes.some(
+			(row) => !validCount(row.packets) || row.packets === 0,
+		)
+	)
+		throw new Error(
+			"Performance output receipt is missing complete per-universe delivery",
+		);
+	const counted = receipt.universes.reduce(
+		(total, row) => total + row.packets,
+		0,
+	);
+	if (!Number.isSafeInteger(counted) || counted !== receipt.packets_received)
+		throw new Error("Performance output receipt packet totals disagree");
+	return receipt;
+}
