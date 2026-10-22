@@ -61,10 +61,10 @@ describe("Media Server library layout contract", () => {
 	padding: 8px;`,
 		);
 		expect(mediaServerCss).not.toContain("repeat(4, minmax(68px, 1fr))");
-		expect(312 - 16).toBeGreaterThanOrEqual(3 * 88 + 2 * 6);
-		expect(312 - 16).toBeLessThan(4 * 88 + 3 * 6);
-		expect(232 - 16).toBeGreaterThanOrEqual(2 * 88 + 6);
-		expect(232 - 16).toBeLessThan(3 * 88 + 2 * 6);
+		expect(312 - 16).toBeGreaterThanOrEqual(2 * 112 + 6);
+		expect(312 - 16).toBeLessThan(3 * 112 + 2 * 6);
+		expect(232 - 16).toBeLessThan(2 * 112 + 6);
+		expect(232 - 16).toBeGreaterThanOrEqual(112);
 	});
 
 	it("keeps generated previews sticky and collapses the identity fields responsively", () => {

@@ -295,7 +295,7 @@ className="media-library-window" search={{ value: search, onSearch: setSearch, p
 }} > {(dropFailure ?? failure) && ( <MediaErrorToast message={dropFailure ?? failure ?? "Library operation failed"}
 onDismiss={() => { setDropFailure(null); onDismissFailure?.(); }} />
 )} <div className="media-catalog-browser"> <WindowScrollArea className="media-library-folders"> <div className="media-library-pool-heading"> <span>Folders</span>
-<small>001–199 · Parking 900–999</small> </div> <ButtonGrid className="media-library-folder-pool" minimum={88}> {folders.map((number) => { const entry = catalog.folders.find(
+<small>001–199 · Parking 900–999</small> </div> <ButtonGrid className="media-library-folder-pool" minimum={112}> {folders.map((number) => { const entry = catalog.folders.find(
 (candidate) => candidate.folder === number, ); const presentation = folderPresentations.find( (candidate) => candidate.folder === number, );
 const writable = isStorageFolder(number); const empty = number < FIRST_PARKING_FOLDER && (entry?.items.length ?? 0) === 0; const selected =
 selectedFolders.has(number) || (!selectedFolders.size && folder === number); return ( <PoolCard key={number}

@@ -39,7 +39,7 @@ describe("the CITP media library", () => {
 			"square-grid",
 		);
 		expect(container.querySelector(".media-library-folder-pool")).toHaveStyle({
-			"--grid-cell-min": "88px",
+			"--grid-cell-min": "112px",
 		});
 		expect(
 			screen.getByRole("button", { name: /199Empty folder/u }),
