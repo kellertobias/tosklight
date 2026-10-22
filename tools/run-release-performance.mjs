@@ -485,6 +485,9 @@ function canonicalDemoEvidence(candidate) {
 }
 
 const PERFORMANCE_CASES = {
+	one_universe: {
+		thresholds: { red_below_hz: 38, yellow_below_hz: 39 },
+	},
 	// The shape the performance goal names: sixteen universes packed with three-channel fixtures,
 	// a Dynamic on every one. It is scheduled at 40 Hz rather than 60, which is why a case carries
 	// the rate it was measured at instead of every case being assumed to be 60.
@@ -524,7 +527,8 @@ function benchmarkScenarioEvidence(caseId, stage) {
 		stage?.report?.schema_version !== 8 ||
 		!scenario ||
 		stage.exit_code == null ||
-		scenario.configured_rate_hz !== (PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
+		scenario.configured_rate_hz !==
+			(PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
 		scenario.frame_rate?.reporting_target_hz !==
 			Math.min(44, PERFORMANCE_CASES[caseId]?.rate_hz ?? 60) ||
 		!Number.isInteger(scenario.frame_rate?.windows_below_reporting_target) ||
@@ -559,10 +563,14 @@ function benchmarkScenarioEvidence(caseId, stage) {
 function desktopScenarioEvidence(scenario) {
 	if (
 		!PERFORMANCE_CASES[scenario?.case_id] ||
+		(scenario.case_id === "one_universe" &&
+			(scenario.fixture_count !== 24 || scenario.universes !== 1 || scenario.parameter_count > 512)) ||
 		!["one_core", "unrestricted"].includes(scenario?.execution_mode) ||
 		scenario?.measurement_surface !== "released-tauri-desk-fixture-sheet" ||
 		!Number.isInteger(scenario?.fixture_count) ||
 		!Number.isInteger(scenario?.parameter_count) ||
+		scenario.parameter_count < 0 ||
+		(scenario.universes > 0 && scenario.parameter_count === 0) ||
 		!Number.isInteger(scenario?.universes) ||
 		!Number.isInteger(scenario?.animated_attribute_count) ||
 		!Number.isInteger(scenario?.master_lane_count) ||
@@ -578,7 +586,10 @@ function desktopScenarioEvidence(scenario) {
 		return null;
 	return {
 		...scenario,
-		thresholds: PERFORMANCE_CASES[scenario.case_id].thresholds,
+		thresholds:
+			scenario.requested_rate_hz === 40
+				? { red_below_hz: 30, yellow_below_hz: 38, critical_below_hz: 30 }
+				: PERFORMANCE_CASES[scenario.case_id].thresholds,
 	};
 }
 
@@ -624,6 +635,10 @@ export function statusDocument(
 		status: classification.status,
 		summary: classification.summary,
 		generated_at: new Date().toISOString(),
+		measurement_tooling: {
+			commit: options["harness-commit"] ?? options.commit,
+			release_binaries_commit: options.commit,
+		},
 		release: {
 			version: options.version,
 			commit: options.commit,

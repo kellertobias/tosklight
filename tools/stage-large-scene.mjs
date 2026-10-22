@@ -126,6 +126,25 @@ export function createPerformanceFixtureInputs(
 	});
 }
 
+/** A compact mixed rig: 24 fixtures, 224 DMX slots, all within one universe. */
+export function createSmallPerformanceFixtureInputs(
+	profiles,
+	layerId = "default",
+) {
+	const counts = { beam: 4, sunstrip: 4, dimmer: 16 };
+	const manifest = LARGE_STAGE_MANIFEST.filter(
+		(entry) => counts[entry.key],
+	).map((entry) => ({ ...entry, records: counts[entry.key], multipatches: 0 }));
+	const scene = createStageInputs(profiles, layerId, manifest, {
+		expectedRecords: 24,
+		expectedInstances: 24,
+		name: "Single-universe performance",
+	});
+	if (scene.patch.universeCount !== 1 || scene.patch.occupiedSlots > 512)
+		throw new Error("Small performance show must fit within one DMX universe");
+	return scene;
+}
+
 const EXACT_PERFORMANCE_COUNTS = new Map([
 	[576, { beam: 224, sunstrip: 96, dimmer: 256 }],
 	[1_024, { beam: 574, sunstrip: 114, dimmer: 336 }],

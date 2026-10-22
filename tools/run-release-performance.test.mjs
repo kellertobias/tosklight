@@ -629,3 +629,48 @@ test("the dense rig is measured at the rate it is scheduled at, not the release 
 	);
 	assert.deepEqual(wrongRate.benchmark_scenarios, []);
 });
+
+test("single-universe desktop case is retained and impossible zero-slot cases fail closed", () => {
+	const small = {
+		...desktopScenario("one_universe"),
+		fixture_count: 24,
+		physical_instance_count: 24,
+		parameter_count: 224,
+		universes: 1,
+		animated_attribute_count: 188,
+	};
+	const baseline = {
+		exit_code: 0,
+		fixtures_per_universe: 32,
+		fixture_count: 1024,
+		report: report(),
+	};
+	const measured = statusDocument(
+		{ ...options, "harness-commit": "reporting-source" },
+		baseline,
+		null,
+		null,
+		null,
+		[],
+		[small],
+	);
+	assert.equal(measured.benchmark_scenarios.length, 1);
+	assert.equal(measured.benchmark_scenarios[0].universes, 1);
+	assert.equal(measured.measurement_tooling.commit, "reporting-source");
+	assert.equal(
+		measured.measurement_tooling.release_binaries_commit,
+		options.commit,
+	);
+	const invalid = statusDocument(
+		options,
+		baseline,
+		null,
+		null,
+		null,
+		[],
+		[{ ...small, parameter_count: 0 }],
+	);
+	assert.equal(invalid.benchmark_scenarios.length, 0);
+	const overflow = statusDocument(options, baseline, null, null, null, [], [{ ...small, universes: 2, parameter_count: 600 }]);
+	assert.equal(overflow.benchmark_scenarios.length, 0);
+});

@@ -167,7 +167,8 @@ const CADENCE_BANDS = [
 
 export function cadenceTone(frameHz) {
 	if (!Number.isFinite(frameHz)) return "unknown";
-	for (const band of CADENCE_BANDS) if (frameHz < band.belowHz) return band.tone;
+	for (const band of CADENCE_BANDS)
+		if (frameHz < band.belowHz) return band.tone;
 	return "spare";
 }
 
@@ -278,7 +279,7 @@ function compactCpu(resources) {
 	const ram =
 		resources?.application_peak_resident_bytes ??
 		resources?.peak_resident_bytes;
-	// The headline is the p95 busiest second, which describes the load the desk actually carries
+	// The headline is the p95 busiest sampled interval, which describes the load the desk actually carries
 	// rather than the single worst spike a run happened to catch.
 	const headline = Number.isFinite(resources?.application_cpu_p95_percent)
 		? resources.application_cpu_p95_percent
@@ -312,27 +313,47 @@ function compactScenarioRow(scenario) {
 				: "Dynamic workload unavailable";
 	const maximum = compactNumber(scenario.maximum_one_second_completed_hz);
 	const elapsed = scenario.measurement_seconds;
-	const parameters = Number.isFinite(scenario.parameter_count)
-		? `${compactNumber(scenario.parameter_count)} param.`
-		: "Not measured";
+	const stage =
+		scenario.stage_enabled === false
+			? "off"
+			: scenario.stage_enabled === true
+				? "on"
+				: "unrecorded";
+	const durationLabel =
+		scenario.measurement_duration_source === "server-monotonic"
+			? "measured"
+			: "nominal";
+	const parameters =
+		Number.isFinite(scenario.parameter_count) &&
+		!(scenario.parameter_count === 0 && scenario.universes > 0)
+			? `${compactNumber(scenario.parameter_count)} DMX slots`
+			: "Not measured";
 	const critical =
 		scenario.thresholds?.critical_below_hz != null &&
 		scenario.p95_one_second_completed_hz < scenario.thresholds.critical_below_hz
 			? `<small>Critical: below ${compactNumber(scenario.thresholds.critical_below_hz)} Hz</small>`
 			: "";
+	const caseName =
+		scenario.parameter_count === 0 && scenario.universes > 0
+			? (scenario.case_name ?? `${scenario.fixture_count} fixtures`).replace(
+					/0 parameters \/ /u,
+					"DMX slot count unavailable / ",
+				)
+			: (scenario.case_name ??
+				`${compactNumber(scenario.fixture_count)} fixtures`);
 	const mode =
 		scenario.execution_mode === "one_core"
 			? "locked to 1 core"
 			: "unrestricted";
 	return (
 		`<tr class="performance-row performance-row-${escapePerformanceText(scenario.compact_status)}">` +
-		`<th scope="row"><strong>${escapePerformanceText(scenario.case_name ?? `${compactNumber(scenario.fixture_count)} fixtures`)}</strong>` +
-		`<small>${mode}<br>${compactNumber(scenario.universes)} DMX universes</small></th>` +
+		`<th scope="row"><strong>${escapePerformanceText(caseName)}</strong>` +
+		`<small>${mode}<br>${compactNumber(scenario.universes)} patched DMX universes<br>Stage: ${stage}</small></th>` +
 		`<td><strong>${parameters}</strong><small>${dynamics}<br>${escapePerformanceText(dynamicsDetail)}</small></td>` +
 		`<td class="performance-tone-${cadenceTone(scenario.p95_one_second_completed_hz)}">` +
-		`<strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz p95</strong>` +
-		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz<br>min / avg / max</small>${critical}</td>` +
-		`<td>${cadenceHistogram(scenario)}<small>over ${compactDuration(elapsed)} s</small></td>` +
+		`<strong>${compactNumber(scenario.p95_one_second_completed_hz)} Hz · 95% floor</strong>` +
+		`<small>${compactNumber(scenario.minimum_one_second_completed_hz)} / ${compactNumber(scenario.average_completed_hz)} / ${maximum} Hz<br>min / avg / max<br>target ${compactNumber(scenario.output_target_hz)} Hz</small>${critical}</td>` +
+		`<td>${cadenceHistogram(scenario)}<small>${compactDuration(elapsed)} s ${durationLabel}</small></td>` +
 		`<td>${compactCpu(scenario.resources)}</td></tr>`
 	);
 }
@@ -344,7 +365,7 @@ function scenarioTable(performance) {
 		scenarios,
 		html: scenarios.length
 			? `<div class="performance-table-scroll"><table class="performance-compact"><thead><tr>` +
-				`<th>Test set</th><th>Load</th><th>Frame rate</th><th>Frame times</th><th>CPU and RAM</th>` +
+				`<th>Test set</th><th>Load</th><th>Output cadence</th><th>Output intervals</th><th>CPU and RAM</th>` +
 				`</tr></thead><tbody>${rows}</tbody></table></div>`
 			: `<p class="performance-empty">No measured output-cadence run is available for this release.</p>`,
 	};
@@ -362,7 +383,9 @@ function componentResourceRows(scenarios) {
 			return [
 				["Complete Desk app tree", application],
 				["Bundled Light server", resources.server],
-				["Tauri host + WebKit", resources.desktop_webview],
+				["WebKit", resources.desktop_webview],
+				["Native Stage renderer", resources.native_renderer],
+				["Tauri host", resources.desktop_host],
 			]
 				.filter(([, component]) =>
 					Number.isFinite(component?.cpu_average_percent),
@@ -389,14 +412,16 @@ function renderTestSetup(scenarios) {
 		return `<p>These legacy results were produced by the released Linux engine benchmark. The next publication uses the released Desk application setup shown on the main page.</p>`;
 	}
 	return (
-		`<p>Each row is a 60-second timed run of the released Linux Desk bundle. Every show runs unrestricted; the demo show runs a second time with the complete application tree locked to one CPU core, which is the case that says whether a modest machine still carries a real show. The output scheduler requests 40 Hz throughout, so the rows compare directly. The frame rate column reports the p95 slowest second beside the slowest, mean, and fastest; the histogram counts every delivered frame by the rate it was delivered at.</p>` +
-		`<figure class="test-setup"><div class="test-flow" role="img" aria-label="Released Linux bundle starts the Tauri Desk under Xvfb. Its real WebKit Fixture Sheet connects to the bundled Light server, which runs the 60 hertz output scheduler.">` +
+		`<p>The current Control baseline runs the released Linux Desk with its real Fixture Sheet and Dynamics active, requesting 40 Hz. Stage is off. The demo also runs with the complete app restricted to one CPU core. Each row shows its target, Stage state and elapsed duration.</p>` +
+		`<p>Output cadence counts completed output ticks, not the Fixture Sheet paint rate or 3D renderer FPS. The 95% floor is the fifth percentile: 95% of sampled windows held at least this rate. A 40 Hz target caps scheduled throughput; this is not a maximum-capacity test. DMX slots count patched addresses including fine bytes; Dynamic attributes count animated components, including virtual intensity and logical heads.</p>` +
+		`<p>New runs target 60 seconds and use the server clock. Older runs polled 60 times and included native Stage under software graphics; their duration is marked nominal. They cannot establish a renderer-off baseline. The engine-only probe below uses a different workload and target.</p>` +
+		`<figure class="test-setup"><div class="test-flow" role="img" aria-label="Released Linux bundle starts the Tauri Desk under Xvfb. Its real WebKit Fixture Sheet connects to the bundled Light server, which runs the 40 hertz output scheduler.">` +
 		`<div><strong>Released Linux bundle</strong><small>exact published AppImage</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>Tauri Desk under Xvfb</strong><small>unrestricted, and one core for the demo show</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>WebKit Fixture Sheet</strong><small>real production UI, kept active</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>Bundled Light server</strong><small>show, Dynamics, and DMX output</small></div><span aria-hidden="true">→</span>` +
 		`<div><strong>40 Hz scheduler</strong><small>cadence diagnostics</small></div></div>` +
-		`<figcaption>The API coordinator loads each real show and confirms the Fixture Sheet remains responsive. Linux process sampling measures the Desk application tree and separates its Light server from the Tauri/WebKit processes. Node and Xvfb are excluded. Playwright is not launched.</figcaption></figure>`
+		`<figcaption>The API coordinator loads each real show and confirms the Fixture Sheet remains responsive. Linux process sampling measures the Desk application tree and separates its Light server from the Tauri/WebKit processes. Node and Xvfb are excluded. Playwright is not launched. Current Control baselines explicitly disable Stage and verify no renderer process is running. Older raw reports included native Stage rendering, even though the summary omitted that state; those runs cannot be treated as a renderer-off baseline. CI uses software-rendered WebKit under Xvfb; this is not a desktop GPU benchmark.</figcaption></figure>`
 	);
 }
 
@@ -407,7 +432,7 @@ function renderDetailedScenarioEvidence(performance) {
 		? `<h3>Application process breakdown</h3><div class="table-scroll"><table><thead><tr><th>Test set</th><th>Mode</th><th>Process scope</th><th>Average CPU</th><th>Maximum CPU</th><th>Maximum RAM</th></tr></thead><tbody>${componentRows}</tbody></table></div>`
 		: "";
 	return (
-		`${html}<p class="performance-legend">This is the same measured-scenario table shown on the main GitHub Pages page. A row is graded by its slowest second first and then its mean; every run requests 40 Hz.</p>` +
+		`${html}<p class="performance-legend">These released-Desk measurements are separate from the engine-only probe below. They use different workloads and requested rates; their Hz values are not directly comparable. This is the same measured-scenario table shown on the main GitHub Pages page. A row is graded by its slowest sampled window first and then its mean; each row shows its own requested target.</p>` +
 		`<h2>How the test runs</h2>${renderTestSetup(scenarios)}${components}`
 	);
 }
@@ -416,11 +441,11 @@ export function renderCompactPerformanceSummary(performance) {
 	const { html } = scenarioTable(performance);
 	return (
 		`<div class="performance-summary">${html}` +
-		`<p class="performance-legend">A row is graded by its slowest second first, then its mean. <span class="legend-healthy">Green</span>: slowest above 38 Hz and mean above 39 Hz · ` +
+		`<p class="performance-legend">A row is graded by its slowest sampled window first, then its mean. <span class="legend-healthy">Green</span>: slowest above 38 Hz and mean above 39 Hz · ` +
 		`<span class="legend-warning">Yellow</span>: slowest above 30 Hz and mean above 35 Hz · ` +
 		`<span class="legend-caution">Orange</span>: slowest above 26 Hz and mean above 30 Hz · ` +
 		`<span class="legend-degraded">Red</span>: below that · ` +
-		`<span class="legend-unknown">Gray</span>: incomplete evidence. Every run requests 40 Hz.</p>` +
+		`<span class="legend-unknown">Gray</span>: incomplete evidence. The target for each row is shown beside its measured cadence. These are output ticks, not visualizer FPS.</p>` +
 		`<p class="performance-legend">CPU and RAM cover the released Desk application tree during the timed window: the Tauri host, its real WebKit Fixture Sheet, and the bundled Light server. The detailed report separates the server and desktop/WebView processes. Node, Xvfb, and Playwright are excluded; Playwright is not launched. CPU is expressed per logical core and bounded by the application affinity; 100% means one fully used core.</p>` +
 		`<p class="performance-details"><a href="performance/">Detailed tests, run information, and raw report →</a></p></div>`
 	);
@@ -601,11 +626,12 @@ export function renderPerformancePage(performance) {
 		`td[class*="performance-tone-"] strong{color:var(--tone)}` +
 		`.test-setup{margin:1.25rem 0 2rem}.test-flow{display:grid;grid-template-columns:repeat(9,auto);align-items:stretch;gap:.6rem}.test-flow div{border:1px solid #526170;border-radius:.5rem;padding:.8rem;background:#1a2027;min-width:0}.test-flow strong,.test-flow small{display:block}.test-flow small,.test-setup figcaption{color:#aab4bf}.test-flow span{align-self:center;color:#72c7ff;font-size:1.4rem}.test-setup figcaption{margin-top:.8rem;line-height:1.5}@media(max-width:900px){.test-flow{display:flex;flex-direction:column}.test-flow span{transform:rotate(90deg);align-self:flex-start;margin-left:1rem}}` +
 		`code{background:#20262d;padding:.15rem .35rem}.healthy{color:#39d98a}.warning{color:#ffd166}.caution{color:#ff9f45}.degraded{color:#ff6b6b}.unknown{color:#9aa5b8}.developer-resources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem;margin-top:1.5rem}.resource-card{display:block;padding:1.15rem;border:1px solid var(--line);border-radius:.75rem;background:var(--surface);color:inherit;text-decoration:none}.resource-card:hover{border-color:var(--blue)}.resource-card strong{display:block;color:var(--text)}.resource-card span{display:block;margin-top:.3rem;color:var(--muted);font-size:.84rem}.performance-footer{margin-top:4rem;padding-top:2rem;border-top:1px solid var(--line);color:var(--quiet);font-size:.82rem}@media(max-width:700px){.development-main{width:min(100% - 2rem,76rem)}.performance-hero{padding-top:3.5rem}.developer-resources{grid-template-columns:1fr}.performance-hero h1{font-size:3.2rem}}</style><nav class="topbar shell" aria-label="Primary navigation"><a class="wordmark" href="../"><img src="../icon.png" alt=""><span>ToskLight</span></a><div class="nav-links"><a href="../#applications">Applications</a><a class="is-active" href="./">Development</a><a href="../manual/">Manual</a><a class="nav-cta" href="../downloads/">Downloads</a></div></nav><main class="development-main">` +
-		`<header class="performance-hero"><p class="performance-kicker">Measured in public</p><h1>Development</h1><p class="performance-intro">Release evidence, test methodology, source, component stories, architecture tours, and operator-facing acceptance contracts in one place.</p><p class="status-line"><strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong>: ${escapePerformanceText(performance.summary)}</p></header><div id="evidence"></div>` +
+		`<header class="performance-hero"><p class="performance-kicker">Measured in public</p><h1>Development</h1><p class="performance-intro">Release evidence, test methodology, source, component stories, architecture tours, and operator-facing acceptance contracts in one place.</p><p class="status-line">Engine-only probe: <strong class="${escapePerformanceText(performance.status)}">${escapePerformanceText(performance.status.toUpperCase())}</strong>: ${escapePerformanceText(performance.summary)}</p></header><div id="evidence"></div>` +
 		`<h2>Evidence</h2><table><tbody>` +
 		row("Release version", performance.release?.version) +
 		row("Tested commit", performance.release?.commit) +
 		row("Generated", performance.generated_at) +
+		row("Measurement tooling commit", performance.measurement_tooling?.commit) +
 		row("Runner", runner) +
 		row("Workload", workloadLabel(performance.workload)) +
 		`</tbody></table>` +
@@ -621,8 +647,8 @@ export function renderPerformancePage(performance) {
 		row("Rust toolchain", performance.runner?.rustc_version) +
 		row("Build profile", performance.runner?.build_profile) +
 		`</tbody></table>` +
-		`<h2>Canonical 306-instance demo show</h2>${renderCanonicalDemo(canonical)}` +
-		`<h2>1,024-fixture released-engine workload</h2><p>Green means at least ${value(required.green_threshold_hz, " Hz")}; yellow means at least ${value(required.yellow_threshold_hz, " Hz")}; below that is red. This released Linux probe measures engine rendering and output encoding without opening a UI. Separate packaged acceptance keeps the 306-instance demo at 100 Hz and proves the exact 1,000-instance show with Stage and Fixture Sheet open while the rest of the desk remains responsive.</p><table><tbody>` +
+		`<h2>Separate Stage demonstration</h2>${renderCanonicalDemo(canonical)}` +
+		`<h2>Separate engine-only probe — 1,024 fixtures</h2><p>This probe runs without Tauri, WebKit, Fixture Sheet subscribers, or a 3D renderer and has its own requested cadence. Its result does not measure the same path as the released-Desk rows above. Green means at least ${value(required.green_threshold_hz, " Hz")}; yellow means at least ${value(required.yellow_threshold_hz, " Hz")}; below that is red. This released Linux probe measures engine rendering and output encoding without opening a UI. Packaged Stage acceptance is a separate GPU test; its targets do not claim that these desktop rows achieved those rates.</p><table><tbody>` +
 		row("Fixtures", required.fixture_count) +
 		row("Universes", required.universes) +
 		row("Fixtures per universe", required.fixtures_per_universe) +
@@ -639,7 +665,7 @@ export function renderPerformancePage(performance) {
 			" Hz",
 		) +
 		row(
-			"Average completed cadence",
+			"Average engine-only output cadence",
 			frameRate.average_completed_hz ?? required.average_completed_hz,
 			" Hz",
 		) +
@@ -658,7 +684,7 @@ export function renderPerformancePage(performance) {
 		row("Deferred ticks", deadline.deferred_ticks ?? required.deferred_ticks) +
 		row("Acceptance tier", performance.status) +
 		row(
-			"Configured 100 Hz reference",
+			"Configured cadence held",
 			reference(required.configured_target_met),
 		) +
 		row("Limiting measured phase", required.limiting_phase?.name) +

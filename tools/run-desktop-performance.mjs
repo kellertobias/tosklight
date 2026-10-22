@@ -8,11 +8,24 @@ import net from "node:net";
 import path from "node:path";
 import { finished } from "node:stream/promises";
 import {
+	performanceCounterInterval,
+	readPerformanceCounterSample,
+	requireNoPerformanceRenderer,
+	summarizePerformancePatch as summarizePatch,
+} from "./desktop-performance-patch.mjs";
+import {
+	configurePerformanceOutputRoutes,
+	createPerformanceOutputSink,
+} from "./desktop-performance-routes.mjs";
+import {
 	processTreeResourceDelta,
 	readLinuxProcessTree,
 } from "./process-tree-resources.mjs";
 import { createLargeStageDynamicsPlan } from "./stage-dynamics-scene.mjs";
-import { createPerformanceFixtureInputs } from "./stage-large-scene.mjs";
+import {
+	createPerformanceFixtureInputs,
+	createSmallPerformanceFixtureInputs,
+} from "./stage-large-scene.mjs";
 
 // Each case is measured over a full minute: a desk is judged by how it holds up over a show, not
 // over a moment, and a short window hides the occasional slow frame entirely.
@@ -37,6 +50,7 @@ const LINUX_PROCESS_OPTIONS = {
 // The Desk surface is measured up to a thousand fixtures. Larger shows are covered by the
 // headless benchmark, which does not depend on a web view drawing every row.
 const CASES = [
+	{ caseId: "one_universe", fixtureRecords: 24, small: true },
 	{ caseId: "demo", fixtureRecords: 264, demo: true },
 	{ caseId: "sixteen_universe", fixtureRecords: 576 },
 	{ caseId: "required_1024", fixtureRecords: 1_024 },
@@ -128,6 +142,7 @@ async function runCase(performanceCase, executionMode) {
 			LIGHT_STAGE_PACKAGED_BENCH_REPORT: reportPath,
 			LIGHT_STAGE_PACKAGED_BENCH_PROFILE: performanceCase.caseId,
 			LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW: "0",
+			LIGHT_STAGE_PACKAGED_BENCH_STAGE: "0",
 			LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET: "1",
 			// The benchmark surface stops when its own duration elapses, and it defaults to
 			// thirty seconds. Tell it how long this run actually measures for, with headroom
@@ -166,6 +181,7 @@ async function runCase(performanceCase, executionMode) {
 	evidence.closed = closed;
 	let failure;
 	let result;
+	let packetSink;
 	for (const stream of [child.stdout, child.stderr])
 		stream.on("data", (chunk) => {
 			evidence.log.write(chunk);
@@ -183,10 +199,19 @@ async function runCase(performanceCase, executionMode) {
 			desk_id: null,
 		});
 		api.session = session;
-		await configureScheduler(api);
 		const prepared = performanceCase.demo
 			? await prepareDemo(api)
-			: await prepareMixed(api, performanceCase.fixtureRecords);
+			: await prepareMixed(
+					api,
+					performanceCase.fixtureRecords,
+					performanceCase.small,
+				);
+		packetSink = await createPerformanceOutputSink();
+		const outputRouteEvidence = await configurePerformanceOutputRoutes(
+			api,
+			packetSink.destination,
+		);
+		const schedulerConfiguration = await configureScheduler(api);
 		// The show exists now, so let the benchmark surface begin.
 		await writeFile(preparedPath, `${JSON.stringify(prepared)}\n`);
 		state.prepared = true;
@@ -205,14 +230,18 @@ async function runCase(performanceCase, executionMode) {
 				state.sheet = snapshot;
 			},
 		);
+		state.phase = "renderer-disabled-verification";
+		await requireRendererOff(reportPath, child);
 		state.phase = "measurement";
 		const measurementStartedAt = Date.now();
+		packetSink.start(outputRouteEvidence.routed_patch_universes);
 		const measured = await measureWindow(
 			api,
 			child.pid,
 			executionMode,
 			evidence.samples,
 		);
+		const receivedPackets = packetSink.stop();
 		state.phase = "fixture-sheet-liveness";
 		await requireFixtureSheetActive(
 			reportPath,
@@ -241,9 +270,16 @@ async function runCase(performanceCase, executionMode) {
 			animated_attribute_count: prepared.animatedAttributes,
 			master_lane_count: prepared.masterLanes,
 			requested_rate_hz: REQUESTED_RATE_HZ,
+			...schedulerConfiguration,
+			...outputRouteEvidence,
+			loopback_packet_receipt: receivedPackets,
 			below_target_hz: 38,
 			measurement_seconds: DURATION_SECONDS,
 			measurement_surface: "released-tauri-desk-fixture-sheet",
+			stage_enabled: false,
+			stage_mode_acknowledged: true,
+			renderer_state: "disabled",
+			renderer_process_verified_absent: true,
 			...measured,
 		};
 	} catch (error) {
@@ -264,17 +300,21 @@ async function runCase(performanceCase, executionMode) {
 			`${performanceCase.caseId}/${executionMode}: ${error instanceof Error ? error.message : String(error)}; diagnostics: ${diagnostics}${output.length ? `\n${output.join("")}` : ""}`,
 		);
 	}
-	failure = await finalizeCaseEvidence(
-		child,
-		evidence,
-		reportPath,
-		preparedPath,
-		state,
-		temporaryRoot,
-		failure,
-	);
-	if (failure) throw failure;
-	return result;
+	try {
+		failure = await finalizeCaseEvidence(
+			child,
+			evidence,
+			reportPath,
+			preparedPath,
+			state,
+			temporaryRoot,
+			failure,
+		);
+		if (failure) throw failure;
+		return result;
+	} finally {
+		await packetSink?.close();
+	}
 }
 
 async function finalizeCaseEvidence(
@@ -513,17 +553,16 @@ async function prepareDemo(api) {
 	return summarizePatch(patch, plan);
 }
 
-async function prepareMixed(api, fixtureRecords) {
+async function prepareMixed(api, fixtureRecords, small = false) {
 	const bootstrap = await api.request("GET", "/api/v2/bootstrap");
 	api.showId = bootstrap.active_show?.id;
 	if (!api.showId) throw new Error("Desk has no active show");
 	const before = await api.request("GET", "/api/v2/patch");
 	const library = await api.request("GET", "/api/v2/fixture-library/profiles");
-	const scene = createPerformanceFixtureInputs(
-		library.profiles,
-		fixtureRecords,
-		before.fixtures[0]?.layer_id ?? "default",
-	);
+	const layerId = before.fixtures[0]?.layer_id ?? "default";
+	const scene = small
+		? createSmallPerformanceFixtureInputs(library.profiles, layerId)
+		: createPerformanceFixtureInputs(library.profiles, fixtureRecords, layerId);
 	await api.request(
 		"POST",
 		"/api/v2/patch/fixtures",
@@ -538,11 +577,16 @@ async function prepareMixed(api, fixtureRecords) {
 	const patch = await api.request("GET", "/api/v2/patch");
 	const plan = createLargeStageDynamicsPlan(patch, scene);
 	await installDynamics(api, plan);
-	return {
-		...summarizePatch(patch, plan),
-		parameterCount: scene.patch.occupiedSlots,
-		universes: scene.patch.universeCount,
-	};
+	const observed = summarizePatch(patch, plan);
+	if (
+		observed.fixtureRecords !== fixtureRecords ||
+		observed.parameterCount !== scene.patch.occupiedSlots ||
+		observed.universes !== scene.patch.universeCount
+	)
+		throw new Error(
+			"Persisted performance Patch differs from the requested scene addresses",
+		);
+	return observed;
 }
 
 async function installDynamics(api, plan) {
@@ -568,54 +612,94 @@ async function installDynamics(api, plan) {
 	}
 }
 
-function summarizePatch(patch, plan) {
-	const universes = new Set();
-	let parameters = 0;
-	let physicalInstances = 0;
-	for (const fixture of patch.fixtures) {
-		// A fixture the show carries without a resolved profile has no footprint to count,
-		// which is ordinary rather than a reason to abandon the measurement.
-		const definition = fixture.definition;
-		const mode = definition?.profile_snapshot?.modes?.find(
-			(candidate) => candidate.id === definition.mode_id,
-		);
-		const footprint =
-			mode?.splits?.reduce((total, split) => total + split.footprint, 0) ?? 0;
-		const instances = [fixture, ...(fixture.multipatch ?? [])];
-		physicalInstances += instances.length;
-		parameters += footprint * instances.length;
-		for (const instance of instances)
-			for (const split of instance.split_patches ?? [])
-				if (split.universe != null) universes.add(split.universe);
-	}
-	return {
-		fixtureRecords: patch.fixtures.length,
-		physicalInstances,
-		parameterCount: parameters,
-		universes: universes.size,
-		animatedAttributes: plan.dynamicTargetCount,
-		masterLanes: plan.activations.length,
-	};
-}
-
 async function configureScheduler(api) {
 	await api.request("POST", "/api/v2/configuration/update", {
 		request_id: crypto.randomUUID(),
 		patch: { frame_rate_hz: REQUESTED_RATE_HZ },
 	});
+	const snapshot = await api.request("GET", "/api/v2/configuration");
+	const configured = snapshot?.configuration?.frame_rate_hz;
+	if (configured !== REQUESTED_RATE_HZ)
+		throw new Error(
+			`Requested ${REQUESTED_RATE_HZ} Hz but configuration read back ${configured}`,
+		);
+	const diagnostics = await api.request("GET", "/api/v2/diagnostics");
+	if (!Array.isArray(diagnostics?.output_routes))
+		throw new Error(
+			"Performance diagnostics lack configured output route evidence",
+		);
+	const enabled = diagnostics.output_routes.filter((route) => route.enabled);
+	return {
+		configured_rate_hz: configured,
+		configuration_rate_verified: true,
+		configured_output_route_count: diagnostics.output_routes.length,
+		configured_enabled_output_route_count: enabled.length,
+		configured_output_universe_count: new Set(
+			enabled.map((route) => route.universe),
+		).size,
+		configured_output_routes: diagnostics.output_routes,
+	};
+}
+
+async function requireRendererOff(reportPath, child) {
+	const deadline = Date.now() + 15_000;
+	while (Date.now() < deadline) {
+		assertRunning(child);
+		const records = (await readFile(reportPath, "utf8"))
+			.split("\n")
+			.flatMap((line) => {
+				try {
+					return [JSON.parse(line)];
+				} catch {
+					return [];
+				}
+			});
+		const acknowledgement = records.findLast(
+			(record) => record.kind === "stage-mode-ack",
+		);
+		if (acknowledgement) {
+			if (
+				acknowledgement.stageEnabled !== false ||
+				!(acknowledgement.hostObservationCount > 0)
+			)
+				throw new Error(
+					"Released Desk did not acknowledge renderer-disabled mode",
+				);
+			return;
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	throw new Error("Released Desk never acknowledged renderer-disabled mode");
 }
 
 async function measureWindow(api, rootPid, executionMode, samples) {
 	const rates = [];
 	const resources = [];
 	let diagnosticsMonotonicStartMillis = performance.now();
+	let diagnosticsUtcStartMillis = Date.now();
 	let diagnostics = await api.request("GET", "/api/v2/diagnostics/performance");
+	let diagnosticsUtcEndMillis = Date.now();
 	let diagnosticsMonotonicEndMillis = performance.now();
-	let counterObservationMillis =
-		(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
+	let counterSample = readPerformanceCounterSample(
+		diagnostics,
+		{
+			utcStartMillis: diagnosticsUtcStartMillis,
+			utcEndMillis: diagnosticsUtcEndMillis,
+			monotonicStartMillis: diagnosticsMonotonicStartMillis,
+			monotonicEndMillis: diagnosticsMonotonicEndMillis,
+		},
+		REQUESTED_RATE_HZ,
+	);
+	const openingCounterSample = counterSample;
+	const measurementDeadline =
+		diagnosticsMonotonicEndMillis + DURATION_SECONDS * 1000;
+	const sampleDurations = [];
 	const openingBands = diagnostics.output.frame_rate_band_counts ?? [];
+	const openingFrames = diagnostics.output.frames_sent;
+	const openingSchedulerRate = diagnostics.output.frame_hz ?? null;
 	let processMonotonicStartMillis = performance.now();
 	let processes = await readLinuxProcessTree(rootPid);
+	requireNoPerformanceRenderer(processes);
 	let processMonotonicEndMillis = performance.now();
 	let processObservationMillis =
 		(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
@@ -624,29 +708,51 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		recordedAt: new Date().toISOString(),
 		diagnosticsMonotonicStartMillis,
 		diagnosticsMonotonicEndMillis,
+		diagnosticsUtcStartMillis,
+		diagnosticsUtcEndMillis,
 		processMonotonicStartMillis,
 		processMonotonicEndMillis,
 		diagnostics,
 		processes,
 	});
-	for (let second = 0; second < DURATION_SECONDS; second++) {
-		await new Promise((resolve) => setTimeout(resolve, 1_000));
+	while (performance.now() < measurementDeadline) {
+		const second = rates.length;
+		await new Promise((resolve) =>
+			setTimeout(
+				resolve,
+				Math.max(0, Math.min(1000, measurementDeadline - performance.now())),
+			),
+		);
 		const diagnosticsStartedAt = new Date().toISOString();
 		diagnosticsMonotonicStartMillis = performance.now();
+		diagnosticsUtcStartMillis = Date.now();
 		const nextDiagnostics = await api.request(
 			"GET",
 			"/api/v2/diagnostics/performance",
 		);
+		diagnosticsUtcEndMillis = Date.now();
 		diagnosticsMonotonicEndMillis = performance.now();
 		const diagnosticsEndedAt = new Date().toISOString();
-		// The counter is sampled inside the request. Retain both bounds and use their
-		// midpoint consistently, including intervening I/O rather than only the sleep.
-		const nextCounterObservationMillis =
-			(diagnosticsMonotonicStartMillis + diagnosticsMonotonicEndMillis) / 2;
-		const elapsed =
-			(nextCounterObservationMillis - counterObservationMillis) / 1_000;
+		// HTTP bounds validate the server clock; cadence uses the same-lock server sample.
+		const nextCounterSample = readPerformanceCounterSample(
+			nextDiagnostics,
+			{
+				utcStartMillis: diagnosticsUtcStartMillis,
+				utcEndMillis: diagnosticsUtcEndMillis,
+				monotonicStartMillis: diagnosticsMonotonicStartMillis,
+				monotonicEndMillis: diagnosticsMonotonicEndMillis,
+			},
+			REQUESTED_RATE_HZ,
+		);
+		const interval = performanceCounterInterval(
+			counterSample,
+			nextCounterSample,
+		);
+		const elapsed = interval.seconds;
+		sampleDurations.push(elapsed);
 		processMonotonicStartMillis = performance.now();
 		const nextProcesses = await readLinuxProcessTree(rootPid);
+		requireNoPerformanceRenderer(nextProcesses);
 		processMonotonicEndMillis = performance.now();
 		const nextProcessObservationMillis =
 			(processMonotonicStartMillis + processMonotonicEndMillis) / 2;
@@ -659,6 +765,8 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 			processElapsed,
 			diagnosticsMonotonicStartMillis,
 			diagnosticsMonotonicEndMillis,
+			diagnosticsUtcStartMillis,
+			diagnosticsUtcEndMillis,
 			processMonotonicStartMillis,
 			processMonotonicEndMillis,
 			diagnosticsStartedAt,
@@ -699,9 +807,17 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 		});
 		diagnostics = nextDiagnostics;
 		processes = nextProcesses;
-		counterObservationMillis = nextCounterObservationMillis;
+		counterSample = nextCounterSample;
 		processObservationMillis = nextProcessObservationMillis;
 	}
+	if (!rates.length)
+		throw new Error(
+			"No performance counter interval completed before the measurement deadline",
+		);
+	const measuredCounters = performanceCounterInterval(
+		openingCounterSample,
+		counterSample,
+	);
 	const sorted = [...rates].sort((left, right) => left - right);
 	// The band counts run from show start, so the window's histogram is the difference between
 	// the reading taken before the first second and the reading taken after the last.
@@ -731,8 +847,28 @@ async function measureWindow(api, rootPid, executionMode, samples) {
 	});
 	const cpuSorted = [...cpu].sort((left, right) => left - right);
 	return {
+		completed_frame_counter: "output.frames_sent",
+		completed_counter_includes_action_wakeups: true,
+		completed_frame_count: diagnostics.output.frames_sent - openingFrames,
+		requested_measurement_seconds: DURATION_SECONDS,
+		measurement_seconds: measuredCounters.seconds,
+		observed_measurement_seconds: measuredCounters.seconds,
+		completed_packet_count: measuredCounters.packets_sent,
+		output_send_errors: measuredCounters.send_errors,
+		output_deadline_misses: measuredCounters.deadline_misses,
+		counter_clock_source: "server_output_health_monotonic_micros",
+		rate_window_semantics: "sampled_server_counter_intervals",
+		cadence_window_kind: "sampled-server-monotonic",
+		measurement_duration_source: "server-monotonic",
+		minimum_sample_window_seconds: Math.min(...sampleDurations),
+		maximum_sample_window_seconds: Math.max(...sampleDurations),
+		rate_window_durations_seconds: sampleDurations,
+		observed_window_count: rates.length,
+		scheduler_rate_hz_start: openingSchedulerRate,
+		scheduler_rate_hz_end: diagnostics.output.frame_hz ?? null,
 		minimum_one_second_completed_hz: sorted[0],
-		average_completed_hz: average(rates),
+		average_completed_hz:
+			measuredCounters.frames_sent / measuredCounters.seconds,
 		// The p95 of a frame rate is its slow tail: the rate 95% of windows stayed at or above.
 		// Taking the fast end instead would let a show that averages 60 Hz claim a p95 of 80.
 		p95_one_second_completed_hz: percentile(sorted, 5),

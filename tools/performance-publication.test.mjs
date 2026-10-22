@@ -290,7 +290,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Engine render and fixture projection/u);
 	assert.match(page, /Protocol encoding/u);
 	assert.match(page, /diagnostic only/u);
-	assert.match(page, /Canonical 306-instance demo show/u);
+	assert.match(page, /Separate Stage demonstration/u);
 	assert.match(page, /Physical Stage instances<\/th><td>343/u);
 	assert.match(page, /Stage source-to-canvas p95<\/th><td>61 ms/u);
 	assert.match(page, /Measured shows/u);
@@ -310,7 +310,7 @@ test("healthy and degraded measured statuses retain their public evidence", () =
 	assert.match(page, /Application process breakdown/u);
 	assert.match(page, /Complete Desk app tree/u);
 	assert.match(page, /Bundled Light server/u);
-	assert.match(page, /Tauri host \+ WebKit/u);
+	assert.match(page, /WebKit<\/td>/u);
 	assert.match(page, /61%<\/td><td>72%<\/td><td>0\.49 GiB/u);
 	assert.match(page, /Runner configuration/u);
 	assert.match(page, /Logical cores<\/th><td>4/u);
@@ -322,15 +322,15 @@ test("compact landing summary includes only measured runs and explains row color
 	assert.equal(summary.match(/class="performance-row /gu)?.length, 3);
 	assert.match(
 		summary,
-		/<th>Test set<\/th><th>Load<\/th><th>Frame rate<\/th><th>Frame times<\/th><th>CPU and RAM<\/th>/u,
+		/<th>Test set<\/th><th>Load<\/th><th>Output cadence<\/th><th>Output intervals<\/th><th>CPU and RAM<\/th>/u,
 	);
 	assert.match(summary, /37,720 parameters \/ 2,000 fixtures/u);
-	assert.match(summary, /unrestricted<br>74 DMX universes/u);
+	assert.match(summary, /unrestricted<br>74 patched DMX universes/u);
 	assert.match(summary, /6,480 dyn\. attr\./u);
 	assert.match(summary, /20 master lanes/u);
-	assert.match(summary, /<strong>44 Hz p95<\/strong>/u);
+	assert.match(summary, /<strong>44 Hz · 95% floor<\/strong>/u);
 	// The frame-time column carries the histogram and the window length it covers.
-	assert.match(summary, /Frame times not measured<\/small><small>over 15\.04 s<\/small>/u);
+	assert.match(summary, /Frame times not measured<\/small><small>15\.04 s nominal<\/small>/u);
 	assert.match(
 		summary,
 		/97% max<\/strong><small>83% avg · 97% max Desk app CPU<br>0\.68 GiB max RAM/u,
@@ -712,4 +712,44 @@ test("the headline CPU number is the p95 busiest second when one was measured", 
 	const summary = renderCompactPerformanceSummary(measured);
 
 	assert.match(summary, /<strong>64% p95<\/strong>/u);
+});
+
+test("cadence labels distinguish desktop targets, slow-tail floor, and separate engine probe", () => {
+	const page = renderPerformancePage(measuredStatus());
+	assert.match(page, /Output cadence/);
+	assert.match(page, /95% floor/);
+	assert.match(page, /target 60 Hz/);
+	assert.match(page, /Separate engine-only probe/);
+	assert.match(page, /Average engine-only output cadence/);
+	assert.match(page, /not directly comparable/);
+	assert.match(page, /not the Fixture Sheet paint rate or 3D renderer FPS/);
+	assert.doesNotMatch(page, /60 hertz output scheduler/);
+});
+
+test("legacy broken zero-slot counters are unavailable rather than claimed as a measured zero", () => {
+	const status = measuredStatus();
+	status.benchmark_scenarios[0].parameter_count = 0;
+	assert.match(renderCompactPerformanceSummary(status), /Not measured/);
+	assert.doesNotMatch(
+		renderCompactPerformanceSummary(status),
+		/<strong>0 DMX slots/,
+	);
+});
+
+test("Stage mode and native renderer CPU remain visible instead of hidden in the total", () => {
+	const status = measuredStatus();
+	status.benchmark_scenarios[0].stage_enabled = false;
+	status.benchmark_scenarios[0].measurement_duration_source =
+		"server-monotonic";
+	status.benchmark_scenarios[0].resources.native_renderer = {
+		cpu_average_percent: 189,
+		cpu_max_percent: 220,
+		peak_resident_bytes: 800 * 1024 ** 2,
+	};
+	const page = renderPerformancePage(status);
+	assert.match(page, /Stage: off/);
+	assert.match(page, /15.04 s measured/);
+	assert.match(page, /Native Stage renderer/);
+	assert.match(page, /189%/);
+	assert.match(page, /Older raw reports included native Stage rendering/);
 });

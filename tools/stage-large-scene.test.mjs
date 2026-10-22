@@ -4,6 +4,7 @@ import {
 	countFixtureInstances,
 	createDeterministicLargeStageInputs,
 	createPerformanceFixtureInputs,
+	createSmallPerformanceFixtureInputs,
 	LARGE_STAGE_FIXTURE_INSTANCES,
 	LARGE_STAGE_FIXTURE_RECORDS,
 	LARGE_STAGE_MANIFEST,
@@ -114,18 +115,28 @@ test("places a generated Venue object in its one mode at the size the entry name
 						minimum_size_metres: { x: 2, y: 0.1, z: 1 },
 						maximum_size_metres: { x: 2, y: 1, z: 1 },
 					},
-					modes: [{ ...profile.modes[0], id: "mode-stage-default", name: "Default" }],
+					modes: [
+						{ ...profile.modes[0], id: "mode-stage-default", name: "Default" },
+					],
 				}
 			: profile,
 	);
 	const { fixtures } = createDeterministicLargeStageInputs([], generated);
-	const stage = fixtures.filter((fixture) => fixture.profile_id === "profile-stage");
+	const stage = fixtures.filter(
+		(fixture) => fixture.profile_id === "profile-stage",
+	);
 	assert.equal(stage.length, 8);
 	for (const fixture of stage) {
 		assert.equal(fixture.mode_id, "mode-stage-default");
-		assert.deepEqual(fixture.scenery_size_metres, { x: 2_000, y: 400, z: 1_000 });
+		assert.deepEqual(fixture.scenery_size_metres, {
+			x: 2_000,
+			y: 400,
+			z: 1_000,
+		});
 	}
-	const moving = fixtures.find((fixture) => fixture.profile_id === "profile-dls");
+	const moving = fixtures.find(
+		(fixture) => fixture.profile_id === "profile-dls",
+	);
 	assert.equal(moving.scenery_size_metres, null);
 });
 
@@ -149,5 +160,30 @@ test("builds proportional real-profile Fixture Sheet and Stage workloads at requ
 	assert.equal(
 		createPerformanceFixtureInputs(profiles, 2_048).patch.occupiedSlots,
 		16_384,
+	);
+});
+
+test("small mixed performance show fits one universe with real moving and multi-head fixtures", () => {
+	const scene = createSmallPerformanceFixtureInputs(profiles);
+	assert.equal(scene.fixtures.length, 24);
+	assert.equal(scene.patch.universeCount, 1);
+	assert.equal(scene.patch.occupiedSlots, 224);
+	assert.equal(scene.dynamicFixtureIds.length, 8);
+	assert.equal(scene.staticControlFixtureIds.length, 16);
+	const patches = scene.fixtures.flatMap((fixture) => fixture.split_patches);
+	assert.equal(new Set(patches.map((split) => split.universe)).size, 1);
+	assert.ok(
+		patches.every((split) => split.address >= 1 && split.address <= 512),
+	);
+	const tooLarge = profiles.map((profile) => ({
+		...profile,
+		modes: profile.modes.map((mode) => ({
+			...mode,
+			splits: [{ number: 1, footprint: 100 }],
+		})),
+	}));
+	assert.throws(
+		() => createSmallPerformanceFixtureInputs(tooLarge),
+		/one DMX universe/,
 	);
 });

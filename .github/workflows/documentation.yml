@@ -92,10 +92,13 @@ jobs:
       VERSION: ${{ needs.release-metadata.outputs.version }}
       RELEASE_SHA: ${{ needs.release-metadata.outputs.sha }}
       RELEASE_TAG: ${{ needs.release-metadata.outputs.tag }}
+      HARNESS_SHA: ${{ github.sha }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ needs.release-metadata.outputs.sha }}
+          # Reporting fixes must be able to remeasure an existing published binary.
+          # Keep tooling and binary identities separate in the evidence.
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -155,7 +158,8 @@ jobs:
           tmp=".artifacts/tmp/release-performance"
           mkdir -p "$out" "$tmp/unpacked"
           archive="tosklight-bundle-linux_amd64.zip"
-          gh release download "$RELEASE_TAG" --pattern "$archive" --dir "$tmp"
+          gh release download "$RELEASE_TAG" --pattern "$archive" --pattern report-checksums.txt --dir "$tmp"
+          (cd "$tmp" && sha256sum --check --ignore-missing report-checksums.txt)
           unzip -q "$tmp/$archive" -d "$tmp/unpacked"
           benchmark="$(find "$tmp/unpacked" -type f -name light-benchmark -print -quit)"
           desk="$(find "$tmp/unpacked" -type f -name 'tosklight-desk-linux_amd64.AppImage' -print -quit)"
@@ -174,6 +178,7 @@ jobs:
             --output-dir "$out" \
             --version "$VERSION" \
             --commit "$RELEASE_SHA" \
+            --harness-commit "$HARNESS_SHA" \
             --release-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${RELEASE_TAG}" \
             --fixture-package-dir "$fixture_library" \
             --desktop-scenarios "$out/desktop-scenarios.json" \
@@ -613,7 +618,8 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ needs.release-metadata.outputs.sha }}
+          # Render current reporting fixes; measured binary identity stays in status.json.
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

@@ -124,7 +124,7 @@ test("repeated ignored invocations have independent groups even on the same bran
 });
 
 test("handbook consumes the complete fresh gallery before rendering", () => {
-	const manual = source.match(/^  manual:\n([\s\S]*?)(?=^  [\w-]+:)/m)?.[1];
+	const manual = source.match(/^ {2}manual:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m)?.[1];
 	assert.ok(manual);
 	assert.match(
 		manual,
@@ -352,4 +352,22 @@ run_manual_renderer build --source example`,
 	} finally {
 		rmSync(cwd, { recursive: true, force: true });
 	}
+});
+
+test("reporting can remeasure a pinned release with separately identified current tooling", () => {
+	const performance = source.match(
+		/^ {2}release-performance:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m,
+	)?.[1];
+	const pages = source.match(
+		/^ {2}pages-build:\n([\s\S]*?)(?=^ {2}[\w-]+:)/m,
+	)?.[1];
+	assert.ok(performance && pages);
+	assert.match(performance, /ref: \$\{\{ github.sha \}\}/);
+	assert.match(pages, /ref: \$\{\{ github.sha \}\}/);
+	assert.match(performance, /--commit "\$RELEASE_SHA"/);
+	assert.match(performance, /--harness-commit "\$HARNESS_SHA"/);
+	assert.match(
+		performance,
+		/sha256sum --check --ignore-missing report-checksums.txt/,
+	);
 });
