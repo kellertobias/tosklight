@@ -470,6 +470,13 @@ test("the performance report link is a direct release asset URL", () => {
 	);
 });
 
+test("README clearly warns that beta builds have not been tested at a show", () => {
+	const readme = readFileSync(resolve(ROOT, "README.md"), "utf8");
+	assert.match(readme, /> \[!WARNING\]/u);
+	assert.match(readme, /ToskLight is beta software and has not yet been tested at a show/u);
+	assert.doesNotMatch(readme, /> \[!CAUTION\]/u);
+});
+
 test("landing-page assembly writes the same normalized object used by the HTML", () => {
 	mkdirSync(artifactPaths.tmp, { recursive: true });
 	const directory = mkdtempSync(
@@ -579,6 +586,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.ok(hardwareSection, "Control needs its hardware and software playback workflow");
         assert.match(hardwareSection, /OSC control surface/u);
         assert.match(hardwareSection, /Custom hardware bridges/u);
+        assert.match(hardwareSection, /UI adapts when hardware connects/u);
+        assert.match(hardwareSection, /compact playback view frees room/u);
+        assert.match(hardwareSection, /no longer need at full touchscreen size/u);
         assert.match(hardwareSection, /--gallery-columns:1/u, "playback comparisons must stay full width");
         assert.deepEqual([...hardwareSection.matchAll(/<img src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]), ["../screenshots/control-playbacks-software.png", "../screenshots/control-playbacks-hardware.png"]);
 
@@ -635,6 +645,12 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
         assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
 		const landingPage = readFileSync(target, "utf8");
+        const homeCardTitles = [...landingPage.matchAll(/<figcaption><strong>([^<]+)<\/strong>/gu)].map(match => match[1]);
+        assert.deepEqual(homeCardTitles, ["Dynamic Screen Layouts", "Track every change", "Desk-style Effect Engine", "Up to Eight Layers", "Library Management Built In", "Control via DMX or in the Browser", "Live 3D Visualizer", "Generate Your Venue Plans", "Patch Your Fixtures"]);
+        assert.match(landingPage, /screenshots\/media-server-library\.png/u);
+        assert.doesNotMatch(landingPage, /screenshots\/media-server-visualizers\.png/u);
+        assert.doesNotMatch(pixelPage, /Library Management Built In/u, "homepage copy must not rewrite Pixel detail captions");
+
         const landingImages = [...landingPage.matchAll(/<img\b[^>]*src="screenshots\/[^"]+"[^>]*>/gu)].map(match => match[0]);
         assert.ok(landingImages.length > 3);
         for (const image of landingImages) assert.match(image, /width="1552" height="265"/u, "landing screenshots including hero images need intrinsic dimensions");

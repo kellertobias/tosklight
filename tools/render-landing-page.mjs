@@ -36,7 +36,18 @@ const GALLERY = marketingManifest.entries;
 const PRODUCT_GALLERIES = {
 	control: ["application-overview.png", "tracked-programming.png", "dynamics.png"],
 	architect: ["architect-renderer-white-ultra.png", "architect-cad.png", "architect-patch.png"],
-	pixel: ["pixel-eight-layer-composite.png", "media-server-visualizers.png", "media-server-playback.png"],
+	pixel: ["pixel-eight-layer-composite.png", "media-server-library.png", "media-server-playback.png"],
+};
+// Homepage cards explain product capabilities; detail figures retain their capture-specific captions.
+const HOMEPAGE_SHOT_COPY = {
+	"application-overview.png": { title: "Dynamic Screen Layouts", caption: "Arrange your workspace around the way you program and run the show." },
+	"dynamics.png": { title: "Desk-style Effect Engine", caption: "Shape functions and keyframes, distribute effects across the rig, and keep them on the beat." },
+	"pixel-eight-layer-composite.png": { title: "Up to Eight Layers", caption: "Combine video, transparent images, visualizers, and text into one live output." },
+	"media-server-library.png": { title: "Library Management Built In", caption: "Prepare and organize the visual assets you need for the show." },
+	"media-server-playback.png": { title: "Control via DMX or in the Browser", caption: "Run Pixel from a lighting desk over Art-Net or sACN, or operate its live controls in your browser." },
+	"architect-renderer-white-ultra.png": { title: "Live 3D Visualizer", caption: "Preview the rig with real fixture models, beams, gobos, and haze." },
+	"architect-cad.png": { title: "Generate Your Venue Plans", caption: "Build the venue and rig, then export measured PDF plans for the crew." },
+	"architect-patch.png": { title: "Patch Your Fixtures", caption: "Prepare fixture types, modes, universes, and addresses in the same Show." },
 };
 const DETAIL_GALLERIES = {
 	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
@@ -167,7 +178,7 @@ const renderFigure = ({ file, title, caption, wide }) => {
 for (const entry of GALLERY) renderFigure(entry);
 const productGallery = (product) =>
 	PRODUCT_GALLERIES[product]
-		.map((file) => renderFigure(galleryByFile.get(file)))
+		.map((file) => renderFigure({ ...galleryByFile.get(file), ...HOMEPAGE_SHOT_COPY[file] }))
 		.join("\n        ");
 
 mkdirSync(resolve(siteRoot, "product-icons"), { recursive: true });
@@ -279,7 +290,7 @@ const productPages = [
 			["Output", "Connect over the network or USB.", "Send DMX through Art-Net, sACN, or supported USB DMX interfaces. Explicit output routes keep the show independent of the network or adapter used at tonight’s venue.", "Frames go out on a fixed schedule, keeping the output rate consistent while you program and run the show."],
 			["Dynamics", "Shape movement. Keep it on the beat.", "Build effects for intensity, color, position, and other supported parameters using functions or editable keyframes. Distribute them across the rig in 3D, then shape their ordering and phase to create coordinated movement.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
 			["Media Server", "Keep your media server close to the desk.", "Browse media and control layers from a compatible media server in your Control workspace. CITP/MSEX supplies names, thumbnails, and previews where supported.", "Use Pixel or another compatible server, and arrange the Media pane alongside your fixtures, presets, and playbacks."],
-			["Hardware", "Choose the controls that suit your show.", "Run the desk from its software playbacks or connect an OSC control surface. The attached surface shares Control’s Programmer, command line, and playback pages.", "Custom hardware bridges can use the documented OSC controls and feedback. The software layout adapts when hardware connects, keeping the same show and playback addressing."],
+			["Hardware", "Choose the controls that suit your show.", "Run the desk from its software playbacks or connect an OSC control surface. The attached surface shares Control’s Programmer, command line, and playback pages.", "Custom hardware bridges can use the documented OSC controls and feedback. The UI adapts when hardware connects: a compact playback view frees room when the controller supplies buttons and faders you no longer need at full touchscreen size."],
 		],
 		coming: [["Position / PSN support", "Public beta"], ["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"]],
 	},

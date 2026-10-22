@@ -1,4 +1,4 @@
-import { act, cleanup, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeCapabilityEvent, SessionResponse } from "../../../../api/types";
@@ -146,11 +146,43 @@ type Writer = ReturnType<typeof fakeWriter>;
 const sent = (writer: Writer) => writer.applyIntent.mock.calls.map(([input]) => input as { operation: { edits: unknown[] }; displayedSource?: unknown });
 
 afterEach(() => {
+	cleanup();
 	writers.normal = null;
 	writers.preload = null;
 });
 
 describe("Position encoders under the semantic contract", () => {
+	it.each([
+		{ index: 1, component: "target_x", value: 1.25, hardwareConnected: false },
+		{ index: 2, component: "target_y", value: -2.5, hardwareConnected: false },
+		{ index: 3, component: "target_z", value: 3.75, hardwareConnected: false },
+		{ index: 1, component: "target_x", value: 1.25, hardwareConnected: true },
+		{ index: 2, component: "target_y", value: -2.5, hardwareConnected: true },
+		{ index: 3, component: "target_z", value: 3.75, hardwareConnected: true },
+	])("enters $component=$value metres through the actual numeric pad (hardware $hardwareConnected)", async ({ index, component, value, hardwareConnected }) => {
+		const normal = fakeWriter();
+		writers.normal = normal;
+		const { hook } = await mount("normal", [target(FIXTURE_A), target(FIXTURE_B)]);
+		act(() => hook.result.current.selectPage("Position", 2));
+		const controller = {
+			hardwareConnected, canWriteValues: true,
+			hasProgrammerValue: () => true,
+			releaseParameter: async () => undefined,
+			familyEncoders: hook.result.current,
+		} as unknown as ParameterController;
+		render(<FamilyEncoderSlotSurface controller={controller} index={index} />);
+		if (hardwareConnected) hardware(`encode/${index + 1}`, "press");
+		else fireEvent.click(screen.getByRole("button", { name: new RegExp(`Set Enc ${index + 1}.*value`) }));
+		const dialog = screen.getByRole("dialog");
+		for (const digit of String(Math.abs(value)))
+			fireEvent.click(within(dialog).getByRole("button", { name: digit }));
+		if (value < 0) fireEvent.click(within(dialog).getByRole("button", { name: "−" }));
+		fireEvent.click(within(dialog).getByRole("button", { name: "ENTER" }));
+		await waitFor(() => expect(sent(normal).at(-1)).toMatchObject({
+			operation: { edits: [{ kind: "scalar", component: { kind: component }, operation: { kind: "set", value: { kind: "value", value } } }] },
+		}));
+	});
+
 	it("hardware encode/1 while Target is active adopts the displayed pose with one activate_angles", async () => {
 		const normal = fakeWriter();
 		writers.normal = normal;

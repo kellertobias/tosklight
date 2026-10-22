@@ -899,6 +899,17 @@ test.describe("docs/testing/34-position-operator-controls.md", () => {
 		await expect.poll(() => encoderText(z)).toBe("-0.2m");
 		expect(await encoderText(await encoderNamed(page, "Y"))).toBe("0m");
 
+		// Absolute entry uses the same metres as the readout, never percent or millimetres.
+		await x.getByRole("button", { name: /^Set Enc \d+ · X value$/ }).click();
+		const valuePad = page.getByRole("dialog");
+		for (const key of ["1", ".", "2", "5", "ENTER"])
+			await valuePad.getByRole("button", { name: key, exact: true }).click();
+		await expect.poll(async () => {
+			const target = await groupPosition(api);
+			return target?.kind === "target" ? (target.offset_metres[0] as { value: number }).value : null;
+		}).toBeCloseTo(1.25, 6);
+		await expect.poll(() => encoderText(x)).toBe("1.25m");
+
 		// Pan/Tilt: the resolved angles of both movers (one unpatched), as their real range, From Point.
 		await bench.tick(25);
 		const poses = (await positionReadouts(api, movers)).poses;

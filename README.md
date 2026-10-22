@@ -9,9 +9,9 @@
   full-size desk budget.
 </p>
 
-> [!CAUTION]
-> **ToskLight is not yet a release candidate.** Published builds are available for testing, but
-> the software and its show-file format may still change between versions.
+> [!WARNING]
+> **ToskLight is beta software and has not yet been tested at a show.** Published builds are for
+> evaluation; features and the show-file format may still change between versions.
 
 Industry-standard lighting desks are excellent tools and worth every penny. Smaller productions,
 however, should not have to learn throwaway workflows simply because their budget is smaller.
