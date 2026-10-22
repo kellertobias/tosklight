@@ -70,7 +70,6 @@ export type OperatorPaneType =
 export enum StageView {
 	TwoDimensional = "2d",
 	ThreeDimensional = "3d",
-	Visualization = "3d-viz",
 }
 
 export enum StageRenderQuality {

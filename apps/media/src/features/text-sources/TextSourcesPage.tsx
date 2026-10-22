@@ -52,7 +52,8 @@ export function TextSourcesPage({
 	const aspectRatio = useMainOutputAspectRatio();
 
 	useEffect(() => {
-		if (selectedKey === null && text.data?.[0]) setSelectedKey(key(text.data[0]));
+		if (selectedKey === null && text.data?.[0])
+			setSelectedKey(key(text.data[0]));
 	}, [selectedKey, text.data]);
 
 	useEffect(() => {
@@ -135,7 +136,11 @@ export function TextSourcesPage({
 								name: slot.name,
 								detail: describe(slot),
 								image: {
-									src: textPreviewUrl(slot, aspectRatio, serverUtcOffsetMinutes),
+									src: textPreviewUrl(
+										slot,
+										aspectRatio,
+										serverUtcOffsetMinutes,
+									),
 									alt: `${slot.name} preview`,
 								},
 							}))}
@@ -190,21 +195,7 @@ export function TextSourcesPage({
 										draft={draft}
 										onDraft={(next) => {
 											setDraft(next);
-											editing.saveLive(() =>
-												api.updateText(
-													selected.address.folder,
-													selected.address.file,
-													{
-														requestId: requestId(),
-														name: next.name,
-														enabled: next.enabled,
-														kind: next.kind,
-														style: next.style,
-														...payloadOf(next),
-													},
-												),
-												`${selected.address.folder}/${selected.address.file}`,
-											);
+											saveTextDraft(selected, next, editing);
 										}}
 										onDelete={() =>
 											void editing.save(() =>
@@ -232,6 +223,26 @@ export function TextSourcesPage({
 				}}
 			</ResourceState>
 		</section>
+	);
+}
+
+/** Save an edited slot while retaining the address that owns its live-edit request. */
+function saveTextDraft(
+	slot: TextSlotView,
+	next: TextDraft,
+	editing: ReturnType<typeof useEditing>,
+) {
+	editing.saveLive(
+		() =>
+			api.updateText(slot.address.folder, slot.address.file, {
+				requestId: requestId(),
+				name: next.name,
+				enabled: next.enabled,
+				kind: next.kind,
+				style: next.style,
+				...payloadOf(next),
+			}),
+		`${slot.address.folder}/${slot.address.file}`,
 	);
 }
 
@@ -286,7 +297,9 @@ function TextDetail({
 }) {
 	const [now, setNow] = useState(() => Date.now());
 	// With preview on, the selected text plays alone on the output as it is edited.
-	usePreviewOf({ slot: { folder: slot.address.folder, file: slot.address.file } });
+	usePreviewOf({
+		slot: { folder: slot.address.folder, file: slot.address.file },
+	});
 	useEffect(() => {
 		const interval = window.setInterval(() => setNow(Date.now()), 250);
 		return () => window.clearInterval(interval);
@@ -308,7 +321,8 @@ function TextDetail({
 						className="media-text-preview-words"
 						style={{
 							fontFamily: draft.style.family,
-							fontSize: `${Math.max(1, draft.style.size * 100)}%`,
+							// Text size is a fraction of output height, as in the native rasterizer.
+							fontSize: `${draft.style.size * 100}cqh`,
 							fontWeight: draft.style.bold ? 700 : 400,
 							fontStyle: draft.style.italic ? "italic" : "normal",
 							textAlign: draft.style.alignment as "left" | "center" | "right",

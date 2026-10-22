@@ -2899,7 +2899,7 @@ async function demonstrateBuskingAndPreload(
 		beamFixtureIds: visibleBeamFixtures,
 	});
 	await desk.setDemoAction(
-		"Open the Programming desktop, switch its Stage pane to 3D Viz, and hold the non-uniform blue-and-yellow moving-light look.",
+		"Open the Programming desktop, switch its Stage pane to 3D, and hold the non-uniform blue-and-yellow moving-light look.",
 	);
 	await openDesktop(desk, app, "Programming");
 	const finalStage = await ensureStagePane3d(desk, app);

@@ -1253,8 +1253,15 @@
 	white-space: pre-line;
 }
 
+.media-generated-library-detail .media-preview.is-text .media-preview-picture {
+	container-type: size;
+}
+
 .media-generated-library-detail .media-text-preview-words {
-	font-size: clamp(1.25rem, 2.5vw, 2.25rem);
+	width: 100%;
+	max-width: none;
+	line-height: 1;
+	white-space: pre;
 }
 
 @media (max-width: 900px) {

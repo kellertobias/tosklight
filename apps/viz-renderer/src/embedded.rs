@@ -77,18 +77,10 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
         let Some(embedding) = source.embedding() else {
             return Ok(());
         };
-        let mut moved = false;
         for input in source.take_input() {
             if let Some((fixture, additive)) = state.apply(input) {
                 source.send_picked(fixture, additive);
-            } else {
-                moved = true;
             }
-        }
-        // Only when it changed, and only from here: the camera the desk shows on its encoders is
-        // the one the renderer is actually using, however it came to be there.
-        if moved {
-            source.send_camera(&state.view.camera);
         }
         // What the operator has selected, which the renderer draws and never decides.
         if let Some(fixtures) = source.selection() {
@@ -183,6 +175,11 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::RenderQuality::High => viz_scene::RenderQuality::High,
                 viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
             };
+        }
+        // Publish the initial/framed camera as well as pointer changes, after the pane's picture
+        // settings have resolved its actual view. Encoders must work before the first gesture.
+        if let Some(camera) = state.take_camera_update() {
+            source.send_camera(&camera);
         }
         state.resize_for(&embedding)?;
         benchmark::draw_and_observe(&mut state, epoch, &mut source, &mut heartbeat_clock);
@@ -294,6 +291,7 @@ struct PaneState {
     /// takes it back. A camera that snapped home whenever the desk re-sent its view would be a
     /// camera nobody could aim.
     camera_is_local: bool,
+    reported_camera: Option<viz_scene::Camera>,
     redraw_gate: crate::redraw::RedrawGate,
     /// What the fixture labels were last built from. The pane's loop turns every two
     /// milliseconds, and building the labels raycasts the whole scene once per fixture; doing that
@@ -332,6 +330,7 @@ impl PaneState {
             shared: None,
             surface_service: embedding.surface_service.clone(),
             camera_is_local: false,
+            reported_camera: None,
             following_preload: false,
             redraw_gate: crate::redraw::RedrawGate::default(),
             overlay_inputs: None,
@@ -344,6 +343,16 @@ impl PaneState {
             physics: crate::physics::Physics::with_state_path(physics_state_path),
             lasers: crate::lasers::Lasers::new(crate::lasers::Lasers::directory(None)),
         })
+    }
+
+    /// First report, then only actual changes: polling does not flood the helper channel.
+    fn take_camera_update(&mut self) -> Option<viz_scene::Camera> {
+        let camera = self.view.camera;
+        if self.reported_camera == Some(camera) {
+            return None;
+        }
+        self.reported_camera = Some(camera);
+        Some(camera)
     }
 
     /// Follow the pane the desk's layout reports.
@@ -1003,6 +1012,54 @@ mod tests {
 
     fn aimed() -> Embedding {
         embedding(640.0, 360.0, 1.0)
+    }
+
+    #[test]
+    fn initial_and_framed_camera_feedback_needs_no_pointer_gesture() {
+        let Ok(mut state) = PaneState::new(&aimed()) else {
+            eprintln!("no GPU here; skipping initial camera feedback");
+            return;
+        };
+        assert_eq!(state.take_camera_update(), Some(state.view.camera));
+        assert_eq!(
+            state.take_camera_update(),
+            None,
+            "unchanged frames stay silent"
+        );
+        let mut scene = crate::demo::build_scene();
+        scene.recompute_bounds();
+        drain(
+            vec![ProviderEvent::Snapshot {
+                scene: Box::new(scene),
+                view: None,
+            }],
+            &mut state,
+        );
+        let framed = state.view.camera;
+        assert_eq!(
+            state.take_camera_update(),
+            Some(framed),
+            "scene framing also reaches the encoders"
+        );
+        assert!(
+            !state.camera_is_local,
+            "reading never claims camera ownership"
+        );
+        state.apply(PaneInput::Place {
+            x: None,
+            y: None,
+            z: Some(15.0),
+            pan: None,
+            tilt: None,
+            distance: None,
+        });
+        let placed = state
+            .take_camera_update()
+            .expect("first absolute entry is reported");
+        assert_eq!(placed.position.z, 15.0);
+        assert_eq!(placed.position.x, framed.position.x);
+        assert_eq!(placed.position.y, framed.position.y);
+        assert_eq!(state.take_camera_update(), None);
     }
 
     /// The camera has to end up somewhere an operator would predict. These are the properties that

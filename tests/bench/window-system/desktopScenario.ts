@@ -618,12 +618,7 @@ async function applyPaneConfiguration<T extends PaneType>(
 	if (type === "stage") {
 		await dialog.getByRole("tab", { name: "Stage" }).click();
 		if (options.view) {
-			const name =
-				options.view === StageView.Visualization
-					? "3D Viz"
-					: options.view === StageView.ThreeDimensional
-						? "3D"
-						: "2D";
+			const name = options.view === StageView.ThreeDimensional ? "3D" : "2D";
 			const view = dialog.getByRole("radio", {
 				name,
 				exact: true,

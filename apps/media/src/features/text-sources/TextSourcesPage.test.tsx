@@ -65,6 +65,23 @@ describe("the text sources page", () => {
 		);
 	});
 
+	it("sizes generated text against preview height rather than the interface font", async () => {
+		const text = aClock();
+		text.style.size = 0.12;
+		text.style.alignment = "right";
+		stubServer({ text: [text] });
+		render(<TextSourcesPage />);
+		const preview = await screen.findByRole("figure", {
+			name: "Clock preview",
+		});
+		await waitFor(() =>
+			expect(preview.querySelector(".media-text-preview-words")).toHaveStyle({
+				fontSize: "12cqh",
+				textAlign: "right",
+			}),
+		);
+	});
+
 	it("keeps playback selection on the Playback screen", async () => {
 		const server = stubServer({ text: [aClock()] });
 		render(<TextSourcesPage />);
@@ -243,7 +260,9 @@ describe("the text sources page", () => {
 		);
 		const time = await screen.findByLabelText(/Counts down every day to/u);
 		expect(time).toHaveAttribute("type", "time");
-		expect(screen.queryByLabelText("Length in seconds")).not.toBeInTheDocument();
+		expect(
+			screen.queryByLabelText("Length in seconds"),
+		).not.toBeInTheDocument();
 		await waitFor(() =>
 			expect(server.text[0]).toMatchObject({
 				kind: "countdown-time-of-day",
@@ -388,7 +407,11 @@ describe("text preview formatting", () => {
 		const draft = emptyDraft();
 		draft.kind = "countdown-time-of-day";
 		draft.timeOfDay = "21:00";
-		draft.format = { ...aTextFormat(), afterZero: "count-up", utcOffsetMinutes: null };
+		draft.format = {
+			...aTextFormat(),
+			afterZero: "count-up",
+			utcOffsetMinutes: null,
+		};
 		const at = (hour: number) => Date.UTC(2026, 8, 24, hour);
 		expect(formatDraftPreview(draft, at(8))).toBe("13:00:00");
 		expect(formatDraftPreview(draft, at(22))).toBe("01:00:00");

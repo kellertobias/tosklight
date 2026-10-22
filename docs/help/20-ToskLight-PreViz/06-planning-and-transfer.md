@@ -289,7 +289,8 @@ geometry as CAD. **Mounting hardware** in a page's settings hides fixture clamps
 Top plans place the audience at the bottom; elevations look from their named direction. The
 viewport's orientation mark follows a rotated plan. Lens direction indicators show the fixtures'
 installed aim. Objects following a Control **3D Point** remain at their authored rig position in
-CAD and are labelled with that reference.
+CAD. **Settings > General > Show fixture IDs** also shows their reference labels; select an
+object to read its full reference in Placement Info without covering the plan.
 
 Use the viewport's **From / To** cut planes to omit obstructing scenery. Top views cut by height,
 elevations by depth. Empty limits are unrestricted; **Show all** clears the cut. Objects wholly

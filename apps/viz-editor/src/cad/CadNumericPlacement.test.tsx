@@ -157,3 +157,22 @@ it("multi-selection Enter spreads poses in selected order as one history step", 
 	expect(mocks.numeric).toHaveBeenCalledTimes(1);
 	expect(mocks.patch).not.toHaveBeenCalled();
 });
+
+it("keeps the selected element's point reference visible in Placement Info", async () => {
+	mocks.snapshot.mockResolvedValue({
+		fixtures: [fixture()],
+		profileRevisions: [],
+	});
+	render(
+		<CadInfoPanel
+			entity={{ ...entity, positionReference: "950 · Rear flybar" }}
+			selectionCount={1}
+			sceneRevision={9}
+			tab="placement"
+			onError={vi.fn()}
+		/>,
+	);
+	expect(await screen.findByRole("note")).toHaveTextContent(
+		"Follows 3D Point 950 · Rear flybar",
+	);
+});

@@ -81,7 +81,7 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 			height: 18,
 		});
 		await stage.configure({
-			view: StageView.Visualization,
+			view: StageView.ThreeDimensional,
 			followPreload: false,
 		});
 		await desktop.apply();
@@ -90,7 +90,7 @@ test("PLAN76-LARGE-001 @ui @benchmark › keeps Fixture Sheet, Programmer, and o
 		await expect(fixtures.root().locator(".fixture-window")).toBeVisible();
 		await desktop.expectStagePane(stage, {
 			lane: "live",
-			view: StageView.Visualization,
+			view: StageView.ThreeDimensional,
 			followPreload: false,
 			nativeRendererAvailable: false,
 		});

@@ -187,6 +187,7 @@ export function StageVizCameraControls({
 							display={display}
 							minimum={encoder.minimum}
 							maximum={encoder.maximum}
+							inputScale={1}
 							slowStep={encoder.fineStep}
 							fastStep={encoder.coarseStep}
 							disabled={camera == null}

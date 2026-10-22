@@ -35,6 +35,35 @@ describe("StageVizCameraControls desk encoders", () => {
 		expect(bridge.placeStagePaneCamera).toHaveBeenCalledWith({ x: 1.1 });
 	});
 
+	it("accepts camera positions in the same metres shown on the encoder", async () => {
+		render(<StageVizCameraControls hardwareConnected={false} />);
+		await screen.findByText("3.0m");
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 3 · Z Pos value" }),
+		);
+		expect(
+			screen.getByRole("textbox", { name: "Enc 3 · Z Pos value" }),
+		).toHaveTextContent("3");
+		for (const key of ["1", "5", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		expect(bridge.placeStagePaneCamera).toHaveBeenCalledWith({ z: 15 });
+	});
+
+	it("accepts camera angles in the same degrees shown on the encoder", async () => {
+		render(<StageVizCameraControls hardwareConnected={false} />);
+		await screen.findByText("3.0m");
+		fireEvent.click(screen.getByRole("button", { name: "Direction" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Set Enc 1 · Pan value" }),
+		);
+		expect(
+			screen.getByRole("textbox", { name: "Enc 1 · Pan value" }),
+		).toHaveTextContent("4");
+		for (const key of ["4", "5", "ENTER"])
+			fireEvent.click(screen.getByRole("button", { name: key }));
+		expect(bridge.placeStagePaneCamera).toHaveBeenCalledWith({ pan: 45 });
+	});
+
 	it("routes attached encoder fine and coarse turns to the renderer camera", async () => {
 		render(<StageVizCameraControls hardwareConnected />);
 		await screen.findByRole("button", { name: "Encoder 1: X Pos, 1.0m" });
