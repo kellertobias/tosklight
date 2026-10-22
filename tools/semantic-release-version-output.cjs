@@ -1,3 +1,4 @@
+const { inspectReleaseEpoch, verifyEpochVersion } = require("./release-epoch.cjs");
 const { appendFileSync } = require("node:fs");
 const { execFileSync } = require("node:child_process");
 
@@ -25,6 +26,7 @@ function verifyNewestMainCommit() {
 
 async function verifyRelease(_pluginConfig, context) {
   const { nextRelease } = context;
+  verifyEpochVersion(nextRelease.version, inspectReleaseEpoch(context.cwd));
   const expected = process.env.LIGHT_EXPECTED_RELEASE_VERSION;
   if (expected && expected !== nextRelease.version) {
     throw new Error(

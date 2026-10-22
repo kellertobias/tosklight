@@ -403,6 +403,8 @@ test("the one-off rebuild selects exactly 1.0.0 before inspecting historical tag
 	const metadata = workflow.jobs.metadata;
 	const select = byName(metadata, "Select the build and release version");
 	assert.equal(select.env.REBUILD_VERSION, "${{ inputs.rebuild_version }}");
+	assert.match(select.run, /node tools\/release-epoch\.cjs build-version/u);
+	assert.doesNotMatch(select.run, /git tag --list/u);
 	fs.mkdirSync(artifactPaths.tmp, { recursive: true });
 	const scratch = fs.mkdtempSync(
 		path.join(artifactPaths.tmp, "one-off-release-version-"),
@@ -417,9 +419,10 @@ test("the one-off rebuild selects exactly 1.0.0 before inspecting historical tag
 		);
 		fs.writeFileSync(
 			path.join(bin, "npm"),
-			'#!/bin/bash\nprintf "version=2.6.3\\nrelease=true\\n" >> "$LIGHT_RELEASE_OUTPUT"\n',
+			'#!/bin/bash\nprintf "version=1.0.0\\nrelease=true\\n" >> "$LIGHT_RELEASE_OUTPUT"\n',
 		);
-		for (const name of ["git", "npm"])
+		fs.writeFileSync(path.join(bin, "node"), '#!/bin/bash\nprintf "1.0.0\\n"\n');
+		for (const name of ["git", "npm", "node"])
 			fs.chmodSync(path.join(bin, name), 0o755);
 		const run = (event, ref, version) => {
 			const output = path.join(scratch, "outputs");
@@ -458,11 +461,11 @@ test("the one-off rebuild selects exactly 1.0.0 before inspecting historical tag
 		assert.equal(normal.status, 0, normal.stderr);
 		assert.equal(
 			normal.outputs,
-			"version=2.6.2\nrelease=false\nversion=2.6.3\nrelease=true\n",
+			"version=1.0.0\nrelease=false\nversion=1.0.0\nrelease=true\n",
 		);
 		const checks = run("workflow_dispatch", "refs/heads/main", "");
 		assert.equal(checks.status, 0, checks.stderr);
-		assert.equal(checks.outputs, "version=2.6.2\nrelease=false\n");
+		assert.equal(checks.outputs, "version=1.0.0\nrelease=false\n");
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });
 	}

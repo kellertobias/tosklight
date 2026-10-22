@@ -90,6 +90,7 @@ architecture(){
   architecture_check "Documentation publication concurrency" node --test "$ROOT/tools/documentation-workflow.test.mjs"
   architecture_check "Documentation capture transfer" python3 "$ROOT/tools/manual-captures.test.py"
   architecture_check "Public site legal pages" node --test "$ROOT/tools/site-legal/site-legal.test.mjs"
+  architecture_check "Release version epoch" node --test "$ROOT/tools/release-epoch.test.mjs"
   architecture_check "Release performance runner" node --test "$ROOT/tools/run-release-performance.test.mjs"
   architecture_check "Desktop performance diagnostics" node --test "$ROOT/tools/run-desktop-performance.test.mjs"
   architecture_check "Sustained output benchmark" node --test "$ROOT/tools/run-sustained-output-benchmark.test.mjs"

@@ -11,6 +11,7 @@ import { artifactPaths } from "./artifact-paths.mjs";
 const require = createRequire(import.meta.url);
 const configuration = require("../release.config.cjs");
 const { previewPlugins } = require("./semantic-release-plugins.cjs");
+const { inspectReleaseEpoch } = require("./release-epoch.cjs");
 const dryRun = process.argv.includes("--dry-run");
 const bootstrapTag = "v0.0.0";
 let disposableRemote;
@@ -37,6 +38,7 @@ function deleteBootstrap() {
 }
 
 try {
+  inspectReleaseEpoch();
   if (!hasSemanticTag()) {
     const rootCommit = git(["rev-list", "--max-parents=0", "HEAD"]).split("\n")[0];
     git(["tag", bootstrapTag, rootCommit]);

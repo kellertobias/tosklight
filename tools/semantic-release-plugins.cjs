@@ -1,5 +1,5 @@
 const commitAnalyzer = [
-  "@semantic-release/commit-analyzer",
+  "./tools/semantic-release-epoch-analyzer.cjs",
   {
     preset: "conventionalcommits",
     releaseRules: [
