@@ -1380,13 +1380,10 @@
 
 /* Clip ending has its own persistent grip; it extends duration without scaling Cues. */
 .lane-cue_list .timecode-timeline-item.item-clip { overflow: visible; }
-.timecode-cue-point.timecode-clip-end-grab { z-index: 13; color: #d0effa; }
-.timecode-cue-point.timecode-clip-end-grab > span { top: 10px; left: 15px; width: 14px; height: 24px; border: 1px solid #a3d7e8; border-radius: 3px; background: #244958; box-shadow: 0 0 0 2px #101820; }
-.timecode-cue-point.timecode-clip-end-grab > span::before, .timecode-cue-point.timecode-clip-end-grab > span::after { content: ""; position: absolute; top: 4px; width: 2px; height: 14px; background: #b9e5f4; }
-.timecode-cue-point.timecode-clip-end-grab > span::before { left: 3px; }
-.timecode-cue-point.timecode-clip-end-grab > span::after { right: 3px; }
-.timecode-cue-point.timecode-clip-end-grab::after { content: ""; position: absolute; left: 43px; top: 0; height: 44px; border-left: 2px solid #8bcfe7; pointer-events: none; }
+.timecode-cue-point.timecode-clip-end-grab { z-index: 13; color: #ffdb84; }
+.timecode-cue-point.timecode-clip-end-grab::after { content: ""; position: absolute; left: 43px; top: 0; height: 44px; border-left: 2px solid #ffdb84; pointer-events: none; }
 .timecode-cue-point.timecode-clip-end-grab.expanded::after { top: -88px; height: 132px; }
-.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-caption { top: 28px; bottom: auto; left: 10px; transform: translateX(-100%); color: #d0effa; }
+.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-caption { top: 28px; bottom: auto; left: 10px; transform: translateX(-100%); color: #ffdb84; }
 
 .timecode-cue-point.timecode-clip-end-grab[aria-disabled="true"] { pointer-events: none; }
+.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-leader line { stroke: #ffdb84; }
