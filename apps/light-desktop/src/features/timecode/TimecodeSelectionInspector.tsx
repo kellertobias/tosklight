@@ -1,12 +1,5 @@
-import { useState } from "react";
-import {
-	Button,
-	CheckboxField,
-	NumberField,
-	SelectField,
-	ModalLayer,
-	ModalTitleBar,
-} from "@tosklight/ui";
+import type { Ref } from "react";
+import { Button, CheckboxField, NumberField, SelectField } from "@tosklight/ui";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	copyTimelineItem,
@@ -28,6 +21,39 @@ interface SelectionInspectorProps {
 	cueLists: readonly TimecodeCueListOption[];
 	fps: number;
 	onCommit(definition: TimecodeDefinition): void;
+}
+
+/** Selection details occupy the right edge without consuming lane height. */
+export function SelectionSidebar(
+	props: Parameters<typeof SelectionProperties>[0] & {
+		beforeClose(): void;
+		inspectorRef: Ref<HTMLDivElement>;
+	},
+) {
+	if (!props.selection) return null;
+	const select = (next: TimecodeEditorSelection | null) => {
+		if (!next) props.beforeClose();
+		props.onSelect(next);
+	};
+	return (
+		<aside
+			className="timecode-editor-inspector"
+			aria-label="Selection settings"
+		>
+			<div className="timecode-editor-inspector-heading">
+				<strong>Selection</strong>
+				<Button
+					size="compact"
+					aria-label="Close selection settings"
+					onClick={() => select(null)}
+				>
+					Close
+				</Button>
+			</div>
+			<div ref={props.inspectorRef} />
+			<SelectionProperties {...props} onSelect={select} />
+		</aside>
+	);
 }
 
 export function SelectionProperties(
@@ -70,7 +96,7 @@ export function SelectionProperties(
 	return (
 		<>
 			{selection.kind === "clip" ? (
-				<ClipSettingsButton key={selection.itemId} {...props} />
+				<SelectedClipInspector key={selection.itemId} {...props} />
 			) : selection.kind !== "marker" ? (
 				<SelectionInspector {...props} />
 			) : null}
@@ -111,31 +137,6 @@ export function SelectionProperties(
 				>
 					Delete {selection.kind}
 				</Button>
-			)}
-		</>
-	);
-}
-
-function ClipSettingsButton(props: SelectionInspectorProps) {
-	const [open, setOpen] = useState(false);
-	return (
-		<>
-			<Button size="compact" onClick={() => setOpen(true)}>
-				Clip settings
-			</Button>
-			{open && (
-				<ModalLayer
-					ariaLabel="Clip settings"
-					dialogClassName="timecode-selection-settings-dialog"
-					onClose={() => setOpen(false)}
-				>
-					<ModalTitleBar
-						title="Clip settings"
-						onClose={() => setOpen(false)}
-						closeLabel="Close clip settings"
-					/>
-					<SelectedClipInspector {...props} />
-				</ModalLayer>
 			)}
 		</>
 	);

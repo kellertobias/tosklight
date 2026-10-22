@@ -698,77 +698,7 @@
 	background: rgb(71 20 24 / 96%);
 	color: #ffb5af;
 }
-.timecode-cue-start-marker {
-	position: absolute;
-	z-index: 4;
-	top: 50%;
-	bottom: 0;
-	width: 2px;
-	border-left: 2px solid #fff;
-	color: #fff;
-	font-size: 0.62rem;
-	font-variant-numeric: tabular-nums;
-	line-height: 1;
-	pointer-events: none;
-}
-.timecode-cue-start-marker::before {
-	position: absolute;
-	top: -0.8rem;
-	left: 2px;
-	padding: 0.08rem 0.16rem;
-	background: rgb(17 18 26 / 88%);
-	content: attr(title);
-	white-space: nowrap;
-}
-/* A Cue occupies the lower two thirds of the clip, under the drag handle, as two stacked bands:
-   the out timing above the in timing. Each band is a muted delay block followed by its fade. */
-.timecode-cue-content-range,
-.timecode-cue-fade-range,
-.timecode-cue-delay-range {
-	position: absolute;
-	z-index: 3;
-	height: calc(((100% - var(--timecode-clip-handle-height)) / 2) - 4px);
-	border-radius: 2px;
-	pointer-events: none;
-}
-.timecode-cue-fade-range {
-	min-width: 2px;
-}
-.timecode-cue-fade-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	background: #f39a4a;
-}
-.timecode-cue-fade-range.in {
-	bottom: 2px;
-	background: #58d4ef;
-}
-/* A delay is a wait, so it reads as a hollow lead-in to the solid fade block it precedes. */
-.timecode-cue-delay-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	border: 1px dashed rgb(243 154 74 / 62%);
-	background: rgb(243 154 74 / 14%);
-}
-.timecode-cue-delay-range.in {
-	bottom: 2px;
-	border: 1px dashed rgb(88 212 239 / 62%);
-	background: rgb(88 212 239 / 14%);
-}
-
-/* Content is the Cue simply being held, so it reads as a flat rail joining its own timing to the
-   next Cue's rather than as a block competing with them. */
-.timecode-cue-content-range {
-	z-index: 2;
-}
-.timecode-cue-content-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	background: rgb(243 154 74 / 22%);
-}
-.timecode-cue-content-range.in {
-	bottom: 2px;
-	background: rgb(88 212 239 / 22%);
-}
-
-/* The first third of a Cuelist clip drags the whole clip; its edges scale it. */
+/* The clip header moves the complete clip; its edges scale it. */
 .timecode-clip-handle {
 	position: absolute;
 	z-index: 6;
@@ -805,80 +735,6 @@
 	background: rgb(0 0 0 / 38%);
 	font-size: 0.62rem;
 	font-variant-numeric: tabular-nums;
-}
-.timecode-cue-fade-handle {
-	position: absolute;
-	top: 50%;
-	width: 44px;
-	height: 44px;
-	transform: translate(-50%, -50%);
-	cursor: ew-resize;
-	touch-action: none;
-	pointer-events: auto;
-}
-.timecode-cue-fade-handle::after {
-	position: absolute;
-	top: 12px;
-	bottom: 12px;
-	left: 21px;
-	width: 3px;
-	border-radius: 2px;
-	background: #fff;
-	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%);
-	content: "";
-}
-.timecode-cue-fade-handle.start {
-	left: 0;
-}
-.timecode-cue-fade-handle.end {
-	left: 100%;
-}
-.timecode-cue-fade-handle:focus-visible::after {
-	outline: 2px solid #fff;
-	outline-offset: 2px;
-}
-.timecode-cue-transition {
-	position: absolute;
-	z-index: 5;
-	top: 50%;
-	width: 44px;
-	height: 44px;
-	transform: translate(-50%, -50%);
-	cursor: ew-resize;
-	touch-action: none;
-	pointer-events: auto;
-}
-.timecode-cue-transition::after {
-	position: absolute;
-	top: 8px;
-	bottom: 8px;
-	left: 20px;
-	width: 4px;
-	border-radius: 2px;
-	background: #ffd166;
-	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%);
-	content: "";
-}
-.timecode-cue-transition.default::after {
-	background: transparent;
-	box-shadow:
-		inset 0 0 0 1px #ffd166,
-		0 0 0 1px rgb(0 0 0 / 65%);
-}
-.timecode-cue-transition:focus-visible::after {
-	outline: 2px solid #fff;
-	outline-offset: 2px;
-}
-.timecode-cue-transition[aria-disabled="true"] {
-	cursor: default;
-	opacity: 0.5;
-}
-.timecode-cue-timing.unsupported .timecode-cue-start-marker {
-	border-color: #ff6a62;
-	color: #ff6a62;
-}
-.timecode-cue-timing.unsupported .timecode-cue-fade-range {
-	opacity: 0.3;
 }
 .timecode-cue-clip-diagnostic,
 .timecode-cue-diagnostic {
@@ -1204,3 +1060,258 @@
 	flex: 1 1 15rem;
 	min-width: 15rem;
 }
+
+/* Cue envelopes retain one time axis as the inspector opens. The selected lane grows
+   downwards; only the selected Cue exposes its timing points. */
+.timecode-editor-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.timecode-editor-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.timecode-editor-inspector {
+	flex: 0 0 300px;
+	overflow: auto;
+	border-left: 1px solid #434754;
+	padding: 12px;
+	background: #171b24;
+}
+.timecode-editor-inspector-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.timecode-editor-inspector h3 {
+	font-size: 0.9rem;
+	margin: 8px 0 14px;
+}
+.timecode-editor-inspector label {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	font-size: 0.75rem;
+	margin-bottom: 9px;
+}
+.timecode-editor-inspector input {
+	width: 100%;
+	min-height: 36px;
+	padding: 6px 8px;
+	border: 1px solid #555c6d;
+	border-radius: 4px;
+	background: #10141d;
+	color: #eef2ff;
+	font-variant-numeric: tabular-nums;
+}
+.timecode-editor-inspector p {
+	font-size: 0.73rem;
+	line-height: 1.45;
+	color: #b1bacb;
+	margin: 7px 0 13px;
+}
+.timecode-editor-inspector fieldset {
+	border: 1px solid #414b5c;
+	border-radius: 5px;
+	margin: 12px 0;
+	padding: 9px;
+}
+.timecode-editor-inspector legend {
+	font-size: 0.74rem;
+	color: #dce7fa;
+}
+.timecode-editor-lane.lane-cue_list {
+	height: 148px;
+	min-height: 148px;
+}
+.timecode-editor-lane.cue-expanded {
+	height: 340px;
+	min-height: 340px;
+}
+.timecode-timeline-item.item-clip {
+	--timecode-clip-handle-height: 24px;
+	background: #14202b;
+	text-align: left;
+}
+.timecode-cue-clip-contents {
+	overflow: hidden;
+}
+.timecode-cue-close {
+	margin-top: 10px;
+}
+.timecode-cue-envelope {
+	position: absolute;
+	top: 30px;
+	left: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+.timecode-cue-envelope polygon {
+	fill: hsl(var(--cue-hue) 40% 37% / 42%);
+	stroke: hsl(var(--cue-hue) 55% 64% / 80%);
+	stroke-width: 1.5;
+}
+.timecode-cue-timing.selected polygon {
+	fill: hsl(var(--cue-hue) 52% 47% / 55%);
+	stroke: #bce8ff;
+	stroke-width: 2;
+}
+.timecode-cue-envelope-hit {
+	position: absolute;
+	top: 30px;
+	height: 76px;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.timecode-cue-envelope-hit:focus-visible {
+	outline: 2px solid #fff;
+	outline-offset: -3px;
+}
+.timecode-cue-name {
+	position: absolute;
+	top: 106px;
+	z-index: 5;
+	display: block;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	min-height: 30px;
+	padding: 4px 8px;
+	border: 0;
+	border-radius: 3px;
+	background: #0b111d;
+	color: #dce8f5;
+	font-size: 0.75rem;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.timecode-cue-name[aria-pressed="true"] {
+	background: #30506b;
+	color: white;
+}
+.timecode-cue-name b {
+	margin-right: 4px;
+	color: #8fd8f1;
+}
+.timecode-cue-end-marker {
+	position: absolute;
+	top: 29px;
+	transform: translateX(-100%);
+	z-index: 4;
+	padding: 3px 6px;
+	font-size: 0.65rem;
+	background: #151b25;
+	color: #c0cad6;
+	white-space: nowrap;
+}
+.timecode-cue-edit-points {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+.timecode-cue-trigger-label {
+	position: absolute;
+	top: 141px;
+	max-width: 240px;
+	padding: 2px 5px;
+	white-space: nowrap;
+	background: #2b2416;
+	color: #ffdb84;
+	font-size: 0.69rem;
+}
+.timecode-cue-point {
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	transform: translate(-50%, -50%);
+	z-index: 9;
+	pointer-events: auto;
+	touch-action: none;
+	cursor: ew-resize;
+}
+.timecode-cue-point > span {
+	position: absolute;
+	width: 12px;
+	height: 12px;
+	top: 16px;
+	left: 16px;
+	border: 2px solid #dcf8ff;
+	border-radius: 50%;
+	background: #2b85a1;
+	box-shadow: 0 0 0 2px #101820;
+}
+.timecode-cue-point.out > span {
+	background: #aa602c;
+	border-color: #ffd7a6;
+}
+.timecode-cue-point.trigger > span {
+	background: #d9a62c;
+	border-color: #ffdf83;
+	border-radius: 2px;
+	transform: rotate(45deg);
+}
+.timecode-cue-point[aria-disabled="true"] {
+	opacity: 0.45;
+	cursor: default;
+}
+.timecode-cue-point:focus-visible {
+	outline: 2px solid #fff;
+	border-radius: 5px;
+}
+.timecode-cue-edit-rail {
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 58px;
+	border-top: 1px solid #3b4c5b;
+}
+.timecode-cue-edit-rail.in {
+	top: 190px;
+}
+.timecode-cue-edit-rail.out {
+	top: 264px;
+}
+.timecode-cue-edit-rail small {
+	position: sticky;
+	left: 6px;
+	top: 2px;
+	font-size: 0.65rem;
+	color: #a9dfee;
+}
+.timecode-cue-edit-rail.out small {
+	color: #edbb88;
+}
+.timecode-cue-edit-line {
+	position: absolute;
+	top: 24px;
+	height: 2px;
+	background: #78c4da;
+}
+.timecode-cue-edit-rail.out .timecode-cue-edit-line {
+	background: #d49c65;
+}
+.timecode-cue-edit-rail.reference {
+	border-top-style: dashed;
+	background: #57402b22;
+}
+
+@media (max-width: 700px) {
+	.timecode-editor-inspector {
+		flex-basis: 230px;
+	}
+}
+
+.timecode-cue-edit-rail.reference { overflow-x: auto; overflow-y: hidden; pointer-events: auto; }
+.timecode-cue-reference-axis { display: block; position: relative; height: 58px; }
+.timecode-editor-lane.cue-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
+.timecode-editor-lane-label .timecode-cue-close { width: calc(100% - 16px); height: 36px; min-height: 36px; margin: 0 8px; align-self: center; }

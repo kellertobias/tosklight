@@ -191,6 +191,52 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.getByTitle(/Audio · 42%/)).toBeTruthy();
 	});
 
+	it("preserves scale and left frame through inspector resize and explicitly refits", () => {
+		let viewportWidth = 720;
+		let notify: (() => void) | undefined;
+		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains("timecode-timeline-scroll") ? viewportWidth : this.classList.contains("timecode-editor-body") ? 720 : 0;
+		});
+		vi.stubGlobal("ResizeObserver", class {
+			constructor(callback: () => void) { notify = callback; }
+			observe() {} disconnect() {}
+		});
+		try {
+			render(<><TimecodeTimelineEditor definition={definition} frame={44} fps={44} cueLists={[]} audioPlayers={[]}
+				onScrub={vi.fn()} onCommit={vi.fn()} onPreview={vi.fn()} onBeginGesture={vi.fn()} onEndGesture={vi.fn()} />
+				<TimecodeEncoderProbe /></>);
+			const viewport = screen.getByLabelText("Timecode timeline viewport");
+			const canvas = viewport.querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+			fireEvent.click(screen.getByRole("button", { name: "Set timeline zone" }));
+			const scale = Number(canvas.dataset.pixelsPerFrame);
+			viewport.scrollLeft = 400;
+			fireEvent.scroll(viewport);
+			fireEvent.click(screen.getByRole("button", { name: /Audio.*audio volume/i }));
+			expect(screen.getByLabelText("Selection settings")).toBeInTheDocument();
+			viewportWidth = 400;
+			act(() => notify?.());
+			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
+			expect(viewport.scrollLeft).toBe(400);
+			// Closing while scrolled to the right edge retains the same time origin.
+			const naturalWidth = canvas.style.width;
+			viewport.scrollLeft = 850;
+			fireEvent.scroll(viewport);
+			expect(canvas.style.width).toBe(naturalWidth);
+			fireEvent.click(screen.getByRole("button", { name: "Close selection settings" }));
+			// Extent is reserved before ResizeObserver can notify an expanded viewport.
+			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + 720);
+			viewportWidth = 720;
+			act(() => notify?.());
+			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
+			expect(viewport.scrollLeft).toBe(850);
+			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + viewportWidth);
+			fireEvent.click(screen.getByRole("button", { name: "Fit timeline" }));
+			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
+			expect(viewport.scrollLeft).toBe(0);
+			expect(canvas.style.width).toBe("720px");
+		} finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
+	});
+
 	it("reduces overview lanes to a one-pixel floor as lane density grows", () => {
 		const denseDefinition: TimecodeDefinition = {
 			...definition,
@@ -897,18 +943,7 @@ describe("TimecodeTimelineEditor", () => {
 			screen.getByRole("button", { name: "Add clip at 00:00:01.00" }),
 		);
 		expect(screen.getByTitle(/Audio Player 201 · 000\.000/)).toBeTruthy();
-		expect(screen.queryByLabelText("Audio Folder")).toBeNull();
-		fireEvent.click(
-			within(
-				screen.getByRole("group", {
-					name: "Selected lane and keyframe actions",
-				}),
-			).getByRole("button", { name: "Clip settings" }),
-		);
 		expect(screen.getByLabelText("Audio Folder")).toBeTruthy();
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close clip settings" }),
-		);
 		expect(
 			screen.queryByRole("button", { name: "Delete Keyframe" }),
 		).toBeNull();
@@ -1154,17 +1189,20 @@ describe("TimecodeTimelineEditor", () => {
 				onSaveCueList={onSaveCueList}
 			/>,
 		);
-		expect(view.getByTitle("Cue 1 start · 00:00:01.00")).toBeTruthy();
-		expect(view.getByTitle("Cue 2 start · 00:00:03.00")).toBeTruthy();
-		expect(view.getByTitle("Cue 1 In fade")).toBeTruthy();
-		expect(view.getByTitle("Cue 1 Out fade")).toBeTruthy();
-		// Each Cue is two bands: the out timing above the in timing, each a delay then a fade.
-		expect(view.getByTitle("Cue 1 In delay")).toBeTruthy();
-		expect(view.getByTitle("Cue 1 Out delay")).toBeTruthy();
-		const bands = view.container.querySelectorAll(
-			".timecode-cue-delay-range, .timecode-cue-fade-range",
-		);
-		expect(bands.length).toBeGreaterThanOrEqual(4);
+		expect(view.getByRole("button", { name: "Edit Cue 1 First" })).toBeTruthy();
+		expect(view.getByRole("button", { name: "Edit Cue 2 Second" })).toBeTruthy();
+		expect(view.queryByRole("slider", { name: "Cue 1 In delay" })).toBeNull();
+		fireEvent.click(view.getByRole("button", { name: "Edit Cue 1 First" }));
+		expect(view.getByRole("slider", { name: "Cue 1 Trigger" })).toBeTruthy();
+		expect(view.getByRole("slider", { name: "Cue 1 In delay" })).toBeTruthy();
+		expect(view.getByRole("slider", { name: "Cue 1 Out fade" })).toBeTruthy();
+		expect(view.getByRole("button", { name: "Close cue editor" })).toBeTruthy();
+		fireEvent.click(view.getByRole("button", { name: "Edit Cue 2 Second" }));
+		expect(view.queryByRole("slider", { name: "Cue 1 In delay" })).toBeNull();
+		expect(view.getByRole("slider", { name: "Cue 2 In delay" })).toBeTruthy();
+		fireEvent.click(view.getByRole("button", { name: "Close cue editor" }));
+		expect(view.queryByRole("slider", { name: "Cue 2 In delay" })).toBeNull();
+		fireEvent.click(view.getByRole("button", { name: "Edit Cue 1 First" }));
 		// A Cuelist clip carries its own drag handle with the Cuelist identity in it.
 		const clipHandle = view.container.querySelector(".timecode-clip-handle");
 		expect(clipHandle).toBeTruthy();
@@ -1405,16 +1443,13 @@ describe("Timecode selection properties", () => {
 			within(strip).getByRole("button", { name: "Next Keyframe" }),
 		).toBeTruthy();
 		expect(
-			within(strip).getByRole("button", { name: "Copy clip" }),
+			within(screen.getByLabelText("Selection settings")).getByRole("button", { name: "Copy clip" }),
 		).toBeTruthy();
 		expect(
 			screen.queryByRole("group", {
 				name: "Selected timeline item properties",
 			}),
 		).toBeNull();
-		fireEvent.click(
-			within(strip).getByRole("button", { name: "Clip settings" }),
-		);
 		fireEvent.click(screen.getByRole("button", { name: "Start Cue" }));
 		expect(screen.queryByRole("option", { name: "3 · Third" })).toBeNull();
 		fireEvent.click(screen.getByRole("option", { name: "1 · First" }));
@@ -1423,9 +1458,6 @@ describe("Timecode selection properties", () => {
 		expect(
 			commits.mock.lastCall?.[0].lanes[0].content.clips[0].start_behavior,
 		).toBe("cue");
-		fireEvent.click(
-			screen.getByRole("button", { name: "Close clip settings" }),
-		);
 		fireEvent.click(screen.getByRole("button", { name: "Copy clip" }));
 		expect(commits.mock.lastCall?.[0].lanes[0].content.clips).toHaveLength(2);
 		fireEvent.click(screen.getByRole("button", { name: "Delete clip" }));
@@ -1506,7 +1538,6 @@ describe("Timecode selection properties", () => {
 				},
 			],
 		});
-		fireEvent.click(screen.getByRole("button", { name: "Clip settings" }));
 		fireEvent.change(screen.getByLabelText("End frame"), {
 			target: { value: "50" },
 		});

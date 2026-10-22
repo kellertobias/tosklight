@@ -1,6 +1,11 @@
+import { mergeCueTimingFields } from "./mergeCueTimingFields";
+import { CueTimingInspector } from "./TimecodeCueTimingInspector";
+import { CueTimingPoints } from "./TimecodeCueTimingPoints";
+import { CueEnvelope } from "./TimecodeCueEnvelope";
 import { formatErrorDetails } from "@tosklight/ui";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { CueList } from "../../api/types";
 import type {
 	TimecodeCueListClip,
@@ -13,11 +18,16 @@ import {
 	type CueFadeKind,
 	cueClipTimingRows,
 	cueWithDraggedFade,
-	TIMECODE_FPS,
+	cueFadeEditFrameBounds,
+	cueTransitionFrameBounds,
 } from "./cueClipTiming";
-import { formatFrame, type TimecodeCueListOption } from "./timecodeEditorShared";
+import type { TimecodeCueListOption } from "./timecodeEditorShared";
 
-export function CueListClipStatus({ status }: { status: TimecodeCueListClipStatus }) {
+export function CueListClipStatus({
+	status,
+}: {
+	status: TimecodeCueListClipStatus;
+}) {
 	const label =
 		status.state === "active"
 			? "Executing"
@@ -48,125 +58,149 @@ interface CueFadeDrag {
 	edge: CueFadeEdge;
 	body: CueList;
 	next: CueList | null;
-	error: string;
 }
 
-/// Clamps a fade handle inside its legal range: a fade cannot start before its Cue,
-/// cross its own opposite edge, or leave the clip.
-function clampedFadeFrame(
-	drag: CueFadeDrag,
+interface CueFadeEditorOptions {
+	cueList: TimecodeCueListOption & { body: CueList };
+	clip: TimecodeCueListClip;
+	pixelsPerFrame: number;
+	timingDefaults: CueClipTimingDefaults;
+	onSaveCueList?(id: string, body: CueList): Promise<CueList>;
+	onError?(message: string): void;
+}
+
+function changedCueTiming(
+	body: CueList,
+	row: CueClipTimingRow,
 	clip: TimecodeCueListClip,
-	proposed: number,
-): number {
-	const range = drag.kind === "in" ? drag.row.inFade : drag.row.outFade;
-	const lower =
-		drag.edge === "end"
-			? Math.max(drag.row.startFrame, range.startFrame)
-			: drag.row.startFrame;
-	const upper =
-		drag.edge === "start"
-			? Math.min(clip.end_frame, range.endFrame)
-			: clip.end_frame;
-	return Math.max(lower, Math.min(upper, proposed));
+	timingDefaults: CueClipTimingDefaults,
+	kind: CueFadeKind,
+	edge: CueFadeEdge,
+	frame: number,
+): CueList {
+	const cue = body.cues.find((candidate) => candidate.id === row.cue.id);
+	if (!cue) throw new Error("The Cue is no longer available.");
+	const bounds = cueFadeEditFrameBounds(
+		clip,
+		body,
+		timingDefaults,
+		row,
+		kind,
+		edge,
+	);
+	if (!bounds) {
+		throw new Error(
+			"This timing point cannot move without changing Cue order.",
+		);
+	}
+	const target = Math.max(
+		bounds.minimum,
+		Math.min(bounds.maximum, Math.round(frame)),
+	);
+	const result = cueWithDraggedFade(cue, row, clip, kind, edge, target);
+	if (!result.cue) {
+		throw new Error(result.error ?? "Cue timing is invalid.");
+	}
+	return {
+		...body,
+		cues: body.cues.map((value) => (value.id === cue.id ? result.cue! : value)),
+	};
 }
 
-/// Owns the pointer gesture that edits Cue fade timing inside a clip. The preview
-/// Cuelist is local until the pointer is released and the desk accepts the save.
 function useCueFadeDrag({
 	cueList,
 	clip,
 	pixelsPerFrame,
+	timingDefaults,
 	onSaveCueList,
 	onError,
-}: {
-	cueList: TimecodeCueListOption & { body: CueList };
-	clip: TimecodeCueListClip;
-	pixelsPerFrame: number;
-	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
-	onError?(message: string): void;
-}) {
+}: CueFadeEditorOptions) {
 	const [preview, setPreview] = useState<CueList | null>(null);
 	const [dragError, setDragError] = useState("");
 	const [saving, setSaving] = useState(false);
 	const drag = useRef<CueFadeDrag | null>(null);
 	const activeBody = preview ?? cueList.body;
 	useEffect(() => {
+		if (!drag.current) setPreview(null);
+	}, [cueList.body]);
+	const changed = (
+		body: CueList,
+		row: CueClipTimingRow,
+		kind: CueFadeKind,
+		edge: CueFadeEdge,
+		frame: number,
+	) => {
+		try {
+			return changedCueTiming(
+				body,
+				row,
+				clip,
+				timingDefaults,
+				kind,
+				edge,
+				frame,
+			);
+		} catch (reason) {
+			setDragError(formatErrorDetails(reason));
+			return null;
+		}
+	};
+	const save = async (basis: CueList, proposed: CueList, label: string) => {
+		if (!onSaveCueList) return;
+		setSaving(true);
+		setDragError("");
+		try {
+			const next = mergeCueTimingFields(cueList.body, basis, proposed);
+			const ordered = cueClipTimingRows(clip, next, timingDefaults).rows;
+			if (
+				ordered.some(
+					(row, index) =>
+						index > 0 && row.startFrame < ordered[index - 1].startFrame,
+				)
+			)
+				throw new Error(
+					"Cue triggers changed during this edit. The timing edit would cross a neighbouring Cue.",
+				);
+			setPreview(next);
+			await onSaveCueList(cueList.id, next);
+			setPreview(null);
+		} catch (reason) {
+			const message = `${label} was not saved: ${formatErrorDetails(reason)}`;
+			setPreview(null);
+			setDragError(message);
+			onError?.(message);
+		} finally {
+			setSaving(false);
+		}
+	};
+	useEffect(() => {
 		const move = (event: PointerEvent) => {
 			const current = drag.current;
-			if (!current || event.pointerId !== current.pointerId) return;
-			const target = clampedFadeFrame(
-				current,
-				clip,
+			if (!current || current.pointerId !== event.pointerId) return;
+			const next = changed(
+				current.body,
+				current.row,
+				current.kind,
+				current.edge,
 				current.startHandleFrame +
 					Math.round((event.clientX - current.startX) / pixelsPerFrame),
 			);
-			const sourceCue = current.body.cues.find(
-				(cue) => cue.id === current.row.cue.id,
-			);
-			if (!sourceCue) return;
-			const result = cueWithDraggedFade(
-				sourceCue,
-				current.row,
-				clip,
-				current.kind,
-				current.edge,
-				target,
-			);
-			if (!result.cue) {
-				current.next = null;
-				current.error = result.error ?? "Cue timing is invalid.";
-				setDragError(current.error);
-				setPreview(current.body);
-				return;
-			}
-			const updatedCue = result.cue;
-			current.next = {
-				...current.body,
-				cues: current.body.cues.map((cue) =>
-					cue.id === updatedCue.id ? updatedCue : cue,
-				),
-			};
-			current.error = "";
-			setDragError("");
-			setPreview(current.next);
-		};
-		const save = (current: CueFadeDrag, next: CueList) => {
-			setSaving(true);
-			void onSaveCueList?.(cueList.id, next)
-				.then((saved) => {
-					setPreview(saved);
-					setDragError("");
-				})
-				.catch((reason) => {
-					const message = `Cue ${current.row.cue.number} ${current.kind === "in" ? "In" : "Out"} fade was not saved: ${formatErrorDetails(reason)}`;
-					setPreview(null);
-					setDragError(message);
-					onError?.(message);
-				})
-				.finally(() => setSaving(false));
+			current.next = next;
+			if (next) setPreview(next);
 		};
 		const finish = (event: PointerEvent) => {
 			const current = drag.current;
-			if (!current || event.pointerId !== current.pointerId) return;
+			if (!current || current.pointerId !== event.pointerId) return;
 			drag.current = null;
-			if (event.type === "pointercancel") {
+			if (event.type === "pointercancel" || !current.next) {
 				setPreview(null);
-				setDragError("");
 				return;
 			}
-			if (current.error || !current.next) {
-				setPreview(null);
-				if (current.error) onError?.(current.error);
-				return;
-			}
-			if (!onSaveCueList) {
-				const message = "Cue timing editing is unavailable on this desk.";
-				setPreview(null);
-				setDragError(message);
-				onError?.(message);
-				return;
-			}
-			save(current, current.next);
+			void save(
+				current.body,
+				current.next,
+				`Cue ${current.row.cue.number} ${current.kind === "in" ? "In" : "Out"} fade`,
+			);
 		};
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", finish);
@@ -176,7 +210,7 @@ function useCueFadeDrag({
 			window.removeEventListener("pointerup", finish);
 			window.removeEventListener("pointercancel", finish);
 		};
-	}, [clip, cueList.id, onError, onSaveCueList, pixelsPerFrame]);
+	});
 	const begin = (
 		event: ReactPointerEvent,
 		row: CueClipTimingRow,
@@ -185,7 +219,8 @@ function useCueFadeDrag({
 	) => {
 		event.preventDefault();
 		event.stopPropagation();
-		if (saving || row.diagnostic) return;
+		if (saving || row.diagnostic || !onSaveCueList) return;
+		(event.currentTarget as HTMLElement).focus({ preventScroll: true });
 		const range = kind === "in" ? row.inFade : row.outFade;
 		drag.current = {
 			pointerId: event.pointerId,
@@ -196,105 +231,25 @@ function useCueFadeDrag({
 			edge,
 			body: structuredClone(activeBody),
 			next: null,
-			error: "",
 		};
 		event.currentTarget.setPointerCapture?.(event.pointerId);
 	};
-	return { activeBody, begin, dragError, saving };
-}
-
-function CueTimingRow({
-	row,
-	rows,
-	clip,
-	pixelsPerFrame,
-	saving,
-	position,
-	transitionFrame,
-	onTransitionDrag,
-	onPlaceCueStart,
-	onBeginFade,
-}: {
-	row: CueClipTimingRow;
-	rows: readonly CueClipTimingRow[];
-	clip: TimecodeCueListClip;
-	pixelsPerFrame: number;
-	saving: boolean;
-	position(frame: number): number;
-	transitionFrame?: number;
-	onTransitionDrag(cueId: string, frame: number | null): void;
-	onPlaceCueStart?(clipId: string, cueId: string, offsetFrame: number): void;
-	onBeginFade(
-		event: ReactPointerEvent,
+	const commit = (
 		row: CueClipTimingRow,
 		kind: CueFadeKind,
 		edge: CueFadeEdge,
-	): void;
-}) {
-	const cueId = row.cue.id;
-	/// A transition may not run past the clip or back over the preceding Cue.
-	const place = (frame: number) => {
-		if (!cueId) return;
-		const previous = rows[rows.indexOf(row) - 1];
-		const minimum = Math.max(
-			clip.start_frame,
-			(previous?.startFrame ?? clip.start_frame) + 1,
-		);
-		const maximum = Math.max(clip.start_frame + 1, clip.end_frame - 1);
-		const clamped = Math.round(Math.max(minimum, Math.min(maximum, frame)));
-		onTransitionDrag(cueId, null);
-		onPlaceCueStart?.(clip.id, cueId, clamped - clip.start_frame);
+		frame: number,
+	) => {
+		if (saving || !onSaveCueList) return;
+		const next = changed(activeBody, row, kind, edge, frame);
+		if (next)
+			void save(
+				activeBody,
+				next,
+				`Cue ${row.cue.number} ${kind === "in" ? "In" : "Out"} fade`,
+			);
 	};
-	return (
-		<span
-			className={`timecode-cue-timing ${row.diagnostic ? "unsupported" : ""}`}
-		>
-			<span
-				className="timecode-cue-start-marker"
-				style={{ left: position(row.startFrame) }}
-				title={`Cue ${row.cue.number} start · ${formatFrame(row.startFrame, TIMECODE_FPS)}`}
-			>
-				{row.cue.number}
-			</span>
-			{row.transition && cueId && (
-				<CueTransitionHandle
-					cueNumber={String(row.cue.number)}
-					placed={row.transition === "placed"}
-					frame={transitionFrame ?? row.startFrame}
-					position={position}
-					disabled={!onPlaceCueStart}
-					onDrag={(frame) => onTransitionDrag(cueId, frame)}
-					onCommit={place}
-					pixelsPerFrame={pixelsPerFrame}
-				/>
-			)}
-			{/* Each Cue is two bands stacked inside the clip: the out timing above the in timing.
-			    Neither band is allowed a hole, so the lower one reads in delay, in fade, then the
-			    content it holds, and the upper one reads that content, out delay, out fade. */}
-			{(["out", "in"] as const).map((kind) => (
-				<CueBand
-					key={kind}
-					cueNumber={String(row.cue.number)}
-					kind={kind}
-					anchorFrame={kind === "in" ? row.startFrame : row.handoverFrame}
-					contentFrames={
-						kind === "in"
-							? [row.inFade.endFrame, row.handoverFrame]
-							: [row.startFrame, row.handoverFrame]
-					}
-					range={kind === "in" ? row.inFade : row.outFade}
-					position={position}
-					disabled={saving || Boolean(row.diagnostic)}
-					onBegin={(event, edge) => onBeginFade(event, row, kind, edge)}
-				/>
-			))}
-			{row.diagnostic && (
-				<span className="timecode-cue-diagnostic" role="status">
-					{row.diagnostic}
-				</span>
-			)}
-		</span>
-	);
+	return { activeBody, begin, commit, dragError, saving };
 }
 
 export function CueListClipContents({
@@ -304,204 +259,140 @@ export function CueListClipContents({
 	timingDefaults,
 	onSaveCueList,
 	onPlaceCueStart,
+	onMoveClip,
+	onSetClipFade,
 	onError,
+	selectedCueId = null,
+	onSelectCue,
+	expanded = false,
+	inspectorHost = null,
 }: {
 	cueList: TimecodeCueListOption & { body: CueList };
 	clip: TimecodeCueListClip;
 	pixelsPerFrame: number;
 	timingDefaults: CueClipTimingDefaults;
-	onSaveCueList?(cueListId: string, body: CueList): Promise<CueList>;
-	onPlaceCueStart?(clipId: string, cueId: string, offsetFrame: number): void;
+	onSaveCueList?(id: string, body: CueList): Promise<CueList>;
+	onPlaceCueStart?(clipId: string, cueId: string, offset: number): void;
+	onMoveClip?(clipId: string, startFrame: number): void;
+	onSetClipFade?(clipId: string, kind: "in" | "out", frames: number): void;
 	onError?(message: string): void;
+	selectedCueId?: string | null;
+	onSelectCue?(cueId: string): void;
+	expanded?: boolean;
+	inspectorHost?: HTMLElement | null;
 }) {
-	const [transitionDrag, setTransitionDrag] = useState<{
-		cueId: string;
-		frame: number;
-	} | null>(null);
-	const { activeBody, begin, dragError, saving } = useCueFadeDrag({
+	const [triggerPreview, setTriggerPreview] = useState<number | null>(null);
+	const { activeBody, begin, commit, dragError, saving } = useCueFadeDrag({
 		cueList,
 		clip,
 		pixelsPerFrame,
+		timingDefaults,
 		onSaveCueList,
 		onError,
 	});
 	const projected = cueClipTimingRows(clip, activeBody, timingDefaults);
-	const clipLength = Math.max(1, clip.end_frame - clip.start_frame);
+	const selected = projected.rows.find((row) => row.cue.id === selectedCueId);
 	const position = (frame: number) =>
-		Math.max(0, Math.min(clipLength, frame - clip.start_frame)) *
-		pixelsPerFrame;
-	return (
-		<span className="timecode-cue-clip-contents" aria-busy={saving}>
-			{projected.error && (
-				<span className="timecode-cue-clip-diagnostic" role="status">
-					{projected.error}
-				</span>
-			)}
-			{projected.rows.map((row) => (
-				<CueTimingRow
-					key={row.cue.id}
-					row={row}
-					rows={projected.rows}
-					clip={clip}
-					pixelsPerFrame={pixelsPerFrame}
-					saving={saving}
-					position={position}
-					transitionFrame={
-						transitionDrag && transitionDrag.cueId === row.cue.id
-							? transitionDrag.frame
-							: undefined
-					}
-					onTransitionDrag={(cueId, frame) =>
-						setTransitionDrag(frame === null ? null : { cueId, frame })
-					}
-					onPlaceCueStart={onPlaceCueStart}
-					onBeginFade={begin}
-				/>
-			))}
-			{dragError && (
-				<span className="timecode-cue-clip-diagnostic" role="status">
-					{dragError}
-				</span>
-			)}
-		</span>
+		Math.max(0, frame - clip.start_frame) * pixelsPerFrame;
+	const width = (clip.end_frame - clip.start_frame) * pixelsPerFrame;
+	const triggerBounds = selected?.cue.id
+		? cueTransitionFrameBounds(
+				clip,
+				activeBody,
+				timingDefaults,
+				selected.cue.id,
+			)
+		: null;
+	const first = selected === projected.rows[0];
+	const canMoveTrigger = Boolean(
+		selected && (first ? onMoveClip : triggerBounds && onPlaceCueStart),
 	);
-}
+	const placeTrigger = (frame: number) => {
+		if (!selected?.cue.id) return;
+		if (first) onMoveClip?.(clip.id, Math.max(0, frame));
+		else if (triggerBounds)
+			onPlaceCueStart?.(
+				clip.id,
+				selected.cue.id,
+				Math.max(
+					triggerBounds.minimum,
+					Math.min(triggerBounds.maximum, frame),
+				) - clip.start_frame,
+			);
+	};
+	const source = first
+		? "Clip start · moves the clip"
+		: selected?.transition
+			? selected.transition === "placed"
+				? "Manual GO · placed in this clip"
+				: "Manual GO · follows previous completion until placed"
+			: `${selected?.cue.trigger.type ?? "Automatic"} · derived from Cuelist trigger settings`;
 
-/// The lane-owned start of a Cue that waits for a manual GO. Dragging it writes the
-/// transition point into the clip, so the Cuelist itself keeps its manual trigger.
-function CueTransitionHandle({
-	cueNumber,
-	placed,
-	frame,
-	position,
-	pixelsPerFrame,
-	disabled,
-	onDrag,
-	onCommit,
-}: {
-	cueNumber: string;
-	placed: boolean;
-	frame: number;
-	position(frame: number): number;
-	pixelsPerFrame: number;
-	disabled: boolean;
-	onDrag(frame: number): void;
-	onCommit(frame: number): void;
-}) {
-	const origin = useRef<{ x: number; frame: number } | null>(null);
-	return (
-		<span
-			className={`timecode-cue-transition ${placed ? "placed" : "default"}`}
-			style={{ left: position(frame) }}
-			role="slider"
-			tabIndex={disabled ? -1 : 0}
-			aria-label={`Cue ${cueNumber} transition point`}
-			aria-valuemin={0}
-			aria-valuenow={frame}
-			aria-disabled={disabled || undefined}
-			title={`Cue ${cueNumber} transition · ${formatFrame(frame, TIMECODE_FPS)}`}
-			onKeyDown={(event) => {
-				if (disabled) return;
-				if (event.key === "ArrowLeft") onCommit(frame - 1);
-				else if (event.key === "ArrowRight") onCommit(frame + 1);
-				else return;
-				event.preventDefault();
-			}}
-			onPointerDown={(event) => {
-				if (disabled) return;
-				event.preventDefault();
-				event.stopPropagation();
-				origin.current = { x: event.clientX, frame };
-				event.currentTarget.setPointerCapture?.(event.pointerId);
-			}}
-			onPointerMove={(event) => {
-				const start = origin.current;
-				if (!start) return;
-				event.stopPropagation();
-				onDrag(
-					start.frame + Math.round((event.clientX - start.x) / pixelsPerFrame),
-				);
-			}}
-			onPointerUp={(event) => {
-				const start = origin.current;
-				if (!start) return;
-				event.stopPropagation();
-				origin.current = null;
-				onCommit(
-					start.frame + Math.round((event.clientX - start.x) / pixelsPerFrame),
-				);
-			}}
-		/>
-	);
-}
-
-/// One band of a Cue sub-clip: the wait before the fade, then the fade itself.
-///
-/// The delay block ends where the fade block begins, so the boundary between them is the single
-/// handle that sets the delay, and the far edge of the fade sets its duration.
-function CueBand({
-	cueNumber,
-	kind,
-	anchorFrame,
-	contentFrames,
-	range,
-	position,
-	disabled,
-	onBegin,
-}: {
-	cueNumber: string;
-	kind: CueFadeKind;
-	anchorFrame: number;
-	contentFrames: readonly [number, number];
-	range: { startFrame: number; endFrame: number };
-	position(frame: number): number;
-	disabled: boolean;
-	onBegin(event: ReactPointerEvent, edge: CueFadeEdge): void;
-}) {
-	const label = kind === "in" ? "In fade" : "Out fade";
-	const delayLabel = kind === "in" ? "In delay" : "Out delay";
-	const delayLeft = position(anchorFrame);
-	const fadeLeft = position(range.startFrame);
-	const fadeRight = position(range.endFrame);
-	const contentLeft = position(contentFrames[0]);
-	const contentRight = position(contentFrames[1]);
 	return (
 		<>
 			<span
-				className={`timecode-cue-content-range ${kind}`}
-				style={{
-					left: contentLeft,
-					width: Math.max(0, contentRight - contentLeft),
-				}}
-				title={`Cue ${cueNumber} content`}
-			/>
-			<span
-				className={`timecode-cue-delay-range ${kind}`}
-				style={{ left: delayLeft, width: Math.max(0, fadeLeft - delayLeft) }}
-				title={`Cue ${cueNumber} ${delayLabel}`}
-			/>
-			<span
-				className={`timecode-cue-fade-range ${kind}`}
-				style={{
-					left: fadeLeft,
-					width: Math.max(2, fadeRight - fadeLeft),
-				}}
-				title={`Cue ${cueNumber} ${label}`}
+				className={`timecode-cue-clip-contents ${expanded ? "expanded" : ""}`}
+				aria-busy={saving}
 			>
-				{(["start", "end"] as const).map((edge) => (
-					<span
-						key={edge}
-						className={`timecode-cue-fade-handle ${edge}`}
-						role="slider"
-						tabIndex={disabled ? -1 : 0}
-						aria-label={`Cue ${cueNumber} ${edge === "start" ? delayLabel : label}`}
-						aria-valuemin={0}
-						aria-valuenow={edge === "start" ? range.startFrame : range.endFrame}
-						aria-disabled={disabled || undefined}
-						onPointerDown={(event) => onBegin(event, edge)}
+				{projected.rows.map((row, index) => {
+					return (
+						<CueEnvelope
+							key={row.cue.id ?? index}
+							row={row}
+							index={index}
+							isSelected={expanded && row.cue.id === selectedCueId}
+							last={index === projected.rows.length - 1}
+							position={position}
+							width={width}
+							clip={clip}
+							onSelectCue={onSelectCue}
+						/>
+					);
+				})}
+				{selected && expanded && (
+					<CueTimingPoints
+						cueList={activeBody}
+						timingDefaults={timingDefaults}
+						selected={selected}
+						clip={clip}
+						position={position}
+						pixelsPerFrame={pixelsPerFrame}
+						triggerPreview={triggerPreview}
+						first={first}
+						triggerBounds={triggerBounds}
+						canMoveTrigger={canMoveTrigger}
+						setTriggerPreview={setTriggerPreview}
+						placeTrigger={placeTrigger}
+						saving={saving}
+						editable={Boolean(onSaveCueList)}
+						begin={begin}
+						commit={commit}
 					/>
-				))}
+				)}
+				{(projected.error || dragError || selected?.diagnostic) && (
+					<span className="timecode-cue-clip-diagnostic" role="status">
+						{dragError || projected.error || selected?.diagnostic}
+					</span>
+				)}
 			</span>
+			{inspectorHost && selected && expanded
+				? createPortal(
+						<CueTimingInspector
+							key={`${clip.id}:${selected.cue.id}`}
+							selected={selected}
+							clip={clip}
+							canMoveTrigger={canMoveTrigger}
+							placeTrigger={placeTrigger}
+							source={source}
+							saving={saving}
+							onSaveCueList={onSaveCueList}
+							commit={commit}
+							timingDefaults={timingDefaults}
+							onSetClipFade={onSetClipFade}
+						/>,
+						inspectorHost,
+					)
+				: null}
 		</>
 	);
 }

@@ -27,6 +27,12 @@ export function CueListClipBody({
 	onPlaceCueStart,
 	onSetClipFade,
 	onCueTimingError,
+	selectedCueId = null,
+	onSelectCue,
+	onCloseCue: _onCloseCue,
+	expanded = false,
+	inspectorHost = null,
+	onMoveClip,
 }: {
 	item: TimelineItem;
 	clip: TimecodeCueListClip;
@@ -49,6 +55,12 @@ export function CueListClipBody({
 		frames: number,
 	): void;
 	onCueTimingError?(message: string): void;
+	selectedCueId?: string | null;
+	onSelectCue?(cueId: string): void;
+	onCloseCue?(): void;
+	expanded?: boolean;
+	inspectorHost?: HTMLElement | null;
+	onMoveClip?(clipId: string, startFrame: number): void;
 }) {
 	return (
 		<>
@@ -78,6 +90,12 @@ export function CueListClipBody({
 					onSaveCueList={onSaveCueList}
 					onPlaceCueStart={onPlaceCueStart}
 					onError={onCueTimingError}
+					selectedCueId={selectedCueId}
+					onSelectCue={onSelectCue}
+					expanded={expanded}
+					inspectorHost={inspectorHost}
+					onMoveClip={onMoveClip}
+					onSetClipFade={onSetClipFade}
 				/>
 			)}
 			<span

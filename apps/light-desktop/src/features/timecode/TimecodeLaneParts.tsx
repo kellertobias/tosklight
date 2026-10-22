@@ -1,3 +1,4 @@
+import { AudioLaneFileName } from "./timecodeEditorShared";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useMemo } from "react";
 import type { TimecodeLane } from "../../api/types/timecode";
@@ -58,12 +59,16 @@ export function LaneLabel({
 	startLaneDrag,
 	consumeLaneDragClick,
 	onSelectLane,
+	expanded = false,
+	onCloseCue,
 }: {
 	lane: TimecodeLane;
 	audioFileName?: string | null;
 	startLaneDrag(event: ReactPointerEvent, laneId: string): void;
 	consumeLaneDragClick(laneId: string): boolean;
 	onSelectLane(laneId: string): void;
+	expanded?: boolean;
+	onCloseCue?(): void;
 }) {
 	const kind = lane.content.kind.replaceAll("_", " ");
 	return (
@@ -85,6 +90,60 @@ export function LaneLabel({
 					<span>{kind}</span>
 				)}
 			</Button>
+			{expanded && (
+				<Button
+					className="timecode-cue-close"
+					size="compact"
+					onPointerDown={(event) => event.stopPropagation()}
+					onClick={onCloseCue}
+					aria-label="Close cue editor"
+				>
+					Close
+				</Button>
+			)}
+		</div>
+	);
+}
+
+/** Audio geometry stays behind the editable items and follows the same time scale. */
+export function AudioVolumeLaneBackground({
+	content,
+	duration,
+	fileName,
+	waveformPeaks,
+}: {
+	content: Extract<TimecodeLane["content"], { kind: "audio_volume" }>;
+	duration: number;
+	fileName?: string | null;
+	waveformPeaks?: readonly number[];
+}) {
+	return (
+		<div
+			className="timecode-audio-lane-content"
+			role="img"
+			aria-label="Linked audio waveform"
+		>
+			<AudioLaneFileName name={fileName} />
+			{waveformPeaks?.length ? (
+				<Waveform peaks={waveformPeaks} />
+			) : (
+				<span>Waveform loads after the managed audio is saved.</span>
+			)}
+			<svg
+				className="timecode-audio-keyframe-curve"
+				viewBox="0 0 100 100"
+				preserveAspectRatio="none"
+				aria-hidden="true"
+			>
+				<polyline
+					points={content.keyframes
+						.map(
+							(keyframe) =>
+								`${(keyframe.frame / duration) * 100},${100 - keyframe.value * 100}`,
+						)
+						.join(" ")}
+				/>
+			</svg>
 		</div>
 	);
 }

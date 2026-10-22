@@ -77,9 +77,13 @@ Select a clip to edit its Cue range, start/end behavior, or audio folder/file, r
 
 ### Cue timing on the timeline
 
-A Cuelist clip displays its Cues' **Out timing** above **In timing**. Drag start/end handles to change the actual Cue delays/fades, snapped to frames. These changes also affect the Cuelist's live timing. Dragging a linked range explicitly replaces its link with independent timing.
+All Cues of a Cuelist share one lane as overlapping envelopes, with their names at the bottom. Tap an envelope or its name to expand that lane downward. Only the selected Cue's four **In delay**, **In fade**, **Out delay**, and **Out fade** points appear. Tap another Cue to edit it; **Close cue editor** on the left restores the compact lane. Exact settings are on the right. Opening or closing these settings keeps the timeline's zoom and left-hand position unchanged; use the overview or explicit Fit action to change the visible range.
 
-A manual-GO Cue has a transition handle inside the clip. Drag it or use arrow keys to place its advance time. Until placed, its dashed handle follows the previous Cue's completion. Moving the clip carries these transitions without changing its manual trigger for ordinary playback.
+Drag the timing points to change the Cuelist's actual delays and fades, snapped to frames. Out delay begins at the handover to the next Cue. Dragging a linked Out timing explicitly replaces its link with independent timing. An In fade of zero inherits the desk's **Cue Fade**; an explicit Out fade of zero is immediate.
+
+The labelled **Trigger** control and exact time show when a Cue advances. The first Cue starts with the clip. A manual-GO Cue's Trigger can be placed inside the clip without changing its manual trigger for ordinary playback. Until placed, it follows its predecessor's completion. Moving the clip carries the placement with it. Follow, Wait, Link, and Timecode triggers remain derived from the Cuelist; selecting a Cue does not convert them to manual placements. Trigger movement stops at legal neighbouring Cue boundaries.
+
+The final Cue has no later handover inside the clip. Its shared Cue Out timing does not run after clip end. Use the separate **Clip Out** gain fade to fade the clip before its end, including a single-Cue clip. **Hold** retains the final state and **Release** removes the clip's ownership at its end.
 
 New Cuelist lanes start with a clip; Speed lanes start with a keyframe. Select a marker and use **Place Marker** for the playhead position or **Move To** for an exact time.
 

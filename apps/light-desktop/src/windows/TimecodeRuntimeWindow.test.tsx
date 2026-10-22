@@ -417,6 +417,7 @@ describe("TimecodeEditor title and settings", () => {
 			".timecode-timeline-canvas",
 		);
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		fireEvent.click(screen.getByRole("button", { name: "Cue 1 First" }));
 		const handle = screen.getByRole("slider", {
 			// Each handle is named for what it sets: the boundary sets the delay, the far edge the fade.
 			name: "Cue 1 In fade",
