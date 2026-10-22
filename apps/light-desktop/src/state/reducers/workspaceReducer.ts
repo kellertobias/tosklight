@@ -1,3 +1,4 @@
+import { normalizeControlStageView } from "../controlStageView";
 import { isTiledPane } from "../../features/panePresentation/tiledPaneKinds";
 import type { AppState } from "../../types";
 import type { Action } from "../appActions";
@@ -30,8 +31,12 @@ function addWindow(
 						: kind === "text_editor"
 							? "Text Editor"
 							: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
-		...(isTiledPane(kind) ? { poolTileLayout: { mode: "automatic" as const } } : {}),
-		...(kind === "playbacks" ? {surface_id: `pane:${kind}-${Date.now()}`} : {}),
+		...(isTiledPane(kind)
+			? { poolTileLayout: { mode: "automatic" as const } }
+			: {}),
+		...(kind === "playbacks"
+			? { surface_id: `pane:${kind}-${Date.now()}` }
+			: {}),
 		...(kind === "file_manager" ? { fileManagerShowHidden: false } : {}),
 		...(kind === "text_editor"
 			? { textEditorReadOnly: false, textEditorMode: "plain" as const }
@@ -64,7 +69,7 @@ export function reduceWorkspace(
 		case "SET_STAGE_MODE":
 			return { ...state, stageMode: action.value };
 		case "SET_STAGE_VIEW":
-			return { ...state, stageView: action.value };
+			return { ...state, stageView: normalizeControlStageView(action.value) };
 		case "SET_STAGE_NAVIGATION":
 			return {
 				...state,
@@ -93,7 +98,7 @@ export function reduceWorkspace(
 					0,
 					1,
 				),
-				stageVizQuality: action.vizQuality ?? state.stageVizQuality,
+				stageVizQuality: "draft",
 				stageVizExposure: clamp(
 					action.vizExposure ?? state.stageVizExposure,
 					0.05,

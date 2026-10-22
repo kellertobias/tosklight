@@ -61,14 +61,6 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-/**
- * The settings an operator is offered have to be settings that do something.
- *
- * Every Stage is the renderer's picture now, and the three views are not the same kind of picture:
- * the 2D plan is a projection, the 3D view is an unlit diagram, and only 3D Viz simulates light.
- * Offering the same controls on all three would mean offering, twice, a control over something
- * that is not happening.
- */
 describe("Stage settings are split between the views", () => {
 	it("asks a 2D Stage only which side it is seen from", () => {
 		openSettings();
@@ -98,35 +90,17 @@ describe("Stage settings are split between the views", () => {
 		});
 	});
 
-	/*
-	 * The Viz view draws the beams themselves, so a dotted line down the middle of one says
-	 * nothing the beam did not.
-	 */
-	it("offers the Viz Stage its light settings but no beam guidelines", () => {
+	it("treats a legacy Viz view as lightweight 3D settings", () => {
 		openSettings({ ...options, view: "3d-viz" });
-		expect(screen.getByText(/environment brightness/i)).toBeTruthy();
-		expect(screen.getByText(/render quality/i)).toBeTruthy();
-		expect(screen.getByText(/^Background$/)).toBeTruthy();
-		expect(screen.queryByText(/beam direction guidelines/i)).toBeNull();
+		expect(screen.getByRole("switch", { name: /beam direction guidelines/i })).toBeVisible();
+		for (const label of [/environment brightness/i, /render quality/i, /^Background$/, /fog/i])
+			expect(screen.queryByText(label)).toBeNull();
+		expect(screen.queryByRole("tab", { name: "3D Viz" })).toBeNull();
 	});
 
-	/*
-	 * Which GPU answered and which transport the picture came over is the renderer's business. A
-	 * Stage that is drawing correctly raises no question that naming the adapter answers.
-	 */
-	it("does not name the renderer or its transport", () => {
-		openSettings({ ...options, view: "3d-viz" });
-		expect(screen.queryByText(/shared surface/i)).toBeNull();
-		expect(screen.queryByText(/^Renderer$/)).toBeNull();
-	});
-
-	/*
-	 * The tab is the view. Opening the 3D Viz tab is asking to look at the 3D Viz picture, not to
-	 * read its settings while looking at something else.
-	 */
 	it("offers one tab per view", () => {
 		openSettings();
-		for (const label of ["2D", "3D", "3D Viz"]) {
+		for (const label of ["2D", "3D"]) {
 			expect(screen.getByRole("tab", { name: label })).toBeTruthy();
 		}
 	});
@@ -134,12 +108,12 @@ describe("Stage settings are split between the views", () => {
 	it("switches the view when its tab is opened", () => {
 		const setView = vi.fn();
 		openSettings({ ...options, setView });
-		fireEvent.click(screen.getByRole("tab", { name: "3D Viz" }));
-		expect(setView).toHaveBeenCalledWith("3d-viz");
+		fireEvent.click(screen.getByRole("tab", { name: "3D" }));
+		expect(setView).toHaveBeenCalledWith("3d");
 	});
 
 	/*
-	 * All three are the renderer's picture, so hiding the ones it cannot draw would mean hiding the
+	 * Both views are the renderer's picture, so hiding the ones it cannot draw would mean hiding the
 	 * Stage. The pane says what it cannot do instead.
 	 */
 	it("keeps every view's tab present whether or not the renderer can draw it", () => {
@@ -148,6 +122,6 @@ describe("Stage settings are split between the views", () => {
 			within(
 				screen.getByRole("dialog", { name: "Stage Settings" }),
 			).getAllByRole("tab"),
-		).toHaveLength(3);
+		).toHaveLength(2);
 	});
 });

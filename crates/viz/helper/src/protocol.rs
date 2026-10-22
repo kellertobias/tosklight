@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Scene scenery now includes stair construction and contextual floor apertures. This changes the
-// postcard scene shape, so stale helpers must be refused before decoding this build's scene.
-pub const PROTOCOL_MAJOR: u16 = 8;
+// FramePresented now names its actual rendered view mode. The postcard variant shape changed,
+// so stale helpers must be refused rather than misdecoding presentation evidence.
+pub const PROTOCOL_MAJOR: u16 = 9;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 
@@ -328,6 +328,8 @@ pub enum FromHelper {
         degraded: bool,
         renderer: String,
         quality: RenderQuality,
+        /// Actual mode used for this frame, never the requested UI setting.
+        mode: String,
         follow_preload: bool,
         width: u32,
         height: u32,
@@ -590,6 +592,7 @@ mod tests {
                 degraded: false,
                 renderer: "Apple M3 Pro (Metal, 4x MSAA)".to_owned(),
                 quality: RenderQuality::High,
+                mode: "full_3d".to_owned(),
                 follow_preload: true,
                 width: 1_280,
                 height: 720,
@@ -598,6 +601,18 @@ mod tests {
         for answer in answers {
             let decoded: FromHelper = decode(&encode(&answer).expect("encodes")).expect("decodes");
             assert_eq!(decoded, answer);
+            if matches!(&answer, FromHelper::FramePresented { .. }) {
+                // Preserve the observed mode, including a forbidden full-render frame, so the
+                // benchmark can detect a broken Control guard instead of reporting requested UI.
+                for actual in ["lines_3d", "top_down", "full_3d"] {
+                    let mut frame = answer.clone();
+                    if let FromHelper::FramePresented { mode, .. } = &mut frame {
+                        *mode = actual.to_owned();
+                    }
+                    let decoded: FromHelper = decode(&encode(&frame).unwrap()).unwrap();
+                    assert_eq!(decoded, frame);
+                }
+            }
         }
     }
 

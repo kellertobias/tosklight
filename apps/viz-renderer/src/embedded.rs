@@ -733,6 +733,7 @@ impl PaneState {
             stats,
             renderer,
             quality,
+            self.view.mode.wire().to_owned(),
             self.following_preload,
             self.size.0,
             self.size.1,

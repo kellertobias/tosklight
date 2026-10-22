@@ -30,13 +30,9 @@ without the Visualizer reconnecting or reloading the show.
 released physics body on the selected renderer target to its authored pose. Re-selecting a view,
 losing DMX, or reconnecting is not a reset.
 
-An embedded **3D Viz** pane at Ultra also offers four fog-character controls: independent
-cloudiness and turbulence for lamps and lasers. Cloudiness runs from spatially even at 0% to
-strongly patchy at 100%; turbulence runs from stationary at 0% to very fast movement and change
-at 100%. These values are stored with that pane in the portable show and remain set when another
-quality is selected, but Draft, Standard and High retain their existing uniform fog. A dedicated
-Visualizer keeps the same four controls locally in **Quick Settings** and does not rewrite a
-show's pane values.
+At Ultra, the dedicated visualizer offers independent cloudiness and turbulence controls for lamps and lasers in **Quick Settings**. Cloudiness ranges from even to patchy haze; turbulence controls how quickly it changes. Draft, Standard, and High use uniform fog.
+
+Control's internal Stage provides only the lightweight 2D plan and 3D wireframe views. Open the separate Architect visualizer for rendered beams, haze, and shadows.
 
 ## Desk and local control
 

@@ -250,7 +250,7 @@
 			"mode": "software",
 			"interactions": [],
 			"reason": "Native Stage rendering is captured in the renderer; browser Storybook cannot host this native surface.",
-			"sourceFile": "docs/marketing/assets/stills/stage-3d-production.png"
+			"sourceFile": "docs/marketing/assets/stills/control-stage-wireframe.png"
 		},
 		{
 			"file": "panes/text-editor.png",

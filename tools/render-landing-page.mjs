@@ -39,7 +39,7 @@ const PRODUCT_GALLERIES = {
 	pixel: ["pixel-eight-layer-composite.png", "media-server-visualizers.png", "media-server-playback.png"],
 };
 const DETAIL_GALLERIES = {
-	control: [null, "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
+	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png"],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
 	architect: ["architect-renderer-ultra.png", "architect-cad.png", "architect-patch.png", null, ["architect-laser-code.png", "architect-laser-output.png"], null],
 };
@@ -262,11 +262,11 @@ const productPages = [
 		category: "Open source lighting control desk",
 		title: "ToskLight Control",
 		intro:
-			"Full tracking, preset and group referencing, a built-in visualizer and GDTF/MVR support, driving DMX over network protocols or supported USB interfaces from your computer.",
+			"Full tracking, preset and group referencing, lightweight plan and wireframe Stage views, and GDTF/MVR support, driving DMX over network protocols or supported USB interfaces from your computer. Use Architect for rendered lighting, haze, and shadows.",
 		benefits: [
 			["Build a show that survives change.", "Groups and presets keep a look connected. Re-focus a light or correct a house white once, and the cues that use it stay current."],
 			["Program at your own pace.", "Point at fixtures and shape a look directly, then take on the desk-style command line, tracking, and deeper programming when you are ready."],
-			["Know what is on stage.", "Follow each fixture from the programmer through playback to the final output, and check the stage picture before the doors open."],
+			["Know what is on stage.", "Follow each fixture from the programmer through playback to the final output. Inspect placement and aim in Control’s lightweight Stage, and preview rendered lighting in Architect."],
 		],
 		images: DETAIL_GALLERIES.control,
 		manual: "../manual/#page-10-desk-index-md",

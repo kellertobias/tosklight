@@ -9,7 +9,7 @@ import type { StageSelectionModel } from "./useStageSelection";
 /**
  * The Stage, drawn by the ToskLight renderer.
  *
- * Every view is drawn here — the 2D plan, the 3D outline view and the 3D Viz picture — and the
+ * Both Control views are drawn here — the 2D plan and the 3D outline view — and the
  * desk draws none of them. It runs beside the desk rather than inside it, so a graphics driver
  * that takes the renderer down takes only the picture with it: the Programmer, playback and DMX
  * output are untouched, and the Stage comes back on its own.
@@ -28,7 +28,7 @@ import type { StageSelectionModel } from "./useStageSelection";
 export function StageRendererView({
 	options,
 	selection,
-	active,
+	active = true,
 	interactive = true,
 }: {
 	options: StageOptionsModel;
@@ -37,7 +37,7 @@ export function StageRendererView({
 	active?: boolean;
 	interactive?: boolean;
 }) {
-	const pane = useNativeStagePane(true, options.view !== "2d");
+	const pane = useNativeStagePane(active, options.view !== "2d");
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
 	 * the desk's, and a renderer holding its own idea of it would be a second answer to the one

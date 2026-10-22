@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { ServerRuntime } from "./api/ServerRuntime";
+import { ConnectionState } from "./components/shell/ConnectionState";
+import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
+import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import {
 	benchmarkStageEnabled,
 	benchmarkSurfaces,
 	NativeHostObservations,
 } from "./nativePackagedBenchmarkMode";
 import { NativeStageReadiness } from "./nativePackagedStageReadiness";
-import { ConnectionState } from "./components/shell/ConnectionState";
-import { DeskLoadingOverlay } from "./components/shell/DeskLoadingOverlay";
-import { PatchFeatureBoundary } from "./features/patch/PatchFeatureBoundary";
 import { useDesktopBridge } from "./platform/desktop";
 import type {
+	DesktopBridge,
 	PackagedStageBenchmarkConfig,
-	StagePaneBenchmarkSample,
 	StagePaneBenchmarkHeartbeat,
 	StagePaneBenchmarkObservations,
-	DesktopBridge,
+	StagePaneBenchmarkSample,
 } from "./platform/desktop/types";
 import { AppProvider, useApp } from "./state/AppContext";
 import { FixtureSheetBenchmarkDiagnostics } from "./windows/FixtureSheetBenchmarkDiagnostics";
@@ -58,6 +58,7 @@ function appendNativeFrames(
 			frame.sequence > previous.sequence &&
 			frame.sourceFrame === previous.sourceFrame &&
 			frame.quality === previous.quality &&
+			frame.mode === previous.mode &&
 			frame.width === previous.width &&
 			frame.height === previous.height
 		) {
@@ -302,7 +303,7 @@ export function NativePackagedStageBenchmarkApp({
 function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	const desktop = useDesktopBridge();
 	const stageMode = benchmarkStageEnabled(config);
-	const { state, dispatch } = useApp();
+	const { dispatch } = useApp();
 	const [prepared, setPrepared] = useState(false);
 	const [stageEnabled, setStageEnabled] = useState(false);
 	const [liveVisible, setLiveVisible] = useState(true);
@@ -320,8 +321,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	const latestFrameByPane = useRef(new Map<string, NativeFrameSample>());
 	const timeline = useRef<Array<Record<string, unknown>>>([]);
 	const startedAt = useRef<string | null>(null);
-	const quality = useRef(state.stageVizQuality);
-	quality.current = state.stageVizQuality;
+	const quality = useRef<StagePaneBenchmarkSample["quality"]>("draft");
 	const observation: NativeObservationContext = {
 		config,
 		hostObservations,
@@ -404,31 +404,24 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	useEffect(() => {
 		if (!stageMode || !stageEnabled) return;
 		stageBeganAt.current = Date.now();
-		const qualities = ["draft", "standard", "high", "ultra"] as const;
-		let index = 0;
-		const qualityStep = Math.max(
+		dispatch({ type: "SET_STAGE_OPTIONS", vizQuality: "draft" });
+		const lifecycleStep = Math.max(
 			100,
 			Math.min(1_000, (config.durationSeconds * 1_000) / 8),
 		);
-		const exercise = window.setInterval(() => {
-			dispatch({ type: "SET_STAGE_OPTIONS", vizQuality: qualities[index] });
-			index += 1;
-			if (index >= qualities.length) window.clearInterval(exercise);
-		}, qualityStep);
 		const releaseAt = Math.min(15_000, config.durationSeconds * 350);
 		const resizeAt = Math.min(8_000, config.durationSeconds * 150);
 		const release = window.setTimeout(() => setLiveVisible(false), releaseAt);
 		const recreate = window.setTimeout(
 			() => setLiveVisible(true),
-			releaseAt + Math.max(250, qualityStep),
+			releaseAt + Math.max(250, lifecycleStep),
 		);
 		const resize = window.setTimeout(() => setSurfaceInset(true), resizeAt);
 		const restoreSize = window.setTimeout(
 			() => setSurfaceInset(false),
-			resizeAt + Math.max(250, qualityStep),
+			resizeAt + Math.max(250, lifecycleStep),
 		);
 		return () => {
-			window.clearInterval(exercise);
 			window.clearTimeout(release);
 			window.clearTimeout(recreate);
 			window.clearTimeout(resize);
@@ -463,7 +456,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 					{liveVisible ? (
 						<StageWindow
 							compact
-							stageView="3d-viz"
+							stageView="3d"
 							followPreload={false}
 							showGroupShortcuts={false}
 							showSelection

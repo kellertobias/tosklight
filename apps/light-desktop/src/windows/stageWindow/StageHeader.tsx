@@ -4,17 +4,9 @@ import { useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { Stage2dSide } from "../../types";
-import { StageVizSettings } from "./StageVizSettings";
 import type { StageOptionsModel } from "./types";
 
-/**
- * The Stage's settings, with one tab per view.
- *
- * The tab *is* the view. An operator opening the 3D Viz tab is asking to look at the 3D Viz
- * picture, not to read its settings while looking at something else — the old arrangement had them
- * pick a view on one tab and then find its settings on another, which is two gestures for one
- * decision and leaves the panel able to describe a view that is not on screen.
- */
+/** Select the lightweight plan or wireframe view and its matching controls. */
 function StageSettings({
 	anchor,
 	options,
@@ -30,7 +22,7 @@ function StageSettings({
 			anchor={anchor}
 			title="Stage Settings"
 			onClose={onClose}
-			activeTab={options.view}
+			activeTab={options.view === "2d" ? "2d" : "3d"}
 			onTabChange={(view) => options.setView(view as StageOptionsModel["view"])}
 			tabs={[
 				{
@@ -49,16 +41,6 @@ function StageSettings({
 					content: (
 						<FormLayout labelPlacement="side">
 							<Stage3dSettings options={options} />
-							<StageCommonSettings options={options} />
-						</FormLayout>
-					),
-				},
-				{
-					id: "3d-viz",
-					label: "3D Viz",
-					content: (
-						<FormLayout labelPlacement="side">
-							<StageVizSettings />
 							<StageCommonSettings options={options} />
 						</FormLayout>
 					),

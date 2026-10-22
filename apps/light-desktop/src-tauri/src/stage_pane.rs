@@ -18,8 +18,10 @@
 
 use crate::stage_compositor::StageCompositor;
 mod benchmark;
+mod picture;
 use benchmark::{BenchmarkAttachment, benchmark_attachment};
 pub(crate) use benchmark::{FrameTelemetry, PaneHeartbeat, StagePaneBenchmarkSamples};
+pub(crate) use picture::Picture;
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
 use std::sync::{Arc, Mutex};
@@ -351,6 +353,7 @@ impl StagePane {
             surface_size,
         };
         running.compositor.set_pane(pane, scale);
+        running.send(&Picture::startup().into_helper());
         running.send(&ToHelper::Embed {
             pane,
             scale,
@@ -439,37 +442,7 @@ impl StagePane {
     pub(crate) fn send_picture(&self, picture: Picture) -> Result<(), String> {
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         if let Some(running) = guard.as_mut() {
-            running.send(&ToHelper::Picture {
-                atmosphere: picture.atmosphere,
-                ambient: picture.ambient,
-                quality: match picture.quality.as_str() {
-                    "draft" => viz_helper::protocol::RenderQuality::Draft,
-                    "standard" => viz_helper::protocol::RenderQuality::Standard,
-                    "ultra" => viz_helper::protocol::RenderQuality::Ultra,
-                    _ => viz_helper::protocol::RenderQuality::High,
-                },
-                exposure: picture.exposure,
-                laser_brightness: picture.laser_brightness,
-                lamp_fog_cloudiness: picture.lamp_fog_cloudiness,
-                lamp_fog_turbulence: picture.lamp_fog_turbulence,
-                laser_fog_cloudiness: picture.laser_fog_cloudiness,
-                laser_fog_turbulence: picture.laser_fog_turbulence,
-                show_labels: picture.show_labels,
-                floor_grid: picture.floor_grid,
-                show_beam_guides: picture.show_beam_guides,
-                background: picture.background,
-                mode: match picture.mode.as_str() {
-                    "top_down" => viz_helper::protocol::StageViewMode::TopDown,
-                    "left_to_right" => viz_helper::protocol::StageViewMode::LeftToRight,
-                    "right_to_left" => viz_helper::protocol::StageViewMode::RightToLeft,
-                    "front_to_back" => viz_helper::protocol::StageViewMode::FrontToBack,
-                    "back_to_front" => viz_helper::protocol::StageViewMode::BackToFront,
-                    "lines_3d" => viz_helper::protocol::StageViewMode::Lines3d,
-                    "simple_3d" => viz_helper::protocol::StageViewMode::Simple3d,
-                    _ => viz_helper::protocol::StageViewMode::Full3d,
-                },
-                follow_preload: picture.follow_preload,
-            });
+            running.send(&picture.into_helper());
         }
         Ok(())
     }
@@ -776,6 +749,7 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                 degraded,
                 renderer,
                 quality,
+                mode,
                 follow_preload,
                 width,
                 height,
@@ -799,6 +773,7 @@ fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRender
                     viz_helper::protocol::RenderQuality::High => "high",
                     viz_helper::protocol::RenderQuality::Ultra => "ultra",
                 },
+                mode,
                 follow_preload,
                 width,
                 height,
@@ -1043,31 +1018,6 @@ pub(crate) fn stage_pane_input(
         other => return Err(format!("no such pane gesture: {other}")),
     };
     pane.send_input(input)
-}
-
-/// The operator's picture settings for the pane, which belong to the renderer drawing it.
-///
-/// Named as the web layer names them, for the reason [`PaneGeometry`] is.
-#[derive(Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct Picture {
-    atmosphere: f32,
-    ambient: f32,
-    quality: String,
-    exposure: f32,
-    laser_brightness: f32,
-    lamp_fog_cloudiness: f32,
-    lamp_fog_turbulence: f32,
-    laser_fog_cloudiness: f32,
-    laser_fog_turbulence: f32,
-    show_labels: bool,
-    floor_grid: bool,
-    show_beam_guides: bool,
-    /// The colour behind the rig, linear RGB.
-    background: [f32; 3],
-    /// Which way the Stage is being looked at, as the web layer names it.
-    mode: String,
-    follow_preload: bool,
 }
 
 /// What the operator has selected, for the renderer to draw.

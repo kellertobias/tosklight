@@ -39,7 +39,6 @@ import {
 	type FixtureSheetCuelistOption,
 	useFixtureSheetCuelistAuthority,
 } from "../../windows/fixtureSheetCuelistAuthority";
-import { StageVizSettings } from "../../windows/stageWindow/StageVizSettings";
 import { PlaybackPaneSettings } from "./PlaybackPaneSettings";
 import {
 	importCsvGroup,
@@ -211,6 +210,7 @@ function PaneLayoutSettings({
 export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 	const { state, dispatch } = useApp();
 	const bridge = useDesktopBridge();
+	const view = pane.stageView === "2d" || !pane.stageView ? "2d" : "3d";
 	const setOption = (
 		option: "stageView" | "followPreload" | "stage2dSide",
 		value:
@@ -222,12 +222,11 @@ export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 		<FormLayout labelPlacement="side">
 			<MultiValueToggleField
 				label="Stage view"
-				value={pane.stageView ?? "2d"}
+				value={view}
 				onChange={(value) => setOption("stageView", value)}
 				options={[
 					{ value: "2d", label: "2D" },
 					{ value: "3d", label: "3D" },
-					{ value: "3d-viz", label: "3D Viz" },
 				]}
 			/>
 			<SwitchField
@@ -242,7 +241,7 @@ export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 			 * which side to look from. What is in a beam belongs to the view and to the render
 			 * quality, neither of which is a per-pane choice.
 			 */}
-			{(pane.stageView ?? "2d") === "2d" && (
+			{view === "2d" && (
 				<SelectField
 					label="Viewed from"
 					value={pane.stage2dSide ?? "top"}
@@ -256,7 +255,7 @@ export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 					]}
 				/>
 			)}
-			{(pane.stageView ?? "2d") === "3d" && (
+			{view === "3d" && (
 				<>
 					<Button
 						onClick={() =>
@@ -265,6 +264,15 @@ export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 					>
 						Reset view
 					</Button>
+					<SwitchField
+						label="Beam direction guidelines"
+						offLabel="Hidden"
+						onLabel="Visible"
+						checked={state.stageShowBeamGuides}
+						onChange={(event) =>
+							dispatch({ type: "SET_STAGE_OPTIONS", showBeamGuides: event.target.checked })
+						}
+					/>
 					<SwitchField
 						label="Floor grid"
 						offLabel="Hidden"
@@ -278,9 +286,6 @@ export function StagePaneSettings({ pane }: { pane: PaneModel }) {
 						}
 					/>
 				</>
-			)}
-			{(pane.stageView ?? "2d") === "3d-viz" && (
-				<StageVizSettings paneId={pane.id} />
 			)}
 			<SwitchField
 				label="Show selection"

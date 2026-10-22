@@ -1673,7 +1673,7 @@ async function verifyDemoFrame(demo: Locator, app: Locator, stage: Locator) {
 		app.locator(".control-section.hardware-connected"),
 	).toBeVisible();
 	const renderer = stage.locator("[data-stage-view]");
-	await expect(renderer).toHaveAttribute("data-stage-view", "3d-viz");
+	await expect(renderer).toHaveAttribute("data-stage-view", "3d");
 	await expect(renderer.locator(".stage-native-pane")).toBeVisible();
 	await expect(renderer).toHaveAttribute("data-stage-renderer", "unavailable");
 	for (const universe of [1, 2, 3, 4]) {
@@ -3347,14 +3347,12 @@ async function ensureStagePane3d(desk: DeskDriver, app: Locator) {
 	await desk.click(pane.getByRole("button", { name: "Settings", exact: true }));
 	const settings = app.page().getByRole("dialog", { name: "Pane Settings" });
 	await desk.click(settings.getByRole("tab", { name: "Stage", exact: true }));
-	if ((await renderer.getAttribute("data-stage-view")) !== "3d-viz")
-		await desk.click(
-			settings.getByRole("radio", { name: "3D Viz", exact: true }),
-		);
+	if ((await renderer.getAttribute("data-stage-view")) !== "3d")
+		await desk.click(settings.getByRole("radio", { name: "3D", exact: true }));
 	await desk.click(
 		settings.getByRole("button", { name: "Close settings", exact: true }),
 	);
-	await expect(renderer).toHaveAttribute("data-stage-view", "3d-viz");
+	await expect(renderer).toHaveAttribute("data-stage-view", "3d");
 	await expect(renderer.locator(".stage-native-pane")).toBeVisible();
 	return stage;
 }
@@ -3624,28 +3622,36 @@ async function createPlaybackDesktop(desk: DeskDriver, page: Page) {
 	await desk.click(
 		paneSettings.getByRole("tab", { name: "Playbacks", exact: true }),
 	);
- await desk.click(paneSettings.getByRole("button", {name:"Configure layout and page source",exact:true}));
- const layout = page.getByRole("dialog", {name:"Configure Playbacks"});
- while (await layout.locator(".playback-row-configuration").count() > 5) {
-  const count = await layout.locator(".playback-row-configuration").count();
-  await desk.click(layout.getByRole("button", {name:`Remove row ${count}`,exact:true}));
- }
- while (await layout.locator(".playback-row-configuration").count() < 5)
-  await desk.click(layout.getByRole("button", {name:"Add Row",exact:true}));
- for (let index=0;index<5;index++) {
-  const row = layout.locator(".playback-row-configuration").nth(index);
-  await row.getByLabel("First Playback Number").fill(String(401+index*10));
-  await row.getByLabel("Playbacks in row").fill("10");
- }
- await desk.click(layout.getByRole("button", {name:"Save",exact:true}));
- await expect(layout).toBeHidden();
+	await desk.click(
+		paneSettings.getByRole("button", {
+			name: "Configure layout and page source",
+			exact: true,
+		}),
+	);
+	const layout = page.getByRole("dialog", { name: "Configure Playbacks" });
+	while ((await layout.locator(".playback-row-configuration").count()) > 5) {
+		const count = await layout.locator(".playback-row-configuration").count();
+		await desk.click(
+			layout.getByRole("button", { name: `Remove row ${count}`, exact: true }),
+		);
+	}
+	while ((await layout.locator(".playback-row-configuration").count()) < 5)
+		await desk.click(
+			layout.getByRole("button", { name: "Add Row", exact: true }),
+		);
+	for (let index = 0; index < 5; index++) {
+		const row = layout.locator(".playback-row-configuration").nth(index);
+		await row
+			.getByLabel("First Playback Number")
+			.fill(String(401 + index * 10));
+		await row.getByLabel("Playbacks in row").fill("10");
+	}
+	await desk.click(layout.getByRole("button", { name: "Save", exact: true }));
+	await expect(layout).toBeHidden();
 	await desk.click(
 		paneSettings.getByRole("button", { name: "Close settings", exact: true }),
 	);
-	await demoPause(
-		page,
-		PRODUCT_DEMO_SCRIPT.pacing.playbackResultHoldFrames,
-	);
+	await demoPause(page, PRODUCT_DEMO_SCRIPT.pacing.playbackResultHoldFrames);
 	return pane;
 }
 
@@ -3730,8 +3736,16 @@ async function createPlaybackSoloRegion(
 }
 
 async function playbackSoloRegions(api: ApiDriver, showId: string) {
- const snapshot = await api.request<{regions: Array<{id: string; name: string; members: Array<{page: number; position: number}>}>}>("GET", "/api/v2/playback-solo-regions", undefined, true, undefined, {showId});
- return snapshot.regions.map(({name, members}) => ({name, members}));
+	const snapshot = await api.request<{
+		regions: Array<{
+			id: string;
+			name: string;
+			members: Array<{ page: number; position: number }>;
+		}>;
+	}>("GET", "/api/v2/playback-solo-regions", undefined, true, undefined, {
+		showId,
+	});
+	return snapshot.regions.map(({ name, members }) => ({ name, members }));
 }
 
 function digits(value: number) {

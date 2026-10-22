@@ -561,6 +561,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
             for (const image of screenshotTags) assert.match(image, /width="1552" height="265"/u, `${product} must reserve the screenshot's actual dimensions`);
         }
         const controlPage = readFileSync(resolve(directory, "control/index.html"), "utf8");
+        const firstControlImage = [...controlPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
+        assert.equal(firstControlImage, "../screenshots/application-overview.png", "Control detail must open with the actual complete application view");
         assert.match(controlPage, /screenshots\/dynamics\.png/u);
         const dynamicsSection = controlPage.split('<p class="eyebrow">Dynamics</p>')[1]?.split('</article>')[0];
         assert.ok(dynamicsSection, "Control detail page needs its Dynamics section");
@@ -575,6 +577,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(controlPage, /screenshots\/control-media-pane\.png/u);
 
         assert.doesNotMatch(controlPage, /A stage view built in/u);
+        assert.match(controlPage, /lightweight plan and wireframe Stage views/u);
+        assert.match(controlPage, /Use Architect for rendered lighting/u);
+        assert.doesNotMatch(controlPage, /a built-in visualizer/u);
         assert.match(controlPage, /Art-Net, sACN, or supported USB DMX/u);
         assert.match(controlPage, /functions or editable keyframes/u);
         assert.match(controlPage, /Distribute them across the rig in 3D/u);

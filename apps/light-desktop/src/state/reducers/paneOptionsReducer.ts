@@ -1,3 +1,4 @@
+import { normalizeControlStageView } from "../controlStageView";
 import { normalizePatchHiddenColumns } from "../reducerHelpers";
 import type { AppState, PaneModel } from "../../types";
 import type { Action } from "../appActions";
@@ -66,15 +67,16 @@ export function reducePaneOptions(
 		case "SET_PANE_TILE_LAYOUT":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,
-				poolTileLayout: action.layout === undefined
-					? undefined
-					: action.layout.mode === "automatic"
-						? { mode: "automatic" }
-						: {
-							mode: "fixed",
-							rows: clamp(Math.trunc(action.layout.rows) || 1, 1, 24),
-							columns: clamp(Math.trunc(action.layout.columns) || 1, 1, 24),
-						},
+				poolTileLayout:
+					action.layout === undefined
+						? undefined
+						: action.layout.mode === "automatic"
+							? { mode: "automatic" }
+							: {
+									mode: "fixed",
+									rows: clamp(Math.trunc(action.layout.rows) || 1, 1, 24),
+									columns: clamp(Math.trunc(action.layout.columns) || 1, 1, 24),
+								},
 			}));
 		case "SET_PANE_POOL_COLUMNS":
 			return updateActivePane(state, action.id, (pane) => ({
@@ -84,7 +86,10 @@ export function reducePaneOptions(
 		case "SET_PANE_STAGE_OPTION":
 			return updateActivePane(state, action.id, (pane) => ({
 				...pane,
-				[action.option]: action.value,
+				[action.option]:
+					action.option === "stageView"
+						? normalizeControlStageView(action.value)
+						: action.value,
 			}));
 		case "SET_PANE_FOG_VARIATION":
 			return updateActivePane(state, action.id, (pane) => ({

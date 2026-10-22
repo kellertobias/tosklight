@@ -40,7 +40,7 @@ const state = {
 	stageMode: "select",
 	stageView: "2d",
 	builtIn: null as string | null,
-	desks: [],
+	desks: [] as { id: string; panes: { kind: string; stageView?: string }[] }[],
 	activeDeskId: "programming",
 	preload: "idle",
 	shiftArmed: false,
@@ -155,7 +155,7 @@ vi.mock("../../state/AppContext", () => ({
 }));
 vi.mock("../../api/ServerContext", () => ({ useServer: () => server }));
 vi.mock("../../features/deskSnapshot/DeskSnapshotState", () => ({
- useSessionSnapshot: () => null,
+	useSessionSnapshot: () => null,
 	useHardwareConnected: () => Boolean(server.bootstrap?.hardware_connected),
 	useAttributeRegistry: () => attributeRegistry.current,
 	useColorModel: () => colorModel.current,
@@ -383,9 +383,9 @@ describe("ParameterControls projection lifecycle", () => {
 		state.builtIn = "timecode";
 		render(<ParameterControls />);
 
-		expect(
-			screen.getByRole("button", { name: "Selected Marker" }),
-		).toHaveClass("is-active");
+		expect(screen.getByRole("button", { name: "Selected Marker" })).toHaveClass(
+			"is-active",
+		);
 		expect(
 			screen.getByRole("group", { name: "Enc 1 · Marker position" }),
 		).toHaveTextContent("00:00:02.00");
@@ -437,10 +437,18 @@ describe("ParameterControls projection lifecycle", () => {
 		expect(server.readVisualization).not.toHaveBeenCalled();
 	});
 
-	it("routes built-in 3D Viz navigation to the renderer camera encoders", () => {
+	it.each([
+		["built-in", "3d"],
+		["built-in", "3d-viz"],
+		["pane", "3d"],
+		["pane", "3d-viz"],
+	] as const)("routes %s %s navigation to the lightweight renderer camera encoders", (surface, view) => {
 		state.stageMode = "navigate";
-		state.stageView = "3d-viz";
-		state.builtIn = "stage";
+		state.stageView = surface === "built-in" ? view : "2d";
+		state.builtIn = surface === "built-in" ? "stage" : null;
+		state.desks = [
+			{ id: state.activeDeskId, panes: [{ kind: "stage", stageView: view }] },
+		];
 
 		render(<ParameterControls />);
 
@@ -1700,18 +1708,24 @@ describe("ParameterControls Group targets and alignment", () => {
 		for (const mode of ["left", "right", "out", "in", "off"]) {
 			const previousLabel = align.getAttribute("aria-label");
 			fireEvent.click(align);
-			await waitFor(() => expect(server.alignSelection).toHaveBeenLastCalledWith("cycle"));
+			await waitFor(() =>
+				expect(server.alignSelection).toHaveBeenLastCalledWith("cycle"),
+			);
 			expect(align.getAttribute("aria-label")).toBe(previousLabel);
 			server.alignment = { mode };
 			rerender(<ParameterControls />);
-			expect(align).toHaveAccessibleName(`Align ${mode[0].toUpperCase()}${mode.slice(1)}`);
+			expect(align).toHaveAccessibleName(
+				`Align ${mode[0].toUpperCase()}${mode.slice(1)}`,
+			);
 		}
 		server.alignment = { mode: "right" };
 		rerender(<ParameterControls />);
 		fireEvent.click(screen.getByRole("button", { name: "Color" }));
 		expect(align).toHaveAccessibleName("Align Right");
 		fireEvent.click(align, { shiftKey: true });
-		await waitFor(() => expect(server.alignSelection).toHaveBeenLastCalledWith("off"));
+		await waitFor(() =>
+			expect(server.alignSelection).toHaveBeenLastCalledWith("off"),
+		);
 		expect(align).toHaveAccessibleName("Align Right");
 		server.alignment = { mode: "off" };
 		rerender(<ParameterControls />);

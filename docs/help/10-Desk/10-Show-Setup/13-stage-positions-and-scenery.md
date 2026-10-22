@@ -2,7 +2,7 @@
 
 Stage provides an operator selection surface for the saved spatial model; the model itself is edited in **Show Patch**.
 
-Stage 2D and 3D use the same saved positions. Changing a fixture in Show Patch updates every view; the 2D plan can be viewed from above, the house, upstage, or either wing.
+Control Stage provides a 2D plan and a lightweight 3D wireframe view. Both use the same saved positions. Changing a fixture in Show Patch updates every view; the 2D plan can be viewed from above, the house, upstage, or either wing.
 
 ## Position fixtures
 
@@ -16,7 +16,7 @@ Press **Open Stage Renderer** in the Show Patch title bar to inspect the changin
 
 The Stage built-in offers **Select fixtures** for programming and **Navigate** to orbit and inspect without moving show objects; it does not edit positions.
 
-In 3D, **Beam direction guides** adds a dotted aim line while a directional emitter is off. The setting is off by default and is shared by the Desk's Stage window and panes. Fixed additional-screen Stage configurations retain their own setting. The option is not shown in 2D or 3D Viz. Emitters marked as broad sources, such as strobes and Sunstrip-style fixtures, remain visibly distinct from their dark housings but do not receive an aim line.
+In 3D, **Beam direction guides** adds a dotted aim line while a directional emitter is off. The setting is off by default and is shared by the Desk's Stage window and panes. Fixed additional-screen Stage configurations retain their own setting. The option is not shown in 2D. Emitters marked as broad sources, such as strobes and Sunstrip-style fixtures, remain visibly distinct from their dark housings but do not receive an aim line.
 
 ## Add scenery and models
 
@@ -32,4 +32,4 @@ Stage, the PreViz Renderer, and Architect show the same Venue objects. Hiding a 
 
 ## Visualization limits
 
-Stage is a programming aid, not a photometric proof. Check real fixtures and DMX output for focus, color, beam, and intensity. Use **Follow Preload** to choose whether Stage displays the live scene or the active Preload scene.
+Use Architect for full rendered lighting, haze, and shadows; Control Stage remains a lightweight selection and aiming surface. Stage is a programming aid, not a photometric proof. Check real fixtures and DMX output for focus, color, beam, and intensity. Use **Follow Preload** to choose whether Stage displays the live scene or the active Preload scene.

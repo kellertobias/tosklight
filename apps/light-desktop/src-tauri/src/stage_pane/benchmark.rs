@@ -57,6 +57,7 @@ pub(crate) struct FrameTelemetry {
     pub(super) degraded: bool,
     pub(super) renderer: String,
     pub(super) quality: &'static str,
+    pub(super) mode: String,
     pub(super) follow_preload: bool,
     pub(super) width: u32,
     pub(super) height: u32,

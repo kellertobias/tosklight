@@ -108,6 +108,8 @@ export interface StagePaneBenchmarkSample {
 	degraded: boolean;
 	renderer: string;
 	quality: "draft" | "standard" | "high" | "ultra";
+	/** Actual view mode reported by the renderer; older helpers may omit it. */
+	mode?: string;
 	followPreload: boolean;
 	width: number;
 	height: number;

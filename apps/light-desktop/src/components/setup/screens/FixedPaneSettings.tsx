@@ -32,7 +32,7 @@ export function defaultFixedPane(
 				follow_preload: false,
 				show_floor_grid: true,
 				show_beam_guides: true,
-				render_quality: "lines_and_beams",
+				render_quality: "lines_only",
 				environment_brightness: 1,
 			};
 		case "cues":
@@ -225,29 +225,6 @@ function Stage3dFixedSettings({
 				checked={pane.show_beam_guides}
 				onChange={(event) =>
 					update({ ...pane, show_beam_guides: event.target.checked })
-				}
-			/>
-			<SelectField
-				label="Render quality"
-				value={pane.render_quality}
-				onChange={(render_quality) => update({ ...pane, render_quality })}
-				options={[
-					{ value: "lines_only", label: "Lines only" },
-					{ value: "lines_and_beams", label: "Lines and beams" },
-					{ value: "full", label: "Full" },
-				]}
-			/>
-			<NumberField
-				label="Environment brightness"
-				min="0"
-				max="1"
-				step="0.05"
-				value={pane.environment_brightness}
-				onChange={(event) =>
-					update({
-						...pane,
-						environment_brightness: Number(event.target.value),
-					})
 				}
 			/>
 		</>

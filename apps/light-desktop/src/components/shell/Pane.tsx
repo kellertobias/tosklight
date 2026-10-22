@@ -29,7 +29,10 @@ export function Pane({
 	editing: boolean;
 }) {
 	const { dispatch } = useApp();
-	const title = pane.kind === "file_manager" && !pane.titleIsCustom ? "File Manager" : pane.title;
+	const title =
+		pane.kind === "file_manager" && !pane.titleIsCustom
+			? "File Manager"
+			: pane.title;
 	const selection = useProgrammingSelectionView(
 		active && (pane.kind === "stage" || pane.kind === "fixtures"),
 	);
@@ -38,48 +41,11 @@ export function Pane({
 	const paneTarget = poolMutationTarget(commandLine?.text ?? "");
 	const deleteArmed =
 		paneTarget?.operation === "delete" && paneTarget.phase === "source";
-	const lastFollowToggle = useRef(0);
 	const [chromeInfo, setChromeInfo] = useState<HTMLSpanElement | null>(null);
 	const [chromeToolbar, setChromeToolbar] = useState<HTMLSpanElement | null>(
 		null,
 	);
-	const stageGroups =
-		pane.kind === "stage"
-			? [
-					{
-						id: "stage-view",
-						actions: [
-							{
-								id: "follow",
-								label: "Follow Preload",
-								active: Boolean(pane.followPreload),
-								onPress: () => {
-									const now = performance.now();
-									if (now - lastFollowToggle.current < 400) return;
-									lastFollowToggle.current = now;
-									dispatch({
-										type: "SET_PANE_STAGE_OPTION",
-										id: pane.id,
-										option: "followPreload",
-										value: !pane.followPreload,
-									});
-								},
-							},
-						],
-					},
-					{
-						id: "stage-navigation",
-						actions: [
-							{
-								id: "groups",
-								label: "Groups",
-								onPress: () =>
-									dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }),
-							},
-						],
-					},
-				]
-			: [];
+	const stageGroups = useStagePaneGroups(pane);
 	const gridDimensions = { columns: 24, rows: 18 };
 	const removeFromDelete = () => {
 		if (!deleteArmed || !requestPaneRemoval(pane.id)) return;
@@ -144,11 +110,7 @@ export function Pane({
 			settings
 			onSettings={() => dispatch({ type: "SET_PANE_SETTINGS", id: pane.id })}
 			onTitleClick={deleteArmed ? removeFromDelete : undefined}
-			titleActionLabel={
-				deleteArmed
-					? `Remove ${title} pane`
-					: undefined
-			}
+			titleActionLabel={deleteArmed ? `Remove ${title} pane` : undefined}
 			onRectChange={updateRect}
 		>
 			<PaneContent
@@ -178,68 +140,124 @@ function PaneContent({
 	return (
 		<PaneChromeProvider value={{ info: chromeInfo, toolbar: chromeToolbar }}>
 			<PoolTileLayoutProvider layout={pane.poolTileLayout}>
-			<Window
-				active={active}
-				compact
-				paneId={pane.id}
-				showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
-				fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
-				fixtureSheetCompactMode={pane.fixtureSheetCompactMode ?? "off"}
-				fixtureSheetIncludedHeads={pane.fixtureSheetIncludedHeads ?? "all"}
-				fixtureSheetOrder={pane.fixtureSheetOrder ?? "fixture-id"}
-				fixtureSheetCueListId={pane.fixtureSheetCueListId || undefined}
-				fixtureSheetColumns={pane.fixtureSheetColumns}
-				fixtureSheetShowType={pane.fixtureSheetShowType ?? true}
-				patchHiddenColumns={pane.patchHiddenColumns}
-				showCueSidebar={pane.showCueSidebar ?? true}
-				cueListCompactRows={pane.cueListCompactRows ?? false}
-				cueInformationBlock={pane.cueInformationBlock ?? "off"}
-				cueListSource={pane.cueListSource ?? "fixed"}
-				fixedCueListNumber={pane.fixedCueListNumber}
-				stageView={pane.stageView ?? state.stageView}
-				stage2dSide={pane.stage2dSide ?? state.stage2dSide}
-				followPreload={Boolean(pane.followPreload)}
-				channelDisplayMode={pane.channelDisplayMode ?? "intensity"}
-				visualizationRows={pane.visualizationRows ?? []}
-				presetFamily={pane.presetFamily ?? state.presetFamily}
-				presetPoolColors={pane.presetPoolColors ?? true}
-				poolColumns={pane.poolColumns}
-				schedulerShowList={pane.schedulerShowList ?? true}
-				schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
-				onSchedulerLayoutChange={({ showList, showCalendar }) =>
-					dispatch({
-						type: "SET_PANE_SCHEDULER_LAYOUT",
-						id: pane.id,
-						showList,
-						showCalendar,
-					})
-				}
-				mediaPaneState={{
-					serverId: pane.mediaServerId,
-					layerId: pane.mediaLayerId,
-					browserMode: pane.mediaBrowserMode,
-					sourceFilter: pane.mediaSourceFilter,
-					controlSectionId: pane.mediaControlSectionId,
-					mainSectionId: pane.mediaMainSectionId,
-					rightPaneVisible: pane.mediaRightPaneVisible,
-				}}
-				onMediaPaneStateChange={(mediaState) =>
-					dispatch({
-						type: "SET_PANE_MEDIA_STATE",
-						id: pane.id,
-						state: mediaState,
-					})
-				}
-				runningFilter={pane.runningFilter ?? "all"}
-				onRunningFilterChange={(filter) =>
-					dispatch({
-						type: "SET_PANE_RUNNING_FILTER",
-						id: pane.id,
-						filter,
-					})
-				}
-			/>
+				<Window
+					active={active}
+					compact
+					paneId={pane.id}
+					showGroupShortcuts={Boolean(pane.showGroupShortcuts)}
+					fixtureSheetActiveOnly={Boolean(pane.fixtureSheetActiveOnly)}
+					fixtureSheetCompactMode={pane.fixtureSheetCompactMode ?? "off"}
+					fixtureSheetIncludedHeads={pane.fixtureSheetIncludedHeads ?? "all"}
+					fixtureSheetOrder={pane.fixtureSheetOrder ?? "fixture-id"}
+					fixtureSheetCueListId={pane.fixtureSheetCueListId || undefined}
+					fixtureSheetColumns={pane.fixtureSheetColumns}
+					fixtureSheetShowType={pane.fixtureSheetShowType ?? true}
+					patchHiddenColumns={pane.patchHiddenColumns}
+					showCueSidebar={pane.showCueSidebar ?? true}
+					cueListCompactRows={pane.cueListCompactRows ?? false}
+					cueInformationBlock={pane.cueInformationBlock ?? "off"}
+					cueListSource={pane.cueListSource ?? "fixed"}
+					fixedCueListNumber={pane.fixedCueListNumber}
+					stageView={pane.stageView ?? state.stageView}
+					stage2dSide={pane.stage2dSide ?? state.stage2dSide}
+					followPreload={Boolean(pane.followPreload)}
+					channelDisplayMode={pane.channelDisplayMode ?? "intensity"}
+					visualizationRows={pane.visualizationRows ?? []}
+					presetFamily={pane.presetFamily ?? state.presetFamily}
+					presetPoolColors={pane.presetPoolColors ?? true}
+					poolColumns={pane.poolColumns}
+					schedulerShowList={pane.schedulerShowList ?? true}
+					schedulerShowCalendar={pane.schedulerShowCalendar ?? true}
+					onSchedulerLayoutChange={({ showList, showCalendar }) =>
+						dispatch({
+							type: "SET_PANE_SCHEDULER_LAYOUT",
+							id: pane.id,
+							showList,
+							showCalendar,
+						})
+					}
+					mediaPaneState={{
+						serverId: pane.mediaServerId,
+						layerId: pane.mediaLayerId,
+						browserMode: pane.mediaBrowserMode,
+						sourceFilter: pane.mediaSourceFilter,
+						controlSectionId: pane.mediaControlSectionId,
+						mainSectionId: pane.mediaMainSectionId,
+						rightPaneVisible: pane.mediaRightPaneVisible,
+					}}
+					onMediaPaneStateChange={(mediaState) =>
+						dispatch({
+							type: "SET_PANE_MEDIA_STATE",
+							id: pane.id,
+							state: mediaState,
+						})
+					}
+					runningFilter={pane.runningFilter ?? "all"}
+					onRunningFilterChange={(filter) =>
+						dispatch({
+							type: "SET_PANE_RUNNING_FILTER",
+							id: pane.id,
+							filter,
+						})
+					}
+				/>
 			</PoolTileLayoutProvider>
 		</PaneChromeProvider>
 	);
+}
+
+/** Shared Stage navigation controls for custom pane chrome. */
+function useStagePaneGroups(pane: PaneModel) {
+	const { state, dispatch } = useApp();
+	const lastFollowToggle = useRef(0);
+	return pane.kind === "stage"
+		? [
+				{
+					id: "stage-view",
+					actions: [
+						{
+							id: "follow",
+							label: "Follow Preload",
+							active: Boolean(pane.followPreload),
+							onPress: () => {
+								const now = performance.now();
+								if (now - lastFollowToggle.current < 400) return;
+								lastFollowToggle.current = now;
+								dispatch({
+									type: "SET_PANE_STAGE_OPTION",
+									id: pane.id,
+									option: "followPreload",
+									value: !pane.followPreload,
+								});
+							},
+						},
+					],
+				},
+				{
+					id: "stage-mode",
+					kind: "tabs" as const,
+					activeId: state.stageMode,
+					onActiveChange: (id: string) =>
+						dispatch({
+							type: "SET_STAGE_MODE",
+							value: id as "select" | "navigate",
+						}),
+					actions: [
+						{ id: "select", label: "Select fixtures" },
+						{ id: "navigate", label: "Navigate" },
+					],
+				},
+				{
+					id: "stage-navigation",
+					actions: [
+						{
+							id: "groups",
+							label: "Groups",
+							onPress: () =>
+								dispatch({ type: "OPEN_GROUPS_FROM_STAGE", origin: "desk" }),
+						},
+					],
+				},
+			]
+		: [];
 }

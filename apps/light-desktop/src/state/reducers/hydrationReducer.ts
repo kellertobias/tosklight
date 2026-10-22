@@ -1,3 +1,4 @@
+import { normalizeControlStageView } from "../controlStageView";
 import { normalizePresetFamily } from "../../presetFamilies";
 import type { AppState } from "../../types";
 import { normalizeVisualizationRows } from "../../windows/visualizationPaneModel";
@@ -19,19 +20,6 @@ import {
  * There is nothing in one to convert — a style said how much of a beam to draw, not where to
  * stand — so it is dropped and the Stage opens on the plan, which is what a 2D Stage was.
  */
-/** A saved render quality, or the current one for anything this build does not know. */
-function normalizeStageVizQuality(
-	value: unknown,
-	fallback: AppState["stageVizQuality"],
-): AppState["stageVizQuality"] {
-	return value === "draft" ||
-		value === "standard" ||
-		value === "high" ||
-		value === "ultra"
-		? value
-		: fallback;
-}
-
 /** A saved number, or the current one where the layout carries something else. */
 function numberOr(value: unknown, fallback: number): number {
 	return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -117,10 +105,14 @@ function hydrateDesks(
 				const migrated = {
 					...activePane,
 					kind,
-					title: pane.titleIsCustom === true
-						? pane.title
-						: cueListWindowTitle(pane.title, kind),
+					title:
+						pane.titleIsCustom === true
+							? pane.title
+							: cueListWindowTitle(pane.title, kind),
 					...(poolTileLayout === undefined ? {} : { poolTileLayout }),
+					...(kind === "stage" && pane.stageView !== undefined
+						? { stageView: normalizeControlStageView(pane.stageView) }
+						: {}),
 					...(kind === "scheduler" ? schedulerPaneLayout(pane) : {}),
 					...(kind === "channels"
 						? {
@@ -144,7 +136,8 @@ function hydrateDesks(
 				const legacyDefault =
 					pane.titleIsCustom !== true &&
 					(pane.title === "All Presets" ||
-						(pane.id === "presets" && pane.title === "Color & Position Presets"));
+						(pane.id === "presets" &&
+							pane.title === "Color & Position Presets"));
 				return {
 					...migrated,
 					title: legacyDefault ? "Mixed Presets" : pane.title,
@@ -210,15 +203,16 @@ export function reduceHydration(
 					action.windowSettings?.stageMode === "navigate"
 						? action.windowSettings.stageMode
 						: state.stageMode,
+				stageView: normalizeControlStageView(
+					action.windowSettings?.stageView,
+					state.stageView,
+				),
 				stage2dSide: normalizeStage2dSide(action.windowSettings?.stage2dSide),
 				stageVizBackground:
 					typeof action.windowSettings?.stageVizBackground === "string"
 						? action.windowSettings.stageVizBackground
 						: state.stageVizBackground,
-				stageVizQuality: normalizeStageVizQuality(
-					action.windowSettings?.stageVizQuality,
-					state.stageVizQuality,
-				),
+				stageVizQuality: "draft",
 				stageVizAtmosphere: numberOr(
 					action.windowSettings?.stageVizAtmosphere,
 					state.stageVizAtmosphere,

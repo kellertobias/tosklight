@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
 	DesktopBridge,
@@ -40,8 +40,8 @@ function stubBridge(overrides: Partial<DesktopBridge>): DesktopBridge {
 	} as unknown as DesktopBridge;
 }
 
-function Probe() {
-	const pane = useNativeStagePane();
+function Probe({ enabled = true }: { enabled?: boolean }) {
+	const pane = useNativeStagePane(enabled);
 	return (
 		<div
 			ref={pane.ref}
@@ -82,11 +82,8 @@ describe("useNativeStagePane", () => {
 
 	it("reports where the pane is and takes it back down again", async () => {
 		const openStagePane = vi.fn(
-			async (
-				_paneId: string,
-				_live3d: boolean,
-				_geometry: StagePaneGeometry,
-			) => undefined,
+			async (_paneId: string, _live3d: boolean, _geometry: StagePaneGeometry) =>
+				undefined,
 		);
 		const closeStagePane = vi.fn(async () => undefined);
 		bridge.current = stubBridge({ openStagePane, closeStagePane });
@@ -107,6 +104,43 @@ describe("useNativeStagePane", () => {
 
 		unmount();
 		await waitFor(() => expect(closeStagePane).toHaveBeenCalledOnce());
+	});
+
+	it("does not start an inactive pane and releases it when its view is hidden", async () => {
+		const openStagePane = vi.fn(async () => undefined);
+		const closeStagePane = vi.fn(async () => undefined);
+		bridge.current = stubBridge({ openStagePane, closeStagePane });
+		const view = render(<Probe enabled={false} />);
+		await waitFor(() =>
+			expect(view.getByTestId("pane")).toHaveAttribute("data-active", "no"),
+		);
+		expect(openStagePane).not.toHaveBeenCalled();
+		view.rerender(<Probe enabled />);
+		await waitFor(() => expect(openStagePane).toHaveBeenCalledOnce());
+		view.rerender(<Probe enabled={false} />);
+		await waitFor(() => expect(closeStagePane).toHaveBeenCalledOnce());
+		expect(view.getByTestId("pane")).toHaveAttribute("data-active", "no");
+	});
+
+	it("closes a delayed native open instead of reviving an already hidden pane", async () => {
+		let finishOpen: (() => void) | undefined;
+		const openStagePane = vi.fn(
+			() =>
+				new Promise<void>((resolve) => {
+					finishOpen = resolve;
+				}),
+		);
+		const closeStagePane = vi.fn(async () => undefined);
+		bridge.current = stubBridge({ openStagePane, closeStagePane });
+		const view = render(<Probe enabled />);
+		await waitFor(() => expect(openStagePane).toHaveBeenCalledOnce());
+		view.rerender(<Probe enabled={false} />);
+		await waitFor(() => expect(closeStagePane).toHaveBeenCalledOnce());
+		await act(async () => {
+			finishOpen?.();
+		});
+		expect(closeStagePane).toHaveBeenCalledTimes(2);
+		expect(view.getByTestId("pane")).toHaveAttribute("data-active", "no");
 	});
 
 	/** A renderer that will not start is shown rather than swallowed, and the Stage falls back. */

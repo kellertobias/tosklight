@@ -34,7 +34,25 @@ export interface NativeStagePane {
 /** How often the desk is asked what the pane is doing. Diagnostics, not the picture. */
 const STATUS_INTERVAL = 2_000;
 
-export function useNativeStagePane(enabled = true, live3d = true): NativeStagePane {
+/** Measure the native drawable from the pane's current CSS bounds and display scale. */
+function nativeStageGeometry(element: HTMLElement) {
+	const rect = element.getBoundingClientRect();
+	const scale = window.devicePixelRatio || 1;
+	return {
+		x: rect.left,
+		y: rect.top,
+		width: rect.width,
+		height: rect.height,
+		scale,
+		surfaceWidth: Math.max(1, Math.round(window.innerWidth * scale)),
+		surfaceHeight: Math.max(1, Math.round(window.innerHeight * scale)),
+	};
+}
+
+export function useNativeStagePane(
+	enabled = true,
+	live3d = true,
+): NativeStagePane {
 	const desktopBridge = useDesktopBridge();
 	const paneId = useId();
 	const [element, setElement] = useState<HTMLElement | null>(null);
@@ -86,19 +104,7 @@ export function useNativeStagePane(enabled = true, live3d = true): NativeStagePa
 		let unsubscribeMove: (() => void) | null = null;
 		let disposed = false;
 
-		const geometry = () => {
-			const rect = element.getBoundingClientRect();
-			const scale = window.devicePixelRatio || 1;
-			return {
-				x: rect.left,
-				y: rect.top,
-				width: rect.width,
-				height: rect.height,
-				scale,
-				surfaceWidth: Math.max(1, Math.round(window.innerWidth * scale)),
-				surfaceHeight: Math.max(1, Math.round(window.innerHeight * scale)),
-			};
-		};
+		const geometry = () => nativeStageGeometry(element);
 
 		// Opening is started without awaiting anything first, so a re-render cannot cancel it
 		// between a question and its answer.
@@ -106,6 +112,11 @@ export function useNativeStagePane(enabled = true, live3d = true): NativeStagePa
 		void desktopBridge
 			.openStagePane(paneId, live3d, geometry())
 			.then(() => {
+				if (disposed) {
+					// A hidden pane may finish opening after cleanup sent its first close.
+					void desktopBridge.closeStagePane(paneId);
+					return;
+				}
 				setActive(true);
 				report = () => {
 					void desktopBridge.setStagePane(paneId, geometry());

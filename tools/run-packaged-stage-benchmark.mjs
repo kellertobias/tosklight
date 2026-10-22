@@ -1,3 +1,4 @@
+import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
 import { execFile, spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { openSync } from "node:fs";
@@ -2539,8 +2540,7 @@ function evaluateNativeStage(
 		failures.push(
 			"a native Stage lane had a source cadence gap longer than 200 ms",
 		);
-	if (qualities.length !== 4)
-		failures.push("the native renderer did not present all four quality tiers");
+	failures.push(...controlStageFrameFailures(frames));
 	const rendererRestarts = countNativeRendererRestarts(frames);
 	if (rendererRestarts < 1)
 		failures.push(

@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { act, cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PackagedStageBenchmarkConfig } from "./platform/desktop/types";
 
@@ -52,10 +52,11 @@ const bridge = {
 	packagedStageBenchmarkPrepared: mock.prepared,
 };
 vi.mock("./platform/desktop", () => ({ useDesktopBridge: () => bridge }));
+
 import { NativePackagedStageBenchmarkApp } from "./NativePackagedStageBenchmarkApp";
 import {
-	NativeHostObservations,
 	benchmarkStageEnabled,
+	NativeHostObservations,
 } from "./nativePackagedBenchmarkMode";
 
 const config: PackagedStageBenchmarkConfig = {
@@ -143,6 +144,16 @@ describe("packaged benchmark Stage mode", () => {
 			await vi.advanceTimersByTimeAsync(30_000);
 		});
 		expect(screen.getAllByTestId("stage")).toHaveLength(2);
+		expect(mock.stage).toHaveBeenCalledWith(
+			expect.objectContaining({ stageView: "3d", followPreload: false }),
+		);
+		expect(mock.stage).toHaveBeenCalledWith(
+			expect.objectContaining({ stageView: "2d", followPreload: true }),
+		);
+		expect(mock.dispatch).toHaveBeenCalledWith({
+			type: "SET_STAGE_OPTIONS",
+			vizQuality: "draft",
+		});
 		expect(screen.getByTestId("sheet").getAttribute("data-active")).toBe(
 			"true",
 		);

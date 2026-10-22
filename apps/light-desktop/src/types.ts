@@ -41,13 +41,7 @@ export type ControlMode = "programmer" | "playbacks";
 export type DockMode = "desks" | "builtins";
 export type ValueSource = "programmer" | "playback" | "default";
 export type StageMode = "select" | "navigate";
-/**
- * Which renderer draws the Stage, chosen by the operator rather than by what is available.
- *
- * All three are drawn by the ToskLight renderer, in its own process: `2d` is its plan of the rig
- * from a chosen side, `3d` its outline view, `3d-viz` the full picture. The desk draws none of
- * them, so a screen the renderer cannot reach shows that rather than a second drawing of its own.
- */
+/** Control draws lightweight plans and wireframe 3D. `3d-viz` is a read-compatible legacy alias. */
 export type StageView = "2d" | "3d" | "3d-viz";
 /**
  * Which side a 2D Stage is the plan from.

@@ -20,8 +20,8 @@ import type { NativeStagePane } from "./useNativeStagePane";
  *
  * Every Stage is the renderer's picture, so this is the whole mapping: a 2D Stage is one of its
  * orthographic plans, chosen by which side the operator is looking from; a 3D Stage is its
- * outline view; a 3D Viz Stage is the full one. Nothing else decides it — in particular no
- * quality setting does, because how much a beam costs to draw is not a way of looking at a rig.
+ * outline view. Legacy full-render views use that same outline view in Control. The full
+ * rendering controls remain in Architect.
  */
 export function stageViewMode(view: StageView, side: Stage2dSide): string {
 	if (view === "2d") {
@@ -33,7 +33,7 @@ export function stageViewMode(view: StageView, side: Stage2dSide): string {
 			right: "right_to_left",
 		}[side];
 	}
-	return view === "3d" ? "lines_3d" : "full_3d";
+	return "lines_3d";
 }
 
 /** `#rrggbb` as the three linear components the renderer wants. */
@@ -59,7 +59,7 @@ export function backgroundColour(hex: string): [number, number, number] {
 
 export function useStagePanePicture(
 	pane: NativeStagePane,
-	mode = "full_3d",
+	mode = "lines_3d",
 	followPreload = false,
 	paneId?: string,
 	forcedShowBeamGuides?: boolean,
@@ -68,9 +68,7 @@ export function useStagePanePicture(
 	const { state } = useApp();
 	const active = pane.active;
 	const {
-		stageVizAtmosphere,
 		stageEnvironmentBrightness,
-		stageVizQuality,
 		stageVizExposure,
 		stageVizLaserBrightness,
 		stageVizShowLabels,
@@ -92,9 +90,9 @@ export function useStagePanePicture(
 	useEffect(() => {
 		if (!active) return;
 		void bridge.setStagePanePicture(pane.id, {
-			atmosphere: stageVizAtmosphere,
+			atmosphere: 0,
 			ambient: stageEnvironmentBrightness,
-			quality: stageVizQuality,
+			quality: "draft",
 			exposure: stageVizExposure,
 			laserBrightness: stageVizLaserBrightness,
 			lampFogCloudiness,
@@ -105,7 +103,15 @@ export function useStagePanePicture(
 			floorGrid: stageShowFloorGrid,
 			showBeamGuides,
 			background: backgroundColour(stageVizBackground),
-			mode,
+			mode: [
+				"top_down",
+				"left_to_right",
+				"right_to_left",
+				"front_to_back",
+				"back_to_front",
+			].includes(mode)
+				? mode
+				: "lines_3d",
 			followPreload,
 		});
 	}, [
@@ -113,9 +119,7 @@ export function useStagePanePicture(
 		bridge,
 		mode,
 		followPreload,
-		stageVizAtmosphere,
 		stageEnvironmentBrightness,
-		stageVizQuality,
 		stageVizExposure,
 		stageVizLaserBrightness,
 		lampFogCloudiness,

@@ -1,8 +1,12 @@
+import { normalizeControlStageView } from "../../state/controlStageView";
 import { useHardwareConnected } from "../../features/deskSnapshot/DeskSnapshotState";
 import { useTimecodeEncoderDeck } from "../../features/timecode/timecodeEncoderBridge";
 import { useApp } from "../../state/AppContext";
 import { ParameterControlView } from "./parameterControls/ParameterControlView";
-import { type ParameterController, useParameterController } from "./parameterControls/useParameterController";
+import {
+	type ParameterController,
+	useParameterController,
+} from "./parameterControls/useParameterController";
 import { StageCommandControls } from "./StageCommandControls";
 import { StageVizCameraControls } from "./StageVizCameraControls";
 import { TimecodeParameterControls } from "./TimecodeParameterControls";
@@ -38,13 +42,14 @@ export function ParameterControls({
 		// looks. The desk's own Stage keeps the controls that match how it draws.
 		const drawnByTheRenderer =
 			state.builtIn === "stage"
-				? state.stageView === "3d-viz"
+				? normalizeControlStageView(state.stageView) === "3d"
 				: state.desks
 						.find((desk) => desk.id === state.activeDeskId)
 						?.panes.some(
 							(pane) =>
 								pane.kind === "stage" &&
-								(pane.stageView ?? state.stageView) === "3d-viz",
+								normalizeControlStageView(pane.stageView ?? state.stageView) ===
+									"3d",
 						);
 		return drawnByTheRenderer ? (
 			<StageVizCameraControls hardwareConnected={hardwareConnected} />
@@ -52,7 +57,11 @@ export function ParameterControls({
 			<StageCommandControls />
 		);
 	}
-	return controller ? <ParameterControlView controller={controller} /> : <ProgrammerParameterControls active={active} />;
+	return controller ? (
+		<ParameterControlView controller={controller} />
+	) : (
+		<ProgrammerParameterControls active={active} />
+	);
 }
 
 function ProgrammerParameterControls({ active }: { active: boolean }) {
@@ -64,10 +73,14 @@ function ProgrammerParameterControls({ active }: { active: boolean }) {
 export function useProgrammerEncoderContext() {
 	const { state } = useApp();
 	const deck = useTimecodeEncoderDeck();
-	const stageVisible = state.builtIn === "stage" || state.desks
-		.find((desk) => desk.id === state.activeDeskId)
-		?.panes.some((pane) => pane.kind === "stage");
-	return state.builtIn !== "patch" &&
+	const stageVisible =
+		state.builtIn === "stage" ||
+		state.desks
+			.find((desk) => desk.id === state.activeDeskId)
+			?.panes.some((pane) => pane.kind === "stage");
+	return (
+		state.builtIn !== "patch" &&
 		!(state.builtIn === "timecode" && deck) &&
-		!(state.stageMode !== "select" && stageVisible);
+		!(state.stageMode !== "select" && stageVisible)
+	);
 }

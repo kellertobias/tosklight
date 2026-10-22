@@ -2,7 +2,6 @@
   "version": 1,
   "limits": {"file":1200,"function":150},
   "files": {
-    "apps/light-desktop/src-tauri/src/stage_pane.rs": 1240,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx": 1325,
     "crates/light/adapters/headless/src/runtime/macros_v2.rs": 1588,
     "crates/media/adapters/library/src/storage.rs": 1215
@@ -14,7 +13,7 @@
     "apps/light-desktop/src/features/controlSurfaceInteraction/SetInteractionProvider.tsx::javascript:function:SetInteractionProvider:7ad4c5cbb6a4:1": 155,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimecodeTimelineEditor:6909217a8925:1": 343,
     "apps/light-desktop/src/features/timecode/TimecodeTimelineEditor.tsx::javascript:function:TimelineOverview:16fafd302031:1": 211,
-    "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 198,
+    "apps/light-desktop/src/NativePackagedStageBenchmarkApp.tsx::javascript:function:NativeBenchmark:42a50ebfaeb7:1": 190,
     "apps/light-desktop/src/windows/cuelistWindow/CuelistPool.tsx::javascript:function:useCuelistPoolActions:58fe5a3d2a5d:1": 164,
     "apps/light-desktop/src/windows/cuelistWindow/CueProperties.tsx::javascript:function:CuePropertyModal:960359513099:1": 243,
     "apps/light-desktop/src/windows/fileManagerWindow/FileManagerHeader.tsx::javascript:function:FileManagerHeader:b653d019e7cf:1": 164,
@@ -25,7 +24,6 @@
     "apps/light-desktop/src/windows/media/useMediaPaneData.ts::javascript:function:useMediaPaneData:9153a6569927:1": 210,
     "apps/light-desktop/src/windows/MediaPaneWindow.tsx::javascript:function:MediaPaneWindow:524b4c7a99c2:1": 196,
     "apps/light-desktop/src/windows/stageWindow/StageVizSettings.tsx::javascript:function:StageVizSettings:1bf5d18db46a:1": 200,
-    "apps/light-desktop/src/windows/stageWindow/useNativeStagePane.ts::javascript:function:useNativeStagePane:594eb11477bc:1": 151,
     "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeEditor:7b955907b986:1": 304,
     "apps/light-desktop/src/windows/TimecodeRuntimeWindow.tsx::javascript:function:TimecodeRuntimeWindow:d912494f991d:1": 228,
     "apps/media/src/features/layers/MediaPanePage.tsx::javascript:function:MediaPanePageContent:c637161b075d:1": 548,

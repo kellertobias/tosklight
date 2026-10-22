@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 	state: {
 		paneSettingsId: null as string | null,
 		stageShowFloorGrid: true,
+		stageShowBeamGuides: false,
 		stageShowSelection: true,
 		stageVizAtmosphere: 0.2,
 		stageEnvironmentBrightness: 0.05,
@@ -106,18 +107,12 @@ describe("Stage pane settings parity", () => {
 		rerender(
 			<StagePaneSettings pane={pane("stage", { stageView: "3d-viz" })} />,
 		);
-		expect(screen.getByText("Fog / haze")).toBeVisible();
-		expect(screen.getByText("Environment brightness")).toBeVisible();
-		expect(screen.getByText("Render quality")).toBeVisible();
-		expect(screen.getByText("Exposure")).toBeVisible();
-		expect(screen.getByText("Fixture labels")).toBeVisible();
-		for (const label of [
-			"Lamp fog cloudiness",
-			"Lamp fog turbulence",
-			"Laser fog cloudiness",
-			"Laser fog turbulence",
-		])
-			expect(screen.getByText(label)).toBeVisible();
+		expect(screen.getByRole("switch", { name: /Beam direction guidelines/ })).toBeVisible();
+		for (const label of ["Fog / haze", "Environment brightness", "Render quality", "Exposure", "Fixture labels", "Lamp fog cloudiness", "Laser fog turbulence"])
+			expect(screen.queryByText(label)).toBeNull();
+		expect(screen.queryByText("3D Viz")).toBeNull();
+		fireEvent.click(screen.getByRole("switch", { name: /Beam direction guidelines/ }));
+		expect(mocks.dispatch).toHaveBeenCalledWith({ type: "SET_STAGE_OPTIONS", showBeamGuides: true });
 	});
 });
 

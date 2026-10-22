@@ -92,7 +92,7 @@ A pane remembers its server, layer, browser, and section. Disconnecting does not
 
 ## Stage
 
-Use Stage for spatial selection and inspection. **2D** shows the plan, **3D** shows models and aim, and **3D Viz** adds rendered light. Tap or marquee fixtures; Shift extends selection and Control/Command toggles it.
+Use Stage for spatial selection and inspection. **2D** shows the plan; **3D** shows a lightweight wireframe view with optional beam direction guidelines. Rendered lighting, haze, and shadows belong to the separate Architect visualizer. Tap or marquee fixtures; Shift extends selection and Control/Command toggles it.
 
 **Pane configuration:** choose the view, **Follow Preload**, and Group shortcuts. Each pane keeps its own camera, so Live and Preload views can coexist.
 
@@ -100,24 +100,15 @@ Drag to orbit, scroll to zoom, middle-drag to pan, and secondary-drag to slide. 
 
 ### Stage is a selection and viewing surface
 
-The full Stage window provides **Select fixtures** and **Navigate**. Navigate repurposes the encoder bank: **Position** controls camera X/Y/Z and Zoom, and **Direction** controls Pan/Tilt. These controls move the view, not the rig.
+The Stage window and custom Stage panes provide **Select fixtures** and **Navigate**. Navigate repurposes the encoder bank: **Position** controls camera X/Y/Z and Zoom, and **Direction** controls Pan/Tilt. These controls move the view, not the rig.
 
 Edit physical placement in **Show Patch** or Architect. Use **Open Stage Renderer** for visual feedback while patching and add visual-only scenery from Venue profiles.
 
-| Render quality | Appearance |
-| --- | --- |
-| **Draft** | Basic light cones. |
-| **Standard** | Adds gobo patterns. |
-| **High** | Adds feathered edges, falloff, and shadows. |
-| **Ultra** | Adds uneven, drifting haze. |
+**Floor grid** adds metre-spaced reference lines. In **3D**, enable **Beam direction guidelines** to inspect aim without rendering light beams. Control Stage does not run the full lighting renderer.
 
-**Environment brightness** reveals unlit scenery; **Background** changes the room color; **Exposure** is a fixed brightness multiplier, rather than automatic exposure. **Floor grid** adds metre-spaced reference lines.
+For rendered lighting, open Architect's separate visualizer. Its [view and rendering controls](../../20-ToskLight-PreViz/04-desk-view-control.md) include quality, haze, and exposure. Close that renderer when it is not needed.
 
-With labels enabled, **UV** means native UV drive is active. The estimation mark means visible color prediction is incomplete. Stage does not simulate fluorescence or replace UV with purple. Verify the real fixture for critical focus and color.
-
-Close the renderer when not needed, or lower quality while arranging the rig.
-
-![Native Stage rendering](../../assets/screenshots/panes/stage.png)
+![Control Stage wireframe and beam direction guidelines](../../assets/screenshots/panes/stage.png)
 
 ![Stage pane settings](../../assets/screenshots/panes/stage-settings.png)
 
