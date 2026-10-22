@@ -61,6 +61,7 @@ export function LaneLabel({
 	onSelectLane,
 	expanded = false,
 	onCloseCue,
+	pinned = false,
 }: {
 	lane: TimecodeLane;
 	audioFileName?: string | null;
@@ -69,14 +70,17 @@ export function LaneLabel({
 	onSelectLane(laneId: string): void;
 	expanded?: boolean;
 	onCloseCue?(): void;
+	pinned?: boolean;
 }) {
 	const kind = lane.content.kind.replaceAll("_", " ");
 	return (
 		<div className="timecode-editor-lane-label">
 			<Button
-				className="timecode-lane-select"
-				aria-label={`${lane.name} · ${kind}. Drag to reorder lane`}
-				onPointerDown={(event) => startLaneDrag(event, lane.id)}
+				className={`timecode-lane-select ${pinned ? "main-audio-label" : ""}`}
+				aria-label={`${lane.name} · ${kind}. ${pinned ? "Pinned main audio" : "Drag to reorder lane"}`}
+				onPointerDown={(event) => {
+					if (!pinned) startLaneDrag(event, lane.id);
+				}}
 				onClick={() => {
 					if (!consumeLaneDragClick(lane.id)) onSelectLane(lane.id);
 				}}

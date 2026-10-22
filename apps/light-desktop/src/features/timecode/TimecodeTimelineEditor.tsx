@@ -1,3 +1,4 @@
+import { Ruler } from "./TimecodeRuler";
 import { timelineSelectionContext } from "./timelineSelectionContext";
 import {
 	useTimelineGeometry,
@@ -47,6 +48,7 @@ import {
 import { CueListChooser } from "./TimecodeCueListChooser";
 import {
 	formatFrame,
+	displayedTimecodeLanes,
 	markerColorOption,
 	TIMECODE_LANE_HEADER_WIDTH,
 	timelineScroller,
@@ -149,6 +151,7 @@ function TimelineCanvas(props: {
 	): void;
 	onCueTimingError?(message: string): void;
 }) {
+	const displayedLanes = displayedTimecodeLanes(props.definition);
 	const scrub = (event: ReactPointerEvent<HTMLDivElement>) => {
 		if (event.target !== event.currentTarget) return;
 		scrubAt(event.clientX, event.currentTarget);
@@ -199,7 +202,7 @@ function TimelineCanvas(props: {
 						Settings.
 					</p>
 				)}
-				{props.definition.lanes.map((lane) => (
+				{displayedLanes.map((lane) => (
 					<EditorLane key={lane.id} {...props} lane={lane} />
 				))}
 				{props.items
@@ -340,7 +343,7 @@ function TimelineOverview({
 	};
 	const lanes = [
 		...(definition.audio ? [{ id: "main-audio", kind: "audio" }] : []),
-		...definition.lanes.map((lane) => ({
+		...displayedTimecodeLanes(definition).map((lane) => ({
 			id: lane.id,
 			kind: lane.content.kind,
 		})),
@@ -468,7 +471,7 @@ function EditorLane(
 			: undefined;
 	return (
 		<div
-			className={`timecode-editor-lane lane-${lane.content.kind} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
+			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
 			data-lane-id={lane.id}
 			onPointerDown={(event) => {
 				const target = event.target as Element;
@@ -508,6 +511,9 @@ function EditorLane(
 				)}
 			<LaneLabel
 				lane={lane}
+				pinned={Boolean(
+					props.definition.audio && lane.content.kind === "audio_volume",
+				)}
 				audioFileName={props.definition.audio?.file_name}
 				startLaneDrag={props.startLaneDrag}
 				consumeLaneDragClick={props.consumeLaneDragClick}
@@ -804,6 +810,15 @@ function useLaneReorder({
 				.elementFromPoint(event.clientX, event.clientY)
 				?.closest<HTMLElement>(".timecode-editor-lane")?.dataset.laneId;
 			if (!targetLane || targetLane === current.laneId) return;
+			if (
+				latest.current.audio &&
+				latest.current.lanes.some(
+					(lane) =>
+						(lane.id === targetLane || lane.id === current.laneId) &&
+						lane.content.kind === "audio_volume",
+				)
+			)
+				return;
 			const next = reorderTimelineLane(
 				latest.current,
 				current.laneId,
@@ -1242,48 +1257,6 @@ function useOverviewScroll({
 		viewportWidth,
 		width,
 	]);
-}
-
-function Ruler({
-	duration,
-	fps,
-	pixelsPerFrame,
-}: {
-	duration: number;
-	fps: number;
-	pixelsPerFrame: number;
-}) {
-	const step = pixelsPerFrame * fps >= 52 ? fps : fps * 5;
-	const ticks = Array.from(
-		{ length: Math.floor(duration / step) + 1 },
-		(_, index) => index * step,
-	);
-	return (
-		<>
-			<div className="timecode-ruler-stripes" aria-hidden="true">
-				{ticks.map((tick) => (
-					<i key={tick} style={{ left: tick * pixelsPerFrame }} />
-				))}
-			</div>
-			<div className="timecode-ruler">
-				{ticks.map((tick) => (
-					<span
-						key={tick}
-						className={
-							tick === 0
-								? "timecode-ruler-first-tick"
-								: tick === duration
-									? "timecode-ruler-final-tick"
-									: undefined
-						}
-						style={{ left: tick * pixelsPerFrame }}
-					>
-						{formatFrame(tick, fps)}
-					</span>
-				))}
-			</div>
-		</>
-	);
 }
 
 /// The clip edits the timeline canvas hands back, each one a whole new definition.

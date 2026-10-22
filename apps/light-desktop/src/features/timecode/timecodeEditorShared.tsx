@@ -1,3 +1,4 @@
+import type { TimecodeDefinition } from "../../api/types/timecode";
 import { Button } from "@tosklight/ui";
 import type { CSSProperties, RefObject } from "react";
 import type { CueList } from "../../api/types";
@@ -149,3 +150,13 @@ export function AudioLaneFileName({ name }: { name?: string | null }) {
 	return <span className="timecode-audio-lane-file">{name}</span>;
 }
 
+/** Main audio stays first in both timeline and overview without rewriting the show. */
+export function displayedTimecodeLanes(definition: TimecodeDefinition) {
+	return definition.audio
+		? [...definition.lanes].sort(
+				(left, right) =>
+					Number(right.content.kind === "audio_volume") -
+					Number(left.content.kind === "audio_volume"),
+			)
+		: definition.lanes;
+}

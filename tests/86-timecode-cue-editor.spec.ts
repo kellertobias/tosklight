@@ -176,6 +176,74 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(originalCues);
 	});
 
+	test("TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll", async ({ api, show, desk, page, request }, testInfo) => {
+		const rig = await seedEditor(api, show.id);
+		const imported = await request.post(`${api.baseUrl}/api/v2/timecodes/audio/import?name=sticky-reference.wav`, {
+			headers: { authorization: `Bearer ${api.session!.token}`, "x-tosk-show": show.id, "content-type": "audio/wav" },
+			data: referenceWav(),
+		});
+		expect(imported.ok()).toBe(true);
+		const asset = await imported.json() as { asset_id: string; asset_revision: number };
+		const speedLanes: TimecodeDefinition["lanes"] = Array.from({ length: 12 }, (_, index) => ({
+			id: crypto.randomUUID(), name: `Ordinary lane ${index + 1}`,
+			content: { kind: "speed_group", group: "A", keyframes: [{ id: crypto.randomUUID(), frame: 220, bpm: 120, phase: 0 }] },
+		}));
+		const audioLaneId = crypto.randomUUID();
+		const lanes: TimecodeDefinition["lanes"] = [...rig.definition.lanes, ...speedLanes, {
+			id: audioLaneId, name: "Main audio", content: { kind: "audio_volume", keyframes: [
+				{ id: crypto.randomUUID(), frame: 220, value: 0.8, fade_frames: 0, curve: "linear" },
+			] },
+		}];
+		const current = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		await api.request("POST", "/api/v2/timecodes/actions", {
+			request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id,
+				expected_revision: current.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision,
+				patch: { audio: { asset_id: asset.asset_id, asset_revision: asset.asset_revision, file_name: "sticky-reference.wav" }, lanes },
+			},
+		}, true, undefined, { showId: show.id });
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+		const ruler = editor.locator(".timecode-timeline-heading");
+		const audio = editor.locator(".timecode-editor-lane.lane-audio_volume.main-audio");
+		const waveform = audio.locator(".timecode-waveform");
+		const label = audio.locator(".timecode-editor-lane-label");
+		const volume = audio.locator(".timecode-timeline-item.item-volume");
+		const ordinary = editor.locator(`.timecode-editor-lane[data-lane-id="${speedLanes[0].id}"]`);
+		const speed = ordinary.locator(".timecode-timeline-item.item-speed");
+		await expect(waveform.locator("path")).toHaveAttribute("d", /.+/);
+		await expect(editor.locator(".timecode-editor-lane").first()).toHaveAttribute("data-lane-id", audioLaneId);
+		await expect(label).toContainText("sticky-reference.wav");
+		await zoomIn(page, editor);
+		const point = (locator: Locator) => locator.evaluate((node) => {
+			const box = node.getBoundingClientRect(); return { x: box.x, y: box.y, width: box.width, height: box.height };
+		});
+		const initial = { waveform: await point(waveform), label: await point(label), volume: await point(volume), ruler: await point(ruler), ordinary: await point(ordinary), speed: await point(speed) };
+		expect(initial.waveform.y).toBeGreaterThanOrEqual(initial.ruler.y + initial.ruler.height);
+		expect(initial.volume.x + initial.volume.width / 2).toBeCloseTo(initial.speed.x + initial.speed.width / 2, 1);
+		const bounds = await viewport.boundingBox();
+		if (!bounds) throw new Error("Missing timeline viewport");
+		await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height - 30);
+		await page.mouse.wheel(0, 360);
+		await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(100);
+		for (const [locator, previous] of [[waveform, initial.waveform], [label, initial.label], [volume, initial.volume], [ruler, initial.ruler]] as const)
+			expect((await point(locator)).y).toBe(previous.y);
+		expect((await point(ordinary)).y).toBeLessThan(initial.ordinary.y - 100);
+		const beforePan = { waveform: await point(waveform), volume: await point(volume), speed: await point(speed), scroll: await viewport.evaluate((node) => node.scrollLeft) };
+		await page.mouse.wheel(320, 0);
+		await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(beforePan.scroll);
+		const delta = await viewport.evaluate((node) => node.scrollLeft) - beforePan.scroll;
+		for (const [locator, previous] of [[waveform, beforePan.waveform], [volume, beforePan.volume], [speed, beforePan.speed]] as const) {
+			const moved = await point(locator);
+			expect(moved.x).toBeCloseTo(previous.x - delta, 1);
+			expect(moved.width).toBe(previous.width);
+		}
+		const collection = await api.request<{ objects: Array<{ definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		expect(collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.lanes.map((lane) => lane.id)).toEqual(lanes.map((lane) => lane.id));
+		await page.screenshot({ path: testInfo.outputPath("timecode-sticky-main-audio.png") });
+	});
+
 });
 
 async function seedEditor(api: ApiDriver, showId: string) {
@@ -273,4 +341,19 @@ async function touchDragFrames(page: Page, editor: Locator, handle: Locator, fra
 	} finally {
 		await cdp.detach();
 	}
+}
+
+function referenceWav() {
+	const sampleRate = 8000;
+	const frames = sampleRate * 20;
+	const buffer = Buffer.alloc(44 + frames * 2);
+	buffer.write("RIFF", 0); buffer.writeUInt32LE(buffer.length - 8, 4); buffer.write("WAVEfmt ", 8);
+	buffer.writeUInt32LE(16, 16); buffer.writeUInt16LE(1, 20); buffer.writeUInt16LE(1, 22);
+	buffer.writeUInt32LE(sampleRate, 24); buffer.writeUInt32LE(sampleRate * 2, 28); buffer.writeUInt16LE(2, 32); buffer.writeUInt16LE(16, 34);
+	buffer.write("data", 36); buffer.writeUInt32LE(frames * 2, 40);
+	for (let index = 0; index < frames; index += 1) {
+		const envelope = 0.3 + 0.6 * Math.abs(Math.sin(index / sampleRate * Math.PI));
+		buffer.writeInt16LE(Math.round(Math.sin(index / sampleRate * 2 * Math.PI * 440) * envelope * 24000), 44 + index * 2);
+	}
+	return buffer;
 }

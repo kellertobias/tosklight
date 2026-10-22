@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **428 root cases across 134 files**.
+Default catalog: **429 root cases across 134 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -403,6 +403,7 @@ Default catalog: **428 root cases across 134 files**.
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › manual Trigger drags stop at neighbours and survive reopening without changing trigger type | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › touch drags each timing point and cancelling a touch restores the unsaved preview | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › first Trigger moves the whole clip and the final Cue explains its separate Clip Out | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-166 @ui › empty faders explain their state while available faders stay clear | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-373 @ui › channel faders are labelled with the fixture name, not the Fixture ID | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-392 @ui › a stage element with no dimmer never reaches the fader bank | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |

@@ -523,7 +523,8 @@ describe("TimecodeTimelineEditor", () => {
 				...definition,
 				lanes: [
 					definition.lanes[0],
-					{ ...definition.lanes[0], id: "second", name: "Second Lane" },
+					{ id: "first", name: "First Lane", content: {kind: "speed_group", group: "A", keyframes: []} },
+ { id: "second", name: "Second Lane", content: {kind: "speed_group", group: "B", keyframes: []} },
 				],
 			});
 			return (
@@ -543,7 +544,7 @@ describe("TimecodeTimelineEditor", () => {
 		}
 		const view = render(<Harness />);
 		const firstHeader = screen.getByRole("button", {
-			name: /Audio.*Drag to reorder lane/,
+			name: /First Lane.*Drag to reorder lane/,
 		});
 		const secondLane = view.container.querySelector<HTMLElement>(
 			'[data-lane-id="second"]',
@@ -574,7 +575,7 @@ describe("TimecodeTimelineEditor", () => {
 					".timecode-editor-lane-label strong",
 				),
 			].map((label) => label.textContent),
-		).toEqual(["Second Lane", "Audio"]);
+		).toEqual(["Audio", "Second Lane", "First Lane"]);
 		expect(begin).toHaveBeenCalledTimes(1);
 		expect(end).toHaveBeenCalledTimes(1);
 	});
@@ -1557,4 +1558,19 @@ describe("Timecode selection properties", () => {
 			true,
 		);
 	});
+});
+
+it("pins main audio first without rewriting stored lane order or allowing its header to drag", () => {
+ const audio=definition.lanes[0];
+ const other={id:"other",name:"Other",content:{kind:"speed_group" as const,group:"A",keyframes:[]}};
+ const stored={...definition,lanes:[other,audio]};
+ const commit=vi.fn(), preview=vi.fn(), begin=vi.fn();
+ const view=render(<TimecodeTimelineEditor definition={stored} frame={0} fps={44} cueLists={[]} audioPlayers={[]} onScrub={vi.fn()} onCommit={commit} onPreview={preview} onBeginGesture={begin} onEndGesture={vi.fn()}/>);
+ expect([...view.container.querySelectorAll(".timecode-editor-lane-label strong")].map(n=>n.textContent)).toEqual(["Audio","Other"]);
+ const header=screen.getByRole("button",{name:/Audio.*Pinned main audio/});
+ fireEvent.pointerDown(header,{pointerId:55,button:0,clientY:40});
+ fireEvent.pointerMove(window,{pointerId:55,clientX:100,clientY:200});
+ fireEvent.pointerUp(window,{pointerId:55});
+ expect(begin).not.toHaveBeenCalled();expect(preview).not.toHaveBeenCalled();expect(commit).not.toHaveBeenCalled();
+ expect(stored.lanes.map(l=>l.name)).toEqual(["Other","Audio"]);
 });

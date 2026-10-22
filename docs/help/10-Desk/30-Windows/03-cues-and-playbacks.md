@@ -67,7 +67,7 @@ Tap a Macro to run it; right-click or use **SET** to edit it. The editor provide
 
 ## Timecode
 
-Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output.
+Use the Timecode Pool and editor to place Cuelist, Speed, and Audio lanes against one timeline. Markers label times but do not execute output. When a main audio file is linked, its waveform and volume lane stay at the top below the ruler while you scroll the other lanes; horizontal scrolling and zoom keep every lane aligned.
 
 Scrubbing the ruler or dragging the playhead inspects a position without seeking live output. The **Playhead** encoder shows that editor position; press the title's transport position button to seek explicitly.
 

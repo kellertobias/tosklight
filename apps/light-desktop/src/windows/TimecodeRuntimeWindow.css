@@ -388,7 +388,7 @@
 	position: relative;
 	box-sizing: border-box;
 	min-height: max(20rem, 100%);
-	padding-top: 2rem;
+	padding-top: 0;
 	background: #11121a;
 	touch-action: none;
 }
@@ -864,7 +864,7 @@
 /* The playhead is the shared Button primitive reshaped into a scrub line. */
 .ui-button.timecode-editor-playhead {
 	position: absolute;
-	z-index: 3;
+	z-index: 9;
 	top: 0;
 	bottom: 0;
 	display: block;
@@ -1315,3 +1315,9 @@
 .timecode-cue-reference-axis { display: block; position: relative; height: 58px; }
 .timecode-editor-lane.cue-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
 .timecode-editor-lane-label .timecode-cue-close { width: calc(100% - 16px); height: 36px; min-height: 36px; margin: 0 8px; align-self: center; }
+
+/* The ruler and main audio remain visible as the other timeline lanes scroll.
+   Both belong to the same canvas, so horizontal panning keeps exact alignment. */
+.timecode-timeline-heading { position: sticky; top: 0; z-index: 8; height: 2rem; background: #171823; pointer-events: none; }
+.timecode-editor-lane.main-audio { position: sticky; top: 2rem; z-index: 7; background: #1d2030; box-shadow: 0 2px 0 #50586b; }
+.timecode-lane-select.main-audio-label.ui-button { cursor: default; }

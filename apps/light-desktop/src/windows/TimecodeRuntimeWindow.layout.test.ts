@@ -133,7 +133,7 @@ describe("Timecode timeline layout", () => {
 
 	it("keeps the playhead label at its top and has only the exact ruler grid", () => {
 		expect(css).toMatch(
-			/\.ui-button\.timecode-editor-playhead\s*\{[\s\S]*?z-index:\s*3;/,
+			/\.ui-button\.timecode-editor-playhead\s*\{[\s\S]*?z-index:\s*9;/,
 		);
 		expect(css).toMatch(
 			/\.timecode-editor-playhead span\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/,

@@ -212,7 +212,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			"▶ Run Macro",
 		);
 		await expect(page.getByRole("button", { name: /copy/i })).toHaveCount(0);
-		await page.getByRole("button", { name: "Settings" }).click();
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Macro Settings" });
 		await expect(settings.getByRole("textbox", { name: "Name" })).toHaveValue(
 			"Front wash",
@@ -462,7 +462,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 			)
 			.toBe("17.5");
 
-		await page.getByRole("button", { name: "Settings" }).click();
+		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
 		// The settings are tabbed: the name is on Generic, the marker import on Markers.
 		await settings.getByLabel("Name").fill("Opening sequence");
