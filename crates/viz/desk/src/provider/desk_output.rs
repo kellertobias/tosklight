@@ -76,20 +76,7 @@ impl DeskProvider {
             {
                 return;
             }
-            // Reject an incompatible source before decoding any universe or point. Show
-            // revisions also advance for non-lighting edits while output may keep its accepted
-            // publication: compatibility is the show and every compiled physical identity, not
-            // the unrelated revision counter. A repatch/profile change still fails this proof.
-            if output.native_protocol > 0
-                && !output.native.as_ref().is_some_and(|lane| {
-                    lane.show_id == scene.show_id
-                        && decoder.accepts_native_snapshot(
-                            lane.instances
-                                .iter()
-                                .map(|i| (i.instance_id, i.native_identity.as_str())),
-                        )
-                })
-            {
+            if !compatible_live_source(&output, scene, decoder) {
                 return;
             }
             // What this read would put on screen. Nothing below changes any of its inputs, so it
@@ -200,6 +187,26 @@ impl DeskProvider {
             }
         }
     }
+}
+
+/// Show revisions also advance for non-lighting edits while output may retain its accepted
+/// publication. Prove compatibility through the show and every compiled physical identity,
+/// rather than the unrelated revision counter. A repatch or profile change fails this proof
+/// before any universe or point can mutate the picture. Legacy sources have no native lane.
+fn compatible_live_source(
+    output: &OutputDmxSnapshot,
+    scene: &viz_scene::Scene,
+    decoder: &viz_project::Decoder,
+) -> bool {
+    output.native_protocol == 0
+        || output.native.as_ref().is_some_and(|lane| {
+            lane.show_id == scene.show_id
+                && decoder.accepts_native_snapshot(
+                    lane.instances
+                        .iter()
+                        .map(|instance| (instance.instance_id, instance.native_identity.as_str())),
+                )
+        })
 }
 
 /// The snapshot's universes as decoder frames, each padded or clipped to 512 slots.
