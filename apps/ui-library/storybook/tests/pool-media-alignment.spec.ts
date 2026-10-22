@@ -25,8 +25,11 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 				if (!artwork) throw new Error("Missing tile artwork");
 				const outer = media.getBoundingClientRect();
 				const inner = artwork.getBoundingClientRect();
-				const card = media.closest("button")!.getBoundingClientRect();
-				const slot = media.parentElement!.getBoundingClientRect();
+				const tile = media.closest("button");
+				const parent = media.parentElement;
+				if (!tile || !parent) throw new Error("Missing tile media slot");
+				const card = tile.getBoundingClientRect();
+				const slot = parent.getBoundingClientRect();
 				return {
 					mediaWidth: outer.width,
 					mediaHeight: outer.height,
@@ -76,13 +79,16 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 	}
 	// Automatic square cards retain their width; both artwork dimensions grow with them.
 	for (const selected of ["false", "true"]) {
-		const widthFor = (shape: string) =>
-			measurements.find(
+		const widthFor = (shape: string) => {
+			const measurement = measurements.find(
 				(item) =>
 					item.shape === shape &&
 					item.selected === selected &&
 					item.name?.includes("Fixture"),
-			)!.mediaWidth;
+			);
+			if (!measurement) throw new Error(`Missing ${shape} fixture tile`);
+			return measurement.mediaWidth;
+		};
 		expect(widthFor("large")).toBeGreaterThan(widthFor("square") * 1.5);
 		expect(widthFor("square")).toBeGreaterThan(widthFor("tiny") * 1.3);
 	}
@@ -93,8 +99,9 @@ test("pool artwork stays vertically and horizontally centered without clipping",
 		rectangular: 160,
 	};
 	for (const measurement of measurements) {
-		const width = expectedWidths[measurement.shape!];
-		expect(Math.abs(measurement.tileWidth - width!)).toBeLessThanOrEqual(0.6);
+		const width = expectedWidths[measurement.shape ?? ""];
+		if (width === undefined) throw new Error("Unexpected tile shape");
+		expect(Math.abs(measurement.tileWidth - width)).toBeLessThanOrEqual(0.6);
 	}
 });
 
@@ -108,9 +115,9 @@ test("media library keeps its full-card image beneath the title strip", async ({
 	await expect(card).toBeVisible();
 	const bounds = await card.evaluate((element) => {
 		const card = element.getBoundingClientRect();
-		const media = element
-			.querySelector(".pool-card-media")!
-			.getBoundingClientRect();
+		const artwork = element.querySelector(".pool-card-media");
+		if (!artwork) throw new Error("Missing library preview");
+		const media = artwork.getBoundingClientRect();
 		return {
 			cardWidth: card.width,
 			mediaWidth: media.width,
