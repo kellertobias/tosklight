@@ -96,10 +96,85 @@ it("separates nearby upper points and coincident lower points without moving the
 		top: "226px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 Out delay" })).toHaveStyle({
-		top: "106px",
+		top: "134px",
 	});
 	expect(screen.getByRole("slider", { name: "Cue 1 In fade" })).toHaveStyle({
 		left: "22px",
-		top: "58px",
+		top: "86px",
+	});
+});
+
+it("keeps Trigger distinct from every fade target when all fade times are zero", () => {
+	const cueList = {
+		id: "list",
+		name: "Instant",
+		mode: "sequence",
+		cues: [
+			{
+				id: "one",
+				number: "1",
+				name: "First",
+				fade_millis: 0,
+				delay_millis: 0,
+				out_delay_millis: 0,
+				out_fade_millis: 0,
+				trigger: { type: "manual" },
+				changes: [],
+			},
+			{
+				id: "two",
+				number: "2",
+				name: "Next",
+				fade_millis: 0,
+				delay_millis: 0,
+				trigger: { type: "wait", delay_millis: 0 },
+				changes: [],
+			},
+		],
+	} as unknown as CueList;
+	const timingDefaults = { sequenceFadeMillis: 0, releaseFadeMillis: 0 };
+	const selected = cueClipTimingRows(clip, cueList, timingDefaults).rows[0];
+	render(
+		<CueTimingPoints
+			selected={selected}
+			cueList={cueList}
+			timingDefaults={timingDefaults}
+			clip={clip}
+			position={(frame) => frame * 2}
+			pixelsPerFrame={2}
+			triggerPreview={null}
+			first
+			triggerBounds={null}
+			canMoveTrigger
+			setTriggerPreview={vi.fn()}
+			placeTrigger={vi.fn()}
+			saving={false}
+			editable
+			begin={vi.fn()}
+			commit={vi.fn()}
+		/>,
+	);
+	const targets = [
+		"Trigger",
+		"In fade",
+		"Out delay",
+		"In delay",
+		"Out fade",
+	].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }));
+	expect(targets.map((target) => target.style.top)).toEqual([
+		"38px",
+		"86px",
+		"134px",
+		"178px",
+		"226px",
+	]);
+	expect(targets.every((target) => target.style.left === "0px")).toBe(true);
+	for (let index = 1; index < targets.length; index++)
+		expect(
+			Number.parseFloat(targets[index].style.top) -
+				Number.parseFloat(targets[index - 1].style.top),
+		).toBeGreaterThanOrEqual(44);
+	expect(targets[1].querySelector(".timecode-cue-point-leader")).toHaveStyle({
+		height: "28px",
 	});
 });

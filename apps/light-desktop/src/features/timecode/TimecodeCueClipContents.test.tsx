@@ -62,6 +62,12 @@ it("shows a single Cue, inherited In, explicit zero Out reference and separate c
 	expect(
 		screen.getByRole("slider", { name: "Cue 1 Out fade" }),
 	).toHaveAttribute("aria-valuenow", "440");
+	expect(screen.getByRole("slider", { name: "Cue 1 Out delay" })).toHaveStyle({
+		top: "22px",
+	});
+	expect(screen.getByRole("slider", { name: "Cue 1 Out fade" })).toHaveStyle({
+		top: "70px",
+	});
 	expect(
 		rendered.container.querySelector(".timecode-cue-edit-rail.out.reference"),
 	).not.toBeNull();
@@ -135,9 +141,16 @@ it("expands Cue envelopes and attaches all four points to their corners", () => 
 		onSaveCueList: vi.fn().mockResolvedValue(two),
 	};
 	const view = render(<CueListClipContents {...props} />);
+	expect(view.container.querySelector(".timecode-cue-envelope")).toBeNull();
 	expect(
-		view.container.querySelector(".timecode-cue-envelope"),
-	).toHaveAttribute("height", "86");
+		screen.getByRole("button", { name: "Edit Cue 1 Audience" }),
+	).toHaveClass("timecode-cue-block");
+	expect(
+		screen.getByRole("button", { name: "Edit Cue 1 Audience" }),
+	).toHaveStyle({ left: "0px", width: "440px", top: "3px" });
+	expect(
+		view.container.querySelector('[data-trigger-frame="220"]'),
+	).toHaveStyle({ left: "440px" });
 	expect(screen.queryByRole("slider", { name: "Cue 1 In fade" })).toBeNull();
 	view.rerender(
 		<CueListClipContents {...props} selectedCueId="one" expanded />,
@@ -166,4 +179,66 @@ it("expands Cue envelopes and attaches all four points to their corners", () => 
 	expect(
 		view.container.querySelector(".timecode-cue-fade-guide.out"),
 	).not.toBeNull();
+});
+
+it("previews placed manual triggers and dependent automatic Cues without saving until release", () => {
+	const body = {
+		...list,
+		cues: [
+			{ ...list.cues[0], fade_millis: 1000 },
+			{
+				...list.cues[0],
+				id: "two",
+				number: "2",
+				name: "Manual",
+				fade_millis: 1000,
+			},
+			{
+				...list.cues[0],
+				id: "three",
+				number: "3",
+				name: "Follow",
+				fade_millis: 1000,
+				trigger: { type: "follow" as const, delay_millis: 0 },
+			},
+		],
+	};
+	const onPlaceCueStart = vi.fn();
+	const view = render(
+		<div data-pixels-per-frame="2">
+			<CueListClipContents
+				cueList={{ id: body.id, name: body.name, cues: body.cues, body }}
+				clip={{
+					...clip,
+					end_cue_id: "three",
+					cue_starts: [{ cue_id: "two", offset_frame: 220 }],
+				}}
+				pixelsPerFrame={2}
+				timingDefaults={{ sequenceFadeMillis: 1000, releaseFadeMillis: 500 }}
+				selectedCueId="two"
+				expanded
+				onPlaceCueStart={onPlaceCueStart}
+			/>
+		</div>,
+	);
+	const trigger = screen.getByRole("slider", { name: "Cue 2 Trigger" });
+	fireEvent.pointerDown(trigger, { pointerId: 1, clientX: 100 });
+	fireEvent.pointerMove(trigger, { pointerId: 1, clientX: 188 });
+	expect(trigger).toHaveAttribute("aria-valuenow", "264");
+	expect(
+		view.container.querySelector('[data-trigger-frame="264"]'),
+	).toHaveStyle({ left: "528px" });
+	expect(
+		view.container.querySelector('[data-trigger-frame="308"]'),
+	).toHaveStyle({ left: "616px" });
+	expect(onPlaceCueStart).not.toHaveBeenCalled();
+	fireEvent.pointerCancel(trigger, { pointerId: 1 });
+	expect(trigger).toHaveAttribute("aria-valuenow", "220");
+	expect(
+		view.container.querySelector('[data-trigger-frame="264"]'),
+	).toHaveStyle({ left: "528px" });
+	fireEvent.pointerDown(trigger, { pointerId: 2, clientX: 100 });
+	fireEvent.pointerMove(trigger, { pointerId: 2, clientX: 188 });
+	fireEvent.pointerUp(trigger, { pointerId: 2, clientX: 188 });
+	expect(onPlaceCueStart).toHaveBeenCalledExactlyOnceWith("clip", "two", 264);
 });

@@ -1,3 +1,7 @@
+import {
+	cueClipTimingWithTriggerPreview,
+	cueTriggerSource,
+} from "./cueClipTimingPreview";
 import { mergeCueTimingFields } from "./mergeCueTimingFields";
 import { CueTimingInspector } from "./TimecodeCueTimingInspector";
 import { CueTimingPoints } from "./TimecodeCueTimingPoints";
@@ -12,11 +16,11 @@ import type {
 	TimecodeCueListClipStatus,
 } from "../../api/types/timecode";
 import {
+	cueClipTimingRows,
 	type CueClipTimingDefaults,
 	type CueClipTimingRow,
 	type CueFadeEdge,
 	type CueFadeKind,
-	cueClipTimingRows,
 	cueWithDraggedFade,
 	cueFadeEditFrameBounds,
 	cueTransitionFrameBounds,
@@ -260,6 +264,7 @@ export function CueListClipContents({
 	onSaveCueList,
 	onPlaceCueStart,
 	onMoveClip,
+	onPreviewMoveClip,
 	onSetClipFade,
 	onError,
 	selectedCueId = null,
@@ -274,6 +279,7 @@ export function CueListClipContents({
 	onSaveCueList?(id: string, body: CueList): Promise<CueList>;
 	onPlaceCueStart?(clipId: string, cueId: string, offset: number): void;
 	onMoveClip?(clipId: string, startFrame: number): void;
+	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
 	onSetClipFade?(clipId: string, kind: "in" | "out", frames: number): void;
 	onError?(message: string): void;
 	selectedCueId?: string | null;
@@ -290,7 +296,13 @@ export function CueListClipContents({
 		onSaveCueList,
 		onError,
 	});
-	const projected = cueClipTimingRows(clip, activeBody, timingDefaults);
+	const projected = cueClipTimingWithTriggerPreview(
+		clip,
+		activeBody,
+		timingDefaults,
+		selectedCueId,
+		triggerPreview,
+	);
 	const selected = projected.rows.find((row) => row.cue.id === selectedCueId);
 	const position = (frame: number) =>
 		Math.max(0, frame - clip.start_frame) * pixelsPerFrame;
@@ -320,13 +332,7 @@ export function CueListClipContents({
 				) - clip.start_frame,
 			);
 	};
-	const source = first
-		? "Clip start · moves the clip"
-		: selected?.transition
-			? selected.transition === "placed"
-				? "Manual GO · placed in this clip"
-				: "Manual GO · follows previous completion until placed"
-			: `${selected?.cue.trigger.type ?? "Automatic"} · derived from Cuelist trigger settings`;
+	const source = cueTriggerSource(selected, first);
 
 	return (
 		<>
@@ -362,7 +368,10 @@ export function CueListClipContents({
 						first={first}
 						triggerBounds={triggerBounds}
 						canMoveTrigger={canMoveTrigger}
-						setTriggerPreview={setTriggerPreview}
+						setTriggerPreview={(frame) => {
+							if (first && onPreviewMoveClip) onPreviewMoveClip(clip.id, frame);
+							else setTriggerPreview(frame);
+						}}
 						placeTrigger={placeTrigger}
 						saving={saving}
 						editable={Boolean(onSaveCueList)}

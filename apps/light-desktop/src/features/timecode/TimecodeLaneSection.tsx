@@ -1,10 +1,7 @@
-import { envelopePoints } from "./cueEnvelopeGeometry";
 import { Button } from "@tosklight/ui";
 import type { ReactNode } from "react";
 import type { TimecodeLane } from "../../api/types/timecode";
-import { cueClipTimingRows, type CueClipTimingDefaults } from "./cueClipTiming";
 import { speedGroupLinePoints } from "./speedLaneGeometry";
-import type { TimecodeCueListOption } from "./timecodeEditorShared";
 
 export const TIMECODE_LANE_SECTIONS = [
 	{
@@ -31,8 +28,6 @@ export function TimecodeLaneSection({
 	lanes,
 	collapsed,
 	duration,
-	cueLists,
-	timingDefaults,
 	onToggle,
 	renderLane,
 }: {
@@ -41,12 +36,19 @@ export function TimecodeLaneSection({
 	lanes: readonly TimecodeLane[];
 	collapsed: boolean;
 	duration: number;
-	cueLists: readonly TimecodeCueListOption[];
-	timingDefaults: CueClipTimingDefaults;
 	onToggle(): void;
 	renderLane(lane: TimecodeLane): ReactNode;
 }) {
 	if (!lanes.length) return null;
+	if (lanes[0].content.kind === "cue_list")
+		return (
+			<section
+				className={`timecode-lane-section ${className}`}
+				aria-label="Cuelist lanes"
+			>
+				{lanes.map(renderLane)}
+			</section>
+		);
 	return (
 		<section
 			className={`timecode-lane-section ${className}`}
@@ -88,12 +90,7 @@ export function TimecodeLaneSection({
 									data-lane-id={lane.id}
 									data-lane-name={lane.name}
 								>
-									<Miniature
-										lane={lane}
-										duration={duration}
-										cueLists={cueLists}
-										timingDefaults={timingDefaults}
-									/>
+									<Miniature lane={lane} duration={duration} />
 								</span>
 							))}
 						</span>
@@ -109,13 +106,9 @@ export function TimecodeLaneSection({
 function Miniature({
 	lane,
 	duration,
-	cueLists,
-	timingDefaults,
 }: {
 	lane: TimecodeLane;
 	duration: number;
-	cueLists: readonly TimecodeCueListOption[];
-	timingDefaults: CueClipTimingDefaults;
 }) {
 	const x = (frame: number) =>
 		Math.max(0, Math.min(100, (frame / Math.max(1, duration)) * 100));
@@ -129,53 +122,6 @@ function Miniature({
 		>
 			{content.kind === "speed_group" ? (
 				<polyline points={speedGroupLinePoints(content.keyframes, duration)} />
-			) : content.kind === "cue_list" ? (
-				content.clips.flatMap((clip) => {
-					const body = cueLists.find(
-						(list) => list.id === content.cue_list_id,
-					)?.body;
-					if (!body)
-						return (
-							<rect
-								key={clip.id}
-								x={x(clip.start_frame)}
-								y="20"
-								width={x(clip.end_frame) - x(clip.start_frame)}
-								height="60"
-							/>
-						);
-					return cueClipTimingRows(clip, body, timingDefaults).rows.map(
-						(row, index, rows) => {
-							const last = index === rows.length - 1;
-							return (
-								<polygon
-									key={`${clip.id}-${row.cue.id}`}
-									points={envelopePoints(
-										row.startFrame,
-										row.inFade.startFrame,
-										row.inFade.endFrame,
-										last
-											? Math.max(clip.end_frame, row.inFade.endFrame)
-											: row.outFade.startFrame,
-										last
-											? Math.max(clip.end_frame, row.inFade.endFrame)
-											: row.outFade.endFrame,
-										90,
-										15,
-										clip.start_frame,
-										clip.end_frame,
-									)
-										.split(" ")
-										.map((point) => {
-											const [frame, y] = point.split(",").map(Number);
-											return `${x(frame)},${y}`;
-										})
-										.join(" ")}
-								/>
-							);
-						},
-					);
-				})
 			) : content.kind === "audio_player" ? (
 				content.clips.map((clip) => (
 					<rect

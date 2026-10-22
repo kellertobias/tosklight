@@ -48,34 +48,41 @@ function pointPlacement(
 	edge: CueFadeEdge,
 	pixelsPerFrame: number,
 ) {
-	const upperCollision =
-		!selected.outFadeReference &&
-		Math.abs(
-			(selected.inFade.endFrame - selected.outFade.startFrame) * pixelsPerFrame,
-		) < 44;
-	const lowerCollision =
-		!selected.outFadeReference &&
-		Math.abs(
-			(selected.inFade.startFrame - selected.outFade.endFrame) * pixelsPerFrame,
-		) < 44;
-
+	const near = (left: number, right: number) =>
+		Math.abs((left - right) * pixelsPerFrame) < 44;
 	const reference = kind === "out" && selected.outFadeReference;
 	const anchorTop = reference
 		? edge === "start"
-			? 14
-			: 44
+			? 22
+			: 70
 		: (kind === "in") === (edge === "start")
 			? 226
 			: 58;
-	const displaced =
-		!reference &&
-		((kind === "out" && edge === "start" && upperCollision) ||
-			(kind === "in" && edge === "start" && lowerCollision));
-	return {
-		anchorTop,
-		displaced,
-		pointTop: anchorTop + (displaced ? (kind === "out" ? 48 : -48) : 0),
-	};
+	const inEndTop = near(selected.inFade.endFrame, selected.startFrame)
+		? 86
+		: 58;
+	let outStartTop = near(selected.outFade.startFrame, selected.startFrame)
+		? 86
+		: 58;
+	if (
+		!selected.outFadeReference &&
+		near(selected.inFade.endFrame, selected.outFade.startFrame) &&
+		Math.abs(outStartTop - inEndTop) < 44
+	)
+		outStartTop = inEndTop + 48;
+	let pointTop = anchorTop;
+	if (!reference) {
+		if (kind === "in" && edge === "end") pointTop = inEndTop;
+		if (kind === "out" && edge === "start") pointTop = outStartTop;
+		if (
+			kind === "in" &&
+			edge === "start" &&
+			!selected.outFadeReference &&
+			near(selected.inFade.startFrame, selected.outFade.endFrame)
+		)
+			pointTop = 178;
+	}
+	return { anchorTop, pointTop, displaced: pointTop !== anchorTop };
 }
 
 export function CueTimingPoints({

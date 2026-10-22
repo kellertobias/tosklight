@@ -696,7 +696,7 @@ describe("TimecodeTimelineEditor", () => {
 			}),
 		).toBeInTheDocument();
 		const clip = within(lane as HTMLElement).getByTitle(
-			"Opening · state start → release · 00:00:00.00",
+			"Opening · 00:00:00.00",
 		);
 		expect(clip).toHaveClass("item-clip");
 		expect(clip).toHaveStyle({ left: "160px", width: "560px" });
@@ -1016,7 +1016,7 @@ describe("TimecodeTimelineEditor", () => {
 		}
 		const view = render(<Harness />);
 		const editor = within(view.container);
-		const clip = editor.getByTitle(/Opening · state start/);
+		const clip = editor.getByTitle(/Opening · 00:/);
 		// The clip is dragged by its handle; its body belongs to the Cue sub-clips.
 		const handle = clip.querySelector<HTMLElement>(".timecode-clip-handle");
 		expect(handle).toBeTruthy();
@@ -1238,6 +1238,22 @@ describe("TimecodeTimelineEditor", () => {
 	});
 
 	it("drags a clip's own out fade and commits it to the clip", () => {
+		const body: CueList = {
+			id: "cue-list", name: "Opening", mode: "sequence",
+			priority: 0, looped: false,
+			cues: [
+				{
+					id: "cue-1", number: "1", name: "First",
+					fade_millis: 1000, delay_millis: 0,
+					trigger: { type: "manual" }, changes: [],
+				},
+				{
+					id: "cue-2", number: "2", name: "Second",
+					fade_millis: 1000, delay_millis: 0,
+					trigger: { type: "follow", delay_millis: 0 }, changes: [],
+				},
+			],
+		};
 		const clipDefinition: TimecodeDefinition = {
 			...definition,
 			lanes: [
@@ -1271,7 +1287,7 @@ describe("TimecodeTimelineEditor", () => {
 				definition={clipDefinition}
 				frame={0}
 				fps={44}
-				cueLists={[]}
+				cueLists={[{ id: body.id, name: body.name, cues: body.cues, body }]}
 				audioPlayers={[]}
 				onScrub={vi.fn()}
 				onCommit={onCommit}
@@ -1284,6 +1300,7 @@ describe("TimecodeTimelineEditor", () => {
 			".timecode-timeline-canvas",
 		);
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
+		fireEvent.click(view.getByRole("button", { name: "Edit Cue 1 First" }));
 		const handle = view.getByRole("slider", { name: "Clip out fade" });
 		// The out handle is measured back from the clip end, so dragging it left lengthens
 		// the fade it owns.

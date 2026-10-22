@@ -2,6 +2,7 @@ import {
 	useTimelineSections,
 	useTimelineSelectedLane,
 } from "./useTimelineSections";
+import { useClipTriggerPreview } from "./useClipTriggerPreview";
 import { TimelineOverview } from "./TimecodeTimelineOverview";
 import {
 	TIMECODE_LANE_SECTIONS,
@@ -272,8 +273,6 @@ function TimelineLanes(props: Parameters<typeof TimelineCanvas>[0]) {
 					)}
 					collapsed={Boolean(props.collapsedSections[section.kind])}
 					duration={props.duration}
-					cueLists={props.cueLists}
-					timingDefaults={props.timingDefaults}
 					onToggle={() => props.onToggleSection(section.kind)}
 					renderLane={(lane) => (
 						<EditorLane key={lane.id} {...props} lane={lane} />
@@ -288,22 +287,30 @@ function TimelineLanes(props: Parameters<typeof TimelineCanvas>[0]) {
 	);
 }
 
+function cueListForLane(
+	lane: TimecodeDefinition["lanes"][number],
+	cueLists: readonly TimecodeCueListOption[],
+) {
+	const id = lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
+	return cueLists.find((candidate) => candidate.id === id);
+}
+
 function EditorLane(
 	props: Parameters<typeof TimelineCanvas>[0] & {
 		lane: TimecodeDefinition["lanes"][number];
 	},
 ) {
-	const { lane } = props;
+	const { displayDefinition, displayItems, previewMoveClip } =
+		useClipTriggerPreview(props.definition, props.items);
+	const lane = displayDefinition.lanes.find(
+		(candidate) => candidate.id === props.lane.id,
+	) ?? props.lane;
 	const speedPositions =
 		lane.content.kind === "speed_group"
 			? speedKeyframePositions(lane.content.keyframes)
 			: new Map<string, number>();
-	const cueListId =
-		lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
-	const cueList =
-		cueListId !== null
-			? props.cueLists.find((candidate) => candidate.id === cueListId)
-			: undefined;
+	const cueListId = lane.content.kind === "cue_list" ? lane.content.cue_list_id : null;
+	const cueList = cueListForLane(lane, props.cueLists);
 	return (
 		<div
 			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
@@ -359,7 +366,7 @@ function EditorLane(
 				}
 				onCloseCue={props.onCloseCue}
 			/>
-			{props.items
+			{displayItems
 				.filter((item) => item.laneId === lane.id)
 				.map((item) => (
 					<TimelineItemButton
@@ -394,6 +401,9 @@ function EditorLane(
 						}}
 						onCloseCue={props.onCloseCue}
 						inspectorHost={props.inspectorHost}
+						onPreviewMoveClip={(clipId, frame) =>
+							previewMoveClip(lane.id, clipId, frame)
+						}
 						onMoveClip={(clipId, frame) =>
 							props.onMoveClip(lane.id, clipId, frame)
 						}
@@ -458,6 +468,7 @@ function TimelineItemButton({
 	expanded = false,
 	inspectorHost = null,
 	onMoveClip,
+	onPreviewMoveClip,
 }: {
 	item: TimelineItem;
 	marker?: boolean;
@@ -486,12 +497,15 @@ function TimelineItemButton({
 	selectedCueId?: string | null;
 	inspectorHost?: HTMLElement | null;
 	onMoveClip?(clipId: string, frame: number): void;
+	onPreviewMoveClip?(clipId: string, frame: number | null): void;
 	onSelectCue?(cueId: string): void;
 	onCloseCue?(): void;
 	expanded?: boolean;
 }) {
 	const width = item.endFrame
-		? Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
+		? cueClip
+			? Math.max(0, (item.endFrame - item.frame) * pixelsPerFrame)
+			: Math.max(44, (item.endFrame - item.frame) * pixelsPerFrame)
 		: undefined;
 	const markerColor = marker ? markerColorOption(item.color) : null;
 	const isCueListClip = item.kind === "clip" && item.endFrame !== undefined;
@@ -530,7 +544,7 @@ function TimelineItemButton({
 				startDrag(event, item.selection, item.frame, undefined, startVolume);
 			}}
 			aria-disabled={marker && markersLocked ? true : undefined}
-			title={`${item.label} · ${formatFrame(item.frame, fps)}`}
+			title={`${cueClip ? (cueList?.name ?? "Cuelist") : item.label} · ${formatFrame(item.frame, fps)}`}
 		>
 			{clipStatus && <CueListClipStatus status={clipStatus} />}
 			{isCueListClip && cueClip && (
@@ -552,6 +566,7 @@ function TimelineItemButton({
 					expanded={expanded}
 					inspectorHost={inspectorHost}
 					onMoveClip={onMoveClip}
+					onPreviewMoveClip={onPreviewMoveClip}
 				/>
 			)}
 			{marker ? (

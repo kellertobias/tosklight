@@ -1,7 +1,8 @@
 import { Button } from "@tosklight/ui";
 import type { CSSProperties } from "react";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
-import type { CueClipTimingRow } from "./cueClipTiming";
+import { TIMECODE_FPS, type CueClipTimingRow } from "./cueClipTiming";
+import { formatFrame } from "./timecodeEditorShared";
 
 export { envelopePoints } from "./cueEnvelopeGeometry";
 import { envelopePoints } from "./cueEnvelopeGeometry";
@@ -55,59 +56,72 @@ export function CueEnvelope({
 			className={`timecode-cue-timing ${isSelected ? "selected" : ""} ${row.diagnostic ? "unsupported" : ""}`}
 			style={{ "--cue-hue": `${(index * 43 + 190) % 360}` } as CSSProperties}
 		>
-			<svg
-				className="timecode-cue-envelope"
-				width={width}
-				height={expanded ? 202 : 86}
-				aria-hidden="true"
-			>
-				<polygon points={points} />
-				{isSelected && (
-					<>
-						<polyline
-							className="timecode-cue-fade-guide in"
-							points={`${inStart},${base} ${inEnd},${peak}`}
-						/>
-						{!last && (
+			{expanded && (
+				<svg
+					className="timecode-cue-envelope"
+					width={width}
+					height={expanded ? 202 : 86}
+					aria-hidden="true"
+				>
+					<polygon points={points} />
+					{isSelected && (
+						<>
 							<polyline
-								className="timecode-cue-fade-guide out"
-								points={`${outStart},${peak} ${outEnd},${base}`}
+								className="timecode-cue-fade-guide in"
+								points={`${inStart},${base} ${inEnd},${peak}`}
 							/>
-						)}
-					</>
-				)}
-			</svg>
-			<Button
-				variant="ghost"
-				size="compact"
-				type="button"
-				className="timecode-cue-envelope-hit"
-				aria-label={label}
-				aria-pressed={isSelected}
-				style={{
-					left,
-					width: Math.max(20, Math.min(width, right) - left),
-					height: expanded ? 202 : 86,
-					clipPath: `polygon(0 100%, ${Math.max(0, inEnd - left)}px 0, 100% 0, 100% 100%)`,
-				}}
-				onPointerDown={(event) => event.stopPropagation()}
-				onClick={(event) => {
-					event.stopPropagation();
-					if (row.cue.id) onSelectCue?.(row.cue.id);
-				}}
+							{!last && (
+								<polyline
+									className="timecode-cue-fade-guide out"
+									points={`${outStart},${peak} ${outEnd},${base}`}
+								/>
+							)}
+						</>
+					)}
+				</svg>
+			)}
+			{expanded && (
+				<Button
+					variant="ghost"
+					size="compact"
+					type="button"
+					className="timecode-cue-envelope-hit"
+					aria-label={label}
+					aria-pressed={isSelected}
+					style={{
+						left,
+						width: Math.max(20, Math.min(width, right) - left),
+						height: expanded ? 202 : 86,
+						clipPath: `polygon(0 100%, ${Math.max(0, inEnd - left)}px 0, 100% 0, 100% 100%)`,
+					}}
+					onPointerDown={(event) => event.stopPropagation()}
+					onClick={(event) => {
+						event.stopPropagation();
+						if (row.cue.id) onSelectCue?.(row.cue.id);
+					}}
+				/>
+			)}
+			<CueTriggerBoundary
+				row={row}
+				expanded={expanded}
+				left={left}
+				selected={isSelected}
 			/>
 			<Button
 				variant="ghost"
 				size="compact"
 				type="button"
-				className="timecode-cue-name"
+				className={`timecode-cue-name ${expanded ? "" : "timecode-cue-block"}`}
 				contentAlign="left"
 				aria-label={`Edit ${label}`}
 				aria-pressed={isSelected}
 				style={{
 					left,
-					width: Math.max(1, position(row.handoverFrame) - left),
-					top: expanded ? 234 : 112,
+					width: Math.max(
+						1,
+						Math.min(width, position(row.handoverFrame)) - left,
+					),
+					top: expanded ? 234 : 3,
 				}}
 				onPointerDown={(event) => event.stopPropagation()}
 				onClick={(event) => {
@@ -115,13 +129,48 @@ export function CueEnvelope({
 					if (row.cue.id) onSelectCue?.(row.cue.id);
 				}}
 			>
-				<b>{row.cue.number}</b> {row.cue.name || "Untitled"}
+				<span className="timecode-cue-block-title">
+					<b>{row.cue.number}</b> {row.cue.name || "Untitled"}
+				</span>
+				{!expanded && (
+					<small className="timecode-cue-block-trigger">
+						{formatFrame(row.startFrame, TIMECODE_FPS)}
+					</small>
+				)}
 			</Button>
-			{last && (
+			{last && expanded && (
 				<span className="timecode-cue-end-marker" style={{ left: width }}>
 					{clip.end_behavior === "hold" ? "Hold" : "Release"}
 					{clip.out_fade_frames > 0 ? " · Clip Out" : ""}
 				</span>
+			)}
+		</span>
+	);
+}
+
+function CueTriggerBoundary({
+	row,
+	expanded,
+	left,
+	selected,
+}: {
+	row: CueClipTimingRow;
+	expanded: boolean;
+	left: number;
+	selected: boolean;
+}) {
+	return (
+		<span
+			className={`timecode-cue-trigger-boundary ${selected ? "selected" : ""}`}
+			data-trigger-frame={row.startFrame}
+			style={{ left }}
+			title={`Cue ${row.cue.number} trigger · ${formatFrame(row.startFrame, TIMECODE_FPS)}`}
+			aria-hidden="true"
+		>
+			{expanded && (
+				<small>
+					Cue {row.cue.number} · {formatFrame(row.startFrame, TIMECODE_FPS)}
+				</small>
 			)}
 		</span>
 	);

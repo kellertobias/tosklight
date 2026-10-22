@@ -127,25 +127,19 @@ it("puts audio before Speed Groups before Cuelists without changing stored order
 	expect(definition).toEqual(before);
 });
 
-it("folds Cuelists independently and retains section collapse after closing the speed inspector", () => {
+it("keeps one lane per Cuelist visible while supplementary sections fold", () => {
 	const { container } = mount();
-	fireEvent.click(screen.getByRole("button", { name: "Cuelists" }));
-	expect(container.querySelector(".lane-cue_list")).toBeNull();
+	expect(screen.queryByRole("button", { name: "Cuelists" })).toBeNull();
+	expect(screen.queryByRole("button", { name: "Expand Cuelists" })).toBeNull();
+	expect(container.querySelectorAll(".lane-cue_list")).toHaveLength(1);
 	fireEvent.click(
 		screen.getByRole("button", { name: /Movement.*Drag to reorder lane/ }),
 	);
 	fireEvent.click(screen.getByRole("button", { name: "Speed Groups" }));
+	expect(container.querySelectorAll(".lane-cue_list")).toHaveLength(1);
 	expect(
 		screen.queryByRole("complementary", { name: "Selection settings" }),
 	).toBeNull();
-	expect(screen.getByRole("button", { name: "Cuelists" })).toHaveAttribute(
-		"aria-expanded",
-		"false",
-	);
-	fireEvent.click(screen.getByRole("button", { name: "Expand Cuelists" }));
-	expect(container.querySelector(".lane-cue_list")).not.toBeNull();
-	expect(screen.getByRole("button", { name: "Speed Groups" })).toHaveAttribute(
-		"aria-expanded",
-		"false",
-	);
+	fireEvent.click(screen.getByRole("button", { name: "Expand Speed Groups" }));
+	expect(container.querySelectorAll(".lane-cue_list")).toHaveLength(1);
 });

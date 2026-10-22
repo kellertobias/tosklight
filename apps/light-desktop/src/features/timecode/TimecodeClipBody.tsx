@@ -33,6 +33,7 @@ export function CueListClipBody({
 	expanded = false,
 	inspectorHost = null,
 	onMoveClip,
+	onPreviewMoveClip,
 }: {
 	item: TimelineItem;
 	clip: TimecodeCueListClip;
@@ -61,6 +62,7 @@ export function CueListClipBody({
 	expanded?: boolean;
 	inspectorHost?: HTMLElement | null;
 	onMoveClip?(clipId: string, startFrame: number): void;
+	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
 }) {
 	return (
 		<>
@@ -75,12 +77,19 @@ export function CueListClipBody({
 				<b>{cueList?.name ?? item.label}</b>
 				{cueList?.number !== undefined && <small>{cueList.number}</small>}
 			</span>
-			{onSetClipFade && (
+			{expanded && onSetClipFade && (
 				<ClipFadeHandles
 					clip={clip}
 					pixelsPerFrame={pixelsPerFrame}
 					onCommit={(kind, frames) => onSetClipFade(clip.id, kind, frames)}
 				/>
+			)}
+			{!cueList?.body && (
+				<span className="timecode-cue-clip-diagnostic" role="status">
+					{cueList
+						? "Cue details unavailable. Reopen this Timecode to reload them."
+						: "Cuelist is missing from this show."}
+				</span>
 			)}
 			{cueList?.body && timingDefaults && (
 				<CueListClipContents
@@ -96,6 +105,7 @@ export function CueListClipBody({
 					expanded={expanded}
 					inspectorHost={inspectorHost}
 					onMoveClip={onMoveClip}
+					onPreviewMoveClip={onPreviewMoveClip}
 					onSetClipFade={onSetClipFade}
 				/>
 			)}
