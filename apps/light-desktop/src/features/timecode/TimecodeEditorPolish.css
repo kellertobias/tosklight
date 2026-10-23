@@ -78,24 +78,26 @@
 .timecode-editor > .ui-window-header .ui-title-chrome-terminals { margin-left: auto; }
 /* One understated handle sits on each editable interior boundary. */
 .timecode-cue-point.cue-divider-grip > span {
-	width: 8px; height: 24px; left: 18px; top: 10px;
+	width: 20px; height: 24px; left: 12px; top: 10px;
 	border: 1px solid #bea46b; border-radius: 4px;
 	background: #242c36; box-shadow: 0 1px 2px #0008;
 }
-.timecode-cue-point.cue-divider-grip > span::before {
-	width: 2px; height: 14px; left: 3px; top: 4px;
+.timecode-cue-point.cue-divider-grip > span::before,
+.timecode-cue-point.cue-divider-grip > span::after {
+	content: ""; position: absolute; width: 2px; height: 14px; top: 4px;
 	border-radius: 1px; background: #e2c98c;
 }
-.timecode-cue-point.cue-divider-grip > span::after { content: none; }
+.timecode-cue-point.cue-divider-grip > span::before { left: 4px; right: auto; }
+.timecode-cue-point.cue-divider-grip > span::after { right: 4px; left: auto; }
 .timecode-cue-point.cue-divider-grip:hover > span,
 .timecode-cue-point.cue-divider-grip:focus-visible > span { border-color: #ffdf94; background: #39424e; }
-.timecode-cue-point.cue-end-grip > span { left: 40px; }
+.timecode-cue-point.cue-end-grip > span { left: 34px; }
 .timecode-cue-point.timecode-clip-end-grab.expanded::after { height: 88px; }
 
 /* Edge grips are the same rounded rectangle, clipped exactly at the clip boundary. */
 .timecode-cue-point.cue-start-grip,
 .timecode-cue-point.cue-end-grip { overflow: hidden; }
-.timecode-cue-point.cue-start-grip > span { left: -4px; }
+.timecode-cue-point.cue-start-grip > span { left: -10px; }
 /* Marker flags live in their own ruler band, above the lanes. */
 .timecode-timeline-editor { --timecode-ruler-height: 76px; }
 .timecode-timeline-editor .timecode-timeline-heading,

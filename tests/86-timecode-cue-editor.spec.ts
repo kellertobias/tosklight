@@ -157,9 +157,13 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).click({ position: { x: 32, y: 18 } });
 		const divider = editor.getByRole("slider", { name: "Move Cue 2 trigger", exact: true });
 		await expect(divider).toHaveAttribute("aria-valuenow", "220");
-		await dragFrames(page, editor, divider, 22, undefined, -6);
+		await assertGripBars(editor, divider, 220);
+		const bars = await gripMetrics(divider);
+		const leftBarOffset = bars.bars[0].center - (bars.left + bars.width / 2);
+		const rightBarOffset = bars.bars[1].center - (bars.left + bars.width / 2);
+		await dragFrames(page, editor, divider, 22, undefined, leftBarOffset);
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).cue_starts.find((start) => start.cue_id === rig.list.cues[1].id)?.offset_frame).toBe(198);
-		await touchDragFrames(page, editor, divider, 22, false, 6);
+		await touchDragFrames(page, editor, divider, 22, false, rightBarOffset);
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).cue_starts.find((start) => start.cue_id === rig.list.cues[1].id)?.offset_frame).toBe(220);
 		await assertCueFrameAlignment(editor, 2, "Verse wash", 264, true);
 		await page.reload();
@@ -884,7 +888,7 @@ async function zoomIn(page: Page, editor: Locator) {
 
 async function dragFrames(page: Page, editor: Locator, handle: Locator, frames: number, onPreview?: () => Promise<void>, grabOffset = 0) {
 	await handle.scrollIntoViewIfNeeded();
-	if (grabOffset === 0) grabOffset = await handle.evaluate((node) => node.classList.contains("cue-end-grip") ? 21 : node.classList.contains("cue-start-grip") ? -21 : 0);
+	if (grabOffset === 0) grabOffset = await visibleHalfBarOffset(handle);
 	const box = await handle.boundingBox();
 	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 	if (!box || !(scale > 0)) throw new Error("Missing timing point or timeline scale");
@@ -912,7 +916,7 @@ async function readClip(api: ApiDriver, showId: string, timecodeId: string) {
 
 async function touchDragFrames(page: Page, editor: Locator, handle: Locator, frames: number, cancel = false, grabOffset = 0) {
 	await handle.scrollIntoViewIfNeeded();
-	if (grabOffset === 0) grabOffset = await handle.evaluate((node) => node.classList.contains("cue-end-grip") ? 21 : node.classList.contains("cue-start-grip") ? -21 : 0);
+	if (grabOffset === 0) grabOffset = await visibleHalfBarOffset(handle);
 	const box = await handle.boundingBox();
 	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 	if (!box || !(scale > 0)) throw new Error("Missing touch timing point");
@@ -1059,13 +1063,39 @@ async function dragAudioVolumeValue(page: Page, audio: Locator, handle: Locator,
 	expect(delta).toBeLessThanOrEqual(0.75);
 }
 
-async function assertHalfGrip(editor: Locator, handle: Locator, frame: number, side: "start" | "end") {
- const axis = await editor.locator(".timecode-timeline-canvas").evaluate(node=>({left:node.getBoundingClientRect().left,origin:Number(node.dataset.timeOriginPx),scale:Number(node.dataset.pixelsPerFrame)}));
- const expected=axis.left+axis.origin+frame*axis.scale;
- const shape=await handle.evaluate(node=>{const target=node.getBoundingClientRect(),pill=node.querySelector(":scope > span")!.getBoundingClientRect();return {left:target.left,right:target.right,width:target.width,pillCenter:pill.left+pill.width/2,pillWidth:pill.width,visible:Math.min(target.right,pill.right)-Math.max(target.left,pill.left),overflow:getComputedStyle(node).overflowX};});
- expect(shape.width).toBe(44);
- expect(Math.abs((side==="start"?shape.left:shape.right)-expected)).toBeLessThanOrEqual(0.75);
+
+async function gripMetrics(handle: Locator) {
+ return handle.evaluate(node=>{
+  const target=node.getBoundingClientRect(),pill=node.querySelector<HTMLElement>(":scope > span")!,box=pill.getBoundingClientRect();
+  const bars=["::before","::after"].map(pseudo=>{
+   const style=getComputedStyle(pill,pseudo),width=Number.parseFloat(style.width),height=Number.parseFloat(style.height);
+   const left=box.left+pill.clientLeft+(style.left==="auto"?pill.clientWidth-Number.parseFloat(style.right)-width:Number.parseFloat(style.left));
+   return {center:left+width/2,width,height,visible:Math.max(0,Math.min(target.right,left+width)-Math.max(target.left,left))};
+  });
+  return {left:target.left,right:target.right,width:target.width,pillCenter:box.left+box.width/2,pillWidth:box.width,pillHeight:box.height,visible:Math.min(target.right,box.right)-Math.max(target.left,box.left),overflow:getComputedStyle(node).overflowX,bars};
+ });
+}
+async function visibleHalfBarOffset(handle: Locator) {
+ const side=await handle.evaluate(node=>node.classList.contains("cue-start-grip")?"start":node.classList.contains("cue-end-grip")?"end":null);
+ if(!side)return 0;
+ const shape=await gripMetrics(handle);
+ return shape.bars[side==="start"?1:0].center-(shape.left+shape.width/2);
+}
+async function assertGripBars(editor: Locator, handle: Locator, frame: number, side?: "start" | "end") {
+ const axis=await editor.locator(".timecode-timeline-canvas").evaluate(node=>({left:node.getBoundingClientRect().left,origin:Number(node.dataset.timeOriginPx),scale:Number(node.dataset.pixelsPerFrame)}));
+ const expected=axis.left+axis.origin+frame*axis.scale,shape=await gripMetrics(handle);
+ expect(shape.width).toBe(44);expect(shape.pillWidth).toBe(20);expect(shape.pillHeight).toBe(24);
  expect(Math.abs(shape.pillCenter-expected)).toBeLessThanOrEqual(0.75);
- expect(shape.overflow).toBe("hidden");
- expect(Math.abs(shape.visible-shape.pillWidth/2)).toBeLessThanOrEqual(0.75);
+ const [left,right]=shape.bars;
+ expect(left.width).toBe(2);expect(right.width).toBe(2);expect(left.height).toBe(14);expect(right.height).toBe(14);
+ expect(left.center).toBeLessThan(expected);expect(right.center).toBeGreaterThan(expected);
+ expect(Math.abs(expected-left.center-(right.center-expected))).toBeLessThanOrEqual(0.75);
+ if(side){
+  expect(Math.abs((side==="start"?shape.left:shape.right)-expected)).toBeLessThanOrEqual(0.75);
+  expect(shape.overflow).toBe("hidden");expect(Math.abs(shape.visible-shape.pillWidth/2)).toBeLessThanOrEqual(0.75);
+  expect(left.visible).toBe(side==="start"?0:2);expect(right.visible).toBe(side==="start"?2:0);
+ } else {expect(left.visible).toBe(2);expect(right.visible).toBe(2);}
+}
+async function assertHalfGrip(editor: Locator, handle: Locator, frame: number, side: "start" | "end") {
+ await assertGripBars(editor,handle,frame,side);
 }
