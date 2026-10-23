@@ -76,7 +76,7 @@
 .timecode-editor > .ui-window-header .ui-window-info { flex: 0 0 86px; max-width: 86px; }
 .timecode-editor > .ui-window-header .ui-window-action-groups { flex: 1; }
 .timecode-editor > .ui-window-header .ui-title-chrome-terminals { margin-left: auto; }
-/* One understated handle sits on each editable interior boundary. */
+/* Two bars flank the Cue boundary inside a single rounded rectangle. */
 .timecode-cue-point.cue-divider-grip > span {
 	width: 20px; height: 24px; left: 12px; top: 10px;
 	border: 1px solid #bea46b; border-radius: 4px;
@@ -115,3 +115,5 @@
 }
 .ui-button.timecode-editor-playhead { z-index: 30; }
 .cue-expanded .timecode-clip-handle { padding-right: 58px !important; }
+
+.cue-expanded .timecode-cue-block-title { padding-inline: 14px; }

@@ -31,6 +31,12 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(await addLeft()).toBe(initialAddLeft);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		await assertHalfGrip(editor, editor.getByRole("slider", { name: "Move clip start", exact: true }), 44, "start");
+		for (const [buttonName, gripName] of [["Edit Cue 1 House out", "Move clip start"], ["Edit Cue 2 Verse wash", "Move Cue 2 trigger"]]) {
+			const glyphLeft = await editor.getByRole("button", { name: buttonName, exact: true }).locator(".timecode-cue-block-title b").evaluate((node) => { const range = document.createRange(); range.selectNodeContents(node); return range.getBoundingClientRect().left; });
+			const gripRight = await editor.getByRole("slider", { name: gripName, exact: true }).locator(":scope > span").evaluate((node) => node.getBoundingClientRect().right);
+			expect(glyphLeft).toBeGreaterThanOrEqual(gripRight);
+		}
+
 		const inDelay = editor.getByRole("slider", { name: "Cue 1 In delay", exact: true });
 		await expect(inDelay).toHaveAttribute("aria-valuenow", "88");
 		const triggerX = await editor.locator('.timecode-cue-trigger-boundary[data-trigger-frame="44"]').evaluate((node) => node.getBoundingClientRect().left);
