@@ -1,15 +1,22 @@
+import { evaluateBaselinePhases } from "./native-stage-baseline-phases.mjs";
 /** A measurement report; this deliberately cannot pass the displayed-60-FPS acceptance gate. */
 export function readNativeBaselineConfig(env) {
   const layout = env.LIGHT_STAGE_PACKAGED_BENCH_LAYOUT;
-  if (!layout) return null;
+  if (!layout) {
+    if (env.LIGHT_STAGE_PACKAGED_BENCH_PHASES) throw new Error("Baseline phases require fixed layout");
+    return null;
+  }
   if (!["single", "dual"].includes(layout)) throw new Error("Baseline layout must be single or dual");
   const quality = env.LIGHT_STAGE_PACKAGED_BENCH_QUALITY ?? "draft";
   const view = env.LIGHT_STAGE_PACKAGED_BENCH_VIEW ?? "lines_3d";
   const helperHz = env.LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ ?? "natural";
+  const phases = env.LIGHT_STAGE_PACKAGED_BENCH_PHASES;
+  if (phases && phases !== "static-camera-hidden") throw new Error("Invalid baseline phases");
+  if (phases && env.LIGHT_PACKAGED_STAGE_DYNAMICS === "1") throw new Error("Baseline phases require static Stage-500 (Dynamics unset)");
   if (!["draft", "standard", "high", "ultra"].includes(quality)) throw new Error("Invalid baseline quality");
   if (!["full_3d", "lines_3d"].includes(view)) throw new Error("Invalid baseline view");
   if (!["natural", "60"].includes(helperHz)) throw new Error("Matched baseline helper Hz must be 60 or absent");
-  return { layout, quality, view, atmosphereAmount: view === "full_3d" ? 0.35 : 0, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
+  return { layout, quality, view, ...(phases ? { phases } : {}), atmosphereAmount: view === "full_3d" ? 0.35 : 0, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
     laneWidth: 1920, laneHeight: layout === "single" ? 1080 : 540,
     display: env.LIGHT_STAGE_PACKAGED_BENCH_DISPLAY ?? "internal" };
 }
@@ -33,6 +40,8 @@ export function evaluateNativeBaseline(complete, metadata) {
     if (observations?.counts?.[counter] > 0) failures.push(`Helper observation ${counter}`);
   const compositor = observations?.compositor;
   if (compositor?.overflow || compositor?.invalid || compositor?.totals?.gpuSampleOverflow || compositor?.totals?.gpuReadbackErrors || compositor?.totals?.errors) failures.push("Compositor observation loss or error");
+  const phases = configuration.phases ? evaluateBaselinePhases(complete, configuration, matches) : null;
+  if (phases) failures.push(...phases.failures);
   return { schemaVersion: 1, kind: "native-stage-before-optimization-measurement", ...metadata,
     measurementSurface: "packaged-tauri-native-stage", failures,
     baselineMeasurementReady: failures.length === 0,
@@ -40,5 +49,5 @@ export function evaluateNativeBaseline(complete, metadata) {
     displayed60Fps: { status: "unverified", reason: "Requires correlated platform display trace; submissions are not displayed frames" },
     gpuReduction: { status: "unverified", reason: "Before-state only; sparse timing samples are not total GPU time per second" },
     measurementBoundaries: complete.nativeStage?.measurementBoundaries ?? null,
-    gpuObservations: observations ?? null };
+    gpuObservations: observations ?? null, ...(phases ? { phases } : {}) };
 }

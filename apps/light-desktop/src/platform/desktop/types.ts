@@ -32,6 +32,7 @@ export interface PackagedStageBenchmarkConfig {
 	baselineLayout?: "single" | "dual" | null;
 	baselineQuality?: "draft" | "standard" | "high" | "ultra";
 	baselineView?: "full_3d" | "lines_3d";
+	baselinePhases?: "static-camera-hidden" | null;
 	durationSeconds: number;
 	controlDurationSeconds: number;
 	profile: string;
@@ -223,6 +224,14 @@ export interface DesktopBridge {
 	placeStagePaneCamera(place: Partial<StagePaneCameraPlacement>): Promise<void>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
+	/** Private opt-in resident-window hide/reveal; absent in browser transports. */
+	exercisePackagedStageBenchmarkVisibility?(): Promise<{
+		hiddenEpochMicros: number;
+		revealedEpochMicros: number;
+		hiddenVerified: boolean;
+		revealedVerified: boolean;
+		observations: Array<{ observedEpochMicros: number; windowVisible: false; samples: StagePaneBenchmarkObservations }>;
+	}>;
 	focusPackagedStageBenchmarkWindow(): Promise<void>;
 	appendPackagedStageBenchmarkSample(sample: unknown): Promise<void>;
 	currentWindowState(): Promise<DesktopWindowState>;

@@ -30,6 +30,11 @@ export function baselineStageBridge(
 	if (!config.baselineLayout) return bridge;
 	return {
 		...bridge,
+		...(config.baselineLayout === "dual" ? {
+			// Benchmark-only allocation exception: both panes still request the same actual 3D view.
+			openStagePane: (id: string, _live3d: boolean, geometry: Parameters<DesktopBridge["openStagePane"]>[2]) =>
+				bridge.openStagePane(id, false, geometry),
+		} : {}),
 		setStagePanePicture: (id, picture) =>
 			bridge.setStagePanePicture(id, {
 				...picture,

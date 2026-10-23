@@ -188,6 +188,10 @@ export const tauriDesktopBridge: DesktopBridge = {
 		const api = await coreApi();
 		return api.invoke("packaged_stage_benchmark_prepared");
 	},
+	exercisePackagedStageBenchmarkVisibility: async () => {
+		const api = await coreApi();
+		return api.invoke("exercise_packaged_stage_benchmark_visibility");
+	},
 	focusPackagedStageBenchmarkWindow: () =>
 		invoke("focus_packaged_stage_benchmark_window"),
 	appendPackagedStageBenchmarkSample: async (sample) => {

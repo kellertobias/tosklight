@@ -34,3 +34,10 @@ test("submission-only telemetry cannot complete a GPU baseline", () => {
   const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 0, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{ samples: 1, scope: ["live", "one", 1, { sourceSize: [1920, 1080] }] }], totals: {} } } } };
   assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
 });
+
+test("phase supplement requires explicit fixed and static configuration", () => {
+  assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_PHASES: "static-camera-hidden" }));
+  assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "unknown" }));
+  assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "static-camera-hidden", LIGHT_PACKAGED_STAGE_DYNAMICS: "1" }));
+  assert.equal(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "static-camera-hidden" }).phases, "static-camera-hidden");
+});

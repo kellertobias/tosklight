@@ -1,5 +1,6 @@
 mod display;
 mod layout;
+mod phases;
 mod picture;
 
 use serde::Serialize;
@@ -33,6 +34,8 @@ pub(crate) struct PackagedStageBenchmarkConfig {
     stage_enabled: bool,
     fixture_sheet: bool,
     expected_fixture_records: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    baseline_phases: Option<String>,
 }
 
 #[tauri::command]
@@ -48,6 +51,27 @@ pub(crate) async fn packaged_stage_benchmark_config(
     let stage_enabled = stage_enabled(std::env::var(STAGE_ENV).ok().as_deref())?;
     let baseline = layout::BaselineOptions::from_env()?;
     let fixed_pixels = baseline.baseline_layout.is_some();
+    let baseline_phases = phases::configured(std::env::var(phases::PHASES_ENV).ok().as_deref())?;
+    if baseline_phases.is_some() {
+        if !stage_enabled {
+            return Err("Baseline phases require Stage enabled".into());
+        }
+        phases::validate(
+            window.label(),
+            report_path().as_deref(),
+            baseline.baseline_layout.as_deref(),
+            baseline_phases.as_deref(),
+            &std::env::var(PROFILE_ENV).unwrap_or_default(),
+            std::env::var("LIGHT_PACKAGED_STAGE_DYNAMICS")
+                .ok()
+                .as_deref()
+                == Some("1"),
+            std::env::var(DURATION_ENV)
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(30),
+        )?;
+    }
     display::place(&window, fixed_pixels).await?;
     window.show().map_err(|error| error.to_string())?;
     if !fixed_pixels {
@@ -55,6 +79,7 @@ pub(crate) async fn packaged_stage_benchmark_config(
     }
     Ok(Some(PackagedStageBenchmarkConfig {
         baseline,
+        baseline_phases,
         duration_seconds: std::env::var(DURATION_ENV)
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
@@ -162,4 +187,11 @@ pub(crate) fn baseline_picture(message: &mut viz_helper::protocol::ToHelper) -> 
         picture::apply(message, &layout::BaselineOptions::from_env()?);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn exercise_packaged_stage_benchmark_visibility(
+    window: tauri::WebviewWindow,
+) -> Result<phases::VisibilityEvidence, String> {
+    phases::exercise(&window).await
 }

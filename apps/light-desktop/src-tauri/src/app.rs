@@ -32,6 +32,7 @@ pub(crate) fn run() {
             crate::lifecycle::frontend_ready,
             crate::packaged_benchmark::packaged_stage_benchmark_config,
             crate::packaged_benchmark::packaged_stage_benchmark_prepared,
+            crate::packaged_benchmark::exercise_packaged_stage_benchmark_visibility,
             crate::packaged_benchmark::focus_packaged_stage_benchmark_window,
             crate::packaged_benchmark::append_packaged_stage_benchmark_sample
         ])

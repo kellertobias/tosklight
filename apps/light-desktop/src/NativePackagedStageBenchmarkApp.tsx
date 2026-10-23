@@ -8,6 +8,7 @@ import {
 	benchmarkSurfaces,
 	NativeHostObservations,
 } from "./nativePackagedBenchmarkMode";
+import { newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases, type BaselinePhaseReport } from "./nativePackagedStagePhases";
 import { NativeStageReadiness } from "./nativePackagedStageReadiness";
 import {
 	NativeStageGpuObservations,
@@ -104,6 +105,9 @@ function retainNativeObservations(
 }
 
 interface NativeObservationContext {
+	phases: { current: BaselinePhaseReport | null };
+	phaseRun: { current: Promise<void> | null };
+	samplingPaused: { current: boolean };
 	config: PackagedStageBenchmarkConfig;
 	hostObservations: { current: NativeHostObservations };
 	modeAcknowledged: { current: boolean };
@@ -125,78 +129,12 @@ interface NativeObservationContext {
 }
 
 function sampleNativeBenchmark(context: NativeObservationContext) {
-	const {
-		desktop,
-		frames,
-		latestFrameByPane,
-		activity,
-		heartbeats,
-		observerOverflow,
-		timeline,
-		quality,
-		sampleInFlight,
-		finishing,
-		readiness,
-		stageBeganAt,
-	} = context;
-	if (finishing.current || sampleInFlight.current) return;
+	const { desktop, observerOverflow, sampleInFlight, finishing } = context;
+	if (finishing.current || sampleInFlight.current || context.samplingPaused.current) return;
 	sampleInFlight.current = desktop
 		.takeStagePaneBenchmarkSamples()
 		.then(async (batch) => {
-			context.gpuObservations.current.record(batch.frames, batch.compositors);
-			context.hostObservations.current.record(batch);
-			if (!context.modeAcknowledged.current) {
-				await desktop.appendPackagedStageBenchmarkSample({
-					schemaVersion: 2,
-					kind: "stage-mode-ack",
-					measurementSurface: "packaged-tauri-native-stage",
-					stageEnabled: context.config.stageEnabled,
-					profile: context.config.profile,
-					recordedAt: new Date().toISOString(),
-					hostObservationCount: context.hostObservations.current.rows.length,
-				});
-				context.modeAcknowledged.current = true;
-			}
-			retainNativeObservations(
-				batch,
-				activity.current,
-				heartbeats.current,
-				observerOverflow.current,
-			);
-			const ready =
-				context.config.stageEnabled &&
-				readiness.current.observe(
-					batch,
-					stageBeganAt.current,
-					Date.now(),
-					Object.values(observerOverflow.current).some((value) => value !== 0),
-				);
-			if (ready) await desktop.appendPackagedStageBenchmarkSample({ ...ready });
-			const first = frames.current.length;
-			appendNativeFrames(
-				frames.current,
-				batch.frames,
-				latestFrameByPane.current,
-			);
-			const renderSamples = frames.current.slice(first).map((frame) => ({
-				benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
-				paneId: frame.paneId,
-				submittedAt: frame.presentedEpochMicros / 1_000,
-				recordedAt: frame.presentedEpochMicros / 1_000,
-				renderQuality: frame.quality,
-				durationMs: frame.cpuMicros / 1_000,
-				calls: frame.drawCalls,
-				geometries: frame.instances,
-				textures: 0,
-			}));
-			timeline.current.push({
-				recordedAt: Date.now(),
-				quality: quality.current,
-				renders: frames.current.length,
-				newRenders: renderSamples,
-				latestRender: renderSamples.at(-1) ?? null,
-				mainDocumentFocused: document.hasFocus(),
-			});
+			await consumeNativeBatch(context, batch);
 		})
 		.catch(() => {
 			observerOverflow.current.errors += 1;
@@ -204,6 +142,101 @@ function sampleNativeBenchmark(context: NativeObservationContext) {
 		.finally(() => {
 			sampleInFlight.current = null;
 		});
+}
+
+async function consumeNativeBatch(context: NativeObservationContext, batch: StagePaneBenchmarkObservations, recordedAt = Date.now()) {
+	const { desktop, frames, latestFrameByPane, activity, heartbeats, observerOverflow, timeline, quality, readiness, stageBeganAt } = context;
+	context.gpuObservations.current.record(batch.frames, batch.compositors);
+	context.hostObservations.current.record(batch, recordedAt);
+	if (!context.modeAcknowledged.current) {
+		await desktop.appendPackagedStageBenchmarkSample({
+			schemaVersion: 2,
+			kind: "stage-mode-ack",
+			measurementSurface: "packaged-tauri-native-stage",
+			stageEnabled: context.config.stageEnabled,
+			profile: context.config.profile,
+			recordedAt: new Date().toISOString(),
+			hostObservationCount: context.hostObservations.current.rows.length,
+		});
+		context.modeAcknowledged.current = true;
+	}
+	retainNativeObservations(
+		batch,
+		activity.current,
+		heartbeats.current,
+		observerOverflow.current,
+	);
+	const ready =
+		context.config.stageEnabled &&
+		readiness.current.observe(
+			batch,
+			stageBeganAt.current,
+			recordedAt,
+			Object.values(observerOverflow.current).some((value) => value !== 0),
+		);
+	if (ready) await desktop.appendPackagedStageBenchmarkSample({ ...ready });
+	const first = frames.current.length;
+	appendNativeFrames(
+		frames.current,
+		batch.frames,
+		latestFrameByPane.current,
+	);
+	const renderSamples = frames.current.slice(first).map((frame) => ({
+		benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
+		paneId: frame.paneId,
+		submittedAt: frame.presentedEpochMicros / 1_000,
+		recordedAt: frame.presentedEpochMicros / 1_000,
+		renderQuality: frame.quality,
+		durationMs: frame.cpuMicros / 1_000,
+		calls: frame.drawCalls,
+		geometries: frame.instances,
+		textures: 0,
+	}));
+	timeline.current.push({
+		recordedAt: recordedAt,
+		quality: quality.current,
+		renders: frames.current.length,
+		newRenders: renderSamples,
+		latestRender: renderSamples.at(-1) ?? null,
+		mainDocumentFocused: document.hasFocus(),
+	});
+}
+
+function useBaselinePhaseExercise(context: NativeObservationContext, enabled: boolean) {
+	const { config, desktop } = context;
+	useEffect(() => {
+		if (!enabled || !config.baselinePhases) return;
+		const controller = new AbortController();
+		const report = newBaselinePhaseReport();
+		context.phases.current = report;
+		const exercise = runBaselinePhases({
+			config, desktop, report, signal: controller.signal,
+			compositorSnapshot: () => ({
+				totals: context.gpuObservations.current.report().compositor.totals,
+				observedEpochMillis: context.hostObservations.current.rows.at(-1)?.recordedAt ?? null,
+			}),
+			panes: () => [...context.latestFrameByPane.current.values()].map(({ paneId, attachmentId }) => ({ paneId, attachmentId })),
+			beforeHidden: async () => {
+				context.samplingPaused.current = true;
+				await context.sampleInFlight.current;
+			},
+			collectHidden: async (batches) => {
+				for (const batch of batches) await consumeNativeBatch(context, batch.samples, batch.observedEpochMicros / 1_000);
+			},
+			afterHidden: () => { context.samplingPaused.current = false; },
+		});
+		let timeout: ReturnType<typeof setTimeout>;
+		const bounded = new Promise<void>((resolve) => {
+			timeout = setTimeout(() => {
+				controller.abort();
+				report.status = "failed";
+				report.error = "Baseline phase exercise exceeded its 60-second collection bound";
+				resolve();
+			}, 60_000);
+		});
+		context.phaseRun.current = Promise.race([exercise, bounded]).finally(() => clearTimeout(timeout));
+		return () => controller.abort();
+	}, [enabled, config, desktop]);
 }
 
 async function finishNativeBenchmark(
@@ -223,6 +256,7 @@ async function finishNativeBenchmark(
 		sampleInFlight,
 		finishing,
 	} = context;
+	await context.phaseRun.current;
 	finishing.current = true;
 	await sampleInFlight.current;
 	const batch = await desktop
@@ -256,6 +290,7 @@ async function finishNativeBenchmark(
 		recordedAt: new Date().toISOString(),
 		activeUiSurfaces: benchmarkSurfaces(config),
 		nativeStage: {
+			phases: context.phases.current,
 			measurementBoundaries: nativeStageMeasurementBoundaries,
 			gpuObservations: context.gpuObservations.current.report(),
 			frames: frames.current,
@@ -298,6 +333,7 @@ export function NativePackagedStageBenchmarkApp({
 }: {
 	config: PackagedStageBenchmarkConfig;
 }) {
+	validateBaselinePhases(config);
 	const desktop = useDesktopBridge();
 	const benchmarkDesktop = useMemo(
 		() => baselineStageBridge(desktop, config),
@@ -323,7 +359,10 @@ function useNativeFrameObservations() {
 	const frames = useRef<NativeFrameSample[]>([]);
 	const gpuObservations = useRef(new NativeStageGpuObservations());
 	const activity = useRef<StagePaneBenchmarkSample[]>([]);
-	return { hostObservations, frames, gpuObservations, activity };
+	const phases = useRef<BaselinePhaseReport | null>(null);
+	const phaseRun = useRef<Promise<void> | null>(null);
+	const samplingPaused = useRef(false);
+	return { hostObservations, frames, gpuObservations, activity, phases, phaseRun, samplingPaused };
 }
 
 function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
@@ -334,7 +373,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	const [stageEnabled, setStageEnabled] = useState(false);
 	const [liveVisible, setLiveVisible] = useState(true);
 	const [surfaceInset, setSurfaceInset] = useState(false);
-	const { hostObservations, frames, gpuObservations, activity } =
+	const { hostObservations, frames, gpuObservations, activity, phases, phaseRun, samplingPaused } =
 		useNativeFrameObservations();
 	const modeAcknowledged = useRef(false);
 	const heartbeats = useRef<StagePaneBenchmarkHeartbeat[]>([]);
@@ -350,6 +389,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		config.baselineQuality ?? "draft",
 	);
 	const observation: NativeObservationContext = {
+		phases, phaseRun, samplingPaused,
 		config,
 		hostObservations,
 		modeAcknowledged,
@@ -367,6 +407,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		readiness,
 		stageBeganAt,
 	};
+	useBaselinePhaseExercise(observation, stageEnabled);
 
 	useEffect(() => {
 		let cancelled = false;

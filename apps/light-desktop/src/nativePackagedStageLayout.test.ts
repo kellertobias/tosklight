@@ -39,3 +39,16 @@ describe("benchmark picture policy", () => {
 		expect(bridge.setStagePanePicture).toBe(send);
 	});
 });
+
+
+it("bypasses exclusive operator 3D allocation only inside the fixed dual benchmark", async () => {
+	const open = vi.fn(async (_id: string, _live3d: boolean, _geometry: unknown) => undefined);
+	const bridge = { openStagePane: open } as unknown as DesktopBridge;
+	const geometry = { x: 0, y: 0, width: 960, height: 270, scale: 2, surfaceWidth: 1920, surfaceHeight: 1080 };
+	const dual = baselineStageBridge(bridge, { ...baseConfig, baselineLayout: "dual" });
+	await dual.openStagePane("live", true, geometry);
+	await dual.openStagePane("preload", true, geometry);
+	expect(open.mock.calls).toEqual([["live", false, geometry], ["preload", false, geometry]]);
+	expect(baselineStageBridge(bridge, { ...baseConfig, baselineLayout: "single" }).openStagePane).toBe(open);
+	expect(baselineStageBridge(bridge, {} as PackagedStageBenchmarkConfig).openStagePane).toBe(open);
+});

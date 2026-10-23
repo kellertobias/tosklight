@@ -53,6 +53,8 @@ const durationSeconds = positiveInteger(
 const profile = process.argv[3] ?? "default-stage";
 const profileDefinition = packagedStageProfile(profile);
 const fixedBaseline = readNativeBaselineConfig(process.env);
+if (fixedBaseline?.phases && (profile !== "stage-500" || durationSeconds < 40))
+	throw new Error("Baseline phases require Stage-500 and at least 40 seconds");
 const controlDurationSeconds =
 	packagedStageControlDurationSeconds(durationSeconds);
 // LIGHT_PACKAGED_STAGE_PORT runs the benchmark beside a desk that already owns 127.0.0.1:5000
