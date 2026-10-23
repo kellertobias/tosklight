@@ -49,9 +49,13 @@ pub(crate) struct FrameTelemetry {
     pub(super) source_frame: u64,
     pub(super) source_input_epoch_micros: u64,
     pub(super) presented_epoch_micros: u64,
+    /// Renderer elapsed wall time, not executing-thread CPU.
     pub(super) cpu_micros: u64,
     pub(super) acquire_micros: u64,
     pub(super) gpu_micros: Option<u64>,
+    pub(super) gpu_sample_id: Option<u64>,
+    pub(super) gpu_sample_matches_frame: bool,
+    pub(super) transport: &'static str,
     pub(super) instances: u32,
     pub(super) draw_calls: u32,
     pub(super) degraded: bool,
@@ -87,6 +91,16 @@ pub(crate) struct PaneHeartbeat {
 pub(crate) struct StagePaneBenchmarkSamples {
     pub(super) frames: Vec<FrameTelemetry>,
     pub(super) heartbeats: Vec<PaneHeartbeat>,
+    pub(super) compositors: Vec<CompositorTelemetry>,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CompositorTelemetry {
+    pane_id: String,
+    attachment_id: String,
+    observed_epoch_micros: u64,
+    measurement: crate::stage_compositor::CompositorMeasurements,
 }
 
 pub(super) struct BenchmarkAttachment {
@@ -193,13 +207,26 @@ impl StagePanes {
         let mut result = StagePaneBenchmarkSamples::default();
         let prefix = format!("{window_label}:");
         for (pane_id, registered) in panes.iter().filter(|(key, _)| key.starts_with(&prefix)) {
-            let running = registered.pane.inner.lock().map_err(|_| "the Stage pane")?;
+            let mut running = registered.pane.inner.lock().map_err(|_| "the Stage pane")?;
             if registered
                 .pane
                 .heartbeat_overflow
                 .load(std::sync::atomic::Ordering::Acquire)
             {
                 return Err("the Stage pane benchmark heartbeat queue overflowed".to_owned());
+            }
+            if let Some(current) = running.as_mut() {
+                if let Some(measurement) = current.compositor.drain_measurements() {
+                    result.compositors.push(CompositorTelemetry {
+                        pane_id: pane_id.clone(),
+                        attachment_id: current
+                            .benchmark
+                            .as_ref()
+                            .map_or_else(String::new, |b| b.id.clone()),
+                        observed_epoch_micros: benchmark_epoch_micros(),
+                        measurement,
+                    });
+                }
             }
             let mut samples = registered
                 .pane

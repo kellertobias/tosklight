@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// FramePresented now names its actual rendered view mode. The postcard variant shape changed,
-// so stale helpers must be refused rather than misdecoding presentation evidence.
-pub const PROTOCOL_MAJOR: u16 = 9;
+// FramePresented now carries GPU sample identity/provenance. Postcard shapes are not
+// additive: reject stale helpers rather than decode ambiguous measurement evidence.
+pub const PROTOCOL_MAJOR: u16 = 10;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 
@@ -310,11 +310,11 @@ pub enum FromHelper {
         height: u32,
         rgba: Vec<u8>,
     },
-    /// Timing and bounded render-work evidence for one frame presented by an embedded pane.
+    /// Timing and bounded render-work evidence for one embedded helper GPU submission.
     ///
     /// Pixels still travel through the negotiated transport. This small message exists so the
-    /// packaged native benchmark can prove source-to-presentation latency without pretending the
-    /// WebView drew a canvas it no longer owns.
+    /// packaged native benchmark can measure helper submission latency. The legacy variant name
+    /// does not mean GPU completion or an on-screen presentation; those require separate evidence.
     FramePresented {
         sequence: u64,
         source_frame: u64,
@@ -323,6 +323,9 @@ pub enum FromHelper {
         cpu_micros: u64,
         acquire_micros: u64,
         gpu_micros: Option<u64>,
+        gpu_sample_id: Option<u64>,
+        gpu_sample_matches_frame: bool,
+        transport: FrameTransport,
         instances: u32,
         draw_calls: u32,
         degraded: bool,
@@ -587,6 +590,9 @@ mod tests {
                 cpu_micros: 1_200,
                 acquire_micros: 300,
                 gpu_micros: Some(900),
+                gpu_sample_id: Some(7),
+                gpu_sample_matches_frame: true,
+                transport: FrameTransport::Shared,
                 instances: 500,
                 draw_calls: 12,
                 degraded: false,

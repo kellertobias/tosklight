@@ -28,6 +28,10 @@ export interface ConsoleScreenWindow {
 }
 
 export interface PackagedStageBenchmarkConfig {
+	/** Fixed physical drawable budget; absent retains the lifecycle benchmark. */
+	baselineLayout?: "single" | "dual" | null;
+	baselineQuality?: "draft" | "standard" | "high" | "ultra";
+	baselineView?: "full_3d" | "lines_3d";
 	durationSeconds: number;
 	controlDurationSeconds: number;
 	profile: string;
@@ -103,6 +107,10 @@ export interface StagePaneBenchmarkSample {
 	cpuMicros: number;
 	acquireMicros: number;
 	gpuMicros: number | null;
+	/** Completed GPU sample identity; absent in historical reports. */
+	gpuSampleId?: number | null;
+	gpuSampleMatchesFrame?: boolean;
+	transport?: "shared" | "copy";
 	instances: number;
 	drawCalls: number;
 	degraded: boolean;
@@ -134,7 +142,26 @@ export interface StagePaneBenchmarkHeartbeat {
 	visible: boolean;
 }
 
+export interface StageCompositorObservation {
+	paneId: string;
+	attachmentId: string;
+	observedEpochMicros: number;
+	measurement: {
+		drawAttempts: number; submissions: number; occluded: number; timeouts: number;
+		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuSampleOverflow: number;
+		cpuWallMicros: number; acquireWallMicros: number;
+		gpuTimingUnavailable: string | null; actualDisplayedFrames: null;
+		measurementBoundary: string;
+		gpuSamples: Array<{
+			sampleId: number; submissionId: number; submittedEpochMicros: number; gpuMicros: number;
+			scope: { generation: number; surfaceWidth: number; surfaceHeight: number;
+				pane: number[] | null; sourceSize: number[] | null; transport: string | null };
+		}>;
+	};
+}
+
 export interface StagePaneBenchmarkObservations {
+	compositors?: StageCompositorObservation[];
 	frames: StagePaneBenchmarkSample[];
 	heartbeats: StagePaneBenchmarkHeartbeat[];
 }

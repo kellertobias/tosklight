@@ -22,6 +22,7 @@ serde_json.workspace = true
 tokio.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"
 mach2 = "0.6"
 
 [lints]

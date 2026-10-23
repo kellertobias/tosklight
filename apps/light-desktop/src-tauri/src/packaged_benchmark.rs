@@ -1,3 +1,6 @@
+mod display;
+mod layout;
+
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -20,6 +23,8 @@ const EXPECTED_FIXTURE_RECORDS_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PackagedStageBenchmarkConfig {
+    #[serde(flatten)]
+    baseline: layout::BaselineOptions,
     duration_seconds: u64,
     control_duration_seconds: u64,
     profile: String,
@@ -30,7 +35,7 @@ pub(crate) struct PackagedStageBenchmarkConfig {
 }
 
 #[tauri::command]
-pub(crate) fn packaged_stage_benchmark_config(
+pub(crate) async fn packaged_stage_benchmark_config(
     window: tauri::WebviewWindow,
 ) -> Result<Option<PackagedStageBenchmarkConfig>, String> {
     if window.label() != "main" {
@@ -40,9 +45,13 @@ pub(crate) fn packaged_stage_benchmark_config(
         return Ok(None);
     }
     let stage_enabled = stage_enabled(std::env::var(STAGE_ENV).ok().as_deref())?;
-    let _ = window.show();
-    let _ = window.set_focus();
+    let baseline = layout::BaselineOptions::from_env()?;
+    let fixed_pixels = baseline.baseline_layout.is_some();
+    display::place(&window, fixed_pixels).await?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())?;
     Ok(Some(PackagedStageBenchmarkConfig {
+        baseline,
         duration_seconds: std::env::var(DURATION_ENV)
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
@@ -55,9 +64,10 @@ pub(crate) fn packaged_stage_benchmark_config(
             .unwrap_or(30),
         profile: std::env::var(PROFILE_ENV).unwrap_or_else(|_| "default-stage".to_string()),
         additional_stage_window: stage_enabled
+            && !fixed_pixels
             && env_enabled_by_default(ADDITIONAL_STAGE_WINDOW_ENV),
         stage_enabled,
-        fixture_sheet: env_enabled_by_default(FIXTURE_SHEET_ENV),
+        fixture_sheet: !fixed_pixels && env_enabled_by_default(FIXTURE_SHEET_ENV),
         expected_fixture_records: std::env::var(EXPECTED_FIXTURE_RECORDS_ENV)
             .ok()
             .and_then(|value| value.parse::<usize>().ok())

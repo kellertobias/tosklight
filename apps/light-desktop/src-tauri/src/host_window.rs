@@ -32,6 +32,8 @@ const LABEL: &str = "main";
 pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     let window = tauri::window::WindowBuilder::new(app, LABEL)
         .title(TITLE)
+        // Benchmark windows are positioned on the chosen internal display before first show.
+        .visible(std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_none())
         .inner_size(1440.0, 900.0)
         .min_inner_size(1024.0, 640.0)
         .decorations(false)

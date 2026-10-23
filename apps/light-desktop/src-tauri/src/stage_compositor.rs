@@ -15,6 +15,9 @@
 
 use std::sync::Arc;
 use viz_helper::pane::PaneRect;
+mod measurement;
+pub(crate) use measurement::CompositorMeasurements;
+use measurement::{CompositorScope, Measurement};
 
 /// The blit.
 ///
@@ -63,6 +66,8 @@ pub struct StageCompositor {
     source: Option<Source>,
     pane: PaneRect,
     scale: f32,
+    generation: u64,
+    measurement: Option<Measurement>,
 }
 
 /// The picture to draw, however it arrived.
@@ -98,9 +103,7 @@ impl StageCompositor {
             ..Default::default()
         }))
         .map_err(|error| format!("no adapter can draw on the desk's window: {error}"))?;
-        let (device, queue) =
-            pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default()))
-                .map_err(|error| format!("the desk's window could not open a device: {error}"))?;
+        let (device, queue, benchmark, timestamps) = measurement::open_device(&adapter)?;
 
         let capabilities = surface.get_capabilities(&adapter);
         let format = capabilities
@@ -202,6 +205,7 @@ impl StageCompositor {
             mapped_at_creation: false,
         });
 
+        let measurement = benchmark.then(|| Measurement::new(&device, &queue, timestamps));
         let mut compositor = Self {
             surface,
             device,
@@ -216,6 +220,8 @@ impl StageCompositor {
             source: None,
             pane: PaneRect::default(),
             scale: if scale > 0.0 { scale } else { 1.0 },
+            generation: 0,
+            measurement,
         };
         compositor.configure();
         // Behind the interface, which is the whole point of drawing here rather than in a window
@@ -228,6 +234,9 @@ impl StageCompositor {
 
     /// Where the desk's layout says the Stage pane is, in the points the web layout works in.
     pub fn set_pane(&mut self, pane: PaneRect, scale: f32) {
+        if self.pane != pane || (scale > 0.0 && self.scale != scale) {
+            self.generation = self.generation.saturating_add(1);
+        }
         self.pane = pane;
         if scale > 0.0 {
             self.scale = scale;
@@ -260,6 +269,7 @@ impl StageCompositor {
             bind_group,
             size: (width, height),
         });
+        self.generation = self.generation.saturating_add(1);
         Ok(())
     }
 
@@ -281,6 +291,7 @@ impl StageCompositor {
             bind_group,
             size: (width, height),
         });
+        self.generation = self.generation.saturating_add(1);
         Ok(())
     }
 
@@ -295,6 +306,7 @@ impl StageCompositor {
             .as_ref()
             .is_some_and(|source| source.size == (width, height) && source.shared.is_none());
         if !reusable {
+            self.generation = self.generation.saturating_add(1);
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("stage pane copy"),
                 size: wgpu::Extent3d {
@@ -339,13 +351,48 @@ impl StageCompositor {
 
     /// Forget whatever was being drawn, leaving the whole window to the interface again.
     pub fn clear_source(&mut self) {
+        self.generation = self.generation.saturating_add(1);
         self.source = None;
+    }
+
+    /// Drain bounded benchmark observations; polling never waits for pending GPU work.
+    pub(crate) fn drain_measurements(&mut self) -> Option<CompositorMeasurements> {
+        let measurement = self.measurement.as_mut()?;
+        measurement.collect(&self.device);
+        Some(measurement.drain())
     }
 
     /// Draw one frame: the pane where the layout put it, and nothing anywhere else.
     pub fn draw(&mut self) -> Result<(), String> {
+        let started = std::time::Instant::now();
+        if let Some(measurement) = self.measurement.as_mut() {
+            measurement.stats.draw_attempts += 1;
+            measurement.collect(&self.device);
+        }
+        let result = self.draw_inner();
+        if let Some(measurement) = self.measurement.as_mut() {
+            measurement.stats.cpu_wall_micros = measurement
+                .stats
+                .cpu_wall_micros
+                .saturating_add(started.elapsed().as_micros().min(u128::from(u64::MAX)) as u64);
+            if result.is_err() {
+                measurement.stats.errors += 1;
+            }
+        }
+        result
+    }
+
+    fn draw_inner(&mut self) -> Result<(), String> {
         use wgpu::CurrentSurfaceTexture;
-        let frame = match self.surface.get_current_texture() {
+        let acquired_at = std::time::Instant::now();
+        let acquired = self.surface.get_current_texture();
+        if let Some(measurement) = self.measurement.as_mut() {
+            measurement.stats.acquire_wall_micros = measurement
+                .stats
+                .acquire_wall_micros
+                .saturating_add(acquired_at.elapsed().as_micros().min(u128::from(u64::MAX)) as u64);
+        }
+        let frame = match acquired {
             CurrentSurfaceTexture::Success(frame) | CurrentSurfaceTexture::Suboptimal(frame) => {
                 frame
             }
@@ -357,7 +404,18 @@ impl StageCompositor {
             }
             // Occluded is the window being hidden and timeout is the compositor being busy.
             // Neither is a fault, and neither has a frame to draw into.
-            CurrentSurfaceTexture::Occluded | CurrentSurfaceTexture::Timeout => return Ok(()),
+            CurrentSurfaceTexture::Occluded => {
+                if let Some(measurement) = self.measurement.as_mut() {
+                    measurement.stats.occluded += 1;
+                }
+                return Ok(());
+            }
+            CurrentSurfaceTexture::Timeout => {
+                if let Some(measurement) = self.measurement.as_mut() {
+                    measurement.stats.timeouts += 1;
+                }
+                return Ok(());
+            }
             CurrentSurfaceTexture::Validation => {
                 return Err("the desk's window refused a frame".to_owned());
             }
@@ -392,7 +450,11 @@ impl StageCompositor {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: self
+                    .measurement
+                    .as_ref()
+                    .and_then(|measurement| measurement.timer.as_ref())
+                    .and_then(|timer| timer.writes()),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -411,7 +473,40 @@ impl StageCompositor {
                 pass.draw(0..3, 0..1);
             }
         }
+        let scope = CompositorScope {
+            generation: self.generation,
+            surface_width: self.surface_size.0,
+            surface_height: self.surface_size.1,
+            pane: viewport.map(|pane| [pane.0, pane.1, pane.2, pane.3]),
+            source_size: self
+                .source
+                .as_ref()
+                .map(|source| [source.size.0, source.size.1]),
+            transport: self.source.as_ref().map(|source| {
+                if source.shared.is_some() {
+                    "shared"
+                } else {
+                    "copy"
+                }
+            }),
+        };
+        let mut readback = false;
+        if let Some(measurement) = self.measurement.as_mut() {
+            measurement.submission_id = measurement.submission_id.saturating_add(1);
+            measurement.stats.submissions += 1;
+            if let Some(timer) = measurement.timer.as_mut() {
+                readback = timer.resolve(&mut encoder, measurement.submission_id, scope);
+            }
+        }
         self.queue.submit(Some(encoder.finish()));
+        if readback
+            && let Some(timer) = self
+                .measurement
+                .as_ref()
+                .and_then(|measurement| measurement.timer.as_ref())
+        {
+            timer.request_readback();
+        }
         self.queue.present(frame);
         Ok(())
     }
@@ -447,6 +542,10 @@ impl StageCompositor {
     }
 
     fn configure(&mut self) {
+        self.generation = self.generation.saturating_add(1);
+        if let Some(measurement) = self.measurement.as_mut() {
+            measurement.stats.reconfigures += 1;
+        }
         self.surface.configure(
             &self.device,
             &wgpu::SurfaceConfiguration {

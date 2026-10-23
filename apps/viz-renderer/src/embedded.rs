@@ -21,6 +21,8 @@
 //! own web renderer, which is why nothing here has to cope with having no transport.
 
 mod benchmark;
+mod benchmark_pacing;
+mod picture;
 use crate::helper_source::{Embedding, HelperSource};
 use benchmark::{BenchmarkDrawWitness, BenchmarkHeartbeatClock};
 use std::time::{Duration, Instant};
@@ -51,6 +53,8 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     };
     let epoch = Instant::now();
     let mut heartbeat_clock = BenchmarkHeartbeatClock::new(state.benchmark.is_some());
+    let mut benchmark_pacing =
+        benchmark_pacing::BenchmarkPacing::from_environment(state.benchmark.is_some())?;
 
     /*
      * The rig comes from the desk's own server, through the same provider the standalone
@@ -176,14 +180,13 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
             };
         }
-        // Publish the initial/framed camera as well as pointer changes, after the pane's picture
-        // settings have resolved its actual view. Encoders must work before the first gesture.
-        if let Some(camera) = state.take_camera_update() {
-            source.send_camera(&camera);
-        }
-        state.resize_for(&embedding)?;
+        picture::prepare(&mut state, &mut source, &embedding)?;
         benchmark::draw_and_observe(&mut state, epoch, &mut source, &mut heartbeat_clock);
-        std::thread::sleep(IDLE_SLEEP);
+        std::thread::sleep(
+            benchmark_pacing
+                .sleep_for(Instant::now())
+                .unwrap_or(IDLE_SLEEP),
+        );
     }
 }
 
@@ -740,6 +743,7 @@ impl PaneState {
             self.values.newest_input_micros,
             presented_epoch_micros,
             stats,
+            self.transport,
             renderer,
             quality,
             self.view.mode.wire().to_owned(),

@@ -1,3 +1,4 @@
+import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage-baseline.mjs";
 import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
 import { execFile, spawn } from "node:child_process";
 import dgram from "node:dgram";
@@ -51,6 +52,7 @@ const durationSeconds = positiveInteger(
 );
 const profile = process.argv[3] ?? "default-stage";
 const profileDefinition = packagedStageProfile(profile);
+const fixedBaseline = readNativeBaselineConfig(process.env);
 const controlDurationSeconds =
 	packagedStageControlDurationSeconds(durationSeconds);
 // LIGHT_PACKAGED_STAGE_PORT runs the benchmark beside a desk that already owns 127.0.0.1:5000
@@ -112,7 +114,7 @@ const benchmarkEnvironment = {
 	),
 	LIGHT_STAGE_PACKAGED_BENCH_PROFILE: profile,
 	LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW:
-		profile === "supported-scale" ? "0" : "1",
+		profile === "supported-scale" || fixedBaseline ? "0" : "1",
 	LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 	LIGHT_DESKTOP_TEST_DATA_DIR: dataPath,
 	...(isolatedPort === null
@@ -285,7 +287,7 @@ try {
 				prepared.session.token,
 			);
 		const showSwitch =
-			profile === "supported-scale"
+			profile === "supported-scale" || fixedBaseline
 				? Promise.resolve({ attempted: false, completed: 0, intervals: [] })
 				: exerciseShowSwitches(
 						prepared.session,
@@ -293,7 +295,7 @@ try {
 						durationSeconds,
 					);
 		const applicationSuspend =
-			profile === "supported-scale"
+			profile === "supported-scale" || fixedBaseline
 				? Promise.resolve({ attempted: false, completed: false })
 				: exerciseApplicationSuspend(application, app, durationSeconds);
 		records = await waitForComplete(
@@ -2476,6 +2478,10 @@ function evaluateNativeStage(
 	runtime,
 	processMemory,
 ) {
+	if (fixedBaseline) return evaluateNativeBaseline(complete, {
+		configuration: fixedBaseline, profile, scene, runtime, durationSeconds: duration,
+		samplesFile, applicationIdentity: packagedApplicationIdentity(application), host: hostHardware(),
+	});
 	const frames = Array.isArray(complete.nativeStage?.frames)
 		? complete.nativeStage.frames
 		: [];
@@ -2601,16 +2607,14 @@ function evaluateNativeStage(
 		{ renderer: "native" },
 	);
 	for (const failure of longRun.failures) failures.push(failure);
-	const gpuSamples = frames
-		.map((frame) => frame.gpuMicros)
-		.filter(Number.isFinite)
-		.sort((left, right) => left - right);
 	const cpuSamples = frames
 		.map((frame) => frame.cpuMicros / 1_000)
 		.filter(Number.isFinite)
 		.sort((left, right) => left - right);
 	return {
-		schemaVersion: 3,
+		schemaVersion: 4,
+		measurementBoundaries: complete.nativeStage?.measurementBoundaries ?? null,
+		gpuObservations: complete.nativeStage?.gpuObservations ?? null,
 		tier: profileDefinition.tier,
 		measurementSurface: "packaged-tauri-native-stage",
 		applicationIdentity: packagedApplicationIdentity(application),
@@ -2648,10 +2652,10 @@ function evaluateNativeStage(
 			rendererRestarts,
 			nativeSurfaceSizes: [...liveSizes],
 			cpuFrameP95Ms: percentile(cpuSamples, 95),
-			gpuFrameP95Ms:
-				percentile(gpuSamples, 95) === null
-					? null
-					: percentile(gpuSamples, 95) / 1_000,
+			// Historical source-deduplicated rows cannot estimate GPU-frame percentiles.
+			gpuFrameP95Ms: null,
+			gpuFrameP95Status: "unavailable; use unique scoped gpuObservations sample statistics",
+			cpuFrameTimingKind: "elapsed wall; source-deduplicated latency observations",
 			degradedFrames: frames.filter((frame) => frame.degraded).length,
 			maximumInstances: maximum(frames.map((frame) => frame.instances ?? 0)),
 			maximumDrawCalls: maximum(frames.map((frame) => frame.drawCalls ?? 0)),
