@@ -765,7 +765,6 @@ export const TimecodeTimelineEditor = forwardRef<
 		setOverviewZoom,
 		fitTimeline,
 		prepareInspectorClose,
-		preserveOverviewExtent,
 	} = useTimelineGeometry({
 		scrollRef,
 		duration,
@@ -865,7 +864,6 @@ export const TimecodeTimelineEditor = forwardRef<
 	});
 	const resizeOverviewWindow = overviewResizer({
 		timelineViewportWidth,
-		preserveOverviewExtent,
 		maximumZoom,
 		fitPixelsPerFrame,
 		setOverviewResize,

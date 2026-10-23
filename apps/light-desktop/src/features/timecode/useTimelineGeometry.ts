@@ -50,7 +50,7 @@ export function useTimelineGeometry({
 	scrollTimelineTo(value: number): void;
 }) {
 	const [zoom, setZoomValue] = useState(1);
-	const [trailingFrames, setTrailingFrames] = useState(0);
+	const [trailingExtent, setTrailingExtent] = useState(0);
 	const restoreLeft = useRef<number | null>(null);
 	const [fitReference, setFitReference] = useState<{
 		id: string;
@@ -87,8 +87,8 @@ export function useTimelineGeometry({
 		const left = viewport.scrollLeft;
 		// Reserve before React removes the inspector. Waiting for ResizeObserver is too
 		// late: the browser has already clamped scrollLeft and emitted a scroll event.
-		setTrailingFrames(
-			Math.max(0, left + expandedWidth - TIMECODE_LANE_HEADER_WIDTH) / pixelsPerFrame,
+		setTrailingExtent(
+			Math.max(0, left + expandedWidth - TIMECODE_LANE_HEADER_WIDTH),
 		);
 		restoreLeft.current = left;
 	};
@@ -99,7 +99,7 @@ export function useTimelineGeometry({
 		scrollTimelineTo(left);
 	});
 	const fitTimeline = () => {
-		setTrailingFrames(0);
+		setTrailingExtent(0);
 		restoreLeft.current = null;
 		setFitReference({ id: definitionId, scale: measuredFit });
 		setZoomValue(1);
@@ -118,7 +118,7 @@ export function useTimelineGeometry({
 	const width = Math.max(
 		timelineViewportWidth,
 		duration * pixelsPerFrame,
-		trailingFrames * pixelsPerFrame,
+		trailingExtent,
 	);
 	useLayoutEffect(() => {
 		const viewport = scrollRef.current;
@@ -144,6 +144,5 @@ export function useTimelineGeometry({
 		setOverviewZoom: (value: number) => setZoomValue(Math.max(1, Math.min(maximumZoom, value))),
 		fitTimeline,
 		prepareInspectorClose,
-		preserveOverviewExtent: setTrailingFrames,
 	};
 }

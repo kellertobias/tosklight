@@ -2047,15 +2047,25 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const track = (await overview.boundingBox())!;
 		const end = editor.getByRole("separator", { name: "Resize timeline overview from end", exact: true });
 		const handle = (await end.boundingBox())!;
+		const initialDisplayedFrames = await canvas.evaluate(node => (node.getBoundingClientRect().width - 160) / Number((node as HTMLElement).dataset.pixelsPerFrame));
 		await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
 		await page.mouse.down();
 		await page.mouse.move(track.x + track.width * 0.35, handle.y + handle.height / 2, { steps: 8 });
 		await page.mouse.up();
-		await expect.poll(() => overview.evaluate(node => {
-			const total = node.querySelector(".timecode-timeline-overview-lane")!.getBoundingClientRect().width;
-			const visible = node.querySelector(".timecode-timeline-overview-visible")!.getBoundingClientRect().width;
-			return Math.abs(visible - total * 0.35);
-		})).toBeLessThanOrEqual(2);
+		// The pointer requests 35% of the captured frame domain. The overview domain
+		// may contract as zoom fills previous blank viewport space; its new thumb
+		// percentage need not remain 35%. Verify the actual visible frame interval.
+		await expect.poll(() => viewport.evaluate((node, frames) => {
+			const currentScale = Number((node.querySelector(".timecode-timeline-canvas") as HTMLElement).dataset.pixelsPerFrame);
+			return Math.abs((node.clientWidth - 160) - frames * 0.35 * currentScale);
+		}, initialDisplayedFrames)).toBeLessThanOrEqual(2);
+		await assertOverviewMainAxis(editor);
+		// The captured wide domain contains blank viewport space. It must not
+		// fabricate a scrollable tail when the actual show still fits on screen.
+		await overview.press("ArrowRight");
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(0);
+		// Narrow further so the actual show extends beyond the scrollport.
+		await zoomIn(page, editor);
 		await assertOverviewMainAxis(editor);
 		await overview.press("ArrowRight");
 		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
@@ -2081,6 +2091,20 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(zoomedScale);
 		await assertOverviewMainAxis(editor);
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-axis-detail.png") });
+		// Retained sidebar space must not grow with zoom and make the real end
+		// unreachable through the normal physical end-of-scroll gesture.
+		const maximumTrack = (await overview.boundingBox())!;
+		const maximumHandle = (await end.boundingBox())!;
+		await page.mouse.move(maximumHandle.x + maximumHandle.width / 2, maximumHandle.y + maximumHandle.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(maximumTrack.x + 1, maximumHandle.y + maximumHandle.height / 2, { steps: 8 });
+		await page.mouse.up();
+		await expect.poll(async () => Number(await canvas.getAttribute("data-pixels-per-frame"))).toBeCloseTo(17.5, 8);
+		const finalBounds = (await viewport.boundingBox())!;
+		await page.mouse.move(finalBounds.x + finalBounds.width / 2, finalBounds.y + 100);
+		await page.mouse.wheel(100_000, 0);
+		await expect(editor.locator(".timecode-ruler-final-tick")).toBeInViewport();
+		await assertOverviewMainAxis(editor);
 	});
 
 	test("TIMECODE-001 @ui › pressing keyframes and Cue corners preserves their geometry and never saves a tap", async ({
