@@ -318,11 +318,8 @@
 }
 .timecode-timeline-overview-handle {
 	position: absolute;
-	/* Zoomed far in, the window is narrower than two edge grips, and an operator still has to be
-	   able to move it. The edges therefore own the lower half of the window and the upper half is
-	   always the pan surface, so however narrow the window gets it keeps a grip of each kind.
-	   Capping each edge at half the window keeps the two of them from covering each other. */
-	top: 50%;
+	/* A narrow window still exposes both edges; its raised center grip owns panning. */
+	top: 0;
 	bottom: -1px;
 	width: min(16px, 50%);
 	cursor: ew-resize;
@@ -333,7 +330,8 @@
 .timecode-timeline-overview-handle::before {
 	content: "";
 	position: absolute;
-	top: 0;
+	top: 50%;
+	transform: translateY(-50%);
 	width: 20px;
 	height: 24px;
 	border: 1px solid #58d4ef;
@@ -344,7 +342,8 @@
 .timecode-timeline-overview-handle::after {
 	content: "";
 	position: absolute;
-	top: 5px;
+	top: 50%;
+	transform: translateY(-50%);
 	width: 2px;
 	height: 14px;
 	border-radius: 1px;
@@ -361,6 +360,38 @@
 .timecode-timeline-overview-handle.handle-end { right: -1px; }
 .timecode-timeline-overview-handle.handle-end::before { right: -10px; }
 .timecode-timeline-overview-handle.handle-end::after { right: 4px; }
+.timecode-timeline-editor .timecode-timeline-overview-move,
+.timecode-timeline-editor .timecode-timeline-overview-move:hover,
+.timecode-timeline-editor .timecode-timeline-overview-move:active {
+	position: absolute;
+	z-index: 4;
+	top: -1px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 44px;
+	height: 22px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: grab;
+	touch-action: none;
+}
+.timecode-timeline-overview-move:active { cursor: grabbing; }
+.timecode-timeline-overview-move > span {
+	display: block;
+	width: 28px;
+	height: 14px;
+	margin: 0 auto;
+	border: 1px solid #58d4ef;
+	border-radius: 4px;
+	background: #242c36;
+	box-shadow: 0 1px 2px #0008;
+}
+.timecode-timeline-overview-move svg { display: block; width: 18px; height: 8px; margin: 2px auto; fill: #b8f3ff; }
+.timecode-timeline-overview-move:hover > span,
+.timecode-timeline-overview-move:focus-visible > span { border-color: #b8f3ff; background: #39424e; }
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
 	min-height: 0;

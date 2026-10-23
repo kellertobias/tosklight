@@ -2,11 +2,12 @@ import { expect, it, vi } from "vitest";
 import { overviewResizer } from "./timelineOverviewResize";
 import type { OverviewResize } from "./timecodeEditorShared";
 function setup(viewport = 1200) {
+	const preserveOverviewExtent = vi.fn();
 	const fitTimeline = vi.fn();
 	const setZoom = vi.fn();
 	const setOverviewResize = vi.fn();
-	const resize = overviewResizer({ timelineViewportWidth: viewport, maximumZoom: 20, fitPixelsPerFrame: 1, setZoom, setOverviewResize, fitTimeline });
-	return { resize, setZoom, setOverviewResize, fitTimeline };
+	const resize = overviewResizer({ timelineViewportWidth: viewport, preserveOverviewExtent, maximumZoom: 20, fitPixelsPerFrame: 1, setZoom, setOverviewResize, fitTimeline });
+	return { preserveOverviewExtent, resize, setZoom, setOverviewResize, fitTimeline };
 }
 it("refits the current viewport when both overview edges explicitly reach the track ends", () => {
 	const { resize, setZoom, setOverviewResize, fitTimeline } = setup();
@@ -24,9 +25,10 @@ it("keeps partial overview ranges on the existing fit reference", () => {
 });
 
 it("zooms a displayed range including blank space and anchors it by its frame", () => {
-	const { resize, setZoom, setOverviewResize } = setup();
+	const { resize, setZoom, setOverviewResize, preserveOverviewExtent } = setup();
 	// Only 440 frames contain the Timecode; the preserved canvas displays 1000.
 	resize(0.25, 0.75, 1000);
+	expect(preserveOverviewExtent).toHaveBeenCalledExactlyOnceWith(1000);
 	expect(setZoom).toHaveBeenCalledExactlyOnceWith(2.4);
 	expect(setOverviewResize.mock.calls[0][0](null).startFrame).toBe(250);
 });

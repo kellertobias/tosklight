@@ -3,6 +3,7 @@ import type { OverviewResize } from "./timecodeEditorShared";
 
 export function overviewResizer({
 	timelineViewportWidth,
+	preserveOverviewExtent,
 	maximumZoom,
 	fitPixelsPerFrame,
 	setOverviewResize,
@@ -10,6 +11,7 @@ export function overviewResizer({
 	fitTimeline,
 }: {
 	timelineViewportWidth: number;
+	preserveOverviewExtent(frames: number): void;
 	maximumZoom: number;
 	fitPixelsPerFrame: number;
 	setOverviewResize: import("react").Dispatch<
@@ -32,6 +34,7 @@ export function overviewResizer({
 			1,
 			Math.min(maximumZoom, requestedPixelsPerFrame / fitPixelsPerFrame),
 		);
+		if (!fullRange) preserveOverviewExtent(displayedFrames);
 		setOverviewResize((current) => ({
 			zoom: nextZoom,
 			startFrame: fullRange ? 0 : startFraction * displayedFrames,

@@ -201,11 +201,26 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.getByTitle(/Audio · 42%/)).toBeTruthy();
 	});
 
-	it("preserves scale and left frame through inspector resize and explicitly refits", () => {
-		let viewportWidth = 720;
+	it("initializes Fit from the mounted viewport rather than the fallback render width", () => {
+		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains("timecode-timeline-scroll") ? 1000 : 0;
+		});
+		try {
+			render(<TimecodeTimelineEditor definition={definition} frame={0} fps={44} cueLists={[]} audioPlayers={[]}
+				onScrub={vi.fn()} onCommit={vi.fn()} onPreview={vi.fn()} onBeginGesture={vi.fn()} onEndGesture={vi.fn()} />);
+			const canvas = screen.getByLabelText("Timecode timeline viewport").querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+			expect(Number(canvas.dataset.pixelsPerFrame) * definition.duration_frame!).toBeCloseTo(840);
+		} finally { vi.restoreAllMocks(); }
+	});
+
+	it.each([0, 15])("preserves scale and left frame through inspector resize with a %ipx gutter and explicitly refits", (gutter) => {
+		let viewportWidth = 720 - gutter;
 		let notify: (() => void) | undefined;
 		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
 			return this.classList.contains("timecode-timeline-scroll") ? viewportWidth : this.classList.contains("timecode-editor-body") ? 720 : 0;
+		});
+		vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains("timecode-timeline-scroll") ? viewportWidth + gutter : 0;
 		});
 		vi.stubGlobal("ResizeObserver", class {
 			constructor(callback: () => void) { notify = callback; }
@@ -224,7 +239,7 @@ describe("TimecodeTimelineEditor", () => {
 			fireEvent.scroll(viewport);
 			fireEvent.click(screen.getByRole("button", { name: /Audio.*audio volume/i }));
 			expect(screen.getByLabelText("Selection settings")).toBeInTheDocument();
-			viewportWidth = 400;
+			viewportWidth = 400 - gutter;
 			act(() => notify?.());
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
 			expect(viewport.scrollLeft).toBe(400);
@@ -235,16 +250,16 @@ describe("TimecodeTimelineEditor", () => {
 			expect(canvas.style.width).toBe(naturalWidth);
 			fireEvent.click(screen.getByRole("button", { name: "Close selection settings" }));
 			// Extent is reserved before ResizeObserver can notify an expanded viewport.
-			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + 720);
-			viewportWidth = 720;
+			expect(Number.parseFloat(canvas.style.width)).toBe(850 + 720 - gutter);
+			viewportWidth = 720 - gutter;
 			act(() => notify?.());
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
 			expect(viewport.scrollLeft).toBe(850);
 			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + viewportWidth);
 			act(() => ref.current?.fit());
-			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
+			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo((560 - gutter) / 440);
 			expect(viewport.scrollLeft).toBe(0);
-			expect(canvas.style.width).toBe("720px");
+			expect(canvas.style.width).toBe(`${720 - gutter}px`);
 		} finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
 	});
 

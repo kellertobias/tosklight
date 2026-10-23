@@ -27,7 +27,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 			exact: true,
 		});
 		await expect(envelope).toBeVisible();
-		await zoomIn(page, editor);
+		await zoomIn(page, editor, 0.6);
 		await expect(editor.locator(".timecode-cue-envelope")).toHaveCount(0);
 		for (const [index, name] of ["House out", "Verse wash", "Chorus"].entries())
 			await assertCueFrameAlignment(
@@ -158,9 +158,11 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 				path: testInfo.outputPath("timecode-cue-editor-detail.png"),
 			});
 		expect(await geometry(editor, viewport, envelope)).toEqual(before);
-		await editor
-			.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true })
-			.tap({ position: { x: 32, y: 18 } });
+		const nextCue = editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true });
+		const nextCueBox = (await nextCue.boundingBox())!;
+		const nextCuePoint = { x: nextCueBox.x + 32, y: nextCueBox.y + 18 };
+		expect(await nextCue.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), nextCuePoint)).toBe(true);
+		await nextCue.tap({ position: { x: 32, y: 18 } });
 		await expect(
 			editor.getByRole("slider", { name: "Cue 2 In fade", exact: true }),
 		).toBeVisible();
@@ -2033,6 +2035,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
 		const canvas = editor.locator(".timecode-timeline-canvas");
 		const scale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+		expect(Math.abs(880 * scale - await viewport.evaluate(node => node.clientWidth - 160))).toBeLessThanOrEqual(1);
 		await page.setViewportSize({ width: 2400, height: 1000 });
 		await expect.poll(() => viewport.evaluate(node => node.clientWidth)).toBeGreaterThan(2000);
 		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(scale);
@@ -2044,28 +2047,55 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
 		await assertOverviewMainAxis(editor);
 		const overview = editor.getByRole("scrollbar", { name: "Timeline overview", exact: true });
+		// Widening the viewport retains scale but must not fabricate a scrollable
+		// tail while every real frame still fits in the visible time range.
+		await overview.press("ArrowRight");
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(0);
 		const track = (await overview.boundingBox())!;
 		const end = editor.getByRole("separator", { name: "Resize timeline overview from end", exact: true });
 		const handle = (await end.boundingBox())!;
-		const initialDisplayedFrames = await canvas.evaluate(node => (node.getBoundingClientRect().width - 160) / Number((node as HTMLElement).dataset.pixelsPerFrame));
+		const initialDisplayedFrames = Number(await overview.getAttribute("data-displayed-frames"));
+		const initialVisible = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
+		const endGrabOffset = handle.x + handle.width / 2 - (initialVisible.x + initialVisible.width);
+		for (const edgeName of ["start", "end"]) {
+			const grip = overview.getByRole("separator", { name: `Resize timeline overview from ${edgeName}`, exact: true });
+			const visualCenterError = await grip.evaluate(node => {
+				const hit = node.getBoundingClientRect();
+				const visible = node.parentElement!.getBoundingClientRect();
+				return Math.max(...["::before", "::after"].map(pseudo => {
+					const style = getComputedStyle(node, pseudo);
+					const height = parseFloat(style.height) + (style.boxSizing === "border-box" ? 0 : parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth));
+					const transformY = new DOMMatrixReadOnly(style.transform).m42;
+					return Math.abs(hit.y + parseFloat(style.top) + transformY + height / 2 - visible.y - visible.height / 2);
+				}));
+			});
+			expect(visualCenterError).toBeLessThanOrEqual(1);
+		}
 		await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
 		await page.mouse.down();
-		await page.mouse.move(track.x + track.width * 0.35, handle.y + handle.height / 2, { steps: 8 });
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(scale);
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(0);
+		await page.mouse.move(handle.x + handle.width / 2 - 2, handle.y + handle.height / 2);
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(scale);
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(0);
+		await page.mouse.move(track.x + track.width * 0.35 + endGrabOffset, handle.y + handle.height / 2, { steps: 8 });
 		await page.mouse.up();
-		// The pointer requests 35% of the captured frame domain. The overview domain
-		// may contract as zoom fills previous blank viewport space; its new thumb
-		// percentage need not remain 35%. Verify the actual visible frame interval.
+		// The grabbed edge follows the requested 35% of the stable overview domain.
+		// Verify the frame interval, not just the miniature's visual width.
 		await expect.poll(() => viewport.evaluate((node, frames) => {
 			const currentScale = Number((node.querySelector(".timecode-timeline-canvas") as HTMLElement).dataset.pixelsPerFrame);
 			return Math.abs((node.clientWidth - 160) - frames * 0.35 * currentScale);
 		}, initialDisplayedFrames)).toBeLessThanOrEqual(2);
 		await assertOverviewMainAxis(editor);
-		// The captured wide domain contains blank viewport space. It must not
-		// fabricate a scrollable tail when the actual show still fits on screen.
-		await overview.press("ArrowRight");
-		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(0);
-		// Narrow further so the actual show extends beyond the scrollport.
-		await zoomIn(page, editor);
+		// Narrow to 220 visible frames so the actual show extends beyond the
+		// scrollport even though the overview domain still includes wide padding.
+		const narrowHandle = (await end.boundingBox())!;
+		const narrowVisible = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
+		const narrowGrab = narrowHandle.x + narrowHandle.width / 2 - (narrowVisible.x + narrowVisible.width);
+		await page.mouse.move(narrowHandle.x + narrowHandle.width / 2, narrowHandle.y + narrowHandle.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(track.x + track.width * (220 / initialDisplayedFrames) + narrowGrab, narrowHandle.y + narrowHandle.height / 2, { steps: 8 });
+		await page.mouse.up();
 		await assertOverviewMainAxis(editor);
 		await overview.press("ArrowRight");
 		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
@@ -2091,6 +2121,24 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(zoomedScale);
 		await assertOverviewMainAxis(editor);
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-axis-detail.png") });
+		// Explicit zoom-out releases resize-only native padding without changing
+		// the overview's captured context or manufacturing a longer frame domain.
+		const closeDomain = Number(await overview.getAttribute("data-displayed-frames"));
+		const zoomOutTrack = (await overview.boundingBox())!;
+		const zoomOutGrip = (await end.boundingBox())!;
+		const zoomOutVisible = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
+		const zoomOutGrab = zoomOutGrip.x + zoomOutGrip.width / 2 - zoomOutVisible.x - zoomOutVisible.width;
+		await page.mouse.move(zoomOutGrip.x + zoomOutGrip.width / 2, zoomOutGrip.y + zoomOutGrip.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(zoomOutTrack.x + zoomOutTrack.width * 0.9 + zoomOutGrab, zoomOutGrip.y + zoomOutGrip.height / 2, { steps: 8 });
+		await page.mouse.up();
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBeLessThan(zoomedScale);
+		expect(Number(await overview.getAttribute("data-displayed-frames"))).toBeCloseTo(closeDomain, 8);
+		expect(await canvas.evaluate(node => {
+			const viewport = node.closest(".timecode-timeline-scroll")!;
+			return Math.abs(node.getBoundingClientRect().width - Math.max(viewport.clientWidth - 160, 880 * Number((node as HTMLElement).dataset.pixelsPerFrame)) - 160);
+		})).toBeLessThanOrEqual(1);
+		await assertOverviewMainAxis(editor);
 		// Retained sidebar space must not grow with zoom and make the real end
 		// unreachable through the normal physical end-of-scroll gesture.
 		const maximumTrack = (await overview.boundingBox())!;
@@ -2111,17 +2159,83 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 			for (const [edgeName, fraction] of [["end", 0.6], ["start", 0.1]] as const) {
 				const grip = overview.getByRole("separator", { name: `Resize timeline overview from ${edgeName}`, exact: true });
 				const box = (await grip.boundingBox())!;
-				const x = box.x + box.width / 2, y = box.y + box.height / 2;
+				const visible = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
+				const currentTrack = (await overview.boundingBox())!;
+				const domain = Number(await overview.getAttribute("data-displayed-frames"));
+				const beforeScale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+				const beforeLeft = await viewport.evaluate(node => node.scrollLeft);
+				const x = box.x + box.width * 0.7, y = box.y + box.height / 2;
+				const boundary = edgeName === "start" ? visible.x : visible.x + visible.width;
+				const grabOffset = x - boundary;
+				const oppositeFrame = edgeName === "start"
+					? (beforeLeft + await viewport.evaluate(node => node.clientWidth - 160)) / beforeScale
+					: beforeLeft / beforeScale;
 				expect(await grip.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), { x, y })).toBe(true);
 				await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 1 }] });
+				expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(beforeScale);
+				expect(await viewport.evaluate(node => node.scrollLeft)).toBe(beforeLeft);
+				await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + 2, y, id: 1 }] });
+				expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(beforeScale);
+				expect(await viewport.evaluate(node => node.scrollLeft)).toBe(beforeLeft);
+				const target = currentTrack.x + currentTrack.width * fraction + grabOffset;
 				for (let step = 1; step <= 6; step++) {
-					await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + (maximumTrack.x + maximumTrack.width * fraction - x) * step / 6, y, id: 1 }] });
+					await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + (target - x) * step / 6, y, id: 1 }] });
 				}
 				await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+				await expect.poll(() => overview.locator(".timecode-timeline-overview-visible").evaluate((node, expected) => {
+					const bounds = node.getBoundingClientRect();
+					return Math.abs((expected.edge === "start" ? bounds.left : bounds.right) - expected.x);
+				}, { edge: edgeName, x: currentTrack.x + currentTrack.width * fraction })).toBeLessThanOrEqual(1);
+				const actualScale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+				const actualLeft = await viewport.evaluate(node => node.scrollLeft);
+				const expectedRange = edgeName === "start" ? oppositeFrame - fraction * domain : fraction * domain - oppositeFrame;
+				expect(Math.abs(await viewport.evaluate(node => node.clientWidth - 160) - expectedRange * actualScale)).toBeLessThanOrEqual(2);
+				const actualOpposite = edgeName === "start" ? (actualLeft + await viewport.evaluate(node => node.clientWidth - 160)) / actualScale : actualLeft / actualScale;
+				expect(Math.abs(actualOpposite - oppositeFrame) * actualScale).toBeLessThanOrEqual(1);
 				await assertOverviewMainAxis(editor);
 			}
 		} finally { await cdp.detach(); }
 		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+		const move = overview.getByRole("button", { name: "Move visible timeline range", exact: true });
+		const moveBox = (await move.boundingBox())!;
+		const visibleBox = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
+		expect(moveBox.width).toBeGreaterThanOrEqual(44);
+		expect(moveBox.height).toBeGreaterThanOrEqual(22);
+		expect(Math.abs(moveBox.y - visibleBox.y)).toBeLessThanOrEqual(1);
+		const moveSymbol = (await move.locator("span").boundingBox())!;
+		expect(Math.abs(moveSymbol.x + moveSymbol.width / 2 - visibleBox.x - visibleBox.width / 2)).toBeLessThanOrEqual(1);
+		expect(moveSymbol.y + moveSymbol.height).toBeLessThanOrEqual(visibleBox.y + visibleBox.height / 2);
+		expect(Math.abs(moveBox.x + moveBox.width / 2 - visibleBox.x - visibleBox.width / 2)).toBeLessThanOrEqual(1);
+		const panBefore = await viewport.evaluate(node => node.scrollLeft);
+		const panScale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+		const panDomain = Number(await overview.getAttribute("data-displayed-frames"));
+		const panTrack = (await overview.boundingBox())!;
+		const panX = moveBox.x + moveBox.width / 2, panY = moveBox.y + moveBox.height / 2;
+		expect(await move.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), { x: panX, y: panY })).toBe(true);
+		await page.mouse.move(panX, panY);
+		await page.mouse.down();
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(panBefore);
+		await page.mouse.move(panX + panTrack.width * 0.08, panY, { steps: 6 });
+		await page.mouse.up();
+		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(panBefore);
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(panScale);
+		expect(Math.abs(await viewport.evaluate(node => node.scrollLeft) - panBefore - panDomain * panScale * 0.08)).toBeLessThanOrEqual(1);
+		await assertOverviewMainAxis(editor);
+		const touchPanBefore = await viewport.evaluate(node => node.scrollLeft);
+		const touchPanBox = (await move.boundingBox())!;
+		const touchPanX = touchPanBox.x + touchPanBox.width / 2, touchPanY = touchPanBox.y + touchPanBox.height / 2;
+		const touchPan = await page.context().newCDPSession(page);
+		try {
+			await touchPan.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: touchPanX, y: touchPanY, id: 1 }] });
+			expect(await viewport.evaluate(node => node.scrollLeft)).toBe(touchPanBefore);
+			await touchPan.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: touchPanX - 2, y: touchPanY, id: 1 }] });
+			expect(await viewport.evaluate(node => node.scrollLeft)).toBe(touchPanBefore);
+			for (let step = 1; step <= 6; step++) await touchPan.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: touchPanX - panTrack.width * 0.04 * step / 6, y: touchPanY, id: 1 }] });
+			await touchPan.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+		} finally { await touchPan.detach(); }
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(panScale);
+		expect(Math.abs(await viewport.evaluate(node => node.scrollLeft) - touchPanBefore + panDomain * panScale * 0.04)).toBeLessThanOrEqual(1);
+		await assertOverviewMainAxis(editor);
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-grips-detail.png") });
 	});
 
@@ -2485,7 +2599,7 @@ async function openEditor(page: Page, sidebar = true) {
 	if (sidebar) await setSelectionSidebar(page, true);
 }
 
-async function zoomIn(page: Page, editor: Locator) {
+async function zoomIn(page: Page, editor: Locator, fraction = 0.25) {
 	const overview = editor.getByRole("scrollbar", { name: "Timeline overview" });
 	const handle = overview.getByRole("separator", {
 		name: "Resize timeline overview from end",
@@ -2495,8 +2609,9 @@ async function zoomIn(page: Page, editor: Locator) {
 	if (!box || !track) throw new Error("Missing overview controls");
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 	await page.mouse.down();
-	// Explicit 4x leaves enough space for the one-second ruler labels used below.
-	await page.mouse.move(track.x + track.width / 4, box.y + box.height / 2, {
+	// Fourfold is the default; selection tests use a wider range to keep adjacent
+	// Cue touch targets physically visible without browser-assisted scrolling.
+	await page.mouse.move(track.x + track.width * fraction, box.y + box.height / 2, {
 		steps: 8,
 	});
 	await page.mouse.up();
@@ -3064,7 +3179,7 @@ async function assertOverviewMainAxis(editor: Locator) {
 		const canvasBounds = canvas.getBoundingClientRect();
 		const originWidth = Number(canvas.dataset.timeOriginPx);
 		const origin = canvasBounds.left + originWidth;
-		const extent = canvasBounds.width - originWidth;
+		const extent = Number(overview.dataset.displayedFrames) * Number(canvas.dataset.pixelsPerFrame);
 		const project = (x: number) => laneTrack.left + ((x - origin) / extent) * laneTrack.width;
 		let error = 0;
 		for (const lane of canvas.querySelectorAll<HTMLElement>(".timecode-editor-lane")) {

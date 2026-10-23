@@ -6,6 +6,7 @@ import {
 interface OverviewDragOptions {
 	scrollRef: RefObject<HTMLDivElement | null>;
 	totalWidth: number;
+	scrollableWidth: number;
 	displayedFrames: number;
 	viewportWidth: number;
 	scrollLeft: number;
@@ -17,6 +18,7 @@ interface OverviewDragOptions {
 export function useOverviewDrag({
 	scrollRef,
 	totalWidth,
+	scrollableWidth,
 	displayedFrames,
 	viewportWidth,
 	scrollLeft,
@@ -24,7 +26,7 @@ export function useOverviewDrag({
 	onScrollLeftChange,
 	onVisibleRangeChange,
 }: OverviewDragOptions) {
-	const maximumScroll = Math.max(0, totalWidth - viewportWidth);
+	const maximumScroll = Math.max(0, scrollableWidth - viewportWidth);
 	const visibleWidth = Math.min(100, (viewportWidth / totalWidth) * 100);
 	const visibleLeft = Math.min(
 		100 - visibleWidth,
@@ -36,6 +38,8 @@ export function useOverviewDrag({
 		pointerId: number;
 		mode: "start" | "end" | "pan";
 		grabOffset: number;
+		startX: number;
+		moved: boolean;
 		displayedFrames: number;
 		visibleStart: number;
 		visibleEnd: number;
@@ -70,28 +74,33 @@ export function useOverviewDrag({
 			drag.current = {
 				pointerId: event.pointerId,
 				mode: edge,
-				grabOffset: 0,
+				grabOffset: fraction - (edge === "start" ? visibleStart : visibleEnd),
+				startX: event.clientX, moved: false,
 				displayedFrames, visibleStart, visibleEnd, minimumVisibleFraction,
 			};
 			return;
 		}
-		const inside = fraction >= visibleStart && fraction <= visibleEnd;
+		const moveGrip = event.target instanceof Element && Boolean(event.target.closest("[data-overview-pan]"));
+		const inside = moveGrip || (fraction >= visibleStart && fraction <= visibleEnd);
 		const grabOffset = inside ? fraction - visibleStart : visibleWidth / 200;
 		drag.current = {
 			pointerId: event.pointerId,
 			mode: "pan",
 			grabOffset,
+			startX: event.clientX, moved: false,
 			displayedFrames, visibleStart, visibleEnd, minimumVisibleFraction,
 		};
-		panTo(fraction - grabOffset);
+		if (!inside) panTo(fraction - grabOffset);
 	};
 	const moveDrag = (clientX: number, overview: HTMLElement) => {
 		const current = drag.current;
 		if (!current) return;
+		if (!current.moved && Math.abs(clientX - current.startX) < 3) return;
+		current.moved = true;
 		const fraction = fractionAt(clientX, overview);
 		if (current.mode === "start") {
 			onVisibleRangeChange(
-				Math.max(0, Math.min(current.visibleEnd - current.minimumVisibleFraction, fraction)),
+				Math.max(0, Math.min(current.visibleEnd - current.minimumVisibleFraction, fraction - current.grabOffset)),
 				current.visibleEnd,
 				current.displayedFrames,
 			);
@@ -100,7 +109,7 @@ export function useOverviewDrag({
 		if (current.mode === "end") {
 			onVisibleRangeChange(
 				current.visibleStart,
-				Math.min(1, Math.max(current.visibleStart + current.minimumVisibleFraction, fraction)),
+				Math.min(1, Math.max(current.visibleStart + current.minimumVisibleFraction, fraction - current.grabOffset)),
 				current.displayedFrames,
 			);
 			return;

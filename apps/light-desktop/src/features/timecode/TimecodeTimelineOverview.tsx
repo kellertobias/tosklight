@@ -1,3 +1,4 @@
+import { Button } from "@tosklight/ui";
 import { useOverviewDrag } from "./useOverviewDrag";
 import { type CSSProperties, type RefObject } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
@@ -14,9 +15,10 @@ export function TimelineOverview({
 	scrollLeft,
 	viewportWidth,
 	totalWidth,
+	scrollableWidth,
 	scrollRef,
 	viewportId,
-	minimumVisibleFraction,
+	maximumPixelsPerFrame,
 	onScrollLeftChange,
 	onVisibleRangeChange,
 }: {
@@ -26,9 +28,10 @@ export function TimelineOverview({
 	scrollLeft: number;
 	viewportWidth: number;
 	totalWidth: number;
+	scrollableWidth: number;
 	scrollRef: RefObject<HTMLDivElement | null>;
 	viewportId: string;
-	minimumVisibleFraction: number;
+	maximumPixelsPerFrame: number;
 	onScrollLeftChange(scrollLeft: number): void;
 	onVisibleRangeChange(startFraction: number, endFraction: number, displayedFrames: number): void;
 }) {
@@ -43,19 +46,21 @@ export function TimelineOverview({
 	} = useOverviewDrag({
 		scrollRef,
 		totalWidth,
+		scrollableWidth,
 		displayedFrames: totalWidth / pixelsPerFrame,
 		viewportWidth,
 		scrollLeft,
-		minimumVisibleFraction,
+		minimumVisibleFraction: Math.min(1, viewportWidth / ((totalWidth / pixelsPerFrame) * maximumPixelsPerFrame)),
 		onScrollLeftChange,
 		onVisibleRangeChange,
 	});
-	// Include the same blank trailing extent as the main canvas. Configured
-	// duration alone is not its width after preserving zoom through a resize.
+	// Project the shared frame axis into retained overview context. Keeping this
+	// context stable during a drag never adds blank native scroll reach.
 	const framePercent = (frame: number) => (frame * pixelsPerFrame / totalWidth) * 100;
 	return (
 		<div
 			className="timecode-timeline-overview"
+			data-displayed-frames={totalWidth / pixelsPerFrame}
 			role="scrollbar"
 			aria-label="Timeline overview"
 			aria-controls={viewportId}
@@ -106,6 +111,10 @@ export function TimelineOverview({
 				className="timecode-timeline-overview-visible"
 				style={{ left: `${visibleLeft}%`, width: `${visibleWidth}%` }}
 			>
+				<Button size="compact" className="timecode-timeline-overview-move" data-overview-pan
+					aria-label="Move visible timeline range" title="Drag to move the visible time range; arrow keys pan">
+					<span aria-hidden="true"><svg viewBox="0 0 18 8"><circle cx="4" cy="2" r="1"/><circle cx="9" cy="2" r="1"/><circle cx="14" cy="2" r="1"/><circle cx="4" cy="6" r="1"/><circle cx="9" cy="6" r="1"/><circle cx="14" cy="6" r="1"/></svg></span>
+				</Button>
 				<i
 					className="timecode-timeline-overview-handle handle-start"
 					data-overview-edge="start"

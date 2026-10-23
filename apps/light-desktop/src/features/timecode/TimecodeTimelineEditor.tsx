@@ -760,6 +760,8 @@ export const TimecodeTimelineEditor = forwardRef<
 		fitPixelsPerFrame,
 		pixelsPerFrame,
 		width,
+		overviewWidth,
+		preserveOverviewExtent,
 		zoom,
 		setZoom,
 		setOverviewZoom,
@@ -864,6 +866,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	});
 	const resizeOverviewWindow = overviewResizer({
 		timelineViewportWidth,
+		preserveOverviewExtent,
 		maximumZoom,
 		fitPixelsPerFrame,
 		setOverviewResize,
@@ -964,14 +967,11 @@ export const TimecodeTimelineEditor = forwardRef<
 							pixelsPerFrame={pixelsPerFrame}
 							scrollLeft={scrollLeft}
 							viewportWidth={timelineViewportWidth}
-							totalWidth={width}
+							totalWidth={overviewWidth}
+							scrollableWidth={width}
 							scrollRef={scrollRef}
 							viewportId={viewportId}
-							minimumVisibleFraction={Math.min(
-								1,
-								timelineViewportWidth /
-									((width / pixelsPerFrame) * TARGET_MAX_PIXELS_PER_FRAME),
-							)}
+							maximumPixelsPerFrame={TARGET_MAX_PIXELS_PER_FRAME}
 							onScrollLeftChange={setScrollLeft}
 							onVisibleRangeChange={resizeOverviewWindow}
 						/>
