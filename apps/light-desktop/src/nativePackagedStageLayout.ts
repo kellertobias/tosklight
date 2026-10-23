@@ -28,12 +28,17 @@ export function baselineStageBridge(
 	config: PackagedStageBenchmarkConfig,
 ): DesktopBridge {
 	if (!config.baselineLayout) return bridge;
+	// Keep one discoverable camera owner across helper restarts. This scoped bridge's
+	// lifetime is the fixed benchmark's lifetime; another pane never steals that ownership.
+	let cameraOwner: string | null = null;
 	return {
 		...bridge,
 		...(config.baselineLayout === "dual" ? {
-			// Benchmark-only allocation exception: both panes still request the same actual 3D view.
-			openStagePane: (id: string, _live3d: boolean, geometry: Parameters<DesktopBridge["openStagePane"]>[2]) =>
-				bridge.openStagePane(id, false, geometry),
+			// Only the first pane reserves native 3D ownership; both request the same actual 3D picture.
+			openStagePane: (id: string, _live3d: boolean, geometry: Parameters<DesktopBridge["openStagePane"]>[2]) => {
+				cameraOwner ??= id;
+				return bridge.openStagePane(id, id === cameraOwner, geometry);
+			},
 		} : {}),
 		setStagePanePicture: (id, picture) =>
 			bridge.setStagePanePicture(id, {
