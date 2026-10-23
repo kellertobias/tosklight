@@ -30,9 +30,10 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
 		expect(await addLeft()).toBe(initialAddLeft);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
+		await assertHalfGrip(editor, editor.getByRole("slider", { name: "Move clip start", exact: true }), 44, "start");
 		const inDelay = editor.getByRole("slider", { name: "Cue 1 In delay", exact: true });
 		await expect(inDelay).toHaveAttribute("aria-valuenow", "88");
-		const triggerX = await editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true }).evaluate((node) => { const box = node.getBoundingClientRect(); return box.left + box.width / 2; });
+		const triggerX = await editor.locator('.timecode-cue-trigger-boundary[data-trigger-frame="44"]').evaluate((node) => node.getBoundingClientRect().left);
 		const delayX = await inDelay.evaluate((node) => { const box = node.getBoundingClientRect(); return box.left + box.width / 2; });
 		const oneSecondWidth = 44 * Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 		expect(Math.abs(delayX - triggerX - oneSecondWidth)).toBeLessThanOrEqual(1);
@@ -245,7 +246,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
 		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).click();
-		const trigger = editor.getByRole("slider", { name: "Cue 2 Trigger", exact: true });
+		const trigger = editor.getByRole("slider", { name: "Move Cue 2 trigger", exact: true });
 		await expect(trigger).toBeVisible();
 		await assertCueFrameAlignment(editor, 2, "Verse wash", 220, true);
 		await touchDragFrames(page, editor, trigger, 44, true);
@@ -288,7 +289,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await page.reload();
 		await openEditor(page);
 		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).click();
-		await expect(editor.getByRole("slider", { name: "Cue 2 Trigger", exact: true })).toHaveAttribute("aria-valuenow", "45");
+		await expect(editor.getByRole("slider", { name: "Move Cue 2 trigger", exact: true })).toHaveAttribute("aria-valuenow", "45");
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues.map((cue) => cue.trigger.type)).toEqual(["manual", "manual", "manual"]);
 	});
 	test("TIMECODE-001 @ui › touch drags each timing point and cancelling a touch restores the unsaved preview", async ({ api, show, desk, page }) => {
@@ -323,8 +324,8 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
 		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click();
-		const firstTrigger = editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true });
-		await expect(editor.getByRole("slider", { name: "Move Cue 1 trigger", exact: true })).toHaveCount(0);
+		const firstTrigger = editor.getByRole("slider", { name: "Move clip start", exact: true });
+		await expect(editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true })).toHaveCount(0);
 		await touchDragFrames(page, editor, firstTrigger, 44, true);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		expect((await readClip(api, show.id, rig.definition.id)).start_frame).toBe(44);
@@ -474,6 +475,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 			const box = scroll.getBoundingClientRect();
 			return target.width === 44 && target.left >= box.left && target.right <= box.left + scroll.clientLeft + scroll.clientWidth + 1;
 		})).toBe(true);
+		await assertHalfGrip(editor, end, 704, "end");
 		await touchDragFrames(page, editor, end, -4, true);
 		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(704);
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-end-grabber-detail.png") });
@@ -481,7 +483,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(editor.locator(".timecode-cue-block")).toHaveCount(0);
 	});
 
-	test("TIMECODE-001 @ui › marker lines do not drag while the sticky bottom flag supports mouse and touch moves", async ({ api, show, desk, page, request }, testInfo) => {
+	test("TIMECODE-001 @ui › marker lines do not drag while the sticky ruler flag supports mouse and touch moves", async ({ api, show, desk, page, request }, testInfo) => {
 		const { rig } = await seedAudioEditor(api, show.id, request, Array.from({ length: 12 }, (_, index) => ["Movement", "Chase", "Colour"][index % 3] + ` ${index + 1}`));
 		const markerId = crypto.randomUUID();
 		const current = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
@@ -493,27 +495,45 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
 		const marker = editor.locator(".timecode-timeline-marker");
 		const flag = marker.locator(".timecode-timeline-marker-label");
-		await expect(flag).toHaveText("Verse");
+		await expect(flag).toContainText("Verse");
+		await expect(flag.locator(".timecode-marker-grab")).toBeVisible();
 		const audio = (await editor.locator(".main-audio").boundingBox())!;
 		const line = (await marker.locator(".timecode-timeline-marker-line").boundingBox())!;
+		expect(await marker.locator(".timecode-timeline-marker-line").evaluate((node) => Number(getComputedStyle(node).opacity))).toBe(0.5);
 		expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".timecode-timeline-marker")), { x: line.x, y: audio.y + audio.height - 8 })).toBe(false);
 		await page.mouse.move(line.x, audio.y + audio.height - 8);
 		await page.mouse.down();
 		await page.mouse.move(line.x + 40, audio.y + audio.height - 8, { steps: 5 });
 		await page.mouse.up();
 		expect(await markerFrame()).toBe(220);
-		const bottom = await flag.evaluate((node) => node.getBoundingClientRect().bottom);
+		const top = await flag.evaluate((node) => node.getBoundingClientRect().top);
+		const ruler = editor.locator(".timecode-timeline-heading");
+		const rulerBox = (await ruler.boundingBox())!;
+		expect(top).toBeGreaterThanOrEqual(rulerBox.y + 32);
+		expect(top + 44).toBeLessThanOrEqual(rulerBox.y + rulerBox.height + 1);
 		const box = (await viewport.boundingBox())!;
 		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 		await page.mouse.wheel(0, 300);
 		await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
-		expect(Math.abs(await flag.evaluate((node) => node.getBoundingClientRect().bottom) - bottom)).toBeLessThanOrEqual(1);
-		expect(Math.abs(bottom - await viewport.evaluate((node) => node.getBoundingClientRect().top + node.clientTop + node.clientHeight))).toBeLessThanOrEqual(1);
+		expect(Math.abs(await flag.evaluate((node) => node.getBoundingClientRect().top) - top)).toBeLessThanOrEqual(1);
+		expect((await ruler.boundingBox())!.y).toBe(rulerBox.y);
 		await dragFrames(page, editor, flag, 44);
 		await expect.poll(markerFrame).toBe(264);
 		await touchDragFrames(page, editor, flag, 44);
 		await expect.poll(markerFrame).toBe(308);
-		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-marker-bottom-flag.png") });
+		const context = { showId: show.id, deskId: api.session!.desk.id };
+		const transport = (action: { type: string; frame?: number }) => api.request("POST", `/api/v2/timecodes/${rig.definition.id}/transport`, { timecode_id: rig.definition.id, action }, true, undefined, context);
+		await transport({ type: "go" }); await transport({ type: "pause" }); await transport({ type: "seek", frame: 320 });
+		await expect(page.getByRole("button", { name: "Timecode position", exact: true })).toHaveText(frameText(320));
+		const playhead = editor.getByRole("button", { name: "Drag playhead to seek", exact: true });
+		await expect.poll(() => playhead.evaluate((node) => {
+			const box = node.getBoundingClientRect();
+			const audio = node.closest(".timecode-timeline-canvas")!.querySelector(".main-audio")!.getBoundingClientRect();
+			const flag = node.closest(".timecode-timeline-canvas")!.querySelector(".timecode-timeline-marker-label")!.getBoundingClientRect();
+			return box.left > flag.left && box.left < flag.right && [audio.top + audio.height / 2, flag.top + flag.height / 2].every((y) => Boolean(document.elementFromPoint(box.left + box.width / 2, y)?.closest(".timecode-editor-playhead")));
+		})).toBe(true);
+
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-marker-ruler-flag.png") });
 	});
 
 	test("TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll", async ({ api, show, desk, page }) => {
@@ -798,7 +818,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await cue.click({ position: { x: 2, y: 22 } });
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toHaveAttribute("aria-valuenow", "44");
-		const trigger = editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true });
+		const trigger = editor.getByRole("slider", { name: "Move clip start", exact: true });
 		await touchDragFrames(page, editor, trigger, 4, true);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		expect((await readClip(api, show.id, rig.definition.id)).start_frame).toBe(44);
@@ -864,6 +884,7 @@ async function zoomIn(page: Page, editor: Locator) {
 
 async function dragFrames(page: Page, editor: Locator, handle: Locator, frames: number, onPreview?: () => Promise<void>, grabOffset = 0) {
 	await handle.scrollIntoViewIfNeeded();
+	if (grabOffset === 0) grabOffset = await handle.evaluate((node) => node.classList.contains("cue-end-grip") ? 21 : node.classList.contains("cue-start-grip") ? -21 : 0);
 	const box = await handle.boundingBox();
 	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 	if (!box || !(scale > 0)) throw new Error("Missing timing point or timeline scale");
@@ -891,6 +912,7 @@ async function readClip(api: ApiDriver, showId: string, timecodeId: string) {
 
 async function touchDragFrames(page: Page, editor: Locator, handle: Locator, frames: number, cancel = false, grabOffset = 0) {
 	await handle.scrollIntoViewIfNeeded();
+	if (grabOffset === 0) grabOffset = await handle.evaluate((node) => node.classList.contains("cue-end-grip") ? 21 : node.classList.contains("cue-start-grip") ? -21 : 0);
 	const box = await handle.boundingBox();
 	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 	if (!box || !(scale > 0)) throw new Error("Missing touch timing point");
@@ -974,10 +996,8 @@ async function assertCueFrameAlignment(editor: Locator, number: number, name: st
 	const block = editor.getByRole("button", { name: `Edit Cue ${number} ${name}`, exact: true });
 	expect(Math.abs(await block.evaluate((node) => node.getBoundingClientRect().left) - expectedX)).toBeLessThanOrEqual(1);
 	if (expanded) {
-		const trigger = editor.getByRole("slider", { name: `Cue ${number} Trigger`, exact: true });
-		await expect(trigger).toHaveAttribute("aria-valuenow", String(frame));
-		const center = await trigger.evaluate((node) => { const box = node.getBoundingClientRect(); return box.left + box.width / 2; });
-		expect(Math.abs(center - expectedX)).toBeLessThanOrEqual(1);
+		const boundary = editor.locator(`.timecode-cue-trigger-boundary[data-trigger-frame="${frame}"]`);
+		expect(Math.abs(await boundary.evaluate((node) => node.getBoundingClientRect().left) - expectedX)).toBeLessThanOrEqual(1);
 		await expect(editor.locator(".timecode-cue-editor-details").getByLabel("Trigger", { exact: true })).toHaveValue(frameText(frame));
 	}
 	if (frame % 44 === 0) {
@@ -1037,4 +1057,15 @@ async function dragAudioVolumeValue(page: Page, audio: Locator, handle: Locator,
 		return Math.max(Math.abs(point.x - box.left - box.width / 2), Math.abs(point.y - box.top - box.height / 2));
 	});
 	expect(delta).toBeLessThanOrEqual(0.75);
+}
+
+async function assertHalfGrip(editor: Locator, handle: Locator, frame: number, side: "start" | "end") {
+ const axis = await editor.locator(".timecode-timeline-canvas").evaluate(node=>({left:node.getBoundingClientRect().left,origin:Number(node.dataset.timeOriginPx),scale:Number(node.dataset.pixelsPerFrame)}));
+ const expected=axis.left+axis.origin+frame*axis.scale;
+ const shape=await handle.evaluate(node=>{const target=node.getBoundingClientRect(),pill=node.querySelector(":scope > span")!.getBoundingClientRect();return {left:target.left,right:target.right,width:target.width,pillCenter:pill.left+pill.width/2,pillWidth:pill.width,visible:Math.min(target.right,pill.right)-Math.max(target.left,pill.left),overflow:getComputedStyle(node).overflowX};});
+ expect(shape.width).toBe(44);
+ expect(Math.abs((side==="start"?shape.left:shape.right)-expected)).toBeLessThanOrEqual(0.75);
+ expect(Math.abs(shape.pillCenter-expected)).toBeLessThanOrEqual(0.75);
+ expect(shape.overflow).toBe("hidden");
+ expect(Math.abs(shape.visible-shape.pillWidth/2)).toBeLessThanOrEqual(0.75);
 }

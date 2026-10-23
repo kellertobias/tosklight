@@ -8,7 +8,6 @@ function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
 		const element = scrollRef.current;
 		if (!element) return;
 		const measure = () => {
-			element.style.setProperty("--timecode-visible-height", `${element.clientHeight}px`);
 			setViewportWidth(
 				element.clientWidth > 0 ? element.clientWidth : FALLBACK_VIEWPORT_WIDTH,
 			);

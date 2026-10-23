@@ -872,7 +872,7 @@ describe("TimecodeTimelineEditor", () => {
 			.querySelector<HTMLElement>(".timecode-timeline-canvas");
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
 		const marker = screen.getByTitle("Verse · 00:00:02.00");
-		fireEvent.pointerDown(marker, { pointerId: 3, clientX: 300 });
+		fireEvent.pointerDown(marker.querySelector(".timecode-timeline-marker-label")!, { pointerId: 3, clientX: 300 });
 		expect(marker).toHaveClass("selected");
 		expect(marker.style.getPropertyValue("--timecode-marker-color")).toBe(
 			"#33aa77",
@@ -1186,7 +1186,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(view.getByRole("button", { name: "Edit Cue 2 Second" })).toBeTruthy();
 		expect(view.queryByRole("slider", { name: "Cue 1 In delay" })).toBeNull();
 		fireEvent.click(view.getByRole("button", { name: "Edit Cue 1 First" }));
-		expect(view.getByRole("slider", { name: "Cue 1 Trigger" })).toBeTruthy();
+		expect(view.getByRole("slider", { name: "Move clip start" })).toBeTruthy();
 		expect(view.getByRole("slider", { name: "Cue 1 In delay" })).toBeTruthy();
 		expect(view.getByRole("slider", { name: "Cue 1 Out fade" })).toBeTruthy();
 		expect(view.getByRole("button", { name: "Close cue editor" })).toBeTruthy();

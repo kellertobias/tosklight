@@ -46,9 +46,9 @@
 .timecode-timeline-editor .timecode-cue-name.ui-button[aria-pressed="true"] { font-weight: 600; }
 .timecode-cue-block-trigger { font-variant-numeric: tabular-nums; }
 
-/* Markers remain visible over every lane; only their bottom flags accept dragging. */
+/* Markers remain visible over every lane; only their ruler flags accept dragging. */
 .ui-button.timecode-timeline-marker { z-index: 11; pointer-events: none; cursor: default; }
-.timecode-timeline-marker-label { pointer-events: auto; cursor: ew-resize; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; bottom: 0; }
+.timecode-timeline-editor .timecode-timeline-marker-label { pointer-events: auto; cursor: ew-resize; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; bottom: 0; }
 /* Dim the inactive content, keeping its lane names readable for navigation. */
 .cue-focus .timecode-speed-section,
 .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) { opacity: 1; }
@@ -59,17 +59,17 @@
 .cue-focus .timecode-speed-section .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
 .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) .timecode-lane-select { color: #b8c5d5; }
 
-.ui-button.timecode-timeline-marker { display: block; overflow: visible; }
-.timecode-timeline-marker-label {
+.ui-button.timecode-timeline-marker { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; overflow: visible; }
+.timecode-timeline-editor .timecode-timeline-marker-label {
 	position: sticky;
-	top: calc(var(--timecode-visible-height, 20rem) - 44px);
+	top: 32px;
 	bottom: auto;
 }
 
 .cue-focus .timecode-speed-section.section-expanded .lane-speed_group .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
 .cue-focus .timecode-speed-section .timecode-section-toggle { color: #b8c5d5; }
 
-.cue-expanded .timecode-clip-handle { padding-left: 16px; }
+.cue-expanded .timecode-clip-handle { padding-left: 8px; }
 
 /* Anchor Add and navigation to the title instead of a shrinking right-aligned toolbar. */
 .timecode-editor > .ui-window-header .ui-window-header-spacer { display: none; }
@@ -83,11 +83,33 @@
 	background: #242c36; box-shadow: 0 1px 2px #0008;
 }
 .timecode-cue-point.cue-divider-grip > span::before {
-	width: 2px; height: 14px; left: 2px; top: 4px;
+	width: 2px; height: 14px; left: 3px; top: 4px;
 	border-radius: 1px; background: #e2c98c;
 }
 .timecode-cue-point.cue-divider-grip > span::after { content: none; }
 .timecode-cue-point.cue-divider-grip:hover > span,
 .timecode-cue-point.cue-divider-grip:focus-visible > span { border-color: #ffdf94; background: #39424e; }
-.timecode-cue-point.cue-end-grip > span { left: 36px; }
+.timecode-cue-point.cue-end-grip > span { left: 40px; }
 .timecode-cue-point.timecode-clip-end-grab.expanded::after { height: 88px; }
+
+/* Edge grips are the same rounded rectangle, clipped exactly at the clip boundary. */
+.timecode-cue-point.cue-start-grip,
+.timecode-cue-point.cue-end-grip { overflow: hidden; }
+.timecode-cue-point.cue-start-grip > span { left: -4px; }
+/* Marker flags live in their own ruler band, above the lanes. */
+.timecode-timeline-editor { --timecode-ruler-height: 76px; }
+.timecode-timeline-editor .timecode-timeline-heading,
+.timecode-timeline-editor .timecode-ruler { height: var(--timecode-ruler-height); }
+.timecode-timeline-editor .timecode-ruler > span { top: 8px; bottom: auto; }
+.timecode-timeline-editor .main-audio { top: var(--timecode-ruler-height); }
+.timecode-timeline-marker-line { opacity: .5; }
+.timecode-timeline-editor .timecode-timeline-marker-label {
+	height: 44px; gap: 6px; padding-inline: 6px;
+	border-radius: 4px; background: #18212dee; font-weight: 600;
+}
+.timecode-marker-grab {
+	width: 10px; height: 18px; flex: none;
+	background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 5px 5px;
+}
+.ui-button.timecode-editor-playhead { z-index: 30; }
+.cue-expanded .timecode-clip-handle { padding-right: 58px !important; }

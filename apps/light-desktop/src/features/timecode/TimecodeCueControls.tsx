@@ -1,3 +1,8 @@
+import { CuePointLeader } from "./TimecodeCuePointLeader";
+import {
+	registerFramePointer,
+	routeFramePointer,
+} from "./frameHandlePointerRouting";
 import "./TimecodeCuePointAnchors.css";
 import { TextField } from "@tosklight/ui";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -15,11 +20,13 @@ export function FrameHandle({
 	onPreview,
 	onCommit,
 	onBegin,
+	onPointerStart,
 	className = "",
 	caption,
 	anchorTop,
 	anchorLeft,
 	anchorVisual = false,
+	showLeader = true,
 }: {
 	label: string;
 	frame: number;
@@ -31,11 +38,13 @@ export function FrameHandle({
 	onPreview?(frame: number | null): void;
 	onCommit(frame: number): void;
 	onBegin?(event: ReactPointerEvent): void;
+	onPointerStart?(): void;
 	className?: string;
 	caption?: string;
 	anchorTop?: number;
 	anchorLeft?: number;
 	anchorVisual?: boolean;
+	showLeader?: boolean;
 }) {
 	const origin = useRef<{ pointerId: number; x: number; frame: number } | null>(
 		null,
@@ -43,8 +52,36 @@ export function FrameHandle({
 	const ppf = useRef(1);
 	const clamp = (value: number) =>
 		Math.max(minimum, Math.min(maximum, Math.round(value)));
+	const beginPointer = (event: ReactPointerEvent, target: HTMLElement) => {
+		if (disabled) return;
+		onPointerStart?.();
+		if (onBegin) {
+			onBegin(event);
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		target.focus({ preventScroll: true });
+		ppf.current =
+			Number(
+				target
+					.closest("[data-pixels-per-frame]")
+					?.getAttribute("data-pixels-per-frame"),
+			) || 1;
+		origin.current = {
+			pointerId: event.pointerId,
+			x: event.clientX,
+			frame,
+		};
+		target.setPointerCapture?.(event.pointerId);
+	};
 	return (
 		<span
+			ref={(node) =>
+				registerFramePointer(node, (event) => {
+					if (node) beginPointer(event, node);
+				})
+			}
 			role="slider"
 			tabIndex={disabled ? -1 : 0}
 			aria-label={label}
@@ -66,28 +103,7 @@ export function FrameHandle({
 				const target = clamp(frame + (event.key === "ArrowLeft" ? -1 : 1));
 				if (target !== frame) onCommit(target);
 			}}
-			onPointerDown={(event) => {
-				if (disabled) return;
-				if (onBegin) {
-					onBegin(event);
-					return;
-				}
-				event.preventDefault();
-				event.stopPropagation();
-				event.currentTarget.focus({ preventScroll: true });
-				ppf.current =
-					Number(
-						event.currentTarget
-							.closest("[data-pixels-per-frame]")
-							?.getAttribute("data-pixels-per-frame"),
-					) || 1;
-				origin.current = {
-					pointerId: event.pointerId,
-					x: event.clientX,
-					frame,
-				};
-				event.currentTarget.setPointerCapture?.(event.pointerId);
-			}}
+			onPointerDown={(event) => routeFramePointer(event, event.currentTarget)}
 			onPointerMove={(event) => {
 				const start = origin.current;
 				if (!start || start.pointerId !== event.pointerId) return;
@@ -113,28 +129,20 @@ export function FrameHandle({
 			}}
 		>
 			{" "}
-			<span aria-hidden="true" className={anchorVisual ? "timecode-cue-point-anchor" : undefined}
-				style={anchorVisual ? { left: 16 + (anchorLeft ?? left) - left, top: 16 + (anchorTop ?? top ?? 0) - (top ?? 0), pointerEvents: "none" } : undefined} />
-			{((anchorTop !== undefined && top !== undefined && anchorTop !== top) ||
-				(anchorLeft !== undefined && anchorLeft !== left)) && (
-				<svg
-					className="timecode-cue-point-leader"
-					aria-hidden="true"
-					style={{
-						left: 22 + Math.min(0, (anchorLeft ?? left) - left),
-						top: 22 + Math.min(0, (anchorTop ?? top ?? 0) - (top ?? 0)),
-						width: Math.max(1, Math.abs((anchorLeft ?? left) - left)),
-						height: Math.max(1, Math.abs((anchorTop ?? top ?? 0) - (top ?? 0))),
-					}}
-				>
-					<line
-						x1={Math.max(0, left - (anchorLeft ?? left))}
-						y1={Math.max(0, (top ?? 0) - (anchorTop ?? top ?? 0))}
-						x2={Math.max(0, (anchorLeft ?? left) - left)}
-						y2={Math.max(0, (anchorTop ?? top ?? 0) - (top ?? 0))}
-					/>
-				</svg>
-			)}
+			<span
+				aria-hidden="true"
+				className={anchorVisual ? "timecode-cue-point-anchor" : undefined}
+				style={
+					anchorVisual
+						? {
+								left: 16 + (anchorLeft ?? left) - left,
+								top: 16 + (anchorTop ?? top ?? 0) - (top ?? 0),
+								pointerEvents: "none",
+							}
+						: undefined
+				}
+			/>
+			<CuePointLeader {...{ showLeader, anchorTop, top, anchorLeft, left }} />
 			{caption && (
 				<small className="timecode-cue-point-caption">{caption}</small>
 			)}{" "}

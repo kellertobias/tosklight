@@ -14,7 +14,6 @@ import {
 	TIMECODE_FPS,
 } from "./cueClipTiming";
 import { FrameHandle } from "./TimecodeCueControls";
-import { formatFrame } from "./timecodeEditorShared";
 interface CueTimingPointsProps {
 	selected: CueClipTimingRow;
 	cueList: CueList;
@@ -112,14 +111,7 @@ export function CueTimingPoints({
 	cueList,
 	timingDefaults,
 	clip,
-	position,
 	pixelsPerFrame,
-	triggerPreview,
-	first,
-	triggerBounds,
-	canMoveTrigger,
-	setTriggerPreview,
-	placeTrigger,
 	saving,
 	editable,
 	dividerFrames = [selected.startFrame],
@@ -135,20 +127,6 @@ export function CueTimingPoints({
 				redirectCueVertexPointer(event, selected, begin)
 			}
 		>
-			<CueTriggerPoint
-				{...{
-					selected,
-					triggerPreview,
-					first,
-					triggerBounds,
-					canMoveTrigger,
-					setTriggerPreview,
-					placeTrigger,
-					position,
-					clip,
-					pixelsPerFrame,
-				}}
-			/>
 			{(["in", "out"] as const).map((kind) => {
 				const range = kind === "in" ? selected.inFade : selected.outFade;
 				const reference = kind === "out" && selected.outFadeReference;
@@ -246,60 +224,5 @@ export function CueTimingPoints({
 				);
 			})}
 		</span>
-	);
-}
-
-function CueTriggerPoint({
-	selected,
-	triggerPreview,
-	first,
-	triggerBounds,
-	canMoveTrigger,
-	setTriggerPreview,
-	placeTrigger,
-	position,
-	clip,
-	pixelsPerFrame,
-}: Pick<
-	CueTimingPointsProps,
-	| "selected"
-	| "triggerPreview"
-	| "first"
-	| "triggerBounds"
-	| "canMoveTrigger"
-	| "setTriggerPreview"
-	| "placeTrigger"
-	| "position"
-	| "clip"
-	| "pixelsPerFrame"
->) {
-	return (
-		<>
-			{" "}
-			<span
-				className="timecode-cue-trigger-label"
-				hidden={(clip.end_frame - clip.start_frame) * pixelsPerFrame < 220}
-			>
-				Trigger ·{" "}
-				{formatFrame(triggerPreview ?? selected.startFrame, TIMECODE_FPS)}
-			</span>
-			<FrameHandle
-				label={`Cue ${selected.cue.number} Trigger`}
-				caption="Trigger"
-				frame={triggerPreview ?? selected.startFrame}
-				minimum={first ? 0 : (triggerBounds?.minimum ?? selected.startFrame)}
-				maximum={
-					first
-						? Number.MAX_SAFE_INTEGER
-						: (triggerBounds?.maximum ?? selected.startFrame)
-				}
-				left={position(triggerPreview ?? selected.startFrame)}
-				top={8}
-				disabled={!canMoveTrigger}
-				onPreview={setTriggerPreview}
-				onCommit={placeTrigger}
-				className="trigger"
-			/>
-		</>
 	);
 }

@@ -601,7 +601,7 @@ function TimelineItemButton({
 			{marker ? (
 				<>
 					<span className="timecode-timeline-marker-line" aria-hidden="true" />
-					<span className="timecode-timeline-marker-label">{item.label}</span>
+					<span className="timecode-timeline-marker-label"><span className="timecode-marker-grab" aria-hidden="true" />{item.label}</span>
 				</>
 			) : isCueListClip ? null : (
 				(item.valueLabel ?? item.label)

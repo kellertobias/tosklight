@@ -83,8 +83,7 @@ export function CueListClipBody({
 					startDrag(event, item.selection, item.frame, undefined, startVolume);
 				}}
 			>
-				<b>{cueList?.name ?? item.label}</b>
-				{cueList?.number !== undefined && <small>{cueList.number}</small>}
+				<b>{cueList?.number !== undefined ? `Cuelist ${cueList.number} · ` : ""}{cueList?.name ?? item.label}</b>
 			</span>
 			{expanded && onSetClipFade && (
 				<ClipFadeHandles

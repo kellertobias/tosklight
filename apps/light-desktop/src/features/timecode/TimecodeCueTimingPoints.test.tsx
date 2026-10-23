@@ -96,8 +96,8 @@ it("separates FOLLOW-zero fade controls horizontally without moving their time a
 });
 it("keeps nearby ordinary visible dots fixed at the true upper and lower corners", () => {
 	mount("wait", 0.5);
+	expect(screen.queryByRole("slider", { name: "Cue 1 Trigger" })).toBeNull();
 	const targets = [
-		"Trigger",
 		"In fade",
 		"Out delay",
 		"In delay",
@@ -105,14 +105,14 @@ it("keeps nearby ordinary visible dots fixed at the true upper and lower corners
 	].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }));
 	expectAnchored(targets);
 	expect(
-		targets.every((target) => ["8px", "32px", "104px"].includes(target.style.top)),
+		targets.every((target) => ["32px", "104px"].includes(target.style.top)),
 	).toBe(true);
 	expect(screen.getByRole("slider", { name: "Cue 1 In fade" })).toHaveAttribute(
 		"data-time-anchor-x",
 		"22",
 	);
 });
-it("keeps Trigger distinct from every fade target when all fade times are zero", () => {
+it("keeps coincident zero-fade corners anchored without a floating Trigger handle", () => {
 	const cueList = {
 		id: "list",
 		name: "Instant",
@@ -162,15 +162,14 @@ it("keeps Trigger distinct from every fade target when all fade times are zero",
 			commit={vi.fn()}
 		/>,
 	);
+	expect(screen.queryByRole("slider", { name: "Cue 1 Trigger" })).toBeNull();
 	const targets = [
-		"Trigger",
 		"In fade",
 		"Out delay",
 		"In delay",
 		"Out fade",
 	].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }));
 	expect(targets.map((target) => target.style.top)).toEqual([
-		"8px",
 		"32px",
 		"32px",
 		"104px",
@@ -180,7 +179,7 @@ it("keeps Trigger distinct from every fade target when all fade times are zero",
 		true,
 	);
 	expectAnchored(targets);
-	expect(targets[2].querySelector(".timecode-cue-point-leader")).not.toBeNull();
+	expect(targets[1].querySelector(".timecode-cue-point-leader")).not.toBeNull();
 });
 
 it("keeps a short single-Cue Out reference clear of In controls", () => {
