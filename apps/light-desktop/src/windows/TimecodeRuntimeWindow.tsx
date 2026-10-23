@@ -919,7 +919,7 @@ function useTimecodeAddAction({
 		ariaLabel: "Add",
 		label: (
 			<>
-				<span aria-hidden="true">＋</span> Add
+				<span aria-hidden="true">＋</span> Add…
 			</>
 		),
 		dropdown: {

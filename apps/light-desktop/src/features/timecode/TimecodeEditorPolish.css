@@ -45,3 +45,28 @@
 .timecode-timeline-editor .timecode-cue-name.ui-button { font-weight: 500; }
 .timecode-timeline-editor .timecode-cue-name.ui-button[aria-pressed="true"] { font-weight: 600; }
 .timecode-cue-block-trigger { font-variant-numeric: tabular-nums; }
+
+/* Markers remain visible over every lane; only their bottom flags accept dragging. */
+.ui-button.timecode-timeline-marker { z-index: 11; pointer-events: none; cursor: default; }
+.timecode-timeline-marker-label { pointer-events: auto; cursor: ew-resize; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; bottom: 0; }
+/* Dim the inactive content, keeping its lane names readable for navigation. */
+.cue-focus .timecode-speed-section,
+.cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) { opacity: 1; }
+.cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) > :not(.timecode-editor-lane-label),
+.cue-focus .timecode-speed-section .timecode-section-summary,
+.cue-focus .timecode-speed-section .lane-speed_group > :not(.timecode-editor-lane-label) { opacity: .35; }
+.cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) .timecode-editor-lane-label,
+.cue-focus .timecode-speed-section .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
+.cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) .timecode-lane-select { color: #b8c5d5; }
+
+.ui-button.timecode-timeline-marker { display: block; overflow: visible; }
+.timecode-timeline-marker-label {
+	position: sticky;
+	top: calc(var(--timecode-visible-height, 20rem) - 44px);
+	bottom: auto;
+}
+
+.cue-focus .timecode-speed-section.section-expanded .lane-speed_group .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
+.cue-focus .timecode-speed-section .timecode-section-toggle { color: #b8c5d5; }
+
+.cue-expanded .timecode-clip-handle { padding-left: 16px; }

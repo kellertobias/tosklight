@@ -1,4 +1,4 @@
-import type { Page, Route } from "@playwright/test";
+import type { Locator, Page, Route } from "@playwright/test";
 import { expect, test } from "./bench/core/fixtures";
 
 test.describe("docs/testing/15-macros-and-timecode.md", () => {
@@ -547,6 +547,100 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		);
 	});
 });
+
+test("TIMECODE-001 @ui › audio volume points and waveform share exact axes at Fit and through sidebar changes", async ({ api, desk, page }) => {
+	const source = editableTimecode();
+	const frames = [44, 660, 1276];
+	const definition = {
+		...source,
+		audio: { asset_id: "00000000-0000-4000-8000-000000000090", asset_revision: 1, file_name: "Alignment.wav" },
+		lanes: [{ ...source.lanes[0], content: { kind: "audio_volume", keyframes: frames.map((frame, index) => ({
+			id: `00000000-0000-4000-8000-00000000009${index + 1}`, frame, value: index / 2, fade_frames: 0, curve: "linear",
+		})) } }, {
+			id: "00000000-0000-4000-8000-000000000095", name: "Movement", content: {
+				kind: "speed_group", group: "A", keyframes: frames.map((frame, index) => ({
+					id: `00000000-0000-4000-8000-00000000009${index + 6}`, frame, bpm: 60 + index * 60, phase: 0,
+				})),
+			},
+		}],
+	};
+	await page.route("**/api/v2/timecodes", (route) => fulfillJson(route, { show_revision: 1, objects: [{ revision: 4, definition }] }));
+	await page.route("**/api/v2/timecodes/runtime", (route) => fulfillJson(route, []));
+	await page.route("**/api/v2/timecodes/*/audio/waveform", (route) => fulfillJson(route, { peaks: [0, 0.5, 1, 0.5, 0] }));
+	await desk.open(api.baseUrl);
+	await openBuiltIns(page);
+	await openShiftedBuiltIn(page, "Timecode");
+	await page.getByRole("button", { name: "Timecode 7 Opening track" }).click({ button: "right" });
+	const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+	const audio = editor.locator(".main-audio.lane-audio_volume");
+	await expect(audio.locator(".timecode-waveform path")).toHaveAttribute("d", /.+/);
+	const speedGroups = editor.getByRole("button", { name: "Speed Groups", exact: true });
+	if (await speedGroups.getAttribute("aria-expanded") === "false") await speedGroups.click();
+	await page.getByRole("button", { name: "Fit timeline", exact: true }).click();
+	await assertAudioAxes(editor, frames, definition.duration_frame);
+	await audio.locator(".item-volume").nth(1).click();
+	await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
+	await assertAudioAxes(editor, frames, definition.duration_frame);
+	const overview = editor.getByRole("scrollbar", { name: "Timeline overview" });
+	const grip = (await overview.getByRole("separator", { name: "Resize timeline overview from end" }).boundingBox())!;
+	const track = (await overview.boundingBox())!;
+	await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(track.x + track.width / 2, grip.y + grip.height / 2, { steps: 8 });
+	await page.mouse.up();
+	await assertAudioAxes(editor, frames, definition.duration_frame);
+	const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+	const bounds = (await viewport.boundingBox())!;
+	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 50);
+	await page.mouse.wheel(100_000, 0);
+	await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+	await assertAudioAxes(editor, frames, definition.duration_frame);
+	const before = await viewport.evaluate((node) => node.scrollLeft);
+	await editor.getByRole("button", { name: "Close selection settings", exact: true }).click();
+	await expect(editor.locator(".timecode-editor-inspector")).toHaveCount(0);
+	await assertAudioAxes(editor, frames, definition.duration_frame);
+	expect(await viewport.evaluate((node) => node.scrollLeft)).toBe(before);
+});
+
+async function assertAudioAxes(editor: Locator, frames: number[], duration: number) {
+	await expect.poll(() => editor.locator(".main-audio.lane-audio_volume").evaluate((lane, expected) => {
+		const svg = lane.querySelector<SVGSVGElement>(".timecode-audio-keyframe-curve")!;
+		const line = svg.querySelector("polyline")!;
+		const matrix = svg.getScreenCTM()!;
+		const buttons = [...lane.querySelectorAll<HTMLElement>(".item-volume")];
+		const canvas = lane.closest<HTMLElement>(".timecode-timeline-canvas")!;
+		const scale = Number(canvas.dataset.pixelsPerFrame);
+		const origin = canvas.getBoundingClientRect().left + Number(canvas.dataset.timeOriginPx);
+		let error = Math.max(
+			Math.abs(svg.getBoundingClientRect().width - expected.duration * scale),
+			Math.abs(lane.querySelector(".timecode-waveform")!.getBoundingClientRect().width - expected.duration * scale),
+		);
+		for (const [index, button] of buttons.entries()) {
+			const point = svg.createSVGPoint();
+			point.x = line.points.getItem(index).x;
+			point.y = line.points.getItem(index).y;
+			const projected = point.matrixTransform(matrix);
+			const box = button.getBoundingClientRect();
+			const x = box.left + box.width / 2;
+			const y = box.top + box.height / 2;
+			error = Math.max(error, Math.abs(projected.x - x), Math.abs(projected.y - y), Math.abs(x - origin - expected.frames[index] * scale));
+		}
+		const speed = canvas.querySelector(".lane-speed_group")!;
+		const speedSvg = speed.querySelector<SVGSVGElement>(".timecode-speed-keyframe-curve")!;
+		const speedLine = speedSvg.querySelector("polyline")!;
+		const speedButtons = [...speed.querySelectorAll<HTMLElement>(".item-speed")];
+		error = Math.max(error, Math.abs(speedSvg.getBoundingClientRect().width - expected.duration * scale));
+		for (const [index, button] of speedButtons.entries()) {
+			const point = speedSvg.createSVGPoint();
+			const vertex = speedLine.points.getItem(index * 2 + 1);
+			point.x = vertex.x; point.y = vertex.y;
+			const projected = point.matrixTransform(speedSvg.getScreenCTM()!);
+			const box = button.getBoundingClientRect();
+			error = Math.max(error, Math.abs(projected.x - box.left - box.width / 2), Math.abs(projected.y - box.top - box.height / 2));
+		}
+		return buttons.length === expected.frames.length && speedButtons.length === expected.frames.length ? error : Number.MAX_SAFE_INTEGER;
+	}, { frames, duration })).toBeLessThanOrEqual(0.75);
+}
 
 async function openBuiltIns(page: Page): Promise<void> {
 	const toggle = page.getByRole("button", {

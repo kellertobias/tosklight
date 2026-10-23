@@ -1,3 +1,4 @@
+import { volumeDragTravel } from "./audioLaneGeometry";
 import {
 	type PointerEvent as ReactPointerEvent,
 	useEffect,
@@ -108,6 +109,7 @@ interface DragState {
 	startFrame: number;
 	clipEdge?: "start" | "end";
 	startVolume?: number;
+	volumeTravelPx?: number;
 	/// The clip as it stood when the edge drag began, so the scale factor is measured against it.
 	originalClip?: TimecodeCueListClip;
 }
@@ -177,7 +179,7 @@ export function useTimelineDrag({
 							0,
 							Math.min(
 								1,
-								active.startVolume - (event.clientY - active.startY) / 160,
+								active.startVolume - (event.clientY - active.startY) / (active.volumeTravelPx ?? 1),
 							),
 						),
 					),
@@ -233,6 +235,9 @@ export function useTimelineDrag({
 			startFrame,
 			clipEdge,
 			startVolume,
+			volumeTravelPx: startVolume === undefined ? undefined : volumeDragTravel(
+				event.currentTarget.closest<HTMLElement>(".timecode-editor-lane")?.clientHeight ?? 0,
+			),
 			originalClip: clipEdge ? cueListClipOf(definition, selection) : undefined,
 		};
 		event.currentTarget.setPointerCapture?.(event.pointerId);

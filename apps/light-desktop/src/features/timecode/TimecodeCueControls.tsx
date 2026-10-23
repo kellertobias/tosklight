@@ -1,3 +1,4 @@
+import "./TimecodeCuePointAnchors.css";
 import { TextField } from "@tosklight/ui";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +19,7 @@ export function FrameHandle({
 	caption,
 	anchorTop,
 	anchorLeft,
+	anchorVisual = false,
 }: {
 	label: string;
 	frame: number;
@@ -33,6 +35,7 @@ export function FrameHandle({
 	caption?: string;
 	anchorTop?: number;
 	anchorLeft?: number;
+	anchorVisual?: boolean;
 }) {
 	const origin = useRef<{ pointerId: number; x: number; frame: number } | null>(
 		null,
@@ -110,7 +113,8 @@ export function FrameHandle({
 			}}
 		>
 			{" "}
-			<span aria-hidden="true" />
+			<span aria-hidden="true" className={anchorVisual ? "timecode-cue-point-anchor" : undefined}
+				style={anchorVisual ? { left: 16 + (anchorLeft ?? left) - left, top: 16 + (anchorTop ?? top ?? 0) - (top ?? 0), pointerEvents: "none" } : undefined} />
 			{((anchorTop !== undefined && top !== undefined && anchorTop !== top) ||
 				(anchorLeft !== undefined && anchorLeft !== left)) && (
 				<svg

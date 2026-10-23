@@ -1,3 +1,4 @@
+import { volumeKeyframeValues } from "./audioLaneGeometry";
 import { useTimecodeEditorHandle } from "./useTimecodeEditorHandle";
 import { cueStatusForItem } from "./cueLaneClipStatus";
 import { overviewResizer } from "./timelineOverviewResize";
@@ -341,6 +342,7 @@ function EditorLane(
 		displayDefinition.lanes.find(
 			(candidate) => candidate.id === props.lane.id,
 		) ?? props.lane;
+	const volumeValues = volumeKeyframeValues(lane.content);
 	const speedPositions =
 		lane.content.kind === "speed_group"
 			? speedKeyframePositions(lane.content.keyframes)
@@ -362,6 +364,7 @@ function EditorLane(
 				<AudioVolumeLaneBackground
 					content={lane.content}
 					duration={props.duration}
+					pixelsPerFrame={props.pixelsPerFrame}
 					fileName={props.definition.audio?.file_name}
 					waveformPeaks={props.waveformPeaks}
 				/>
@@ -371,6 +374,7 @@ function EditorLane(
 					name={lane.name}
 					content={lane.content}
 					duration={props.duration}
+					pixelsPerFrame={props.pixelsPerFrame}
 				/>
 			)}
 			<LaneLabel
@@ -399,18 +403,10 @@ function EditorLane(
 						pixelsPerFrame={props.pixelsPerFrame}
 						startDrag={props.startDrag}
 						onSelect={props.onSelectItem}
-						verticalPosition={
-							item.kind === "speed"
-								? speedPositions.get(item.selection.itemId)
-								: undefined
-						}
-						startVolume={
-							item.kind === "volume" && lane.content.kind === "audio_volume"
-								? lane.content.keyframes.find(
-										(keyframe) => keyframe.id === item.selection.itemId,
-									)?.value
-								: undefined
-						}
+						verticalPosition={item.kind === "speed"
+							? speedPositions.get(item.selection.itemId)
+							: volumeValues.get(item.selection.itemId)?.position}
+						startVolume={volumeValues.get(item.selection.itemId)?.value}
 						cueList={cueList}
 						selectedCueId={
 							sameSelection(props.selection, item.selection)

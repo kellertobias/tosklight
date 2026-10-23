@@ -170,6 +170,25 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues.map((cue) => cue.trigger.type)).toEqual(["manual", "manual", "manual"]);
 	});
 
+	test("TIMECODE-001 @ui › visible timing dots stay on the four actual slope vertices with delayed and zero-delay In", async ({ api, show, desk, page }, testInfo) => {
+		const rig = await seedEditor(api, show.id);
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		await zoomIn(page, editor);
+		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).tap();
+		await assertVisibleCueCorners(editor, 1);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-true-corners-delayed.png") });
+		const start = editor.locator(".timecode-cue-editor-details").getByLabel("In start", { exact: true });
+		await start.fill(frameText(44));
+		await start.press("Tab");
+		await expect.poll(async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[0].delay_millis).toBe(0);
+		await assertVisibleCueCorners(editor, 1);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-true-corners-zero-delay.png") });
+		await touchDragFrames(page, editor, editor.getByRole("slider", { name: "Cue 1 In delay", exact: true }), 4);
+		await assertVisibleCueCorners(editor, 1);
+	});
+
 	test("TIMECODE-001 @ui › each timing point saves to the Cuelist and a refused pointer edit rolls back", async ({ api, show, desk, page }) => {
 		const rig = await seedEditor(api, show.id);
 		await desk.open(api.baseUrl);
@@ -358,8 +377,11 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const active = editor.locator(`[data-lane-id="${rig.definition.lanes[0].id}"].timecode-editor-lane`);
 		const other = editor.locator(".lane-cue_list").nth(1);
 		const opacity = (lane: Locator) => lane.evaluate((node) => Number(getComputedStyle(node).opacity));
-		expect(await opacity(section)).toBeLessThan(0.5);
-		expect(await opacity(other)).toBeLessThan(0.5);
+		expect(await opacity(section)).toBe(1);
+		expect(await opacity(other)).toBe(1);
+		await expect.poll(() => opacity(other.locator(".timecode-timeline-item").first())).toBeLessThan(0.5);
+		await expect.poll(() => opacity(movement.locator(":scope > :not(.timecode-editor-lane-label)").last())).toBeLessThan(0.5);
+		expect(await opacity(other.locator(".timecode-editor-lane-label"))).toBe(1);
 		expect(await opacity(active)).toBe(1);
 		expect(await opacity(editor.locator(".main-audio"))).toBe(1);
 		const inspector = editor.locator(".timecode-editor-inspector");
@@ -446,6 +468,41 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(editor.locator(".timecode-cue-block")).toHaveCount(0);
 	});
 
+	test("TIMECODE-001 @ui › marker lines do not drag while the sticky bottom flag supports mouse and touch moves", async ({ api, show, desk, page, request }, testInfo) => {
+		const { rig } = await seedAudioEditor(api, show.id, request, Array.from({ length: 12 }, (_, index) => ["Movement", "Chase", "Colour"][index % 3] + ` ${index + 1}`));
+		const markerId = crypto.randomUUID();
+		const current = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		await api.request("POST", "/api/v2/timecodes/actions", { request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id, expected_revision: current.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision, patch: { markers: [{ id: markerId, frame: 220, name: "Verse", color: "#ffffff" }] } } }, true, undefined, { showId: show.id });
+		const markerFrame = async () => (await api.request<{ objects: Array<{ definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id })).objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.markers[0].frame;
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+		const marker = editor.locator(".timecode-timeline-marker");
+		const flag = marker.locator(".timecode-timeline-marker-label");
+		await expect(flag).toHaveText("Verse");
+		const audio = (await editor.locator(".main-audio").boundingBox())!;
+		const line = (await marker.locator(".timecode-timeline-marker-line").boundingBox())!;
+		expect(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest(".timecode-timeline-marker")), { x: line.x, y: audio.y + audio.height - 8 })).toBe(false);
+		await page.mouse.move(line.x, audio.y + audio.height - 8);
+		await page.mouse.down();
+		await page.mouse.move(line.x + 40, audio.y + audio.height - 8, { steps: 5 });
+		await page.mouse.up();
+		expect(await markerFrame()).toBe(220);
+		const bottom = await flag.evaluate((node) => node.getBoundingClientRect().bottom);
+		const box = (await viewport.boundingBox())!;
+		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+		await page.mouse.wheel(0, 300);
+		await expect.poll(() => viewport.evaluate((node) => node.scrollTop)).toBeGreaterThan(0);
+		expect(Math.abs(await flag.evaluate((node) => node.getBoundingClientRect().bottom) - bottom)).toBeLessThanOrEqual(1);
+		expect(Math.abs(bottom - await viewport.evaluate((node) => node.getBoundingClientRect().top + node.clientTop + node.clientHeight))).toBeLessThanOrEqual(1);
+		await dragFrames(page, editor, flag, 44);
+		await expect.poll(markerFrame).toBe(264);
+		await touchDragFrames(page, editor, flag, 44);
+		await expect.poll(markerFrame).toBe(308);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-marker-bottom-flag.png") });
+	});
+
 	test("TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll", async ({ api, show, desk, page }) => {
 		const rig = await seedEditor(api, show.id);
 		const record = (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!;
@@ -491,6 +548,21 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await expect(waveform.locator("path")).toHaveAttribute("d", /.+/);
 		await expect(editor.locator(".timecode-editor-lane").first()).toHaveAttribute("data-lane-id", audioLaneId);
 		await expect(label).toContainText("Show Opener.wav");
+		const readVolume = async () => {
+			const saved = await api.request<{ objects: Array<{ definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+			const content = saved.objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.lanes.find((lane) => lane.id === audioLaneId)!.content;
+			if (content.kind !== "audio_volume") throw new Error("Expected saved audio volume lane");
+			return content.keyframes[0];
+		};
+		for (const [touch, value] of [[false, 0.5], [true, 0.8]] as const) {
+			await dragAudioVolumeValue(page, audio, volume, (await readVolume()).value, value, touch);
+			await expect.poll(async () => Math.abs((await readVolume()).value - value)).toBeLessThan(0.005);
+			expect((await readVolume()).frame).toBe(220);
+		}
+		await page.reload();
+		await openEditor(page);
+		await expandSpeedGroups(editor);
+		await expect(volume).toHaveAttribute("title", /80%/);
 		await ordinary.locator(".timecode-lane-select").click();
 		await zoomIn(page, editor);
 		const point = (locator: Locator) => locator.evaluate((node) => {
@@ -604,7 +676,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.definition.lanes.map((lane) => lane.id)).toEqual(lanes.map((lane) => lane.id));
 	});
 
-	test("TIMECODE-001 @ui › coincident In end and Out start remain independently editable by mouse and touch", async ({ api, show, desk, page }) => {
+	test("TIMECODE-001 @ui › coincident In end and Out start remain independently editable by mouse and touch", async ({ api, show, desk, page }, testInfo) => {
 		// Follow 0 with zero Out delay puts the handover exactly at the incoming fade's end.
 		const rig = await seedEditor(api, show.id, true);
 		await desk.open(api.baseUrl);
@@ -612,6 +684,8 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
 		await zoomIn(page, editor);
 		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).tap();
+		await assertVisibleCueCorners(editor, 1);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-true-corners-coincident.png") });
 		const incoming = editor.getByRole("slider", { name: "Cue 1 In fade", exact: true });
 		const outgoing = editor.getByRole("slider", { name: "Cue 1 Out delay", exact: true });
 		const readCue = async () => (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[0];
@@ -898,4 +972,56 @@ async function assertCueFrameAlignment(editor: Locator, number: number, name: st
 		await expect(rulerTick).toBeVisible();
 		expect(Math.abs(await rulerTick.evaluate((node) => node.getBoundingClientRect().left) - expectedX)).toBeLessThanOrEqual(1);
 	}
+}
+
+async function assertVisibleCueCorners(editor: Locator, number: number) {
+	for (const [name, kind, index] of [["In delay", "in", 0], ["In fade", "in", 1], ["Out delay", "out", 0], ["Out fade", "out", 1]] as const) {
+		const corner = await editor.locator(`.timecode-cue-timing.selected .timecode-cue-fade-guide.${kind}`).evaluate((node, index) => {
+			const guide = node as SVGPolylineElement;
+			const point = guide.points.getItem(index);
+			const screen = new DOMPoint(point.x, point.y).matrixTransform(guide.getScreenCTM()!);
+			return { x: screen.x, y: screen.y };
+		}, index);
+		const handle = editor.getByRole("slider", { name: `Cue ${number} ${name}`, exact: true });
+		const dot = (await handle.locator(".timecode-cue-point-anchor").boundingBox())!;
+		expect(Math.abs(dot.x + dot.width / 2 - corner.x), `${name} visible dot X`).toBeLessThanOrEqual(0.75);
+		expect(Math.abs(dot.y + dot.height / 2 - corner.y), `${name} visible dot Y`).toBeLessThanOrEqual(0.75);
+		await expect(handle).toHaveCSS("width", "44px");
+		await expect(handle).toHaveCSS("height", "44px");
+	}
+}
+
+async function dragAudioVolumeValue(page: Page, audio: Locator, handle: Locator, from: number, to: number, touch: boolean) {
+	const box = (await handle.boundingBox())!;
+	const x = box.x + box.width / 2;
+	const y = box.y + box.height / 2;
+	const travel = await audio.evaluate((node) => node.clientHeight * 0.76);
+	const target = y + (from - to) * travel;
+	if (touch) {
+		const cdp = await page.context().newCDPSession(page);
+		const points = (y: number) => [{ x, y, id: 1, radiusX: 2, radiusY: 2, force: 1 }];
+		try {
+			await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(y) });
+			for (let step = 1; step <= 8; step += 1)
+				await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: points(y + (target - y) * step / 8) });
+			await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+		} finally { await cdp.detach(); }
+	} else {
+		await page.mouse.move(x, y);
+		await page.mouse.down();
+		await page.mouse.move(x, target, { steps: 8 });
+		await page.mouse.up();
+	}
+	await expect.poll(() => handle.evaluate((node, target) => {
+		const box = node.getBoundingClientRect();
+		return Math.abs(box.top + box.height / 2 - target);
+	}, target)).toBeLessThanOrEqual(0.75);
+	const delta = await audio.evaluate((lane) => {
+		const line = lane.querySelector<SVGPolylineElement>(".timecode-audio-keyframe-curve polyline")!;
+		const vertex = line.points.getItem(0);
+		const point = new DOMPoint(vertex.x, vertex.y).matrixTransform(line.getScreenCTM()!);
+		const box = lane.querySelector(".item-volume")!.getBoundingClientRect();
+		return Math.max(Math.abs(point.x - box.left - box.width / 2), Math.abs(point.y - box.top - box.height / 2));
+	});
+	expect(delta).toBeLessThanOrEqual(0.75);
 }

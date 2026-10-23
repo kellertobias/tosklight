@@ -1,3 +1,4 @@
+import { audioVolumeLinePoints } from "./audioLaneGeometry";
 import { speedGroupLinePoints } from "./speedLaneGeometry";
 import { AudioLaneFileName } from "./timecodeEditorShared";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -125,17 +126,20 @@ export function LaneLabel({
 export function AudioVolumeLaneBackground({
 	content,
 	duration,
+	pixelsPerFrame,
 	fileName,
 	waveformPeaks,
 }: {
 	content: Extract<TimecodeLane["content"], { kind: "audio_volume" }>;
 	duration: number;
+	pixelsPerFrame: number;
 	fileName?: string | null;
 	waveformPeaks?: readonly number[];
 }) {
 	return (
 		<div
 			className="timecode-audio-lane-content"
+			style={{ width: Math.max(1, duration) * pixelsPerFrame }}
 			role="img"
 			aria-label="Linked audio waveform"
 		>
@@ -152,12 +156,7 @@ export function AudioVolumeLaneBackground({
 				aria-hidden="true"
 			>
 				<polyline
-					points={content.keyframes
-						.map(
-							(keyframe) =>
-								`${(keyframe.frame / duration) * 100},${100 - keyframe.value * 100}`,
-						)
-						.join(" ")}
+					points={audioVolumeLinePoints(content.keyframes, duration)}
 				/>
 			</svg>
 		</div>
@@ -169,15 +168,18 @@ export function SpeedGroupLaneBackground({
 	name,
 	content,
 	duration,
+	pixelsPerFrame,
 }: {
 	name: string;
 	content: Extract<TimecodeLane["content"], { kind: "speed_group" }>;
 	duration: number;
+	pixelsPerFrame: number;
 }) {
 	if (!content.keyframes.length) return null;
 	return (
 		<svg
 			className="timecode-speed-keyframe-curve"
+			style={{ width: Math.max(1, duration) * pixelsPerFrame }}
 			viewBox="0 0 100 100"
 			preserveAspectRatio="none"
 			role="img"

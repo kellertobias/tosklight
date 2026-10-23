@@ -247,3 +247,38 @@ it("uses the current Cue timing callback when a resize ends after a render", () 
 		110 / 264,
 	);
 });
+
+
+it("volume drags follow the actual lane value axis at zero, middle, and full level", () => {
+	for (const height of [100, 200]) {
+		for (const value of [0, 0.5, 1]) {
+			const lane = document.createElement("div");
+			lane.className = "timecode-editor-lane";
+			Object.defineProperty(lane, "clientHeight", { value: height });
+			const button = document.createElement("button");
+			lane.append(button);
+			const definition: TimecodeDefinition = {
+				id: "volume", number: 1, name: "Audio", duration_frame: 440,
+				transport_offset_frame: 0, auto_start: false, markers: [],
+				lanes: [{ id: "audio", name: "Audio", content: { kind: "audio_volume", keyframes: [
+					{ id: "point", frame: 220, value: 0.5, fade_frames: 0, curve: "linear" },
+				] } }],
+			};
+			const preview = vi.fn();
+			const hook = renderHook(() => useTimelineDrag({
+				definition, pixelsPerFrame: 2, onPreview: preview,
+				onBeginGesture: vi.fn(), onEndGesture: vi.fn(), setSelection: vi.fn(),
+			}));
+			act(() => hook.result.current({ preventDefault: vi.fn(), clientX: 100, clientY: height / 2,
+				currentTarget: button } as never, { kind: "volume", laneId: "audio", itemId: "point" }, 220, undefined, 0.5));
+			fireEvent.pointerMove(window, { clientX: 100, clientY: (88 - value * 76) / 100 * height });
+			const next = preview.mock.calls.at(-1)![0] as TimecodeDefinition;
+			const content = next.lanes[0].content;
+			if (content.kind !== "audio_volume") throw Error("Audio lane expected");
+			expect(content.keyframes[0].value).toBeCloseTo(value, 8);
+			expect(content.keyframes[0].frame).toBe(220);
+			fireEvent.pointerUp(window);
+			hook.unmount();
+		}
+	}
+});

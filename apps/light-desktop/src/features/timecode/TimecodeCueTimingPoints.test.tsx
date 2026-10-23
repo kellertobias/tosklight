@@ -71,20 +71,15 @@ function mount(trigger: "follow" | "wait", pixelsPerFrame: number, endFrame = cl
 	);
 	return { view, selected, begin };
 }
-function expectSeparated(targets: HTMLElement[]) {
-	for (let i = 0; i < targets.length; i++)
-		for (let j = i + 1; j < targets.length; j++) {
-			const dx = Math.abs(
-				Number.parseFloat(targets[i].style.left) -
-					Number.parseFloat(targets[j].style.left),
-			);
-			const dy = Math.abs(
-				Number.parseFloat(targets[i].style.top) -
-					Number.parseFloat(targets[j].style.top),
-			);
-			expect(dx >= 44 || dy >= 44).toBe(true);
-		}
+function expectAnchored(targets: HTMLElement[]) {
+	for (const target of targets) {
+		const dot = target.querySelector<HTMLElement>(".timecode-cue-point-anchor");
+		if (!dot) continue;
+		expect(Number.parseFloat(target.style.left) + Number.parseFloat(dot.style.left) - 16).toBe(Number(target.dataset.timeAnchorX));
+		expect(Number.parseFloat(target.style.top) + Number.parseFloat(dot.style.top) - 16).toBe(Number(target.dataset.timeAnchorY));
+	}
 }
+
 it("separates FOLLOW-zero fade controls horizontally without moving their time anchors", () => {
 	const { selected, begin } = mount("follow", 2);
 	const inEnd = screen.getByRole("slider", { name: "Cue 1 In fade" });
@@ -92,14 +87,14 @@ it("separates FOLLOW-zero fade controls horizontally without moving their time a
 	expect(inEnd.dataset.timeAnchorX).toBe(outStart.dataset.timeAnchorX);
 	expect(inEnd).toHaveStyle({ top: "32px" });
 	expect(outStart).toHaveStyle({ top: "32px" });
-	expectSeparated([inEnd, outStart]);
+	expectAnchored([inEnd, outStart]);
 	expect(outStart.querySelector(".timecode-cue-point-leader")).not.toBeNull();
 	fireEvent.pointerDown(inEnd, { pointerId: 1, clientX: 100 });
 	expect(begin.mock.lastCall?.slice(1)).toEqual([selected, "in", "end"]);
 	fireEvent.pointerDown(outStart, { pointerId: 2, clientX: 100 });
 	expect(begin.mock.lastCall?.slice(1)).toEqual([selected, "out", "start"]);
 });
-it("keeps nearby upper and lower controls independently reachable inside the short envelope", () => {
+it("keeps nearby ordinary visible dots fixed at the true upper and lower corners", () => {
 	mount("wait", 0.5);
 	const targets = [
 		"Trigger",
@@ -108,9 +103,9 @@ it("keeps nearby upper and lower controls independently reachable inside the sho
 		"In delay",
 		"Out fade",
 	].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }));
-	expectSeparated(targets);
+	expectAnchored(targets);
 	expect(
-		targets.every((target) => ["32px", "104px"].includes(target.style.top)),
+		targets.every((target) => ["8px", "32px", "104px"].includes(target.style.top)),
 	).toBe(true);
 	expect(screen.getByRole("slider", { name: "Cue 1 In fade" })).toHaveAttribute(
 		"data-time-anchor-x",
@@ -175,7 +170,7 @@ it("keeps Trigger distinct from every fade target when all fade times are zero",
 		"Out fade",
 	].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }));
 	expect(targets.map((target) => target.style.top)).toEqual([
-		"32px",
+		"8px",
 		"32px",
 		"32px",
 		"104px",
@@ -184,8 +179,8 @@ it("keeps Trigger distinct from every fade target when all fade times are zero",
 	expect(targets.every((target) => target.dataset.timeAnchorX === "0")).toBe(
 		true,
 	);
-	expectSeparated(targets);
-	expect(targets[1].querySelector(".timecode-cue-point-leader")).not.toBeNull();
+	expectAnchored(targets);
+	expect(targets[2].querySelector(".timecode-cue-point-leader")).not.toBeNull();
 });
 
 it("keeps a short single-Cue Out reference clear of In controls", () => {
@@ -231,22 +226,7 @@ it("keeps a short single-Cue Out reference clear of In controls", () => {
 			commit={vi.fn()}
 		/>,
 	);
-	const points = ["Trigger", "In fade", "In delay", "Out delay", "Out fade"]
-		.map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` }))
-		.map((target) => ({
-			x:
-				Number.parseFloat(target.style.left) +
-				(target.closest(".reference") ? 6 : 0),
-			y:
-				Number.parseFloat(target.style.top) +
-				(target.closest(".reference") ? 24 : 0),
-		}));
-	for (let i = 0; i < points.length; i++)
-		for (let j = i + 1; j < points.length; j++)
-			expect(
-				Math.abs(points[i].x - points[j].x) >= 44 ||
-					Math.abs(points[i].y - points[j].y) >= 44,
-			).toBe(true);
+	expectAnchored(["In fade", "In delay", "Out delay", "Out fade"].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` })));
 	expect(screen.getByText("Out · not executed")).toBeInTheDocument();
 });
 
@@ -297,11 +277,8 @@ it("re-packs a scrolled final Out reference and resets its scroll on Cue selecti
 	expect(rail).toHaveAttribute("data-reference-scroll", "374");
 	const inEnd = screen.getByRole("slider", { name: "Cue 1 In fade" });
 	const outStart = screen.getByRole("slider", { name: "Cue 1 Out delay" });
-	const actualOutX =
-		440 + Number.parseFloat(outStart.style.left) - rail.scrollLeft;
-	expect(
-		Math.abs(actualOutX - Number.parseFloat(inEnd.style.left)),
-	).toBeGreaterThanOrEqual(44);
+	expectAnchored([inEnd, outStart]);
+	expect(inEnd.style.left).toBe(`${inEnd.dataset.timeAnchorX}px`);
 	const next = {
 		...selected,
 		cue: { ...selected.cue, id: "next", number: "2" },
@@ -311,7 +288,7 @@ it("re-packs a scrolled final Out reference and resets its scroll on Cue selecti
 	expect(rail).toHaveAttribute("data-reference-scroll", "0");
 });
 
-it("finds a guaranteed free target beyond densely occupied divider candidates", () => {
+it("does not displace ordinary slope vertices to avoid name-band dividers", () => {
 	const body = {
 		id: "list",
 		name: "Dense",
@@ -365,22 +342,14 @@ it("finds a guaranteed free target beyond densely occupied divider candidates", 
 	);
 	const inStart = screen.getByRole("slider", { name: "Cue 1 In delay" });
 	const x = Number.parseFloat(inStart.style.left);
-	expect(x).toBeGreaterThan(Math.max(...dividers));
-	for (const divider of dividers)
-		expect(Math.abs(x - divider)).toBeGreaterThanOrEqual(44);
-	expectSeparated([
+	expect(x).toBe(Number(inStart.dataset.timeAnchorX));
+	expectAnchored([
 		inStart,
 		screen.getByRole("slider", { name: "Cue 1 Out fade" }),
 	]);
 });
 
-it("reserves the inset end-grip touch center instead of the clip boundary", () => {
+it("keeps the visible bottom vertices exact near the inset end grip", () => {
 	mount("follow", 2, 22);
-	const endGrip = { x: 22 * 2 - 22, y: 134 };
-	for (const name of ["In delay", "In fade", "Out delay", "Out fade"]) {
-		const handle = screen.getByRole("slider", { name: `Cue 1 ${name}` });
-		const x = Number.parseFloat(handle.style.left);
-		const y = Number.parseFloat(handle.style.top);
-		expect(Math.abs(x - endGrip.x) >= 44 || Math.abs(y - endGrip.y) >= 44).toBe(true);
-	}
+	expectAnchored(["In delay", "In fade", "Out delay", "Out fade"].map((name) => screen.getByRole("slider", { name: `Cue 1 ${name}` })));
 });

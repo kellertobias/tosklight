@@ -1090,12 +1090,13 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.queryByRole("button", { name: "+ keyframe" })).toBeNull();
 		act(() => ref.current?.insertKeyframe());
 		const keyframe = view.getByTitle(/Main audio volume · 100%/);
+		Object.defineProperty(lane, "clientHeight", { value: 100 });
 		fireEvent.pointerDown(keyframe, {
 			pointerId: 1,
 			clientX: 80,
 			clientY: 100,
 		});
-		fireEvent.pointerMove(window, { clientX: 112, clientY: 132 });
+		fireEvent.pointerMove(window, { clientX: 112, clientY: 115.2 });
 		fireEvent.pointerUp(window);
 		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
 		act(() => ref.current?.deleteSelection());

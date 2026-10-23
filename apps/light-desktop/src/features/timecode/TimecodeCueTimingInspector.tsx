@@ -43,22 +43,15 @@ export function CueTimingInspector({
 			<h3>
 				Cue {selected.cue.number} · {selected.cue.name || "Untitled"}
 			</h3>
-			<ExactFrame
-				label="Trigger"
-				frame={selected.startFrame}
-				disabled={!canMoveTrigger}
-				onCommit={placeTrigger}
-			/>
-			<p>{source}</p>
-			<p>
-				Drag the yellow <strong>Trigger</strong> handle to move this Cue’s
-				actual start. Automatic trigger times are derived; edit their trigger in
-				the Cuelist.
-			</p>
 			{(["in", "out"] as const).map((kind) => {
 				const range = kind === "in" ? selected.inFade : selected.outFade;
 				return (
 					<TimecodeInspectorSection key={kind} title={kind === "in" ? "Cue In" : "Cue Out"} defaultOpen>
+						{kind === "in" && <>
+							<ExactFrame label="Trigger" frame={selected.startFrame} disabled={!canMoveTrigger} onCommit={placeTrigger} />
+							<p>{source}</p>
+							<p>The Trigger starts this Cue. In delay runs from Trigger to In start; the In fade runs from In start to In end. Automatic triggers are derived from the Cuelist.</p>
+						</>}
 						{kind === "in" && boundaries?.inControl}
 						{(["start", "end"] as const).map((edge) => (
 							<ExactFrame

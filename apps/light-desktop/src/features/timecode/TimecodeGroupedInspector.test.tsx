@@ -35,8 +35,8 @@ it("places each clip boundary with its Cue timing section and delegates to the e
 		<SelectionProperties definition={definition} selection={selection} cueTimingActive cueLists={[{ id: list.id, name: list.name, cues: list.cues, body: list }]}
 			fps={44} items={timelineItems(definition)} onCommit={commitDefinition} onSelect={vi.fn()} />
 	</CueClipBoundaryProvider>);
-	const start = screen.getByLabelText("Start frame");
-	const end = screen.getByLabelText("End frame");
+	const start = screen.getByLabelText("Clip start frame");
+	const end = screen.getByLabelText("Clip end frame");
 	expect(start.closest("details")?.querySelector("summary")).toHaveTextContent("Cue In");
 	expect(end.closest("details")?.querySelector("summary")).toHaveTextContent("Cue Out");
 	expect(screen.getByLabelText("In start").closest("details")).toBe(start.closest("details"));
@@ -56,8 +56,8 @@ it("places each clip boundary with its Cue timing section and delegates to the e
 it("does not create a definition overwrite path when resize authority is unavailable", () => {
 	const slots = cueClipBoundarySlots({ definition, selection });
 	render(<>{slots?.inControl}{slots?.outControl}</>);
-	expect(screen.getByLabelText("Start frame")).toBeDisabled();
-	expect(screen.getByLabelText("End frame")).toBeDisabled();
+	expect(screen.getByLabelText("Clip start frame")).toBeDisabled();
+	expect(screen.getByLabelText("Clip end frame")).toBeDisabled();
 });
 
 it("exact boundary resize scales authoritative Cue timing within the same gesture and ignores unchanged frames", () => {

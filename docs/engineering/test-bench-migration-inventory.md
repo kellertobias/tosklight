@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **439 root cases across 134 files**.
+Default catalog: **442 root cases across 134 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -392,6 +392,7 @@ Default catalog: **439 root cases across 134 files**.
 | 84-dynamic-pool-visibility.spec.ts | DYNAMICS-POOL-001 @ui › stored Dynamic 29 stays painted through navigation and reconnect | repository contract | @ui | dynamic-pool-visibility | standard failure evidence | parallel | pending-semantic-migration |
 | 84-semantic-media-running-panes.spec.ts | MEDIA-001 @ui › Media is absent without an eligible patched server | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
 | 84-semantic-media-running-panes.spec.ts | RUNNING-003 @ui › a Macro row filters and cancels through its exact live Off action | docs/testing/14-media-and-running-panes.md | @ui | semantic-media-running-panes | standard failure evidence | parallel | pending-semantic-migration |
+| 85-semantic-macros-timecode.spec.ts | TIMECODE-001 @ui › audio volume points and waveform share exact axes at Fit and through sidebar changes | repository contract | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
 | 85-semantic-macros-timecode.spec.ts | MACRO-003 @api › command-line start uses the shared one-shot execution | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | MACRO-002 @api › a running Macro never disturbs the command line the operator is typing | docs/testing/15-macros-and-timecode.md | @api | semantic-macros-timecode | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 85-semantic-macros-timecode.spec.ts | MACRO-004 @ui › refined editor exposes settings, focus, alternating lines, and IntelliCode | docs/testing/15-macros-and-timecode.md | @ui | semantic-macros-timecode | standard failure evidence | parallel | pending-semantic-migration |
@@ -402,12 +403,14 @@ Default catalog: **439 root cases across 134 files**.
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the complete expanded lane fits above the desk controls with an 88px envelope and 44px names | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › tapping an unplaced manual Cue divider never creates a placement or sends a save | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › both visible Cue divider grips move the real Trigger with mouse and touch and persist | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › visible timing dots stay on the four actual slope vertices with delayed and zero-delay In | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › each timing point saves to the Cuelist and a refused pointer edit rolls back | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › manual Trigger drags stop at neighbours and survive reopening without changing trigger type | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › touch drags each timing point and cancelling a touch restores the unsaved preview | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › first Trigger moves the whole clip and the final Cue explains its separate Clip Out | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › open Speed Groups retain context and Cue focus dims only other editing lanes | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the last Cue end grip preserves earlier triggers and retains a refused autosave draft | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › marker lines do not drag while the sticky bottom flag supports mouse and touch moves | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › a long final Cue Out reference remains reachable after its independent horizontal scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › the main audio waveform and volume points stay below the ruler while other lanes scroll | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › grouped Speed navigation previews every group and enlarges only the selected lane | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |

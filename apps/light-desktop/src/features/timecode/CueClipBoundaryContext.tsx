@@ -27,8 +27,8 @@ export function cueClipBoundarySlots({ definition, selection, onResizeClip }: {
 	const minimum = Math.max(0, ...clips.filter((other) => other.id !== clip.id && other.end_frame <= clip.start_frame).map((other) => other.end_frame));
 	const maximum = Math.min(definition.duration_frame ?? Infinity, ...clips.filter((other) => other.id !== clip.id && other.start_frame >= clip.end_frame).map((other) => other.start_frame));
 	return {
-		inControl: <BoundaryField key={`${clip.id}-start`} label="Start frame" frame={clip.start_frame} minimum={minimum} maximum={clip.end_frame - 1} change={onResizeClip ? (frame) => onResizeClip(chosen, "start", frame) : undefined} />,
-		outControl: <BoundaryField key={`${clip.id}-end`} label="End frame" frame={clip.end_frame} minimum={clip.start_frame + 1} maximum={maximum} change={onResizeClip ? (frame) => onResizeClip(chosen, "end", frame) : undefined} />,
+		inControl: <BoundaryField key={`${clip.id}-start`} label="Clip start frame" frame={clip.start_frame} minimum={minimum} maximum={clip.end_frame - 1} change={onResizeClip ? (frame) => onResizeClip(chosen, "start", frame) : undefined} />,
+		outControl: <BoundaryField key={`${clip.id}-end`} label="Clip end frame" frame={clip.end_frame} minimum={clip.start_frame + 1} maximum={maximum} change={onResizeClip ? (frame) => onResizeClip(chosen, "end", frame) : undefined} />,
 	};
 }
 function BoundaryField({ label, frame, minimum, maximum, change }: BoundaryControl & { label: string }) {

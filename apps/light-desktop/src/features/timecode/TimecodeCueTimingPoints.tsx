@@ -1,5 +1,6 @@
+import { redirectCueVertexPointer } from "./cueVertexPointer";
 import { useCueReferenceScroll } from "./useCueReferenceScroll";
-import { HEADER, PEAK_Y, BASE_Y, DIVIDER_CENTER, END_GRIP_CENTER } from "./cueEditorLayout";
+import { HEADER, PEAK_Y, BASE_Y } from "./cueEditorLayout";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -55,14 +56,7 @@ function pointPlacement(
 	referenceScroll: number,
 ) {
 	const anchorTop = (kind === "in") === (edge === "start") ? BASE_Y : PEAK_Y;
-	const occupied = [
-		{ x: selected.startFrame * pixelsPerFrame, y: PEAK_Y },
-		{ x: clip.end_frame * pixelsPerFrame - 22, y: END_GRIP_CENTER },
-		...dividerFrames.map((frame) => ({
-			x: frame * pixelsPerFrame,
-			y: DIVIDER_CENTER,
-		})),
-	];
+	const occupied: Array<{ x: number; y: number; target: number }> = [];
 	const positions = new Map<string, number>();
 	for (const [handleKind, handleEdge] of [
 		["in", "end"],
@@ -87,28 +81,18 @@ function pointPlacement(
 			: (handleKind === "in") === (handleEdge === "start")
 				? BASE_Y
 				: PEAK_Y;
-		const candidates = [
-			0, 48, 96, 144, 192, 240, 288, -48, -96, -144, -192, -240, -288,
-		];
-		const inside = candidates.filter(
-			(delta) =>
-				x + delta >= clip.start_frame * pixelsPerFrame + 22 &&
-				x + delta <= clip.end_frame * pixelsPerFrame - 22,
-		);
-		const offset =
-			[...inside, ...candidates].find((delta) =>
-				occupied.every(
-					(point) =>
-						Math.abs(x + delta - point.x) >= 44 || Math.abs(y - point.y) >= 44,
-				),
-			) ??
-			Math.max(
-				x,
-				...occupied
-					.filter((point) => Math.abs(y - point.y) < 44)
-					.map((point) => point.x + 48),
-			) - x;
-		occupied.push({ x: x + offset, y });
+		// Only truly coincident corners need a separate labelled touch affordance.
+		// Nearby ordinary vertices remain exactly on their fade slopes.
+		let offset = 0;
+		while (
+			occupied.some(
+				(point) =>
+					Math.abs(point.target - (x + offset)) < 1 &&
+					Math.abs(point.y - y) < 1,
+			)
+		)
+			offset += 48;
+		occupied.push({ x, y, target: x + offset });
 		positions.set(`${handleKind}:${handleEdge}`, offset);
 	}
 	const offset = positions.get(`${kind}:${edge}`) ?? 0;
@@ -145,7 +129,12 @@ export function CueTimingPoints({
 	const { referenceRail, referenceScroll, onReferenceScroll } =
 		useCueReferenceScroll(clip.id, selected.cue.id);
 	return (
-		<span className="timecode-cue-edit-points">
+		<span
+			className="timecode-cue-edit-points"
+			onPointerDownCapture={(event) =>
+				redirectCueVertexPointer(event, selected, begin)
+			}
+		>
 			<CueTriggerPoint
 				{...{
 					selected,
@@ -246,7 +235,8 @@ export function CueTimingPoints({
 										}
 										onBegin={(event) => begin(event, selected, kind, edge)}
 										onCommit={(target) => commit(selected, kind, edge, target)}
-										className={`${kind} ${edge} ${displaced ? "displaced" : ""}`}
+										className={`${kind} ${edge} anchored-vertex ${displaced ? "displaced" : ""}`}
+										anchorVisual
 										caption={`${kind === "in" ? "In" : "Out"} ${edge === "start" ? "start" : "end"}`}
 									/>
 								);
@@ -304,7 +294,7 @@ function CueTriggerPoint({
 						: (triggerBounds?.maximum ?? selected.startFrame)
 				}
 				left={position(triggerPreview ?? selected.startFrame)}
-				top={PEAK_Y}
+				top={8}
 				disabled={!canMoveTrigger}
 				onPreview={setTriggerPreview}
 				onCommit={placeTrigger}

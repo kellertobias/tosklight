@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Waveform } from "./TimecodeLaneParts";
+import { audioVolumeLinePoints, volumeKeyframePosition } from "./audioLaneGeometry";
+import { AudioVolumeLaneBackground, SpeedGroupLaneBackground, Waveform } from "./TimecodeLaneParts";
 
 function envelopeOf(peaks: readonly number[]) {
 	const { container } = render(<Waveform peaks={peaks} />);
@@ -25,4 +26,34 @@ describe("Waveform", () => {
 		// centre line and half below it.
 		expect(envelopeOf([1])).toBe("M 0 0 L 0 48 Z");
 	});
+});
+
+
+describe("audio volume axes", () => {
+	it("places zero and full volume inside the lane and half volume at its center", () => {
+		expect([0, 0.5, 1].map(volumeKeyframePosition)).toEqual([88, 50, 12]);
+		expect(audioVolumeLinePoints([
+			{ frame: 0, value: 0 }, { frame: 220, value: 0.5 }, { frame: 440, value: 1 },
+		], 440)).toBe("0,88 50,50 100,12");
+	});
+
+	it("anchors audio width to frame scale rather than extra canvas scroll space", () => {
+		const { container, rerender } = render(<AudioVolumeLaneBackground
+			content={{ kind: "audio_volume", keyframes: [] }} duration={440} pixelsPerFrame={2}
+			waveformPeaks={[0, 1, 0]} />);
+		expect(container.querySelector(".timecode-audio-lane-content")).toHaveStyle({ width: "880px" });
+		rerender(<AudioVolumeLaneBackground content={{ kind: "audio_volume", keyframes: [] }}
+			duration={440} pixelsPerFrame={4} waveformPeaks={[0, 1, 0]} />);
+		expect(container.querySelector(".timecode-audio-lane-content")).toHaveStyle({ width: "1760px" });
+	});
+});
+
+
+it("keeps the Speed Group line on the frame axis despite extra canvas scroll space", () => {
+	const { container } = render(<SpeedGroupLaneBackground name="Movement" duration={440}
+		pixelsPerFrame={2} content={{ kind: "speed_group", group: "A", keyframes: [
+			{ id: "speed", frame: 220, bpm: 120, phase: 0 },
+		] }} />);
+	expect(container.querySelector("svg")).toHaveStyle({ width: "880px" });
+	expect(container.querySelector("polyline")).toHaveAttribute("points", "0,50 50,50 100,50");
 });
