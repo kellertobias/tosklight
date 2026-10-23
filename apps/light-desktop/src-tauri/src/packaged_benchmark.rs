@@ -49,7 +49,9 @@ pub(crate) async fn packaged_stage_benchmark_config(
     let fixed_pixels = baseline.baseline_layout.is_some();
     display::place(&window, fixed_pixels).await?;
     window.show().map_err(|error| error.to_string())?;
-    window.set_focus().map_err(|error| error.to_string())?;
+    if !fixed_pixels {
+        window.set_focus().map_err(|error| error.to_string())?;
+    }
     Ok(Some(PackagedStageBenchmarkConfig {
         baseline,
         duration_seconds: std::env::var(DURATION_ENV)

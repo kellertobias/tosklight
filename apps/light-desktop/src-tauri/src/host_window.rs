@@ -34,6 +34,11 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
         .title(TITLE)
         // Benchmark windows are positioned on the chosen internal display before first show.
         .visible(std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_none())
+        // Fixed measurements must not take keyboard focus from an operator on another screen.
+        .focusable(
+            !(std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_some()
+                && std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_LAYOUT").is_some()),
+        )
         .inner_size(1440.0, 900.0)
         .min_inner_size(1024.0, 640.0)
         .decorations(false)
