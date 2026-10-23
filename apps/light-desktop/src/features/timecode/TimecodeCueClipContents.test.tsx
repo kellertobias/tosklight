@@ -292,3 +292,19 @@ it("keeps wholeclip start movement available when only inherited In exceeds a sh
 	fireEvent.pointerUp(start, { pointerId: 4, clientX: 44 });
 	expect(move).toHaveBeenCalledExactlyOnceWith("clip", 22);
 });
+
+it("does not author inherited or explicit Cue timing on a stationary or vertical-only touch", () => {
+	const save = vi.fn().mockResolvedValue(list);
+	render(<CueListClipContents cueList={{ id: list.id, name: list.name, cues: list.cues, body: list }} clip={clip} pixelsPerFrame={2}
+		timingDefaults={{ sequenceFadeMillis: 1000, releaseFadeMillis: 500 }} selectedCueId="one" expanded onSaveCueList={save} />);
+	for (const name of ["In delay", "In fade", "Out delay", "Out fade"]) {
+		const point = screen.getByRole("slider", { name: `Cue 1 ${name}` });
+		const frame = point.getAttribute("aria-valuenow");
+		fireEvent.pointerDown(point, { pointerId: 9, clientX: 20, clientY: 20 });
+		fireEvent.pointerMove(window, { pointerId: 9, clientX: 20, clientY: 80 });
+		fireEvent.pointerUp(window, { pointerId: 9, clientX: 20, clientY: 80 });
+		expect(point).toHaveAttribute("aria-valuenow", frame);
+	}
+	expect(save).not.toHaveBeenCalled();
+	expect(list.cues[0].fade_millis).toBe(0);
+});

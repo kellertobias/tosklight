@@ -46,12 +46,12 @@ it("title actions call the current editor handle and obey capability visibility"
 	const handle: TimecodeTimelineEditorHandle = { stepKeyframe: vi.fn(), deleteSelection: vi.fn(), insertKeyframe: vi.fn(), addClip: vi.fn(), fit: vi.fn(), addMarker: vi.fn(), chooseSpeedLane: vi.fn(), chooseCueListLane: vi.fn(), addAudioPlayerLane: vi.fn() };
 	const ref = { current: handle };
 	const disabled = timecodeTimelineTitleActions(ref, EMPTY_TIMELINE_TITLE_STATE);
-	expect(disabled.filter((action) => action.disabled).map((action) => action.id)).toEqual(["previous-keyframe", "next-keyframe"]);
-	expect(disabled.map((action) => action.id)).toEqual(["previous-keyframe", "next-keyframe", "fit-timeline"]);
+	expect(disabled).toEqual([]);
+	expect(disabled.some((action) => action.id === "fit-timeline")).toBe(false);
 	const actions = timecodeTimelineTitleActions(ref, { canStep: true, canDeleteClip: true, canInsert: true, canDeleteKeyframe: false, canAddClip: true });
 	for (const action of actions) action.onPress?.(document.createElement("button"));
 	expect(handle.stepKeyframe).toHaveBeenCalledWith(-1); expect(handle.stepKeyframe).toHaveBeenCalledWith(1);
-	expect(handle.fit).toHaveBeenCalledOnce(); expect(handle.insertKeyframe).toHaveBeenCalledOnce(); expect(handle.addClip).toHaveBeenCalledOnce(); expect(handle.deleteSelection).toHaveBeenCalledOnce();
+	expect(handle.fit).not.toHaveBeenCalled(); expect(handle.insertKeyframe).toHaveBeenCalledOnce(); expect(handle.addClip).toHaveBeenCalledOnce(); expect(handle.deleteSelection).toHaveBeenCalledOnce();
 });
 
 it("keeps Add clip available on an empty Audio Player lane without enabling Delete clip", () => {
@@ -97,4 +97,15 @@ it("keeps marker name, color, placing and exact movement controls in the sidebar
 	fireEvent.click(screen.getByRole("button", { name: /Marker color: .*Select next color/ }));
 	expect(commit.mock.calls.at(-1)![0].markers[0]).toMatchObject({ id: "mark", name: "Marker", frame: 22 });
 	expect(commit.mock.calls.at(-1)![0].markers[0].color).toBeTruthy();
+});
+
+it("hides keyframe navigation and insertion while working on a marker", () => {
+	const publish = vi.fn(), select = vi.fn();
+	const { result } = renderHook(() => useTimelineTitleActions({ definition, selection: { kind: "marker", itemId: "mark" }, laneId: "a", items: timelineItems(definition), onSelect: select, onCommit: vi.fn(), onStateChange: publish }));
+	const state = publish.mock.calls.at(-1)![0];
+	expect(state.canStep).toBe(false);
+	expect(state.canInsert).toBe(false);
+	expect(timecodeTimelineTitleActions({ current: null }, state)).toEqual([]);
+	result.current.stepKeyframe(1);
+	expect(select).not.toHaveBeenCalled();
 });

@@ -1,3 +1,4 @@
+import { ClipBehaviorLabels } from "./TimecodeClipBehaviorLabels";
 import { ClipEndHandle } from "./TimecodeClipEndHandle";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
@@ -75,6 +76,7 @@ export function CueListClipBody({
 }) {
 	return (
 		<>
+			<ClipBehaviorLabels clip={clip} />
 			<span
 				className="timecode-clip-handle"
 				title="Drag to move the Cuelist clip"

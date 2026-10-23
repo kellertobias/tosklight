@@ -6,17 +6,27 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { act, createRef, useState } from "react";
+import { act, createRef, forwardRef, useState, type ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CueList } from "../../api/types";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	TIMECODE_LANE_HEADER_WIDTH,
-	TimecodeTimelineEditor,
+	TimecodeTimelineEditor as UnconfiguredTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 	timelineFrameX,
 } from "./TimecodeTimelineEditor";
 import { useTimecodeEncoderDeck } from "./timecodeEncoderBridge";
+
+import { TimelineInspectorPreferenceContext } from "./useTimecodeSidebarPreference";
+
+// These property-editor tests explicitly opt into the optional sidebar.
+const TimecodeTimelineEditor = forwardRef<TimecodeTimelineEditorHandle, ComponentProps<typeof UnconfiguredTimelineEditor>>((props, ref) => {
+ const [visible, setVisible] = useState(true);
+ return <TimelineInspectorPreferenceContext.Provider value={{ visible, setVisible }}>
+  <UnconfiguredTimelineEditor {...props} ref={ref} />
+ </TimelineInspectorPreferenceContext.Provider>;
+});
 
 function TimecodeEncoderProbe() {
 	const deck = useTimecodeEncoderDeck();
@@ -873,7 +883,7 @@ describe("TimecodeTimelineEditor", () => {
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
 		const marker = screen.getByTitle("Verse · 00:00:02.00");
 		fireEvent.pointerDown(marker.querySelector(".timecode-timeline-marker-label")!, { pointerId: 3, clientX: 300 });
-		expect(marker).toHaveClass("selected");
+		expect(marker).not.toHaveClass("selected");
 		expect(marker.style.getPropertyValue("--timecode-marker-color")).toBe(
 			"#33aa77",
 		);
@@ -883,6 +893,7 @@ describe("TimecodeTimelineEditor", () => {
 		});
 		fireEvent.pointerUp(window, { pointerId: 3 });
 		const moved = screen.getByTitle("Verse · 00:00:00.00");
+		expect(moved).toHaveClass("selected");
 		expect(moved).toHaveStyle({ left: `${TIMECODE_LANE_HEADER_WIDTH}px` });
 		expect(moved).not.toHaveStyle({ transform: "translateX(-22px)" });
 	});
@@ -1014,15 +1025,15 @@ describe("TimecodeTimelineEditor", () => {
 		const handle = clip.querySelector<HTMLElement>(".timecode-clip-handle");
 		expect(handle).toBeTruthy();
 		fireEvent.pointerDown(clip, { pointerId: 9, clientX: 72 });
-		fireEvent.pointerMove(window, { clientX: 128 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 9, clientX: 128 });
+		fireEvent.pointerUp(window, { pointerId: 9 });
 		expect(latest.current.lanes[0].content).toMatchObject({
 			kind: "cue_list",
 			clips: [expect.objectContaining({ start_frame: 44, end_frame: 132 })],
 		});
 		fireEvent.pointerDown(handle as HTMLElement, { pointerId: 1, clientX: 72 });
-		fireEvent.pointerMove(window, { clientX: 128 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 1, clientX: 128 });
+		fireEvent.pointerUp(window, { pointerId: 1 });
 		let cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
@@ -1031,18 +1042,20 @@ describe("TimecodeTimelineEditor", () => {
 		const start = clip.querySelector<HTMLElement>(".timecode-clip-edge.start");
 		expect(start).toBeTruthy();
 		fireEvent.pointerDown(start as HTMLElement, { pointerId: 2, clientX: 144 });
-		fireEvent.pointerMove(window, { clientX: 172 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 2, clientX: 172 });
+		fireEvent.pointerUp(window, { pointerId: 2 });
 		cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
 			clips: [expect.objectContaining({ start_frame: 110 })],
 		});
-		const end = clip.querySelector<HTMLElement>(".timecode-clip-edge.end");
+		// Completing the start gesture selects the Cue and replaces its clip body.
+        // A real pointer hits the current connected boundary, not the detached old node.
+        const end = editor.getByTitle(/Opening · 00:/).querySelector<HTMLElement>(".timecode-clip-edge.end");
 		expect(end).toBeTruthy();
 		fireEvent.pointerDown(end as HTMLElement, { pointerId: 3, clientX: 324 });
-		fireEvent.pointerMove(window, { clientX: 352 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 3, clientX: 352 });
+		fireEvent.pointerUp(window, { pointerId: 3 });
 		cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
@@ -1096,8 +1109,8 @@ describe("TimecodeTimelineEditor", () => {
 			clientX: 80,
 			clientY: 100,
 		});
-		fireEvent.pointerMove(window, { clientX: 112, clientY: 115.2 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 1, clientX: 112, clientY: 115.2 });
+		fireEvent.pointerUp(window, { pointerId: 1 });
 		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
 		act(() => ref.current?.deleteSelection());
 		expect(view.queryByTitle(/Main audio volume · 80%/)).toBeNull();

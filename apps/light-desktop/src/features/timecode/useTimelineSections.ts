@@ -21,11 +21,13 @@ export function useTimelineSections({
 	setSelectedCueId(id: string | null): void;
 	prepareInspectorClose(): void;
 }) {
+	const [expandedSpeedLaneId, setExpandedSpeedLaneId] = useState<string | null>(null);
 	const [collapsedSections, setCollapsedSections] = useState<
 		Record<string, boolean>
 	>({});
 	useEffect(() => {
 		setCollapsedSections({});
+		setExpandedSpeedLaneId(null);
 	}, [definition.id]);
 	useEffect(() => {
 		const kind = definition.lanes.find((lane) => lane.id === activeLaneId)
@@ -36,6 +38,7 @@ export function useTimelineSections({
 			);
 	}, [activeLaneId, definition.lanes]);
 	const onCloseCue = () => {
+		setExpandedSpeedLaneId(null);
 		prepareInspectorClose();
 		setSelectedCueId(null);
 		setSelectedLaneId(null);
@@ -56,12 +59,13 @@ export function useTimelineSections({
 			.kind;
 		if (kind)
 			setCollapsedSections((current) => ({ ...current, [kind]: false }));
+		setExpandedSpeedLaneId(kind === "speed_group" ? laneId : null);
 		setSelectedLaneId(laneId);
 		setSelection(
 			items.find((item) => item.laneId === laneId)?.selection ?? null,
 		);
 	};
-	return { collapsedSections, onToggleSection, onSelectLane, onCloseCue };
+	return { collapsedSections, onToggleSection, onSelectLane, onCloseCue, expandedSpeedLaneId };
 }
 
 /** The last selected lane remains addressable when its selected item is cleared. */

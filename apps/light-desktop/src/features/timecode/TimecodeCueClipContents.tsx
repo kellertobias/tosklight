@@ -34,26 +34,10 @@ export function CueListClipStatus({
 }: {
 	status: TimecodeCueListClipStatus;
 }) {
-	const label =
-		status.state === "active"
-			? "Executing"
-			: status.state === "armed"
-				? "Ready"
-				: status.state === "held"
-					? "Held"
-					: status.state === "unable"
-						? "Unable"
-						: "Released";
-	return (
-		<span
-			className={`timecode-cue-clip-status ${status.state}`}
-			title={status.state === "armed" ? "Ready to run when Timecode reaches this clip" : undefined}
-			role={status.state === "unable" ? "status" : undefined}
-		>
-			<strong>{label}</strong>
-			{status.message && <small>{status.message}</small>}
-		</span>
-	);
+	if (status.state !== "unable") return null;
+	return <span className="timecode-cue-clip-status unable" role="status">
+		<strong>Unable</strong>{status.message && <small>{status.message}</small>}
+	</span>;
 }
 
 interface CueFadeDrag {
@@ -184,14 +168,18 @@ function useCueFadeDrag({
 		const move = (event: PointerEvent) => {
 			const current = drag.current;
 			if (!current || current.pointerId !== event.pointerId) return;
-			const next = changed(
-				current.body,
-				current.row,
-				current.kind,
-				current.edge,
-				current.startHandleFrame +
-					Math.round((event.clientX - current.startX) / pixelsPerFrame),
-			);
+			const bounds = cueFadeEditFrameBounds(clip, current.body, timingDefaults,
+				current.row, current.kind, current.edge);
+			if (!bounds) return;
+			const frame = Math.max(bounds.minimum, Math.min(bounds.maximum,
+				current.startHandleFrame + Math.round((event.clientX - current.startX) / pixelsPerFrame)));
+			// A tap or a return to the original corner must not replace inherited timing.
+			if (frame === current.startHandleFrame) {
+				current.next = null;
+				setPreview(null);
+				return;
+			}
+			const next = changed(current.body, current.row, current.kind, current.edge, frame);
 			current.next = next;
 			if (next) setPreview(next);
 		};

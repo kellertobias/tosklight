@@ -272,6 +272,7 @@ it("volume drags follow the actual lane value axis at zero, middle, and full lev
 			act(() => hook.result.current({ preventDefault: vi.fn(), clientX: 100, clientY: height / 2,
 				currentTarget: button } as never, { kind: "volume", laneId: "audio", itemId: "point" }, 220, undefined, 0.5));
 			fireEvent.pointerMove(window, { clientX: 100, clientY: (88 - value * 76) / 100 * height });
+			if (value === 0.5) { expect(preview).not.toHaveBeenCalled(); fireEvent.pointerUp(window); hook.unmount(); continue; }
 			const next = preview.mock.calls.at(-1)![0] as TimecodeDefinition;
 			const content = next.lanes[0].content;
 			if (content.kind !== "audio_volume") throw Error("Audio lane expected");

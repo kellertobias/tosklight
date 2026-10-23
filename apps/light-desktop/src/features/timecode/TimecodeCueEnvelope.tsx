@@ -134,12 +134,6 @@ export function CueEnvelope({
 					</small>
 				)}
 			</Button>
-			{last && expanded && (
-				<span className="timecode-cue-end-marker" style={{ left: width }}>
-					{clip.end_behavior === "hold" ? "Hold" : "Release"}
-					{clip.out_fade_frames > 0 ? " · Clip Out" : ""}
-				</span>
-			)}
 		</span>
 	);
 }

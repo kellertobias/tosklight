@@ -1,3 +1,4 @@
+import { TimecodePaneScope, TimelineInspectorPreferenceContext, useTimecodeSidebarPreference } from "../features/timecode/useTimecodeSidebarPreference";
 import { importTimecodeMarkerCsv } from "../features/timecode/importTimecodeMarkerCsv";
 import { EMPTY_TIMELINE_TITLE_STATE, TimelineTitleStateContext } from "../features/timecode/useTimelineTitleActions";
 import { timecodeTimelineTitleActions } from "../features/timecode/timecodeTimelineTitleActions";
@@ -117,7 +118,7 @@ function useCueListPlaybackNumbers(active: boolean): Map<string, number> {
 	return useMemo(() => new Map(cueLists.flatMap(({body}) => body.pool_number == null ? [] : [[body.id, body.pool_number] as const])), [cueLists]);
 }
 
-export function TimecodeRuntimeWindow({
+function TimecodeRuntimeWindow({
 	active = true,
 	compact = false,
 }: WindowProps) {
@@ -506,6 +507,7 @@ export function TimecodeEditor({
 	const [audioImporting, setAudioImporting] = useState(false);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [inspectorVisible, setInspectorVisible] = useTimecodeSidebarPreference();
 	const [markersLocked, setMarkersLocked] = useState(false);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
@@ -687,6 +689,8 @@ export function TimecodeEditor({
 										importCsv,
 										markersLocked,
 										setMarkersLocked,
+										inspectorVisible,
+										setInspectorVisible,
 									}}
 								/>
 							),
@@ -706,6 +710,7 @@ export function TimecodeEditor({
 				onRetrySave={retrySave}
 				onRetryWaveform={retryWaveform}
 			/>
+			<TimelineInspectorPreferenceContext.Provider value={{ visible: inspectorVisible, setVisible: setInspectorVisible }}>
 			<TimelineTitleStateContext.Provider value={setTimelineTitleState}>
 				<TimecodeTimelineEditor
 					ref={timelineRef}
@@ -727,6 +732,7 @@ export function TimecodeEditor({
 					onCueTimingError={setError}
 				/>
 			</TimelineTitleStateContext.Provider>
+			</TimelineInspectorPreferenceContext.Provider>
 		</section>
 	);
 }
@@ -748,6 +754,8 @@ export function TimecodeSettings({
 	importCsv,
 	markersLocked,
 	setMarkersLocked,
+	inspectorVisible = false,
+	setInspectorVisible,
 }: {
 	draft: TimecodeDefinition;
 	setDraft(value: TimecodeDefinition): void;
@@ -761,6 +769,8 @@ export function TimecodeSettings({
 	importCsv(file: File): Promise<void>;
 	markersLocked: boolean;
 	setMarkersLocked(value: boolean): void;
+	inspectorVisible?: boolean;
+	setInspectorVisible?(value: boolean): void;
 }) {
 	const [activeTab, setActiveTab] =
 		useState<(typeof TIMECODE_SETTINGS_TABS)[number]>("Generic");
@@ -786,6 +796,8 @@ export function TimecodeSettings({
 			</div>
 			{activeTab === "Generic" && (
 				<>
+					<CheckboxField label="Show selection sidebar" checked={inspectorVisible}
+						onChange={(event) => setInspectorVisible?.(event.currentTarget.checked)} />
 					<TextField
 						label="Name"
 						value={draft.name}
@@ -1124,3 +1136,11 @@ function useTimecodeEditState({
 		},
 	};
 }
+
+/** Each pane keeps its own local presentation preference within the connected desk. */
+function TimecodeRuntimePresentation(props: WindowProps) {
+	return <TimecodePaneScope.Provider value={props.paneId ?? "built-in"}>
+		<TimecodeRuntimeWindow {...props} />
+	</TimecodePaneScope.Provider>;
+}
+export { TimecodeRuntimePresentation as TimecodeRuntimeWindow };
