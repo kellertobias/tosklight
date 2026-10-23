@@ -1244,3 +1244,5 @@ fn tl795_assigned_go_resumes_linked_audio_but_editor_go_restarts() {
 
 #[path = "external_clock_tests.rs"]
 mod external_clock;
+
+mod late_timing;

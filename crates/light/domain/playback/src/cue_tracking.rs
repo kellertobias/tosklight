@@ -230,6 +230,7 @@ impl PlaybackEngine {
         id: CueListId,
         cue_id: Uuid,
     ) -> Result<&ActivePlayback, String> {
+        let previous = self.timeline_cue_reference(id);
         let was_off = self
             .key_for_cue_list(id)
             .ok()
@@ -248,7 +249,8 @@ impl PlaybackEngine {
             playback.deleted_cue_transition_source = None;
         }
         playback.discrete_cue_actions_suppressed = false;
-        Ok(playback)
+        self.queue_timeline_transition(id, previous);
+        Ok(self.active.get(&key).expect("jump installed playback"))
     }
 
     pub fn reconstruct_to_cue_id(
@@ -269,6 +271,7 @@ impl PlaybackEngine {
         let elapsed =
             chrono::Duration::milliseconds(i64::try_from(elapsed_millis).unwrap_or(i64::MAX));
         self.jump_at(id, number, self.clock.now() - elapsed)?;
+        self.timeline_transitions.remove(&id);
         self.timeline_controlled.insert(id, None);
         let key = self.key_for_cue_list(id)?;
         let playback = self.active.get_mut(&key).expect("jump installed playback");
@@ -278,6 +281,28 @@ impl PlaybackEngine {
         playback.previous_index = None;
         playback.deleted_cue_transition_source = None;
         Ok(playback)
+    }
+
+    /// Advance a late live Timecode Cue at its scheduled age, preserving one-shot actions.
+    /// Ordinary seek reconstruction keeps those actions suppressed instead.
+    pub fn execute_timeline_cues(
+        &mut self,
+        id: CueListId,
+        cues: &[(Uuid, u64)],
+    ) -> Result<&ActivePlayback, String> {
+        let previous = self.timeline_cue_reference(id);
+        self.reconstruct_timeline_cues(id, cues)?;
+        let key = self.key_for_cue_list(id)?;
+        let playback = self
+            .active
+            .get_mut(&key)
+            .expect("reconstruction installed playback");
+        playback.discrete_cue_actions_suppressed = false;
+        self.queue_timeline_transition(id, previous);
+        Ok(self
+            .active
+            .get(&key)
+            .expect("reconstruction installed playback"))
     }
 
     /// Rebuild a Timecode clip's reached Cue transitions at their original timestamps.
@@ -321,6 +346,9 @@ impl PlaybackEngine {
             let elapsed = chrono::Duration::milliseconds(i64::try_from(age).unwrap_or(i64::MAX));
             self.jump_at(id, number, now - elapsed)?;
         }
+        // Replaying later Cues uses jump_at, which relinquishes ordinary timeline authority.
+        // The complete reconstruction still belongs to this Timecode, not automatic playback.
+        self.timeline_controlled.insert(id, None);
         let key = self.key_for_cue_list(id)?;
         let playback = self
             .active
@@ -572,6 +600,7 @@ impl PlaybackEngine {
         Ok(PlaybackMutation::new((), PlaybackRuntimeEffect::Durable))
     }
     pub fn release(&mut self, id: CueListId) -> bool {
+        self.timeline_transitions.remove(&id);
         self.timeline_controlled.remove(&id);
         self.jump_counts
             .retain(|(cue_list_id, _), _| *cue_list_id != id);

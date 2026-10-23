@@ -50,7 +50,8 @@ impl PlaybackEngine {
         if self.dynamics_paused_at.is_some() {
             return PlaybackTickResult::default();
         }
-        let transitions = self.advance_automatic_cues(now, timecode_frame);
+        let mut transitions = self.take_timeline_transitions();
+        transitions.extend(self.advance_automatic_cues(now, timecode_frame));
         self.advance_temporary_cues(now, timecode_frame);
         self.release_emptied_playbacks(now);
         PlaybackTickResult { transitions }

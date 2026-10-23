@@ -831,6 +831,26 @@ impl TimecodeRuntimeService {
     }
 }
 
+fn cue_history_action(next: &AppliedCueListClip, execute: bool) -> CueListPlaybackAction {
+    let cues = next
+        .cue_history
+        .iter()
+        .map(|(start, cue_id)| {
+            (
+                *cue_id,
+                frames_to_millis(next.frame.0.saturating_sub(start.0), next.frame_rate),
+            )
+        })
+        .collect();
+    if execute {
+        CueListPlaybackAction::ExecuteTimelineCues(cues)
+    } else if next.external_clock {
+        CueListPlaybackAction::ReconstructSampledTimelineCues(cues)
+    } else {
+        CueListPlaybackAction::ReconstructTimelineCues(cues)
+    }
+}
+
 fn reconcile_desired_cue_list(
     actual: Option<light_playback::PlaybackRuntimeStatus>,
     cue_list_id: light_core::CueListId,
@@ -866,23 +886,19 @@ fn reconcile_desired_cue_list(
                 CueListReconcileMode::Reconstruct => false,
             };
         let action = if should_execute {
-            CueListPlaybackAction::ExecuteCueId(next.cue_id)
-        } else {
-            let cues = next
+            let elapsed = next
                 .cue_history
                 .iter()
-                .map(|(start, cue_id)| {
-                    (
-                        *cue_id,
-                        frames_to_millis(next.frame.0.saturating_sub(start.0), next.frame_rate),
-                    )
-                })
-                .collect();
-            if next.external_clock {
-                CueListPlaybackAction::ReconstructSampledTimelineCues(cues)
+                .rev()
+                .find(|(_, id)| *id == next.cue_id)
+                .is_some_and(|(start, _)| start.0 < next.frame.0);
+            if elapsed {
+                cue_history_action(next, true)
             } else {
-                CueListPlaybackAction::ReconstructTimelineCues(cues)
+                CueListPlaybackAction::ExecuteCueId(next.cue_id)
             }
+        } else {
+            cue_history_action(next, false)
         };
         execute(
             EnginePlaybackCommand::CueList {

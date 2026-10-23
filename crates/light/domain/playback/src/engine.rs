@@ -36,6 +36,8 @@ pub struct PlaybackEngine {
     pub(crate) swap_held: HashSet<PlaybackControlKey>,
     /// Timeline ownership with an optional external sample clock; not persisted or operator Pause.
     pub(crate) timeline_controlled: HashMap<CueListId, Option<DateTime<Utc>>>,
+    /// Final live Timecode crossings awaiting one authoritative output capture; never persisted.
+    pub(crate) timeline_transitions: HashMap<CueListId, AutomaticPlaybackTransition>,
     pub(crate) dynamics_paused_at: Option<DateTime<Utc>>,
     pub(crate) speed_groups_bpm: [f64; 5],
     pub(crate) speed_groups_paused: [bool; 5],
@@ -74,6 +76,7 @@ impl PlaybackEngine {
             temporary: HashMap::new(),
             swap_held: HashSet::new(),
             timeline_controlled: HashMap::new(),
+            timeline_transitions: HashMap::new(),
             dynamics_paused_at: None,
             speed_groups_bpm: [120.0, 90.0, 60.0, 30.0, 15.0],
             speed_groups_paused: [false; 5],
@@ -139,6 +142,7 @@ impl PlaybackEngine {
     /// A same-show generation may retain the exact old owner. New/deleted/remapped owners
     /// receive no clock authority, and show activation never calls this preserving operation.
     pub fn restore_timeline_clock_state(&mut self, state: PlaybackTimelineClockState) {
+        self.timeline_transitions.clear();
         self.timeline_controlled.clear();
         for owner in state.0 {
             let matches =
