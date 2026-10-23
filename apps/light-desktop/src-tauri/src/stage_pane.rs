@@ -438,17 +438,6 @@ impl StagePane {
         Ok(())
     }
 
-    /// Send the operator's picture settings on to the renderer, which owns this picture.
-    pub(crate) fn send_picture(&self, picture: Picture) -> Result<(), String> {
-        let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
-        if let Some(running) = guard.as_mut() {
-            let mut instruction = picture.into_helper();
-            crate::packaged_benchmark::baseline_picture(&mut instruction)?;
-            running.send(&instruction);
-        }
-        Ok(())
-    }
-
     /// Take what has arrived and draw. Driven from the desk's own loop, on the thread that owns
     /// the window, because that is where a surface may be presented.
     pub(crate) fn tick(&self) -> Result<(), String> {
