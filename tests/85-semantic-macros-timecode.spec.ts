@@ -357,8 +357,8 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		api,
 		desk,
 		page,
-	}) => {
-		const definition = editableTimecode();
+	}, testInfo) => {
+		const definition = { ...editableTimecode(), duration_frame: 44 * 61 + 13 };
 		const mutations: Record<string, unknown>[] = [];
 		let revision = 4;
 		await page.route("**/api/v2/timecodes", async (route) => {
@@ -402,6 +402,8 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 
 		const editor = page.getByLabel("Timecode timeline editor");
 		await expect(editor).toBeVisible();
+		await assertRulerLabelsDoNotOverlap(editor, definition.duration_frame);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-ruler-fit-detail.png") });
 		await expect(
 			page.getByRole("button", { name: "Save", exact: true }),
 		).toHaveCount(0);
@@ -461,6 +463,15 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 					.getAttribute("data-pixels-per-frame"),
 			)
 			.toBe("17.5");
+		await assertRulerLabelsDoNotOverlap(editor, definition.duration_frame);
+		const scrollBounds = (await viewport.boundingBox())!;
+		await page.mouse.move(scrollBounds.x + scrollBounds.width / 2, scrollBounds.y + 20);
+		await page.mouse.wheel(100000, 0);
+		await expect(editor.locator(".timecode-ruler-final-tick")).toBeInViewport();
+		await assertRulerLabelsDoNotOverlap(editor, definition.duration_frame);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-ruler-right-edge-detail.png") });
+		await page.getByRole("button", { name: "Fit timeline", exact: true }).click();
+
 
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
@@ -595,4 +606,18 @@ async function openShiftedBuiltIn(page: Page, name: string): Promise<void> {
 		.locator("[aria-label='Shift Built-ins']")
 		.getByRole("button", { name, exact: true })
 		.click();
+}
+
+async function assertRulerLabelsDoNotOverlap(editor: import("@playwright/test").Locator, duration: number) {
+	const ruler = editor.locator(".timecode-ruler");
+	await expect(ruler.locator(".timecode-ruler-final-tick")).toHaveAttribute("data-frame", String(duration));
+	const labels = await ruler.locator(":scope > span").evaluateAll((nodes) => nodes.map((node) => {
+		const box = node.getBoundingClientRect();
+		return { left: box.left, right: box.right };
+	}));
+	for (let index = 1; index < labels.length; index += 1) expect(labels[index].left - labels[index - 1].right).toBeGreaterThanOrEqual(1);
+	const endpoint = await ruler.locator(".timecode-ruler-final-tick").boundingBox();
+	const origin = (await ruler.boundingBox())!.x;
+	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
+	expect(Math.abs(endpoint!.x + endpoint!.width - origin - duration * scale)).toBeLessThanOrEqual(1);
 }

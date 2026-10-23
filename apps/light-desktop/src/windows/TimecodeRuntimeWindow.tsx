@@ -81,6 +81,7 @@ import { TimecodeFrameField } from "../features/timecode/TimecodeFrameField";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import type { WindowProps } from "./windowTypes";
 import "./TimecodeRuntimeWindow.css";
+import "../features/timecode/TimecodeEditorPolish.css";
 
 const FPS = 44;
 const TIMECODE_POOL_SIZE = 100;

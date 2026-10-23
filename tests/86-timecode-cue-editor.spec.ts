@@ -240,6 +240,18 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		});
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).cue_starts.find((start) => start.cue_id === rig.list.cues[1].id)?.offset_frame).toBe(220);
 		await assertCueFrameAlignment(editor, 2, "Verse wash", 264, true);
+		// Prove the saved editor position drives the authoritative playback boundary.
+		const context = { showId: show.id, deskId: api.session!.desk.id };
+		const transport = (action: { type: string; frame?: number }) => api.request("POST", `/api/v2/timecodes/${rig.definition.id}/transport`, { timecode_id: rig.definition.id, action }, true, undefined, context);
+		const currentCue = async () => (await api.request<{ cue_list_clips: Array<{ clip_id: string; cue_id: string; cue_start_frame: number; state: string }> }>("GET", `/api/v2/timecodes/${rig.definition.id}/runtime`, undefined, true, undefined, context)).cue_list_clips.find((clip) => clip.clip_id === (rig.definition.lanes[0].content.kind === "cue_list" ? rig.definition.lanes[0].content.clips[0].id : ""));
+		await transport({ type: "go" });
+		await transport({ type: "pause" });
+		await transport({ type: "seek", frame: 263 });
+		await expect.poll(currentCue).toMatchObject({ cue_id: rig.list.cues[0].id, state: "active" });
+		await transport({ type: "seek", frame: 264 });
+		await expect.poll(currentCue).toMatchObject({ cue_id: rig.list.cues[1].id, cue_start_frame: 264, state: "active" });
+		await transport({ type: "stop" });
+
 		await page.reload();
 		await openEditor(page);
 		await zoomIn(page, editor);

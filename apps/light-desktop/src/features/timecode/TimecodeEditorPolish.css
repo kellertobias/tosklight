@@ -1,0 +1,47 @@
+/* Detail styling keeps the operator's lane and timing geometry unchanged. */
+.timecode-editor-inspector {
+	background: #181d27;
+	border-left-color: #354252;
+}
+.timecode-editor-inspector-heading > strong {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: #aebdce;
+}
+.timecode-editor-inspector h3 {
+	line-height: 1.4;
+	font-weight: 600;
+}
+.timecode-editor-inspector label { color: #bdcadb; }
+.timecode-editor-inspector input { border-color: #435266; }
+.timecode-editor-inspector .timecode-inspector-section {
+	border-color: #394859;
+	border-radius: 6px;
+	background: #151b25;
+}
+.timecode-editor-inspector .timecode-inspector-section > summary {
+	font-weight: 600;
+	line-height: 20px;
+	border-radius: 5px;
+}
+.timecode-editor-inspector .timecode-inspector-section > summary::marker { color: #88a9bd; }
+.timecode-editor-inspector .timecode-inspector-section[open] > summary {
+	background: #202b39;
+	box-shadow: inset 0 -1px #344455;
+}
+.timecode-editor-inspector .timecode-inspector-section-content { padding-top: 10px; }
+.timecode-editor-inspector .timecode-inspector-section > summary:hover { background: #263443; }
+.timecode-editor-inspector .timecode-inspector-section > summary:focus-visible {
+	outline: 2px solid #78d4e9;
+	outline-offset: -2px;
+}
+.timecode-timeline-item.item-clip.selected { outline-color: #91c8da; }
+.timecode-cue-clip-status {
+	font-size: 0.66rem;
+	font-weight: 500;
+	line-height: 1.35;
+	letter-spacing: 0.01em;
+}
+.timecode-timeline-editor .timecode-cue-name.ui-button { font-weight: 500; }
+.timecode-timeline-editor .timecode-cue-name.ui-button[aria-pressed="true"] { font-weight: 600; }
+.timecode-cue-block-trigger { font-variant-numeric: tabular-nums; }
