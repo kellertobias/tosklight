@@ -22,9 +22,13 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		for (const [index, name] of ["House out", "Verse wash", "Chorus"].entries())
 			await assertCueFrameAlignment(editor, index + 1, name, [44, 220, 396][index], false);
 		const before = await geometry(editor, viewport, envelope);
+		const add = page.locator(".timecode-window.timecode-editor").getByRole("button", { name: "Add", exact: true });
+		const addLeft = async () => (await add.boundingBox())!.x;
+		const initialAddLeft = await addLeft();
 		await envelope.tap();
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toBeVisible();
 		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
+		expect(await addLeft()).toBe(initialAddLeft);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		const inDelay = editor.getByRole("slider", { name: "Cue 1 In delay", exact: true });
 		await expect(inDelay).toHaveAttribute("aria-valuenow", "88");
@@ -59,12 +63,14 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect(await geometry(editor, viewport, envelope)).toEqual(before);
 		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).tap({ position: { x: 32, y: 18 } });
 		await expect(editor.getByRole("slider", { name: "Cue 2 In fade", exact: true })).toBeVisible();
+		expect(await addLeft()).toBe(initialAddLeft);
 		await expect(editor.getByRole("slider", { name: "Cue 1 In fade", exact: true })).toHaveCount(0);
 		await editor.getByRole("button", { name: "Close cue editor", exact: true }).tap();
 		await expect(editor.getByRole("slider", { name: "Cue 2 In fade", exact: true })).toHaveCount(0);
 		const closeSettings = editor.getByRole("button", { name: "Close selection settings", exact: true });
 		if (await closeSettings.isVisible()) await closeSettings.tap();
 		await expect(editor.locator(".timecode-editor-inspector")).toHaveCount(0);
+		expect(await addLeft()).toBe(initialAddLeft);
 		expect(await geometry(editor, viewport, envelope)).toEqual(before);
 
 		// Closing a sidebar widens the viewport. At the right edge this must not let the browser
@@ -141,7 +147,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues[1].trigger.type).toBe("manual");
 	});
 
-	test("TIMECODE-001 @ui › both visible Cue divider grips move the real Trigger with mouse and touch and persist", async ({ api, show, desk, page }) => {
+	test("TIMECODE-001 @ui › interior Cue dividers move the real Trigger with mouse and touch and persist", async ({ api, show, desk, page }) => {
 		const rig = await seedEditor(api, show.id);
 		await desk.open(api.baseUrl);
 		await openEditor(page);
@@ -150,14 +156,6 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await editor.getByRole("button", { name: "Edit Cue 2 Verse wash", exact: true }).click({ position: { x: 32, y: 18 } });
 		const divider = editor.getByRole("slider", { name: "Move Cue 2 trigger", exact: true });
 		await expect(divider).toHaveAttribute("aria-valuenow", "220");
-		const grips = await divider.locator(":scope > span").evaluate((node) => ["::before", "::after"].map((pseudo) => {
-			const style = getComputedStyle(node, pseudo);
-			return { width: style.width, height: style.height, background: style.backgroundColor, content: style.content };
-		}));
-		for (const grip of grips) {
-			expect(grip).toMatchObject({ width: "2px", height: "18px", content: '""' });
-			expect(grip.background).not.toBe("rgba(0, 0, 0, 0)");
-		}
 		await dragFrames(page, editor, divider, 22, undefined, -6);
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).cue_starts.find((start) => start.cue_id === rig.list.cues[1].id)?.offset_frame).toBe(198);
 		await touchDragFrames(page, editor, divider, 22, false, 6);
@@ -326,6 +324,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await zoomIn(page, editor);
 		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click();
 		const firstTrigger = editor.getByRole("slider", { name: "Cue 1 Trigger", exact: true });
+		await expect(editor.getByRole("slider", { name: "Move Cue 1 trigger", exact: true })).toHaveCount(0);
 		await touchDragFrames(page, editor, firstTrigger, 44, true);
 		await assertCueFrameAlignment(editor, 1, "House out", 44, true);
 		expect((await readClip(api, show.id, rig.definition.id)).start_frame).toBe(44);
@@ -340,6 +339,20 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const moved = await readClip(api, show.id, rig.definition.id);
 		expect(moved.end_frame).toBe(660);
 		expect(moved.cue_starts).toEqual(rig.definition.lanes[0].content.kind === "cue_list" ? rig.definition.lanes[0].content.clips[0].cue_starts : []);
+		const triggerField = editor.locator(".timecode-cue-editor-details").getByLabel("Trigger", { exact: true });
+		await triggerField.fill(frameText(132));
+		await triggerField.press("Tab");
+		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).start_frame).toBe(132);
+		const exactMoved = await readClip(api, show.id, rig.definition.id);
+		expect(exactMoved.end_frame - exactMoved.start_frame).toBe(moved.end_frame - moved.start_frame);
+		expect(exactMoved.cue_starts).toEqual(moved.cue_starts);
+		await assertCueFrameAlignment(editor, 1, "House out", 132, true);
+		await assertCueFrameAlignment(editor, 2, "Verse wash", 308, false);
+		await page.reload();
+		await openEditor(page);
+		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click({ position: { x: 32, y: 18 } });
+		await expect(firstTrigger).toHaveAttribute("aria-valuenow", "132");
+
 		await editor.getByRole("button", { name: "Edit Cue 3 Chorus", exact: true }).click();
 		await expect(editor.locator(".timecode-cue-edit-rail.out.reference")).toContainText("Out · not executed");
 		const details = editor.locator(".timecode-cue-editor-details");
@@ -347,7 +360,7 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await details.getByLabel("Clip Out duration", { exact: true }).fill("00:00:01.00");
 		await details.getByLabel("Clip Out duration", { exact: true }).press("Tab");
 		await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).out_fade_frames).toBe(44);
-		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(660);
+		expect((await readClip(api, show.id, rig.definition.id)).end_frame).toBe(704);
 		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(originalCues);
 	});
 

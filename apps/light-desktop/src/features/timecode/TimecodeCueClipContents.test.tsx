@@ -242,3 +242,15 @@ it("previews placed manual triggers and dependent automatic Cues without saving 
 	fireEvent.pointerUp(trigger, { pointerId: 2, clientX: 188 });
 	expect(onPlaceCueStart).toHaveBeenCalledExactlyOnceWith("clip", "two", 264);
 });
+
+it("keeps the first Cue movement in its header and exact Trigger field without a leading name-band divider", () => {
+ const host = document.createElement("div"); document.body.append(host);
+ const move = vi.fn();
+ render(<CueListClipContents cueList={{ id: list.id, name: list.name, cues: list.cues, body: list }} clip={clip} pixelsPerFrame={2} timingDefaults={{sequenceFadeMillis:1000,releaseFadeMillis:500}} selectedCueId="one" expanded inspectorHost={host} onMoveClip={move} />);
+ expect(screen.queryByRole("slider", {name:"Move Cue 1 trigger"})).toBeNull();
+ expect(screen.getByRole("slider", {name:"Cue 1 Trigger"})).toBeInTheDocument();
+ const input = screen.getByLabelText("Trigger");
+ fireEvent.change(input,{target:{value:"00:00:01.00"}}); fireEvent.blur(input);
+ expect(move).toHaveBeenCalledExactlyOnceWith("clip",44);
+ host.remove();
+});

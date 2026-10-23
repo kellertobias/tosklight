@@ -5,9 +5,9 @@ import { DIVIDER_CENTER } from "./cueEditorLayout";
 import { cueTriggerEditing } from "./cueTriggerEditing";
 import { FrameHandle } from "./TimecodeCueControls";
 
-/** The paired grip marks straddle the real Cue boundary; dragging moves its trigger. */
+/** Interior Cue boundaries have one centered grip; the first Cue moves with its clip. */
 export function CueDividerHandles({ rows, clip, body, defaults, position, disabled,
-	onSelect, onPreviewTrigger, onPreviewMoveClip, onMoveClip, onPlaceCueStart,
+	onSelect, onPreviewTrigger, onMoveClip, onPlaceCueStart,
 }: {
 	rows: CueClipTimingRow[];
 	clip: TimecodeCueListClip;
@@ -24,25 +24,21 @@ export function CueDividerHandles({ rows, clip, body, defaults, position, disabl
 	const { placeRow } = cueTriggerEditing(clip, body, defaults, rows, null, onMoveClip, onPlaceCueStart);
 	return <span className="timecode-cue-divider-handles">
 		{rows.map((row, index) => {
-			if (!row.cue.id) return null;
-			const first = index === 0;
+			if (index === 0 || !row.cue.id) return null;
 			const bounds = cueTransitionFrameBounds(clip, body, defaults, row.cue.id);
-			if (!first && !bounds) return null;
+			if (!bounds) return null;
 			return <span key={row.cue.id} onPointerDownCapture={() => onSelect?.(row.cue.id!)}
 				onFocusCapture={() => onSelect?.(row.cue.id!)}>
 				<FrameHandle
 					label={`Move Cue ${row.cue.number} trigger`}
 					frame={row.startFrame}
-					minimum={first ? 0 : bounds!.minimum}
-					maximum={first ? Number.MAX_SAFE_INTEGER : bounds!.maximum}
+					minimum={bounds.minimum}
+					maximum={bounds.maximum}
 					left={position(row.startFrame)}
 					top={DIVIDER_CENTER}
-					disabled={disabled || Boolean(row.diagnostic) || (first ? !onMoveClip : !onPlaceCueStart)}
-					onPreview={(frame) => {
-						if (first && onPreviewMoveClip) onPreviewMoveClip(clip.id, frame);
-						else onPreviewTrigger(frame);
-					}}
-					onCommit={(frame) => placeRow(row, first, frame)}
+					disabled={disabled || Boolean(row.diagnostic) || !onPlaceCueStart}
+					onPreview={onPreviewTrigger}
+					onCommit={(frame) => placeRow(row, false, frame)}
 					className="cue-divider-grip"
 				/>
 			</span>;

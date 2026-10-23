@@ -40,7 +40,7 @@ export function ClipEndHandle({
 				disabled={!onCommit}
 				onCommit={(frame) => onCommit?.(frame)}
 				onPreview={onPreview}
-				className="cue-divider-grip timecode-clip-end-grab expanded"
+				className="cue-divider-grip cue-end-grip timecode-clip-end-grab expanded"
 			/>
 		</span>
 	);

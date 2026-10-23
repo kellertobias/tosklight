@@ -38,7 +38,7 @@ export function CueListClipStatus({
 		status.state === "active"
 			? "Executing"
 			: status.state === "armed"
-				? "Armed"
+				? "Ready"
 				: status.state === "held"
 					? "Held"
 					: status.state === "unable"
@@ -47,6 +47,7 @@ export function CueListClipStatus({
 	return (
 		<span
 			className={`timecode-cue-clip-status ${status.state}`}
+			title={status.state === "armed" ? "Ready to run when Timecode reaches this clip" : undefined}
 			role={status.state === "unable" ? "status" : undefined}
 		>
 			<strong>{label}</strong>
