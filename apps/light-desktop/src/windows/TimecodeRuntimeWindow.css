@@ -328,28 +328,39 @@
 	cursor: ew-resize;
 	touch-action: none;
 }
-.timecode-timeline-overview-handle::after {
+/* The same rounded grip as a Cue boundary, clipped to its inward half. */
+.timecode-timeline-overview-handle { overflow: hidden; }
+.timecode-timeline-overview-handle::before {
+	content: "";
 	position: absolute;
 	top: 0;
-	bottom: 0;
-	left: 7px;
-	width: 2px;
-	background: #58d4ef;
+	width: 20px;
+	height: 24px;
+	border: 1px solid #58d4ef;
+	border-radius: 4px;
+	background: #242c36;
+	box-shadow: 0 1px 2px #0008;
+}
+.timecode-timeline-overview-handle::after {
 	content: "";
+	position: absolute;
+	top: 5px;
+	width: 2px;
+	height: 14px;
+	border-radius: 1px;
+	background: #b8f3ff;
 }
-.timecode-timeline-overview-handle.handle-start {
-	left: -1px;
+.timecode-timeline-overview-handle:hover::before,
+.timecode-timeline-overview:focus-visible .timecode-timeline-overview-handle::before {
+	border-color: #b8f3ff;
+	background: #39424e;
 }
-.timecode-timeline-overview-handle.handle-start::after {
-	left: 0;
-}
-.timecode-timeline-overview-handle.handle-end {
-	right: -1px;
-}
-.timecode-timeline-overview-handle.handle-end::after {
-	right: 0;
-	left: auto;
-}
+.timecode-timeline-overview-handle.handle-start { left: -1px; }
+.timecode-timeline-overview-handle.handle-start::before { left: -10px; }
+.timecode-timeline-overview-handle.handle-start::after { left: 4px; }
+.timecode-timeline-overview-handle.handle-end { right: -1px; }
+.timecode-timeline-overview-handle.handle-end::before { right: -10px; }
+.timecode-timeline-overview-handle.handle-end::after { right: 4px; }
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
 	min-height: 0;

@@ -2105,6 +2105,24 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await page.mouse.wheel(100_000, 0);
 		await expect(editor.locator(".timecode-ruler-final-tick")).toBeInViewport();
 		await assertOverviewMainAxis(editor);
+		await fitUsingOverview(page, editor);
+		const cdp = await page.context().newCDPSession(page);
+		try {
+			for (const [edgeName, fraction] of [["end", 0.6], ["start", 0.1]] as const) {
+				const grip = overview.getByRole("separator", { name: `Resize timeline overview from ${edgeName}`, exact: true });
+				const box = (await grip.boundingBox())!;
+				const x = box.x + box.width / 2, y = box.y + box.height / 2;
+				expect(await grip.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), { x, y })).toBe(true);
+				await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y, id: 1 }] });
+				for (let step = 1; step <= 6; step++) {
+					await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x + (maximumTrack.x + maximumTrack.width * fraction - x) * step / 6, y, id: 1 }] });
+				}
+				await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+				await assertOverviewMainAxis(editor);
+			}
+		} finally { await cdp.detach(); }
+		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-grips-detail.png") });
 	});
 
 	test("TIMECODE-001 @ui › pressing keyframes and Cue corners preserves their geometry and never saves a tap", async ({
