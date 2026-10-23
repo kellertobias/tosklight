@@ -2026,6 +2026,10 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 	});
 
 	test("TIMECODE-001 @ui › overview positions and viewport bounds match the main time axis through resize, sidebar, zoom and pan", async ({ api, show, desk, page, request }, testInfo) => {
+		// This matrix performs several full-width, multi-step mouse drags followed
+		// by real touch drags. Linux CI spends several seconds painting each drag.
+		// Keep every geometry assertion strict while allowing the sequence to finish.
+		test.setTimeout(60_000);
 		await page.setViewportSize({ width: 1280, height: 1000 });
 		const { rig, speedLanes } = await seedAudioEditor(api, show.id, request, ["Movement"]);
 		await patchTimecode(api, show.id, rig.definition.id, { markers: [{ id: crypto.randomUUID(), frame: 440, name: "Chorus", color: "#ffffff" }] });
