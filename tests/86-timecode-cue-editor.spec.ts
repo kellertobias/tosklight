@@ -2148,6 +2148,17 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		await page.mouse.move(maximumTrack.x + 1, maximumHandle.y + maximumHandle.height / 2, { steps: 8 });
 		await page.mouse.up();
 		await expect.poll(async () => Number(await canvas.getAttribute("data-pixels-per-frame"))).toBeCloseTo(17.5, 8);
+		// At maximum zoom a narrow overview window must still expose both resize
+		// centers below the top move grip, even though that grip is 44px wide.
+		await page.setViewportSize({ width: 1280, height: 1000 });
+		await expect.poll(() => viewport.evaluate(node => node.clientWidth)).toBeLessThan(1200);
+		await expect.poll(() => overview.locator(".timecode-timeline-overview-visible").evaluate(node => node.getBoundingClientRect().width)).toBeLessThan(44);
+		for (const edgeName of ["start", "end"]) {
+			const grip = overview.getByRole("separator", { name: `Resize timeline overview from ${edgeName}`, exact: true });
+			const box = (await grip.boundingBox())!;
+			const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+			expect(await grip.evaluate((node, position) => node.contains(document.elementFromPoint(position.x, position.y)), point)).toBe(true);
+		}
 		const finalBounds = (await viewport.boundingBox())!;
 		await page.mouse.move(finalBounds.x + finalBounds.width / 2, finalBounds.y + 100);
 		await page.mouse.wheel(100_000, 0);
@@ -2199,8 +2210,8 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		const move = overview.getByRole("button", { name: "Move visible timeline range", exact: true });
 		const moveBox = (await move.boundingBox())!;
 		const visibleBox = (await overview.locator(".timecode-timeline-overview-visible").boundingBox())!;
-		expect(moveBox.width).toBeGreaterThanOrEqual(44);
-		expect(moveBox.height).toBeGreaterThanOrEqual(22);
+		expect(moveBox.width).toBe(44);
+		expect(moveBox.height).toBe(22);
 		expect(Math.abs(moveBox.y - visibleBox.y)).toBeLessThanOrEqual(1);
 		const moveSymbol = (await move.locator("span").boundingBox())!;
 		expect(Math.abs(moveSymbol.x + moveSymbol.width / 2 - visibleBox.x - visibleBox.width / 2)).toBeLessThanOrEqual(1);

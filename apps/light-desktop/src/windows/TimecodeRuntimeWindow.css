@@ -360,9 +360,9 @@
 .timecode-timeline-overview-handle.handle-end { right: -1px; }
 .timecode-timeline-overview-handle.handle-end::before { right: -10px; }
 .timecode-timeline-overview-handle.handle-end::after { right: 4px; }
-.timecode-timeline-editor .timecode-timeline-overview-move,
-.timecode-timeline-editor .timecode-timeline-overview-move:hover,
-.timecode-timeline-editor .timecode-timeline-overview-move:active {
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move,
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move:hover,
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move:active {
 	position: absolute;
 	z-index: 4;
 	top: -1px;
