@@ -113,6 +113,10 @@ impl GpuPassTimings {
 
 /// Timestamp queries for one sampled frame, and the asynchronous readback that follows.
 pub struct GpuTimer {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    frame_done: Arc<AtomicBool>,
+    completion_requested: bool,
     queries: wgpu::QuerySet,
     resolved: wgpu::Buffer,
     readback: wgpu::Buffer,
@@ -154,6 +158,10 @@ impl GpuTimer {
             mapped_at_creation: false,
         });
         Some(Self {
+            device: device.clone(),
+            queue: queue.clone(),
+            frame_done: Arc::new(AtomicBool::new(false)),
+            completion_requested: false,
             queries,
             resolved,
             readback,
@@ -213,8 +221,9 @@ impl GpuTimer {
         })
     }
 
-    /// Resolve only query pairs that were written. This is required for optional passes.
-    pub(crate) fn resolve(&mut self, encoder: &mut wgpu::CommandEncoder, context: TimingContext) {
+    /// Capture ownership now; resolve only after the render submission has completed.
+    /// Metal can otherwise expose a previous frame's end counter alongside the current start.
+    pub(crate) fn resolve(&mut self, _encoder: &mut wgpu::CommandEncoder, context: TimingContext) {
         if self.ownership.in_flight() || self.is_broken() {
             return;
         }
@@ -222,8 +231,34 @@ impl GpuTimer {
         if mask == 0 {
             return;
         }
+        self.readback_mask = mask;
+        self.frame_done.store(false, Ordering::Release);
+        self.completion_requested = false;
+        self.ownership.submitted(context);
+    }
+
+    /// Called after the frame submit. Register exactly one asynchronous completion notification.
+    pub fn request_readback(&mut self) {
+        if !self.ownership.in_flight() || self.completion_requested || self.is_broken() {
+            return;
+        }
+        self.completion_requested = true;
+        let done = self.frame_done.clone();
+        self.queue
+            .on_submitted_work_done(move || done.store(true, Ordering::Release));
+    }
+
+    fn resolve_completed_frame(&mut self) {
+        if !self.frame_done.swap(false, Ordering::Acquire) || !self.ownership.request_mapping() {
+            return;
+        }
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("completed viz timestamp resolve"),
+            });
         for pass in GpuPass::ALL {
-            if mask & (1 << pass.index()) == 0 {
+            if self.readback_mask & (1 << pass.index()) == 0 {
                 continue;
             }
             let (beginning, end) = pass.queries();
@@ -243,14 +278,7 @@ impl GpuTimer {
                 16,
             );
         }
-        self.readback_mask = mask;
-        self.ownership.submitted(context);
-    }
-
-    pub fn request_readback(&mut self) {
-        if !self.ownership.request_mapping() {
-            return;
-        }
+        self.queue.submit(Some(encoder.finish()));
         let ready = self.ready.clone();
         let broken = self.broken.clone();
         self.readback
@@ -268,6 +296,7 @@ impl GpuTimer {
             self.last = GpuPassTimings::default();
             return;
         }
+        self.resolve_completed_frame();
         if !self.ownership.in_flight() || !self.ready.swap(false, Ordering::Acquire) {
             return;
         }
@@ -320,8 +349,17 @@ fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
                 bytes.get(start..start + 8)?.try_into().ok()?,
             ))
         };
+        #[cfg(test)]
+        if std::env::var_os("TOSKLIGHT_GPU_TIMING_DIAGNOSTIC").is_some() {
+            eprintln!(
+                "raw timestamp mask={mask} pair=({beginning},{end}) start={:?} end={:?}",
+                tick(beginning),
+                tick(end)
+            );
+        }
         let Some(ticks) = tick(end)
             .zip(tick(beginning))
+            .filter(|(end, start)| *end != u64::MAX && *start != u64::MAX)
             .and_then(|(end, start)| end.checked_sub(start))
         else {
             // A partial/invalid pair cannot become a cheap zero or incomplete frame total.
@@ -342,6 +380,8 @@ mod tests {
 
     #[test]
     fn malformed_or_reversed_pairs_are_unavailable_instead_of_zero() {
+        let unavailable = [u64::MAX.to_le_bytes(), u64::MAX.to_le_bytes()].concat();
+        assert_eq!(decode_timings(&unavailable, 1, 1.0).total_micros(), None);
         let reversed = [350_u64.to_le_bytes(), 100_u64.to_le_bytes()].concat();
         assert_eq!(decode_timings(&reversed, 1, 1.0).total_micros(), None);
         assert_eq!(decode_timings(&reversed[..8], 1, 1.0).total_micros(), None);

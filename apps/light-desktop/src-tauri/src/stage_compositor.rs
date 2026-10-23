@@ -495,15 +495,15 @@ impl StageCompositor {
             measurement.submission_id = measurement.submission_id.saturating_add(1);
             measurement.stats.submissions += 1;
             if let Some(timer) = measurement.timer.as_mut() {
-                readback = timer.resolve(&mut encoder, measurement.submission_id, scope);
+                readback = timer.resolve(measurement.submission_id, scope);
             }
         }
         self.queue.submit(Some(encoder.finish()));
         if readback
             && let Some(timer) = self
                 .measurement
-                .as_ref()
-                .and_then(|measurement| measurement.timer.as_ref())
+                .as_mut()
+                .and_then(|measurement| measurement.timer.as_mut())
         {
             timer.request_readback();
         }

@@ -1,5 +1,6 @@
 mod display;
 mod layout;
+mod picture;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -153,4 +154,12 @@ fn report_path() -> Option<PathBuf> {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
+}
+
+/// Only the private fixed baseline may request a photorealistic Control test pane.
+pub(crate) fn baseline_picture(message: &mut viz_helper::protocol::ToHelper) -> Result<(), String> {
+    if report_path().is_some() && std::env::var_os(layout::LAYOUT_ENV).is_some() {
+        picture::apply(message, &layout::BaselineOptions::from_env()?);
+    }
+    Ok(())
 }

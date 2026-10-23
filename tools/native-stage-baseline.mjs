@@ -9,7 +9,7 @@ export function readNativeBaselineConfig(env) {
   if (!["draft", "standard", "high", "ultra"].includes(quality)) throw new Error("Invalid baseline quality");
   if (!["full_3d", "lines_3d"].includes(view)) throw new Error("Invalid baseline view");
   if (!["natural", "60"].includes(helperHz)) throw new Error("Matched baseline helper Hz must be 60 or absent");
-  return { layout, quality, view, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
+  return { layout, quality, view, atmosphereAmount: view === "full_3d" ? 0.35 : 0, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
     laneWidth: 1920, laneHeight: layout === "single" ? 1080 : 540,
     display: env.LIGHT_STAGE_PACKAGED_BENCH_DISPLAY ?? "internal" };
 }

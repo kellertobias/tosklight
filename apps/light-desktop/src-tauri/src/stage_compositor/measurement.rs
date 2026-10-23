@@ -117,19 +117,32 @@ impl Measurement {
 }
 
 pub(super) struct GpuTiming {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
     queries: wgpu::QuerySet,
     resolved: wgpu::Buffer,
     readback: wgpu::Buffer,
     period: f64,
-    // 0 = pending, 1 = mapped, 2 = failed. At most one map is outstanding.
+    // 0 = waiting, 1 = frame GPU work complete, 2 = mapped, 3 = mapping failed.
     ready: Arc<AtomicU8>,
+    phase: ReadbackPhase,
     pending: Option<CompositorGpuSample>,
     next_sample_id: u64,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ReadbackPhase {
+    Idle,
+    AwaitingSubmission,
+    AwaitingFrame,
+    AwaitingMap,
 }
 
 impl GpuTiming {
     fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         Self {
+            device: device.clone(),
+            queue: queue.clone(),
             queries: device.create_query_set(&wgpu::QuerySetDescriptor {
                 label: Some("stage compositor timestamps"),
                 ty: wgpu::QueryType::Timestamp,
@@ -149,6 +162,7 @@ impl GpuTiming {
             }),
             period: f64::from(queue.get_timestamp_period()),
             ready: Arc::new(AtomicU8::new(0)),
+            phase: ReadbackPhase::Idle,
             pending: None,
             next_sample_id: 0,
         }
@@ -164,17 +178,14 @@ impl GpuTiming {
             })
     }
 
-    pub fn resolve(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        submission_id: u64,
-        scope: CompositorScope,
-    ) -> bool {
+    pub fn resolve(&mut self, submission_id: u64, scope: CompositorScope) -> bool {
         if self.pending.is_some() {
             return false;
         }
-        encoder.resolve_query_set(&self.queries, 0..2, &self.resolved, 0);
-        encoder.copy_buffer_to_buffer(&self.resolved, 0, &self.readback, 0, 16);
+        // Reserve this query pair and its immutable identity only. Metal timestamp counters
+        // must not be resolved in the command buffer that is still writing those counters.
+        self.ready.store(0, Ordering::Release);
+        self.phase = ReadbackPhase::AwaitingSubmission;
         self.next_sample_id = self.next_sample_id.saturating_add(1);
         self.pending = Some(CompositorGpuSample {
             sample_id: self.next_sample_id,
@@ -188,12 +199,34 @@ impl GpuTiming {
         true
     }
 
-    pub fn request_readback(&self) {
+    /// Called exactly once after the render submission. This callback never waits or maps.
+    pub fn request_readback(&mut self) {
+        if self.phase != ReadbackPhase::AwaitingSubmission {
+            return;
+        }
+        self.phase = ReadbackPhase::AwaitingFrame;
+        let ready = self.ready.clone();
+        self.queue.on_submitted_work_done(move || {
+            ready.store(1, Ordering::Release);
+        });
+    }
+
+    /// Encode the resolve in a fresh command buffer after the frame's completion callback.
+    fn begin_mapping(&mut self) {
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("stage compositor deferred timestamp resolve"),
+            });
+        encoder.resolve_query_set(&self.queries, 0..2, &self.resolved, 0);
+        encoder.copy_buffer_to_buffer(&self.resolved, 0, &self.readback, 0, 16);
+        self.queue.submit(Some(encoder.finish()));
+        self.phase = ReadbackPhase::AwaitingMap;
         let ready = self.ready.clone();
         self.readback
             .slice(..)
             .map_async(wgpu::MapMode::Read, move |result| {
-                ready.store(if result.is_ok() { 1 } else { 2 }, Ordering::Release);
+                ready.store(if result.is_ok() { 2 } else { 3 }, Ordering::Release);
             });
     }
 
@@ -203,7 +236,11 @@ impl GpuTiming {
         }
         match self.ready.swap(0, Ordering::Acquire) {
             0 => Ok(None),
-            1 => {
+            1 if self.phase == ReadbackPhase::AwaitingFrame => {
+                self.begin_mapping();
+                Ok(None)
+            }
+            2 if self.phase == ReadbackPhase::AwaitingMap => {
                 let decoded = {
                     let slice = self.readback.slice(..);
                     let bytes = slice.get_mapped_range().map_err(|_| ())?;
@@ -211,6 +248,7 @@ impl GpuTiming {
                 };
                 self.readback.unmap();
                 let mut sample = self.pending.take().ok_or(())?;
+                self.phase = ReadbackPhase::Idle;
                 let Some(micros) = decoded else {
                     *invalid = invalid.saturating_add(1);
                     return Ok(None);
@@ -229,6 +267,9 @@ fn decode_micros(bytes: &[u8], period: f64) -> Option<f64> {
     }
     let start = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
     let end = u64::from_le_bytes(bytes.get(8..16)?.try_into().ok()?);
+    if start == u64::MAX || end == u64::MAX {
+        return None;
+    }
     let micros = end.checked_sub(start)? as f64 * period / 1000.0;
     (micros.is_finite() && micros >= 0.0).then_some(micros)
 }
@@ -244,6 +285,8 @@ mod tests {
         assert_eq!(decode_micros(&bytes[..8], 2.0), None);
         assert_eq!(decode_micros(&bytes, f64::NAN), None);
         assert_eq!(decode_micros(&bytes, 0.0), None);
+        let unavailable = [u64::MAX.to_le_bytes(), u64::MAX.to_le_bytes()].concat();
+        assert_eq!(decode_micros(&unavailable, 1.0), None);
         let reversed = [350_u64.to_le_bytes(), 100_u64.to_le_bytes()].concat();
         assert_eq!(decode_micros(&reversed, 1.0), None);
     }

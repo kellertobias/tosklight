@@ -442,7 +442,9 @@ impl StagePane {
     pub(crate) fn send_picture(&self, picture: Picture) -> Result<(), String> {
         let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         if let Some(running) = guard.as_mut() {
-            running.send(&picture.into_helper());
+            let mut instruction = picture.into_helper();
+            crate::packaged_benchmark::baseline_picture(&mut instruction)?;
+            running.send(&instruction);
         }
         Ok(())
     }

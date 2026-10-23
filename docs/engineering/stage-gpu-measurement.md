@@ -25,7 +25,7 @@ LIGHT_STAGE_PACKAGED_BENCH_DISPLAY=internal \
 node tools/run-packaged-stage-benchmark.mjs 30 canonical-demo
 ```
 
-`single` uses one 1920×1080 physical drawable. `dual` uses Live and Follow Preload at 1920×540 each, keeping total physical pixel area equal. `full_3d` and `lines_3d` choose the actual renderer mode only inside the benchmark subtree. Draft, Standard, High and Ultra use their actual renderer settings. The ordinary Control path retains its wireframe/Draft contract.
+`single` uses one 1920×1080 physical drawable. `dual` uses Live and Follow Preload at 1920×540 each, keeping total physical pixel area equal. `full_3d` and `lines_3d` choose the actual renderer mode only inside the benchmark subtree. Draft, Standard, High and Ultra use their actual renderer settings. The full-render benchmark uses a fixed haze amount of 0.35; Lines uses zero. This override is enforced only with an absolute benchmark report path plus validated fixed layout. The ordinary Control path retains its wireframe/Draft contract.
 
 Run both `canonical-demo` and `stage-500`; set `LIGHT_PACKAGED_STAGE_DYNAMICS=1` for animated stage-500 (19 universes). Record the actual inventory rather than assuming an older count. Retain camera/look, DPR, physical dimensions, transport, GPU/backend, OS, bundle hash, other load, monitor refresh and thermal state with each result.
 

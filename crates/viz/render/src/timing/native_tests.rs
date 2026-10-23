@@ -1,6 +1,8 @@
 //! A real GPU exercises mapping reuse and provenance across actual render submissions.
 use crate::Renderer;
-use viz_scene::{RenderQuality, Scene, SceneValues, ViewConfiguration};
+use viz_scene::{
+    RenderQuality, Scene, SceneValues, SceneryKind, SceneryObject, ViewConfiguration, ViewMode,
+};
 
 #[test]
 fn native_timestamp_readbacks_continue_and_do_not_cross_quality_boundaries() {
@@ -8,12 +10,23 @@ fn native_timestamp_readbacks_continue_and_do_not_cross_quality_boundaries() {
         eprintln!("GPU unavailable: native timestamp ownership proof not run");
         return;
     };
-    let scene = Scene {
+    let mut scene = Scene {
         revision: 1,
         ..Default::default()
     };
+    // Metal may return its counter-error sentinel for empty passes. Exercise real triangles.
+    scene.scenery.push(SceneryObject {
+        kind: SceneryKind::Floor,
+        size: glam::Vec3::new(4.0, 0.1, 4.0),
+        colour: [0.4; 3],
+        ..Default::default()
+    });
+    scene.recompute_bounds();
     let values = SceneValues::default();
-    let mut view = ViewConfiguration::default();
+    let mut view = ViewConfiguration {
+        mode: ViewMode::Lines3d,
+        ..Default::default()
+    };
     let overlay = crate::Overlay::default();
     let mut ids = std::collections::HashSet::new();
     for frame in 0..8 {
@@ -44,10 +57,20 @@ fn native_timestamp_readbacks_continue_and_do_not_cross_quality_boundaries() {
         !renderer.stats().gpu_sample_matches_frame,
         "last HQ timing must not become Draft timing"
     );
-    renderer
-        .capture(&scene, &values, &view, &overlay, 10.0)
-        .expect("next Draft frame");
-    assert!(renderer.stats().gpu_sample_matches_frame);
+    let mut draft_sample = false;
+    for frame in 10..30 {
+        renderer
+            .capture(&scene, &values, &view, &overlay, frame as f32)
+            .expect("next Draft frame");
+        if renderer.stats().gpu_sample_matches_frame && renderer.stats().gpu_sample_id.is_some() {
+            draft_sample = true;
+            break;
+        }
+    }
+    assert!(
+        draft_sample,
+        "a completed Draft sample eventually becomes available without crediting old HQ timing"
+    );
     eprintln!(
         "Native GPU timestamp ownership verified: {} distinct samples; quality boundary rejected",
         ids.len()

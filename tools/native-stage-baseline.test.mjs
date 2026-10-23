@@ -5,7 +5,7 @@ import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage
 test("baseline configuration preserves normal runs and declares fixed pixel budget", () => {
   assert.equal(readNativeBaselineConfig({}), null);
   assert.deepEqual(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual" }), {
-    layout: "dual", quality: "draft", view: "lines_3d", helperScheduling: "natural",
+    layout: "dual", quality: "draft", view: "lines_3d", atmosphereAmount: 0, helperScheduling: "natural",
     physicalPixelArea: 2073600, laneWidth: 1920, laneHeight: 540, display: "internal" });
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "all" }));
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single", LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ: "120" }));
