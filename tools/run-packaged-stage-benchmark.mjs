@@ -384,7 +384,7 @@ await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
 await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
 console.log(`Updated ${canonicalReportPath}`);
-if (!result.acceptanceGateEnforced) {
+if (!(fixedBaseline ? result.baselineMeasurementReady : result.acceptanceGateEnforced)) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
 	process.exitCode = 1;

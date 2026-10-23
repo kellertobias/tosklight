@@ -13,7 +13,7 @@ test("baseline configuration preserves normal runs and declares fixed pixel budg
 
 test("successful baseline observations cannot assert displayed FPS or savings", () => {
   const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single" });
-  const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 1, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{}], totals: {} } } } };
+  const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 1, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{ samples: 1, scope: ["live", "one", 1, { sourceSize: [1920, 1080] }] }], totals: {} } } } };
   const report = evaluateNativeBaseline(complete, { configuration });
   assert.equal(report.baselineMeasurementReady, true);
   assert.equal(report.acceptanceGateEnforced, false);
@@ -31,6 +31,6 @@ test("missing lane, pixel mismatch and telemetry loss fail the measurement gate"
 
 test("submission-only telemetry cannot complete a GPU baseline", () => {
   const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single" });
-  const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 0, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{}], totals: {} } } } };
+  const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 0, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{ samples: 1, scope: ["live", "one", 1, { sourceSize: [1920, 1080] }] }], totals: {} } } } };
   assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
 });

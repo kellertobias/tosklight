@@ -25,11 +25,14 @@ export function evaluateNativeBaseline(complete, metadata) {
   for (const followPreload of configuration.layout === "dual" ? [false, true] : [false])
     if (!matches.some((row) => row.followPreload === followPreload && row.gpuSampleCount > 0)) failures.push(`No accepted helper GPU samples for ${followPreload ? "Preload" : "Live"} lane`);
   if (configuration.layout === "dual" && new Set(matches.map((row) => row.paneId)).size < 2) failures.push("Dual layout did not observe both lanes");
-  if (!observations?.compositor?.rows?.length) failures.push("No independent compositor GPU samples");
+  const compositorRows = observations?.compositor?.rows ?? [];
+  for (const paneId of new Set(matches.map((row) => row.paneId)))
+    if (!compositorRows.some((row) => row.samples > 0 && row.scope?.[0] === paneId && row.scope?.[3]?.sourceSize?.[0] === configuration.laneWidth && row.scope?.[3]?.sourceSize?.[1] === configuration.laneHeight)) failures.push(`No compositor GPU samples for ready source in ${paneId}`);
+  if (!compositorRows.length) failures.push("No independent compositor GPU samples");
   for (const counter of ["attachmentOverflow", "rowOverflow", "invalidFrames", "invalidGpuSamples"])
     if (observations?.counts?.[counter] > 0) failures.push(`Helper observation ${counter}`);
   const compositor = observations?.compositor;
-  if (compositor?.overflow || compositor?.invalid || compositor?.totals?.gpuSampleOverflow || compositor?.totals?.gpuReadbackErrors) failures.push("Compositor observation loss or error");
+  if (compositor?.overflow || compositor?.invalid || compositor?.totals?.gpuSampleOverflow || compositor?.totals?.gpuReadbackErrors || compositor?.totals?.errors) failures.push("Compositor observation loss or error");
   return { schemaVersion: 1, kind: "native-stage-before-optimization-measurement", ...metadata,
     measurementSurface: "packaged-tauri-native-stage", failures,
     baselineMeasurementReady: failures.length === 0,
