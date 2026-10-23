@@ -166,6 +166,7 @@ pub struct CapturedImage {
 /// What one presented frame cost and how far behind the newest input it is.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FrameStats {
+    /// Elapsed render wall time, including acquire; not executing-thread CPU time.
     pub cpu_micros: u64,
     /// How long this frame waited for the display to release a drawable. The wait happens on the
     /// caller's thread, so an application that also handles input needs to know about it.
@@ -184,6 +185,10 @@ pub struct FrameStats {
     /// What the GPU itself spent on a recent frame, where the adapter can time one. This is the
     /// number that says whether there is headroom under a display-limited frame rate.
     pub gpu_micros: Option<u64>,
+    /// Identity of the most recent completed asynchronous timestamp sample.
+    pub gpu_sample_id: Option<u64>,
+    /// Whether that sample belongs to this scene/view/quality/size generation.
+    pub gpu_sample_matches_frame: bool,
     /// Named pass costs from the same asynchronously sampled frame as `gpu_micros`.
     pub gpu_passes: crate::timing::GpuPassTimings,
     /// Effective Ultra controls after the frame-budget controller is applied.
@@ -294,6 +299,7 @@ pub struct Renderer {
     timer: Option<crate::timing::GpuTimer>,
     ultra_budget: UltraBudget,
     last_timing_sample: u64,
+    timing_context: Option<crate::timing::TimingContext>,
     crowd_amount: f32,
 }
 
@@ -464,6 +470,7 @@ impl Renderer {
             timer,
             ultra_budget: UltraBudget::default(),
             last_timing_sample: 0,
+            timing_context: None,
             crowd_amount: 1.0,
         })
     }

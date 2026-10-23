@@ -4,6 +4,12 @@
 //! the presentation path waits for the GPU; while one readback is in flight, frames simply run
 //! without timing queries and keep the most recent completed measurement.
 
+#[cfg(test)]
+mod native_tests;
+mod provenance;
+use provenance::ReadbackOwnership;
+pub(crate) use provenance::TimingContext;
+
 use std::cell::Cell;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -113,7 +119,7 @@ pub struct GpuTimer {
     period_nanos: f32,
     ready: Arc<AtomicBool>,
     broken: Arc<AtomicBool>,
-    in_flight: bool,
+    ownership: ReadbackOwnership,
     /// Passes written into the command encoder currently being built.
     active_mask: Cell<u8>,
     /// Passes in the mapping currently in flight.
@@ -154,7 +160,7 @@ impl GpuTimer {
             period_nanos: queue.get_timestamp_period(),
             ready: Arc::new(AtomicBool::new(false)),
             broken: Arc::new(AtomicBool::new(false)),
-            in_flight: false,
+            ownership: ReadbackOwnership::default(),
             active_mask: Cell::new(0),
             readback_mask: 0,
             last: GpuPassTimings::default(),
@@ -180,7 +186,7 @@ impl GpuTimer {
         beginning: bool,
         end: bool,
     ) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        if self.in_flight || self.is_broken() {
+        if self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -194,7 +200,7 @@ impl GpuTimer {
     }
 
     pub fn compute_writes(&self, pass: GpuPass) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        if self.in_flight || self.is_broken() {
+        if self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -208,8 +214,8 @@ impl GpuTimer {
     }
 
     /// Resolve only query pairs that were written. This is required for optional passes.
-    pub fn resolve(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        if self.in_flight || self.is_broken() {
+    pub(crate) fn resolve(&mut self, encoder: &mut wgpu::CommandEncoder, context: TimingContext) {
+        if self.ownership.in_flight() || self.is_broken() {
             return;
         }
         let mask = self.active_mask.replace(0);
@@ -238,11 +244,11 @@ impl GpuTimer {
             );
         }
         self.readback_mask = mask;
-        self.in_flight = true;
+        self.ownership.submitted(context);
     }
 
-    pub fn request_readback(&self) {
-        if !self.in_flight {
+    pub fn request_readback(&mut self) {
+        if !self.ownership.request_mapping() {
             return;
         }
         let ready = self.ready.clone();
@@ -258,11 +264,11 @@ impl GpuTimer {
     /// Take a completed measurement without waiting for it.
     pub fn collect(&mut self) {
         if self.is_broken() {
-            self.in_flight = false;
+            self.ownership.failed();
             self.last = GpuPassTimings::default();
             return;
         }
-        if !self.in_flight || !self.ready.swap(false, Ordering::Acquire) {
+        if !self.ownership.in_flight() || !self.ready.swap(false, Ordering::Acquire) {
             return;
         }
         {
@@ -270,15 +276,23 @@ impl GpuTimer {
             if let Ok(mapped) = slice.get_mapped_range() {
                 self.last = decode_timings(&mapped, self.readback_mask, self.period_nanos);
                 self.sample_id = self.sample_id.wrapping_add(1);
+                self.ownership.completed();
+            } else {
+                self.ownership.failed();
+                self.last = GpuPassTimings::default();
+                self.broken.store(true, Ordering::Release);
             }
         }
         self.readback.unmap();
-        self.in_flight = false;
         self.readback_mask = 0;
     }
 
     pub fn timings(&self) -> GpuPassTimings {
         self.last
+    }
+
+    pub(crate) fn sample_matches(&self, context: TimingContext) -> bool {
+        self.ownership.sample_matches(context)
     }
 
     pub fn sample_id(&self) -> u64 {

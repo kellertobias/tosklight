@@ -64,19 +64,8 @@ impl Renderer {
         if let Some(timer) = self.timer.as_mut() {
             timer.collect();
         }
-        if let Some((sample_id, gpu_micros)) = self.timer.as_ref().and_then(|timer| {
-            timer
-                .timings()
-                .total_micros()
-                .map(|micros| (timer.sample_id(), micros))
-        }) && sample_id != self.last_timing_sample
-        {
-            self.last_timing_sample = sample_id;
-            if view.quality == viz_scene::RenderQuality::Ultra {
-                self.ultra_budget.observe(gpu_micros);
-            }
-        }
         let plan = self.plan_frame(scene, values, view);
+        let timing_context = self.observe_gpu_sample(scene, view);
         let device = self.gpu.device.clone();
         let queue = self.gpu.queue.clone();
 
@@ -137,10 +126,10 @@ impl Renderer {
         }
 
         if let Some(timer) = self.timer.as_mut() {
-            timer.resolve(&mut encoder);
+            timer.resolve(&mut encoder, timing_context);
         }
         queue.submit(Some(encoder.finish()));
-        if let Some(timer) = self.timer.as_ref() {
+        if let Some(timer) = self.timer.as_mut() {
             timer.request_readback();
         }
         if let Some(frame) = frame {
@@ -177,6 +166,15 @@ impl Renderer {
             degraded: quality_reduction.is_active(),
             quality_reduction,
             gpu_micros: gpu_passes.total_micros(),
+            gpu_sample_id: self
+                .timer
+                .as_ref()
+                .filter(|t| t.timings().total_micros().is_some())
+                .map(|t| t.sample_id()),
+            gpu_sample_matches_frame: self
+                .timer
+                .as_ref()
+                .is_some_and(|t| t.sample_matches(timing_context)),
             gpu_passes,
             volumetric_steps: plan.volumetric_steps,
             shadow_budget: plan.shadow_budget,
@@ -185,6 +183,37 @@ impl Renderer {
             crowd_drawn: self.frame.crowd_drawn,
         };
         Ok(self.stats)
+    }
+
+    /// Attribute completed GPU work to the scope which submitted it, never to a new view.
+    fn observe_gpu_sample(
+        &mut self,
+        scene: &Scene,
+        view: &ViewConfiguration,
+    ) -> crate::timing::TimingContext {
+        let context = crate::timing::TimingContext {
+            scene_revision: scene.revision,
+            show_id: scene.show_id.map(|id| id.as_u128()),
+            mode: view.mode,
+            quality: view.quality,
+            size: (self.gpu.config.width, self.gpu.config.height),
+            render_size: (self.targets.width, self.targets.height),
+            generation: 0,
+        }
+        .following(self.timing_context);
+        self.timing_context = Some(context);
+        if let Some(timer) = self.timer.as_ref()
+            && timer.sample_id() != self.last_timing_sample
+        {
+            self.last_timing_sample = timer.sample_id();
+            if timer.sample_matches(context)
+                && view.quality == viz_scene::RenderQuality::Ultra
+                && let Some(micros) = timer.timings().total_micros()
+            {
+                self.ultra_budget.observe(micros);
+            }
+        }
+        context
     }
 
     /// Everything about this frame that is decided before anything is uploaded or drawn.

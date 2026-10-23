@@ -24,8 +24,10 @@ impl Application {
         let Some(mut session) = self.session.take() else {
             return;
         };
-        self.draw_session(&mut session, event_loop, now, delta, width, height);
-        self.session = Some(session);
+        let benchmark = self.draw_session(&mut session, event_loop, now, delta, width, height);
+        if self.finish_benchmark_frame(session, benchmark) {
+            event_loop.exit();
+        }
     }
 
     fn draw_session(
@@ -36,7 +38,11 @@ impl Application {
         delta: f32,
         width: f32,
         height: f32,
-    ) {
+    ) -> Option<(
+        Measured,
+        Result<viz_render::FrameStats, RenderError>,
+        Instant,
+    )> {
         session.pump(now);
         self.adopt_connected_renderer_settings(session);
         self.pump_media(session);
@@ -125,10 +131,11 @@ impl Application {
         );
         session.values = values;
         let Some(result) = result else {
-            return;
+            return None;
         };
+        let observed = Instant::now();
         record_frame(
-            result,
+            &result,
             session,
             &mut self.stats,
             &mut self.presented_frames,
@@ -139,7 +146,7 @@ impl Application {
             event_loop.exit();
         }
         if self.options.benchmark_seconds.is_none() {
-            return;
+            return None;
         }
         let measured = Measured {
             latency: session.latency_percentiles(),
@@ -150,7 +157,7 @@ impl Application {
             inputs: session.diagnostics.inputs.clone(),
             scene_ready: !session.scene.emitters.is_empty(),
         };
-        self.record_benchmark_frame(&measured, delta, now, event_loop);
+        Some((measured, result, observed))
     }
 
     /// Hand the session's media surfaces to the decode workers and upload what they finished.
@@ -492,7 +499,7 @@ fn write_capture(
 /// A frame that could not be presented is not a failure of the show: a surface that is briefly
 /// unavailable is skipped, and only a real device error is reported as one.
 fn record_frame(
-    result: Result<viz_render::FrameStats, RenderError>,
+    result: &Result<viz_render::FrameStats, RenderError>,
     session: &mut Session,
     stats: &mut viz_render::FrameStats,
     presented_frames: &mut u64,
@@ -501,7 +508,7 @@ fn record_frame(
 ) {
     match result {
         Ok(frame) => {
-            *stats = frame;
+            *stats = *frame;
             *presented_frames += 1;
             let presented = Instant::now();
             session.record_presented(presented);
@@ -522,23 +529,29 @@ fn record_frame(
 }
 
 impl Application {
-    /// Fold this frame into the `--benchmark` run, and print the report when it is done.
-    fn record_benchmark_frame(
+    /// Restore authority before a benchmark changes views; drawing temporarily takes the session.
+    pub(super) fn finish_benchmark_frame(
         &mut self,
-        measured: &Measured,
-        delta: f32,
-        now: Instant,
-        event_loop: &ActiveEventLoop,
-    ) {
+        session: Session,
+        benchmark: Option<(
+            Measured,
+            Result<viz_render::FrameStats, RenderError>,
+            Instant,
+        )>,
+    ) -> bool {
+        self.session = Some(session);
+        let Some((measured, outcome, now)) = benchmark else {
+            return false;
+        };
         if self.benchmark.is_empty() {
-            // Give the connection a moment to load the scene before measuring.
             if now.duration_since(self.epoch).as_secs_f32() > 2.0 && measured.scene_ready {
                 self.start_benchmark();
             }
-        } else if self.record_benchmark(delta, measured) {
-            self.print_benchmark(measured);
-            event_loop.exit();
+        } else if self.record_benchmark(now, &outcome, &measured) {
+            self.print_benchmark(&measured);
+            return true;
         }
+        false
     }
 }
 

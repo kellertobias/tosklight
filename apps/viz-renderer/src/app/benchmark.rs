@@ -4,7 +4,12 @@
 //! view, so a regression can be told from a heavier scene. The report is printed in one place and
 //! read by build machines as well as by people.
 
+mod measurement;
+#[cfg(test)]
+mod tests;
+
 use super::{Application, Measured};
+use std::collections::HashSet;
 use std::time::Instant;
 use viz_scene::ViewMode;
 
@@ -23,10 +28,16 @@ const GPU_PASS_LABELS: [&str; 8] = [
 pub(super) struct BenchmarkSample {
     mode: ViewMode,
     frames: u64,
-    seconds: f32,
+    seconds: f64,
+    started: Instant,
+    last_presented: Option<Instant>,
+    attempted: u64,
+    skipped: u64,
+    failed: u64,
+    seen_gpu: HashSet<u64>,
+    rejected_gpu: u64,
     frame_millis: Vec<f32>,
-    /// CPU time inside the renderer, waiting for the display excluded, which shows the headroom
-    /// under a vsync-capped frame rate.
+    /// Elapsed renderer wall time excluding drawable acquire; thread CPU is not measured.
     cpu_millis: Vec<f32>,
     /// Time each frame spent waiting for the display to release a drawable. This is time the event
     /// loop cannot deliver input in, so it is reported beside the frame rate rather than hidden
@@ -51,11 +62,18 @@ pub(super) struct BenchmarkSample {
 }
 
 impl BenchmarkSample {
-    fn new(mode: ViewMode) -> Self {
+    fn new(mode: ViewMode, started: Instant) -> Self {
         Self {
             mode,
             frames: 0,
             seconds: 0.0,
+            started,
+            last_presented: None,
+            attempted: 0,
+            skipped: 0,
+            failed: 0,
+            seen_gpu: HashSet::new(),
+            rejected_gpu: 0,
             frame_millis: Vec::new(),
             cpu_millis: Vec::new(),
             wait_millis: Vec::new(),
@@ -105,60 +123,36 @@ impl Application {
     pub(super) fn start_benchmark(&mut self) {
         let mode = self.benchmark_views()[0];
         self.set_view_mode(mode);
-        self.benchmark.push(BenchmarkSample::new(mode));
         self.benchmark_view_started = Instant::now();
+        self.benchmark
+            .push(BenchmarkSample::new(mode, self.benchmark_view_started));
     }
 
     /// Fold this frame into the current benchmark sample and advance the view when its slice is
     /// over. Returns `true` when the whole run is finished.
-    pub(super) fn record_benchmark(&mut self, frame_seconds: f32, measured: &Measured) -> bool {
+    pub(super) fn record_benchmark(
+        &mut self,
+        observed: Instant,
+        outcome: &Result<viz_render::FrameStats, viz_render::RenderError>,
+        measured: &Measured,
+    ) -> bool {
         let Some(total) = self.options.benchmark_seconds else {
             return false;
         };
         let views = self.benchmark_views();
+        // Redraw events already queued when exit is requested must not reopen the closed window.
+        if self.benchmark_view_index >= views.len() {
+            return false;
+        }
         let slice = total / views.len() as f32;
         let (p50, p95, max) = measured.latency;
         let dmx_hz = measured.dmx_hz;
-        let degraded = self.stats.degraded;
-        let lights = self.stats.lights;
-        let wait_millis = self.stats.acquire_micros as f32 / 1000.0;
-        let cpu_millis = self
-            .stats
-            .cpu_micros
-            .saturating_sub(self.stats.acquire_micros) as f32
-            / 1000.0;
         if let Some(sample) = self.benchmark.last_mut() {
-            sample.frames += 1;
-            sample.seconds += frame_seconds;
-            sample.frame_millis.push(frame_seconds * 1000.0);
-            sample.cpu_millis.push(cpu_millis);
-            sample.wait_millis.push(wait_millis);
-            if let Some(micros) = self.stats.gpu_micros {
-                sample.gpu_millis.push(micros as f32 / 1000.0);
-            }
-            for (samples, micros) in sample
-                .gpu_pass_millis
-                .iter_mut()
-                .zip(self.stats.gpu_passes.as_array())
-            {
-                if let Some(micros) = micros {
-                    samples.push(micros as f32 / 1000.0);
-                }
-            }
+            sample.record_outcome(outcome, observed);
             sample.latency_p50 = p50;
             sample.latency_p95 = p95;
             sample.latency_max = max;
             sample.dmx_hz = dmx_hz;
-            sample.lights = sample.lights.max(lights);
-            if degraded {
-                sample.degraded_frames += 1;
-            }
-            sample.crowd_authored = sample.crowd_authored.max(self.stats.crowd_authored);
-            sample.crowd_drawn = sample.crowd_drawn.max(self.stats.crowd_drawn);
-            sample.particles_requested = sample
-                .particles_requested
-                .max(self.stats.particles_requested);
-            sample.particles_drawn = sample.particles_drawn.max(self.stats.particles_drawn);
         }
         if self.benchmark_view_started.elapsed().as_secs_f32() < slice {
             return false;
@@ -169,8 +163,9 @@ impl Application {
         }
         let mode = views[self.benchmark_view_index];
         self.set_view_mode(mode);
-        self.benchmark.push(BenchmarkSample::new(mode));
         self.benchmark_view_started = Instant::now();
+        self.benchmark
+            .push(BenchmarkSample::new(mode, self.benchmark_view_started));
         false
     }
 
@@ -188,7 +183,7 @@ impl Application {
             "fps",
             "p50 ms",
             "p95 ms",
-            "cpu p95",
+            "wall p95",
             "gpu p95",
             "wait p95",
             "lat p50",
@@ -204,7 +199,7 @@ impl Application {
                 "{:<16} {:>7} {:>8.1} {:>8.2} {:>8.2} {:>8.2} {:>8} {:>8.2} {:>9.1} {:>9.1} {:>9.1} {:>8.1} {:>7}",
                 sample.mode.label(),
                 sample.frames,
-                sample.frames as f32 / sample.seconds.max(1e-3),
+                sample.frames as f64 / sample.seconds.max(1e-3),
                 frame_p50,
                 frame_p95,
                 percentile(&sample.cpu_millis, 0.95),
@@ -221,6 +216,20 @@ impl Application {
                 sample.latency_max,
                 sample.dmx_hz,
                 sample.lights,
+            );
+            println!(
+                "  attempts: {}  presented: {}  skipped: {}  errors: {}  observed seconds: {:.3}  intervals: {}",
+                sample.attempted,
+                sample.frames,
+                sample.skipped,
+                sample.failed,
+                sample.seconds,
+                sample.frame_millis.len()
+            );
+            println!(
+                "  GPU unique samples: {}  rejected provenance: {}  thread CPU: unavailable; wall excludes acquire; presented means submitted to the presentation queue, not display-confirmed",
+                sample.gpu_millis.len(),
+                sample.rejected_gpu
             );
             let pass_p95 = GPU_PASS_LABELS
                 .iter()

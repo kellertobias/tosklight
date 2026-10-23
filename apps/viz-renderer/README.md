@@ -544,7 +544,8 @@ almost nothing for input, and a drag then arrives seconds after the hand made it
 frame to fall due instead spends that time in the window system, where input is delivered, and
 costs no frame rate: the display still gets a frame every refresh.
 
-`--benchmark` reports both halves. `cpu p95` is the work, `wait p95` is what was spent waiting for
+`--benchmark` reports both halves. `wall p95` is elapsed renderer time excluding acquire,
+not executing-thread CPU time. `wait p95` is what was spent waiting for
 the display; a healthy `wait` is a millisecond or two, and a `wait` near the whole frame interval
 means the loop is starving its own input.
 
@@ -557,3 +558,5 @@ means the loop is starving its own input.
 - `crates/viz/render` — the `wgpu` render core.
 - `crates/viz/snapshot` — freezing a rig, writing it as glTF, and exporting it with Blender.
 - `apps/viz-renderer` — this application: window, input, Quick Settings, diagnostics.
+
+Benchmark wall time excludes drawable-acquire wait and is not executing-thread CPU. Reports count successful presentation-queue submissions separately from attempted, skipped and failed draws. GPU percentiles use each completed, matching-scope sample once; sample counts and rejected provenance are explicit. Submission FPS does not prove displayed FPS.
