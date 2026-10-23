@@ -55,6 +55,7 @@ pub(crate) struct CompositorMeasurements {
     pub reconfigures: u64,
     pub errors: u64,
     pub gpu_readback_errors: u64,
+    pub gpu_invalid_samples: u64,
     pub gpu_sample_overflow: u64,
     pub cpu_wall_micros: u64,
     pub acquire_wall_micros: u64,
@@ -91,7 +92,7 @@ impl Measurement {
         if device.poll(wgpu::PollType::Poll).is_err() {
             self.stats.errors += 1;
         }
-        match timer.collect() {
+        match timer.collect(&mut self.stats.gpu_invalid_samples) {
             Ok(Some(sample)) if self.stats.gpu_samples.len() < MAX_SAMPLES => {
                 self.stats.gpu_samples.push(sample)
             }
@@ -196,7 +197,7 @@ impl GpuTiming {
             });
     }
 
-    fn collect(&mut self) -> Result<Option<CompositorGpuSample>, ()> {
+    fn collect(&mut self, invalid: &mut u64) -> Result<Option<CompositorGpuSample>, ()> {
         if self.pending.is_none() {
             return Ok(None);
         }
@@ -205,16 +206,15 @@ impl GpuTiming {
             1 => {
                 let decoded = {
                     let slice = self.readback.slice(..);
-                    slice
-                        .get_mapped_range()
-                        .ok()
-                        .and_then(|bytes| decode_micros(&bytes, self.period))
+                    let bytes = slice.get_mapped_range().map_err(|_| ())?;
+                    decode_micros(&bytes, self.period)
                 };
                 self.readback.unmap();
-                let Some(micros) = decoded else {
-                    return Err(());
-                };
                 let mut sample = self.pending.take().ok_or(())?;
+                let Some(micros) = decoded else {
+                    *invalid = invalid.saturating_add(1);
+                    return Ok(None);
+                };
                 sample.gpu_micros = micros;
                 Ok(Some(sample))
             }
@@ -224,6 +224,9 @@ impl GpuTiming {
 }
 
 fn decode_micros(bytes: &[u8], period: f64) -> Option<f64> {
+    if !period.is_finite() || period <= 0.0 {
+        return None;
+    }
     let start = u64::from_le_bytes(bytes.get(..8)?.try_into().ok()?);
     let end = u64::from_le_bytes(bytes.get(8..16)?.try_into().ok()?);
     let micros = end.checked_sub(start)? as f64 * period / 1000.0;
@@ -240,6 +243,7 @@ mod tests {
         assert_eq!(decode_micros(&bytes, 2.0), Some(0.5));
         assert_eq!(decode_micros(&bytes[..8], 2.0), None);
         assert_eq!(decode_micros(&bytes, f64::NAN), None);
+        assert_eq!(decode_micros(&bytes, 0.0), None);
         let reversed = [350_u64.to_le_bytes(), 100_u64.to_le_bytes()].concat();
         assert_eq!(decode_micros(&reversed, 1.0), None);
     }

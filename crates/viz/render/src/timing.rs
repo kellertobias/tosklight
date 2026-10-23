@@ -306,16 +306,31 @@ impl GpuTimer {
 
 fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
     let mut timings = GpuPassTimings::default();
+    if !period_nanos.is_finite() || period_nanos <= 0.0 {
+        return timings;
+    }
     for pass in GpuPass::ALL {
         if mask & (1 << pass.index()) == 0 {
             continue;
         }
         let (beginning, end) = pass.queries();
-        let tick = |index: u32| {
+        let tick = |index: u32| -> Option<u64> {
             let start = index as usize * 8;
-            u64::from_le_bytes(bytes[start..start + 8].try_into().expect("timestamp bytes"))
+            Some(u64::from_le_bytes(
+                bytes.get(start..start + 8)?.try_into().ok()?,
+            ))
         };
-        let nanos = tick(end).saturating_sub(tick(beginning)) as f32 * period_nanos;
+        let Some(ticks) = tick(end)
+            .zip(tick(beginning))
+            .and_then(|(end, start)| end.checked_sub(start))
+        else {
+            // A partial/invalid pair cannot become a cheap zero or incomplete frame total.
+            return GpuPassTimings::default();
+        };
+        let nanos = ticks as f32 * period_nanos;
+        if !nanos.is_finite() {
+            return GpuPassTimings::default();
+        }
         timings.set(pass, (nanos / 1000.0) as u64);
     }
     timings
@@ -324,6 +339,14 @@ fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn malformed_or_reversed_pairs_are_unavailable_instead_of_zero() {
+        let reversed = [350_u64.to_le_bytes(), 100_u64.to_le_bytes()].concat();
+        assert_eq!(decode_timings(&reversed, 1, 1.0).total_micros(), None);
+        assert_eq!(decode_timings(&reversed[..8], 1, 1.0).total_micros(), None);
+        assert_eq!(decode_timings(&reversed, 1, 0.0).total_micros(), None);
+    }
 
     #[test]
     fn decodes_only_passes_that_ran_and_sums_them() {

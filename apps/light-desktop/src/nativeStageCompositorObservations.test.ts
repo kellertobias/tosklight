@@ -5,7 +5,7 @@ import type { StageCompositorObservation } from "./platform/desktop/types";
 function observation(attachmentId = "one", sampleId = 1): StageCompositorObservation {
 	return { paneId: "live", attachmentId, observedEpochMicros: 2_000_000,
 		measurement: { drawAttempts: 5, submissions: 3, occluded: 1, timeouts: 1,
-			reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuSampleOverflow: 0,
+			reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuInvalidSamples: 0, gpuSampleOverflow: 0,
 			cpuWallMicros: 200, acquireWallMicros: 100, gpuTimingUnavailable: null,
 			actualDisplayedFrames: null, measurementBoundary: "submission only",
 			gpuSamples: [{ sampleId, submissionId: 3, submittedEpochMicros: 1_000_000,

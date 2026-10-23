@@ -5,7 +5,7 @@ export class NativeStageCompositorObservations {
 	private readonly scopes = new Map<string, { samples: number; microsSum: number; microsMax: number }>();
 	private readonly attachments = new Map<string, number>();
 	private readonly totals = { drawAttempts: 0, submissions: 0, occluded: 0, timeouts: 0,
-		reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuSampleOverflow: 0,
+		reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuInvalidSamples: 0, gpuSampleOverflow: 0,
 		cpuWallMicros: 0, acquireWallMicros: 0 };
 	private unavailable = new Set<string>();
 	private overflow = 0;

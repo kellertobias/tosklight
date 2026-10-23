@@ -148,7 +148,7 @@ export interface StageCompositorObservation {
 	observedEpochMicros: number;
 	measurement: {
 		drawAttempts: number; submissions: number; occluded: number; timeouts: number;
-		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuSampleOverflow: number;
+		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuInvalidSamples: number; gpuSampleOverflow: number;
 		cpuWallMicros: number; acquireWallMicros: number;
 		gpuTimingUnavailable: string | null; actualDisplayedFrames: null;
 		measurementBoundary: string;
