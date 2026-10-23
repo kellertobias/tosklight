@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **444 root cases across 134 files**.
+Default catalog: **445 root cases across 134 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -417,6 +417,7 @@ Default catalog: **444 root cases across 134 files**.
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › coincident In end and Out start remain independently editable by mouse and touch | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › a short single-Cue clip with inherited fade can be repeatedly shortened and repaired through its End grip | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › a four-frame clip keeps its true width and Trigger alignment when moved | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
+| 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › overview positions and viewport bounds match the main time axis through resize, sidebar, zoom and pan | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › pressing keyframes and Cue corners preserves their geometry and never saves a tap | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 86-timecode-cue-editor.spec.ts | TIMECODE-001 @ui › sidebar opt-in is independent of Cue expansion and title controls follow the selected context | repository contract | @ui | timecode-cue-editor | standard failure evidence | parallel | pending-semantic-migration |
 | 87-channel-disabled-reasons.spec.ts | TL-166 @ui › empty faders explain their state while available faders stay clear | repository contract | @ui | channel-disabled-reasons | standard failure evidence | parallel | pending-semantic-migration |

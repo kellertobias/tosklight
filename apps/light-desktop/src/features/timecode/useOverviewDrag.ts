@@ -6,16 +6,18 @@ import {
 interface OverviewDragOptions {
 	scrollRef: RefObject<HTMLDivElement | null>;
 	totalWidth: number;
+	displayedFrames: number;
 	viewportWidth: number;
 	scrollLeft: number;
 	minimumVisibleFraction: number;
 	onScrollLeftChange(left: number): void;
-	onVisibleRangeChange(start: number, end: number): void;
+	onVisibleRangeChange(start: number, end: number, displayedFrames: number): void;
 }
 /** Panning and edge-resizing share one captured overview gesture. */
 export function useOverviewDrag({
 	scrollRef,
 	totalWidth,
+	displayedFrames,
 	viewportWidth,
 	scrollLeft,
 	minimumVisibleFraction,
@@ -34,6 +36,10 @@ export function useOverviewDrag({
 		pointerId: number;
 		mode: "start" | "end" | "pan";
 		grabOffset: number;
+		displayedFrames: number;
+		visibleStart: number;
+		visibleEnd: number;
+		minimumVisibleFraction: number;
 	} | null>(null);
 	const fractionAt = (clientX: number, overview: HTMLElement) => {
 		const bounds = overview.getBoundingClientRect();
@@ -65,6 +71,7 @@ export function useOverviewDrag({
 				pointerId: event.pointerId,
 				mode: edge,
 				grabOffset: 0,
+				displayedFrames, visibleStart, visibleEnd, minimumVisibleFraction,
 			};
 			return;
 		}
@@ -74,6 +81,7 @@ export function useOverviewDrag({
 			pointerId: event.pointerId,
 			mode: "pan",
 			grabOffset,
+			displayedFrames, visibleStart, visibleEnd, minimumVisibleFraction,
 		};
 		panTo(fraction - grabOffset);
 	};
@@ -83,15 +91,17 @@ export function useOverviewDrag({
 		const fraction = fractionAt(clientX, overview);
 		if (current.mode === "start") {
 			onVisibleRangeChange(
-				Math.max(0, Math.min(visibleEnd - minimumVisibleFraction, fraction)),
-				visibleEnd,
+				Math.max(0, Math.min(current.visibleEnd - current.minimumVisibleFraction, fraction)),
+				current.visibleEnd,
+				current.displayedFrames,
 			);
 			return;
 		}
 		if (current.mode === "end") {
 			onVisibleRangeChange(
-				visibleStart,
-				Math.min(1, Math.max(visibleStart + minimumVisibleFraction, fraction)),
+				current.visibleStart,
+				Math.min(1, Math.max(current.visibleStart + current.minimumVisibleFraction, fraction)),
+				current.displayedFrames,
 			);
 			return;
 		}

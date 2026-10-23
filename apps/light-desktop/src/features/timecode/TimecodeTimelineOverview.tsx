@@ -10,7 +10,7 @@ import {
 export function TimelineOverview({
 	definition,
 	items,
-	duration,
+	pixelsPerFrame,
 	scrollLeft,
 	viewportWidth,
 	totalWidth,
@@ -22,7 +22,7 @@ export function TimelineOverview({
 }: {
 	definition: TimecodeDefinition;
 	items: readonly TimelineItem[];
-	duration: number;
+	pixelsPerFrame: number;
 	scrollLeft: number;
 	viewportWidth: number;
 	totalWidth: number;
@@ -30,7 +30,7 @@ export function TimelineOverview({
 	viewportId: string;
 	minimumVisibleFraction: number;
 	onScrollLeftChange(scrollLeft: number): void;
-	onVisibleRangeChange(startFraction: number, endFraction: number): void;
+	onVisibleRangeChange(startFraction: number, endFraction: number, displayedFrames: number): void;
 }) {
 	const {
 		maximumScroll,
@@ -43,13 +43,16 @@ export function TimelineOverview({
 	} = useOverviewDrag({
 		scrollRef,
 		totalWidth,
+		displayedFrames: totalWidth / pixelsPerFrame,
 		viewportWidth,
 		scrollLeft,
 		minimumVisibleFraction,
 		onScrollLeftChange,
 		onVisibleRangeChange,
 	});
-	const { lanes, laneHeight, laneGap } = overviewLanes(definition);
+	// Include the same blank trailing extent as the main canvas. Configured
+	// duration alone is not its width after preserving zoom through a resize.
+	const framePercent = (frame: number) => (frame * pixelsPerFrame / totalWidth) * 100;
 	return (
 		<div
 			className="timecode-timeline-overview"
@@ -86,44 +89,14 @@ export function TimelineOverview({
 					);
 			}}
 		>
-			<div
-				className="timecode-timeline-overview-lanes"
-				style={
-					{
-						"--timecode-overview-lane-height": `${laneHeight}px`,
-						"--timecode-overview-lane-gap": `${laneGap}px`,
-					} as CSSProperties
-				}
-				data-lane-height={laneHeight}
-				aria-hidden="true"
-			>
-				{lanes.map((lane) => (
-					<span
-						key={lane.id}
-						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
-					>
-						{items
-							.filter((item) => item.laneId === lane.id)
-							.map((item) => (
-								<i
-									key={item.selection.itemId}
-									style={{
-										left: `${(item.frame / duration) * 100}%`,
-										width: item.endFrame
-											? `${Math.max(0.25, ((item.endFrame - item.frame) / duration) * 100)}%`
-											: undefined,
-									}}
-								/>
-							))}
-					</span>
-				))}
-			</div>
+			<OverviewLanes definition={definition} items={items} framePercent={framePercent} />
 			{definition.markers.map((marker) => (
 				<i
 					key={marker.id}
 					className="timecode-timeline-overview-marker"
+					data-marker-id={marker.id}
 					style={{
-						left: `${(marker.frame / duration) * 100}%`,
+						left: `${framePercent(marker.frame)}%`,
 						background: markerColorOption(marker.color).value,
 					}}
 					aria-hidden="true"
@@ -149,6 +122,50 @@ export function TimelineOverview({
 				/>
 			</span>
 		</div>
+	);
+}
+
+function OverviewLanes({ definition, items, framePercent }: {
+	definition: TimecodeDefinition;
+	items: readonly TimelineItem[];
+	framePercent(frame: number): number;
+}) {
+	const { lanes, laneHeight, laneGap } = overviewLanes(definition);
+	return (
+			<div
+				className="timecode-timeline-overview-lanes"
+				style={
+					{
+						"--timecode-overview-lane-height": `${laneHeight}px`,
+						"--timecode-overview-lane-gap": `${laneGap}px`,
+					} as CSSProperties
+				}
+				data-lane-height={laneHeight}
+				aria-hidden="true"
+			>
+				{lanes.map((lane) => (
+					<span
+						key={lane.id}
+						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
+						data-overview-lane-id={lane.id}
+					>
+						{items
+							.filter((item) => item.laneId === lane.id)
+							.map((item) => (
+								<i
+									key={item.selection.itemId}
+									data-item-id={item.selection.itemId}
+									style={{
+										left: `${framePercent(item.frame)}%`,
+										width: item.endFrame
+											? `${framePercent(item.endFrame - item.frame)}%`
+											: undefined,
+									}}
+								/>
+							))}
+					</span>
+				))}
+			</div>
 	);
 }
 

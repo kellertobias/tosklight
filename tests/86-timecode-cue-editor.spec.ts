@@ -1371,6 +1371,17 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 				exact: true,
 			});
 			await handle.scrollIntoViewIfNeeded();
+			// Native scrollIntoView does not account for the sticky lane-name column.
+			// Pan the main timeline with the real wheel before touching an occluded point.
+			const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+			const viewportBox = (await viewport.boundingBox())!;
+			const handleBox = (await handle.boundingBox())!;
+			const coveredByHeader = viewportBox.x + 160 - handleBox.x;
+			if (coveredByHeader > 0) {
+				await page.mouse.move(viewportBox.x + viewportBox.width / 2, viewportBox.y + viewportBox.height - 30);
+				await page.mouse.wheel(-coveredByHeader - 16, 0);
+				await expect.poll(async () => (await handle.boundingBox())!.x).toBeGreaterThanOrEqual(viewportBox.x + 160);
+			}
 			await expect
 				.poll(() =>
 					handle.evaluate((node) => {
@@ -2012,6 +2023,66 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		});
 	});
 
+	test("TIMECODE-001 @ui › overview positions and viewport bounds match the main time axis through resize, sidebar, zoom and pan", async ({ api, show, desk, page, request }, testInfo) => {
+		await page.setViewportSize({ width: 1280, height: 1000 });
+		const { rig, speedLanes } = await seedAudioEditor(api, show.id, request, ["Movement"]);
+		await patchTimecode(api, show.id, rig.definition.id, { markers: [{ id: crypto.randomUUID(), frame: 440, name: "Chorus", color: "#ffffff" }] });
+		await desk.open(api.baseUrl);
+		await openEditor(page, false);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		const viewport = editor.getByLabel("Timecode timeline viewport", { exact: true });
+		const canvas = editor.locator(".timecode-timeline-canvas");
+		const scale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+		await page.setViewportSize({ width: 2400, height: 1000 });
+		await expect.poll(() => viewport.evaluate(node => node.clientWidth)).toBeGreaterThan(2000);
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(scale);
+		await expect.poll(() => canvas.evaluate(node => 880 * Number((node as HTMLElement).dataset.pixelsPerFrame) / (node.getBoundingClientRect().width - 160))).toBeLessThan(0.6);
+		await assertOverviewMainAxis(editor);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-wide-detail.png") });
+		await setSelectionSidebar(page, true);
+		await editor.locator(`[data-lane-id="${speedLanes[0].id}"].timecode-editor-lane .timecode-lane-select`).click();
+		await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
+		await assertOverviewMainAxis(editor);
+		const overview = editor.getByRole("scrollbar", { name: "Timeline overview", exact: true });
+		const track = (await overview.boundingBox())!;
+		const end = editor.getByRole("separator", { name: "Resize timeline overview from end", exact: true });
+		const handle = (await end.boundingBox())!;
+		await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(track.x + track.width * 0.35, handle.y + handle.height / 2, { steps: 8 });
+		await page.mouse.up();
+		await expect.poll(() => overview.evaluate(node => {
+			const total = node.querySelector(".timecode-timeline-overview-lane")!.getBoundingClientRect().width;
+			const visible = node.querySelector(".timecode-timeline-overview-visible")!.getBoundingClientRect().width;
+			return Math.abs(visible - total * 0.35);
+		})).toBeLessThanOrEqual(2);
+		await assertOverviewMainAxis(editor);
+		await overview.press("ArrowRight");
+		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+		await assertOverviewMainAxis(editor);
+		const pannedLeft = await viewport.evaluate(node => node.scrollLeft);
+		const bounds = (await viewport.boundingBox())!;
+		await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 100);
+		await page.mouse.wheel(100_000, 0);
+		await expect.poll(() => viewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(pannedLeft);
+		await expect.poll(async () => {
+			const previous = await viewport.evaluate(node => node.scrollLeft);
+			await page.waitForTimeout(100);
+			return viewport.evaluate((node, left) => node.scrollLeft === left &&
+				node.querySelector(".timecode-timeline-canvas")!.getBoundingClientRect().right <=
+				node.getBoundingClientRect().left + node.clientLeft + node.clientWidth + 1, previous);
+		}).toBe(true);
+		await assertOverviewMainAxis(editor);
+		const left = await viewport.evaluate(node => node.scrollLeft);
+		const zoomedScale = Number(await canvas.getAttribute("data-pixels-per-frame"));
+		expect(zoomedScale).toBeGreaterThan(scale);
+		await editor.getByRole("button", { name: "Close selection settings", exact: true }).click();
+		expect(await viewport.evaluate(node => node.scrollLeft)).toBe(left);
+		expect(Number(await canvas.getAttribute("data-pixels-per-frame"))).toBe(zoomedScale);
+		await assertOverviewMainAxis(editor);
+		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-overview-axis-detail.png") });
+	});
+
 	test("TIMECODE-001 @ui › pressing keyframes and Cue corners preserves their geometry and never saves a tap", async ({
 		api,
 		show,
@@ -2382,8 +2453,8 @@ async function zoomIn(page: Page, editor: Locator) {
 	if (!box || !track) throw new Error("Missing overview controls");
 	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
 	await page.mouse.down();
-	// Approximately 2x keeps the first two Cues and every first-Cue point reachable.
-	await page.mouse.move(track.x + track.width / 2, box.y + box.height / 2, {
+	// Explicit 4x leaves enough space for the one-second ruler labels used below.
+	await page.mouse.move(track.x + track.width / 4, box.y + box.height / 2, {
 		steps: 8,
 	});
 	await page.mouse.up();
@@ -2941,6 +3012,46 @@ async function setSelectionSidebar(page: Page, visible: boolean) {
 		.setChecked(visible);
 	await settings.getByRole("button", { name: /Close/ }).click();
 }
+
+async function assertOverviewMainAxis(editor: Locator) {
+	await expect.poll(() => editor.evaluate(node => {
+		const canvas = node.querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+		const viewport = node.querySelector<HTMLElement>(".timecode-timeline-scroll")!;
+		const overview = node.querySelector<HTMLElement>(".timecode-timeline-overview")!;
+		const laneTrack = overview.querySelector<HTMLElement>(".timecode-timeline-overview-lane")!.getBoundingClientRect();
+		const canvasBounds = canvas.getBoundingClientRect();
+		const originWidth = Number(canvas.dataset.timeOriginPx);
+		const origin = canvasBounds.left + originWidth;
+		const extent = canvasBounds.width - originWidth;
+		const project = (x: number) => laneTrack.left + ((x - origin) / extent) * laneTrack.width;
+		let error = 0;
+		for (const lane of canvas.querySelectorAll<HTMLElement>(".timecode-editor-lane")) {
+			const miniature = overview.querySelector<HTMLElement>(`.timecode-timeline-overview-lane[data-overview-lane-id="${lane.dataset.laneId}"]`);
+			if (!miniature) throw new Error(`Missing overview lane ${lane.dataset.laneId}`);
+			const items = lane.querySelectorAll<HTMLElement>(".timecode-timeline-item");
+			const minis = miniature.querySelectorAll<HTMLElement>(":scope > i");
+			if (items.length !== minis.length) throw new Error(`Overview item count differs for ${lane.dataset.laneId}`);
+			items.forEach((item, index) => {
+				const bounds = item.getBoundingClientRect(), mini = minis[index].getBoundingClientRect();
+				const clip = item.classList.contains("item-clip");
+				const start = clip ? bounds.left : bounds.left + bounds.width / 2;
+				error = Math.max(error, Math.abs(mini.left - project(start)));
+				if (clip) error = Math.max(error, Math.abs(mini.right - project(bounds.right)));
+			});
+		}
+		const markers = canvas.querySelectorAll<HTMLElement>(".timecode-timeline-marker");
+		const miniMarkers = overview.querySelectorAll<HTMLElement>(".timecode-timeline-overview-marker");
+		markers.forEach((marker, index) => {
+			error = Math.max(error, Math.abs(miniMarkers[index].getBoundingClientRect().left - project(marker.getBoundingClientRect().left)));
+		});
+		const visible = overview.querySelector<HTMLElement>(".timecode-timeline-overview-visible")!.getBoundingClientRect();
+		const expectedLeft = laneTrack.left + viewport.scrollLeft / extent * laneTrack.width;
+		const expectedWidth = Math.min(1, (viewport.clientWidth - originWidth) / extent) * laneTrack.width;
+		error = Math.max(error, Math.abs(visible.left - expectedLeft), Math.abs(visible.width - expectedWidth));
+		return error;
+	})).toBeLessThanOrEqual(1);
+}
+
 async function fitUsingOverview(page: Page, editor: Locator) {
 	const overview = editor.getByRole("scrollbar", {
 		name: "Timeline overview",

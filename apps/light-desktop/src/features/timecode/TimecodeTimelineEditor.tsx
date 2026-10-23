@@ -762,8 +762,10 @@ export const TimecodeTimelineEditor = forwardRef<
 		width,
 		zoom,
 		setZoom,
+		setOverviewZoom,
 		fitTimeline,
 		prepareInspectorClose,
+		preserveOverviewExtent,
 	} = useTimelineGeometry({
 		scrollRef,
 		duration,
@@ -855,6 +857,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	useOverviewScroll({
 		scrollRef,
 		width,
+		pixelsPerFrame,
 		viewportWidth,
 		overviewResize,
 		setScrollLeft,
@@ -862,11 +865,12 @@ export const TimecodeTimelineEditor = forwardRef<
 	});
 	const resizeOverviewWindow = overviewResizer({
 		timelineViewportWidth,
-		duration,
+		preserveOverviewExtent,
 		maximumZoom,
 		fitPixelsPerFrame,
 		setOverviewResize,
-		setZoom,
+		setZoom: setOverviewZoom,
+		fitTimeline,
 	});
 
 	useEffect(() => {
@@ -959,7 +963,7 @@ export const TimecodeTimelineEditor = forwardRef<
 						<TimelineOverview
 							definition={definition}
 							items={items}
-							duration={duration}
+							pixelsPerFrame={pixelsPerFrame}
 							scrollLeft={scrollLeft}
 							viewportWidth={timelineViewportWidth}
 							totalWidth={width}
@@ -968,7 +972,7 @@ export const TimecodeTimelineEditor = forwardRef<
 							minimumVisibleFraction={Math.min(
 								1,
 								timelineViewportWidth /
-									(duration * TARGET_MAX_PIXELS_PER_FRAME),
+									((width / pixelsPerFrame) * TARGET_MAX_PIXELS_PER_FRAME),
 							)}
 							onScrollLeftChange={setScrollLeft}
 							onVisibleRangeChange={resizeOverviewWindow}
@@ -1062,6 +1066,7 @@ function unusedSpeedGroups(definition: TimecodeDefinition) {
 function useOverviewScroll({
 	scrollRef,
 	width,
+	pixelsPerFrame,
 	viewportWidth,
 	overviewResize,
 	setScrollLeft,
@@ -1069,6 +1074,7 @@ function useOverviewScroll({
 }: {
 	scrollRef: RefObject<HTMLDivElement | null>;
 	width: number;
+	pixelsPerFrame: number;
 	viewportWidth: number;
 	overviewResize: OverviewResize | null;
 	setScrollLeft(value: number): void;
@@ -1084,7 +1090,7 @@ function useOverviewScroll({
 		if (overviewResize) {
 			const next = Math.max(
 				0,
-				Math.min(maximumScroll, overviewResize.startFraction * width),
+				Math.min(maximumScroll, overviewResize.startFrame * pixelsPerFrame),
 			);
 			viewport.scrollLeft = next;
 			setScrollLeft(next);
@@ -1096,6 +1102,7 @@ function useOverviewScroll({
 		setScrollLeft(viewport.scrollLeft);
 	}, [
 		overviewResize,
+		pixelsPerFrame,
 		width + TIMECODE_LANE_HEADER_WIDTH,
 		viewportWidth,
 		width,
