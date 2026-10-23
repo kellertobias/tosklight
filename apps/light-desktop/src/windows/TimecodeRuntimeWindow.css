@@ -392,6 +392,16 @@
 	background: #11121a;
 	touch-action: none;
 }
+/* Reserve native classic-scrollbar space after, never inside, the time axis. */
+.timecode-timeline-canvas::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 100%;
+	width: var(--timecode-trailing-scroll-gutter, 0px);
+	height: 1px;
+	pointer-events: none;
+}
 .timecode-ruler-stripes {
 	position: absolute;
 	z-index: 1;

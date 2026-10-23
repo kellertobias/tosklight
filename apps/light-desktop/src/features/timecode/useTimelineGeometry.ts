@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TIMECODE_LANE_HEADER_WIDTH } from "./timecodeEditorShared";
+import { timelineTrailingGutter } from "./timelineTrailingGutter";
 export const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
 function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
@@ -119,6 +120,18 @@ export function useTimelineGeometry({
 		duration * pixelsPerFrame,
 		trailingExtent,
 	);
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current;
+		if (!viewport) return;
+		const style = getComputedStyle(viewport);
+		const borders = (Number.parseFloat(style.borderLeftWidth) || 0) +
+			(Number.parseFloat(style.borderRightWidth) || 0);
+		const gutter = timelineTrailingGutter(
+			width + TIMECODE_LANE_HEADER_WIDTH, viewport.clientWidth,
+			viewport.offsetWidth, borders,
+		);
+		viewport.style.setProperty("--timecode-trailing-scroll-gutter", `${gutter}px`);
+	}, [scrollRef, width, viewportWidth]);
 	return {
 		viewportWidth,
 		timelineViewportWidth,
