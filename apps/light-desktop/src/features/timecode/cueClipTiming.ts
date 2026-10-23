@@ -24,6 +24,8 @@ export interface CueClipTimingRow {
 	outFade: CueClipTimingRange;
 	/// Shared Out timing without a successor before this clip ends; this is not an executed tail.
 	outFadeReference?: boolean;
+	/// Only the In fade exceeds the clip end; extending the clip can repair this diagnostic.
+	clipEndOverflow?: boolean;
 	diagnostic?: string;
 	/// Set for a Cue whose start the Timecode lane owns because it waits for a manual GO.
 	/// "placed" means the operator dropped a transition point, "default" means it follows
@@ -160,8 +162,10 @@ export function cueClipTimingRows(
 			row.diagnostic = `Cue ${cue.number} starts before the preceding Cue.`;
 		else if (startFrame < clip.start_frame || startFrame > clip.end_frame)
 			row.diagnostic = `Cue ${cue.number} starts outside this clip.`;
-		else if (row.inFade.endFrame > clip.end_frame)
+		else if (row.inFade.endFrame > clip.end_frame) {
+			row.clipEndOverflow = true;
 			row.diagnostic = `Cue ${cue.number} timing extends outside this clip.`;
+		}
 		rows.push(row);
 	}
 	return { rows };

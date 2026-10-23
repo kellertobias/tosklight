@@ -629,6 +629,49 @@ test.describe("TIMECODE-001 › overlapping Cue editor", () => {
 		expect((await readCue()).fade_millis).toBe(1000);
 	});
 
+	test("TIMECODE-001 @ui › a short single-Cue clip with inherited fade can be repeatedly shortened and repaired through its End grip", async ({ api, show, desk, page }) => {
+		const rig = await seedEditor(api, show.id);
+		const record = (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!;
+		const cues = structuredClone(record.body);
+		Object.assign(cues.cues[0], { fade_millis: 0, delay_millis: 0, out_delay_millis: 0, out_fade_millis: 0 });
+		await api.seedShowObject(show.id, "cue_list", rig.list.id, cues, record.revision);
+		const lanes = structuredClone(rig.definition.lanes);
+		if (lanes[0].content.kind !== "cue_list") throw new Error("Expected Cuelist lane");
+		Object.assign(lanes[0].content.clips[0], { end_frame: 48, end_cue_id: lanes[0].content.clips[0].start_cue_id, cue_starts: [] });
+		const collection = await api.request<{ objects: Array<{ revision: number; definition: TimecodeDefinition }> }>("GET", "/api/v2/timecodes", undefined, true, undefined, { showId: show.id });
+		await api.request("POST", "/api/v2/timecodes/actions", { request_id: crypto.randomUUID(), action: { type: "update", timecode_id: rig.definition.id, expected_revision: collection.objects.find((entry) => entry.definition.id === rig.definition.id)!.revision, patch: { lanes } } }, true, undefined, { showId: show.id });
+		const baselineCues = (await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues;
+		await desk.open(api.baseUrl);
+		await openEditor(page);
+		const editor = page.getByLabel("Timecode timeline editor", { exact: true });
+		await zoomIn(page, editor);
+		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click({ position: { x: 2, y: 22 } });
+		const fade = editor.getByRole("slider", { name: "Cue 1 In fade", exact: true });
+		const fadeEnd = Number(await fade.getAttribute("aria-valuenow"));
+		expect(fadeEnd).toBeGreaterThan(92);
+		const end = editor.getByRole("slider", { name: "Extend last Cue", exact: true });
+		await expect(end).not.toHaveAttribute("aria-disabled", "true");
+		let previous = 48;
+		for (const [target, touch] of [[52, false], [56, true], [48, false], [92, true], [fadeEnd + 4, false], [48, true], [92, false], [fadeEnd + 4, true]] as const) {
+			if (touch) await touchDragFrames(page, editor, end, target - previous);
+			else await dragFrames(page, editor, end, target - previous);
+			await expect.poll(async () => (await readClip(api, show.id, rig.definition.id)).end_frame).toBe(target);
+			await expect(fade).toHaveAttribute("aria-valuenow", String(fadeEnd));
+			const clip = await readClip(api, show.id, rig.definition.id);
+			expect(clip.start_frame).toBe(44);
+			expect(clip.cue_starts).toEqual([]);
+			expect(clip.end_cue_id).toBe(clip.start_cue_id);
+			expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(baselineCues);
+			previous = target;
+		}
+		await page.reload();
+		await openEditor(page);
+		await editor.getByRole("button", { name: "Edit Cue 1 House out", exact: true }).click({ position: { x: 32, y: 18 } });
+		await expect(end).toHaveAttribute("aria-valuenow", String(fadeEnd + 4));
+		await expect(fade).toHaveAttribute("aria-valuenow", String(fadeEnd));
+		expect((await api.showObject<CueList>(show.id, "cue_list", rig.list.id))!.body.cues).toEqual(baselineCues);
+	});
+
 	test("TIMECODE-001 @ui › a four-frame clip keeps its true width and Trigger alignment when moved", async ({ api, show, desk, page }) => {
 		// A real nonzero 1ms In fade rounds to zero frames, avoiding zero-In inheritance.
 		const rig = await seedEditor(api, show.id, false, true);

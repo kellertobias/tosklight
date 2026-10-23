@@ -26,6 +26,28 @@ const clip: TimecodeCueListClip = {
 const defaults = { sequenceFadeMillis: 3_000, releaseFadeMillis: 4_000 };
 
 describe("Cue List clip timing", () => {
+	it("marks only otherwise valid In-end overflow as repairable by extending the clip", () => {
+		const short = { ...clip, end_frame: 60, end_cue_id: "cue-1" };
+		const first = {
+			...cue("cue-1", "1", { type: "manual" }),
+			fade_millis: 0,
+		};
+		const row = cueClipTimingRows(short, cueList([first]), defaults).rows[0];
+		expect(row.clipEndOverflow).toBe(true);
+		expect(row.diagnostic).toContain("timing extends outside");
+		const repaired = cueClipTimingRows(
+			{ ...short, end_frame: 220 }, cueList([first]), defaults,
+		).rows[0];
+		expect(repaired.clipEndOverflow).toBeUndefined();
+		expect(repaired.diagnostic).toBeUndefined();
+		const invalid = cueClipTimingRows(short, cueList([{
+			...first,
+			trigger: { type: "link", cue_id: "missing", delay_millis: 0 },
+		}]), defaults).rows[0];
+		expect(invalid.diagnostic).toContain("missing Cue");
+		expect(invalid.clipEndOverflow).toBeUndefined();
+	});
+
 	it("uses incoming-Cue Wait/Follow semantics and clip-relative Timecode frames", () => {
 		const list = cueList([
 			cue("cue-1", "1", { type: "follow", delay_millis: 9_000 }),

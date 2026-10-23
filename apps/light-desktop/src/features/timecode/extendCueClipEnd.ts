@@ -41,7 +41,7 @@ function lastTrigger(
 	if (
 		projected.error ||
 		!projected.rows.length ||
-		projected.rows.some((row) => row.diagnostic)
+		projected.rows.some((row) => row.diagnostic && !row.clipEndOverflow)
 	)
 		return null;
 	return Math.max(...projected.rows.map((row) => row.startFrame));
