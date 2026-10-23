@@ -599,9 +599,29 @@ test("TIMECODE-001 @ui › audio volume points and waveform share exact axes at 
 	const bounds = (await viewport.boundingBox())!;
 	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 50);
 	await page.mouse.wheel(100_000, 0);
-	// Chromium wheel scrolling is asynchronous: compare Close against the settled
- // right edge, rather than capturing its first intermediate pixel.
- await expect.poll(() => viewport.evaluate((node) => Math.abs(node.scrollWidth - node.clientWidth - node.scrollLeft))).toBeLessThanOrEqual(1);
+	// Native end-of-scroll is authoritative: scrollWidth can include reserved
+	// scrollbar gutter or endpoint paint beyond the actual timeline canvas.
+	await expect.poll(async () => {
+		const left = await viewport.evaluate((node) => node.scrollLeft);
+		await page.waitForTimeout(100);
+		return viewport.evaluate((node, previous) => {
+			const canvas = node.querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+			const right = node.getBoundingClientRect().left + node.clientLeft + node.clientWidth;
+			return { settled: node.scrollLeft === previous, endingVisible: canvas.getBoundingClientRect().right <= right + 1 };
+		}, left);
+	}).toEqual({ settled: true, endingVisible: true });
+	const reachedEnd = await viewport.evaluate((node) => node.scrollLeft);
+	// A second physical wheel must not move even one pixel farther. This proves
+	// the native end, without assuming the gutter is scrollable time-axis space.
+	await page.mouse.wheel(100_000, 0);
+	await page.waitForTimeout(100);
+	await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBe(reachedEnd);
+	console.log("Timecode native right edge", await viewport.evaluate((node) => ({
+		scrollLeft: node.scrollLeft, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+		offsetWidth: (node as HTMLElement).offsetWidth, clientLeft: node.clientLeft,
+		scrollbarGutter: getComputedStyle(node).scrollbarGutter,
+		canvasWidth: node.querySelector<HTMLElement>(".timecode-timeline-canvas")!.getBoundingClientRect().width,
+	})));
  await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
 	await assertAudioAxes(editor, frames, definition.duration_frame);
 	const before = await viewport.evaluate((node) => node.scrollLeft);
