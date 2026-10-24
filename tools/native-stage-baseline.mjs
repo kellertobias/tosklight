@@ -3,6 +3,7 @@ import { evaluateBaselinePhases } from "./native-stage-baseline-phases.mjs";
 export function readNativeBaselineConfig(env) {
   const layout = env.LIGHT_STAGE_PACKAGED_BENCH_LAYOUT;
   if (!layout) {
+    if (env.LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT !== undefined) throw new Error("Baseline transport requires fixed layout");
     if (env.LIGHT_STAGE_PACKAGED_BENCH_PHASES) throw new Error("Baseline phases require fixed layout");
     return null;
   }
@@ -11,12 +12,14 @@ export function readNativeBaselineConfig(env) {
   const view = env.LIGHT_STAGE_PACKAGED_BENCH_VIEW ?? "lines_3d";
   const helperHz = env.LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ ?? "natural";
   const phases = env.LIGHT_STAGE_PACKAGED_BENCH_PHASES;
-  if (phases && phases !== "static-camera-hidden") throw new Error("Invalid baseline phases");
-  if (phases && env.LIGHT_PACKAGED_STAGE_DYNAMICS === "1") throw new Error("Baseline phases require static Stage-500 (Dynamics unset)");
+  const requestedTransport = env.LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT ?? "auto";
+  if (!["auto", "copy", "shared"].includes(requestedTransport)) throw new Error("Baseline transport must be copy, shared or auto");
+  if (phases && !["static-camera-hidden", "animated-camera-hidden"].includes(phases)) throw new Error("Invalid baseline phases");
+  if (phases && ((phases === "animated-camera-hidden") !== (env.LIGHT_PACKAGED_STAGE_DYNAMICS === "1"))) throw new Error("Phase mode must match the explicit Dynamics workload");
   if (!["draft", "standard", "high", "ultra"].includes(quality)) throw new Error("Invalid baseline quality");
   if (!["full_3d", "lines_3d"].includes(view)) throw new Error("Invalid baseline view");
   if (!["natural", "60"].includes(helperHz)) throw new Error("Matched baseline helper Hz must be 60 or absent");
-  return { layout, quality, view, ...(phases ? { phases } : {}), atmosphereAmount: view === "full_3d" ? 0.35 : 0, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
+  return { layout, quality, view, requestedTransport, ...(phases ? { phases } : {}), atmosphereAmount: view === "full_3d" ? 0.35 : 0, helperScheduling: helperHz, physicalPixelArea: 1920 * 1080,
     laneWidth: 1920, laneHeight: layout === "single" ? 1080 : 540,
     display: env.LIGHT_STAGE_PACKAGED_BENCH_DISPLAY ?? "internal" };
 }
@@ -27,14 +30,19 @@ export function evaluateNativeBaseline(complete, metadata) {
   const rows = observations?.rows ?? [];
   const failures = [];
   if (!rows.length) failures.push("No raw helper submission observations");
-  const matches = rows.filter((row) => row.width === configuration.laneWidth && row.height === configuration.laneHeight && row.quality === configuration.quality && row.mode === configuration.view);
+  const requested = configuration.requestedTransport ?? "auto";
+  const transportMatches = (transport) => requested === "auto" || transport === requested;
+  if (!["auto", "copy", "shared"].includes(requested)) failures.push("Invalid declared baseline transport");
+  const conditionRows = rows.filter((row) => row.width === configuration.laneWidth && row.height === configuration.laneHeight && row.quality === configuration.quality && row.mode === configuration.view);
+  const matches = conditionRows.filter((row) => transportMatches(row.transport));
+  if (conditionRows.some((row) => !transportMatches(row.transport))) failures.push("Helper transport does not match requested baseline transport");
   if (!matches.length) failures.push("No observations match declared physical pixels, quality and view");
   for (const followPreload of configuration.layout === "dual" ? [false, true] : [false])
     if (!matches.some((row) => row.followPreload === followPreload && row.gpuSampleCount > 0)) failures.push(`No accepted helper GPU samples for ${followPreload ? "Preload" : "Live"} lane`);
   if (configuration.layout === "dual" && new Set(matches.map((row) => row.paneId)).size < 2) failures.push("Dual layout did not observe both lanes");
   const compositorRows = observations?.compositor?.rows ?? [];
   for (const paneId of new Set(matches.map((row) => row.paneId)))
-    if (!compositorRows.some((row) => row.samples > 0 && row.scope?.[0] === paneId && row.scope?.[3]?.sourceSize?.[0] === configuration.laneWidth && row.scope?.[3]?.sourceSize?.[1] === configuration.laneHeight)) failures.push(`No compositor GPU samples for ready source in ${paneId}`);
+    if (!compositorRows.some((row) => row.samples > 0 && transportMatches(row.scope?.[3]?.transport) && row.scope?.[0] === paneId && row.scope?.[3]?.sourceSize?.[0] === configuration.laneWidth && row.scope?.[3]?.sourceSize?.[1] === configuration.laneHeight)) failures.push(`No compositor GPU samples for ready source in ${paneId}`);
   if (!compositorRows.length) failures.push("No independent compositor GPU samples");
   for (const counter of ["attachmentOverflow", "rowOverflow", "invalidFrames", "invalidGpuSamples"])
     if (observations?.counts?.[counter] > 0) failures.push(`Helper observation ${counter}`);

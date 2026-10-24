@@ -32,7 +32,7 @@ export interface PackagedStageBenchmarkConfig {
 	baselineLayout?: "single" | "dual" | null;
 	baselineQuality?: "draft" | "standard" | "high" | "ultra";
 	baselineView?: "full_3d" | "lines_3d";
-	baselinePhases?: "static-camera-hidden" | null;
+	baselinePhases?: "static-camera-hidden" | "animated-camera-hidden" | null;
 	durationSeconds: number;
 	controlDurationSeconds: number;
 	profile: string;
@@ -149,6 +149,8 @@ export interface StageCompositorObservation {
 	observedEpochMicros: number;
 	measurement: {
 		drawAttempts: number; submissions: number; occluded: number; timeouts: number;
+		/** Absent in reports recorded before change-driven compositor scheduling. */
+		cleanSkips?: number; hiddenSkips?: number; busySkips?: number; pacedSkips?: number; retries?: number;
 		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuInvalidSamples: number; gpuSampleOverflow: number;
 		cpuWallMicros: number; acquireWallMicros: number;
 		gpuTimingUnavailable: string | null; actualDisplayedFrames: null;
@@ -197,6 +199,8 @@ export interface DesktopBridge {
 		geometry: StagePaneGeometry,
 	): Promise<void>;
 	setStagePane(paneId: string, geometry: StagePaneGeometry): Promise<void>;
+	/** Suspend the resident picture without closing its helper or discarding current scene state. */
+	setStagePaneVisibility(paneId: string, visible: boolean): Promise<void>;
 	closeStagePane(paneId: string): Promise<void>;
 	sendStagePaneInput(
 		gesture: StagePaneGesture,

@@ -2,6 +2,7 @@ mod display;
 mod layout;
 mod phases;
 mod picture;
+mod transport;
 
 use serde::Serialize;
 use serde_json::Value;
@@ -51,6 +52,11 @@ pub(crate) async fn packaged_stage_benchmark_config(
     let stage_enabled = stage_enabled(std::env::var(STAGE_ENV).ok().as_deref())?;
     let baseline = layout::BaselineOptions::from_env()?;
     let fixed_pixels = baseline.baseline_layout.is_some();
+    transport::requested(
+        report_path().is_some(),
+        baseline.baseline_layout.as_deref(),
+        std::env::var(transport::TRANSPORT_ENV).ok().as_deref(),
+    )?;
     let baseline_phases = phases::configured(std::env::var(phases::PHASES_ENV).ok().as_deref())?;
     if baseline_phases.is_some() {
         if !stage_enabled {
@@ -194,4 +200,26 @@ pub(crate) async fn exercise_packaged_stage_benchmark_visibility(
     window: tauri::WebviewWindow,
 ) -> Result<phases::VisibilityEvidence, String> {
     phases::exercise(&window).await
+}
+
+/// A transport override belongs exclusively to the private, fixed-pixel benchmark.
+pub(crate) fn baseline_transport(
+    identity: &viz_helper::handshake::HelperIdentity,
+    available: Vec<viz_helper::protocol::FrameTransport>,
+) -> Result<viz_helper::protocol::FrameTransport, String> {
+    let report = report_path().is_some();
+    let layout = if report {
+        layout::BaselineOptions::from_env()?.baseline_layout
+    } else {
+        None
+    };
+    let request = transport::requested(
+        report,
+        layout.as_deref(),
+        std::env::var(transport::TRANSPORT_ENV).ok().as_deref(),
+    )?;
+    let offered = transport::filter(available, request)?;
+    identity.embeddable_with(&offered).ok_or_else(|| {
+        format!("no compatible picture transport: desk offers {offered:?}, renderer offers {:?}; explicit benchmark requests cannot fall back", identity.transports)
+    })
 }

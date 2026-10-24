@@ -63,6 +63,12 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     let webview = window.add_child(
         crate::portable::place_webview(
             tauri::webview::WebviewBuilder::new(LABEL, WebviewUrl::default())
+                // A non-focusable measurement window still accepts the operator's camera drag.
+                // Ordinary desks keep their established first-click behavior.
+                .accept_first_mouse(
+                    std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_some()
+                        && std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_LAYOUT").is_some(),
+                )
                 .transparent(true)
                 .auto_resize(),
         ),

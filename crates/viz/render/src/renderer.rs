@@ -835,84 +835,16 @@ impl Renderer {
         overlay: &crate::overlay::Overlay,
         time_seconds: f32,
     ) -> Result<CapturedImage, RenderError> {
-        let device = self.gpu.device.clone();
-        let queue = self.gpu.queue.clone();
-        let width = self.gpu.config.width;
-        let height = self.gpu.config.height;
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("viz capture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: self.gpu.format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        self.capture_request = Some(texture.create_view(&wgpu::TextureViewDescriptor::default()));
-        self.render(scene, values, view, overlay, time_seconds)?;
-
-        let row_bytes = width * 4;
-        let padded = row_bytes.div_ceil(256) * 256;
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("viz capture readback"),
-            size: (padded * height) as u64,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("viz capture copy"),
-        });
-        encoder.copy_texture_to_buffer(
-            texture.as_image_copy(),
-            wgpu::TexelCopyBufferInfo {
-                buffer: &buffer,
-                layout: wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(padded),
-                    rows_per_image: Some(height),
-                },
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
-        queue.submit(Some(encoder.finish()));
-        let slice = buffer.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
-        let _ = device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: None,
-        });
-        let mapped = slice
-            .get_mapped_range()
-            .map_err(|error| RenderError::Surface(format!("capture readback: {error}")))?;
-        let mut pixels = Vec::with_capacity((row_bytes * height) as usize);
-        for row in 0..height {
-            let start = (row * padded) as usize;
-            pixels.extend_from_slice(&mapped[start..start + row_bytes as usize]);
-        }
-        drop(mapped);
-        buffer.unmap();
-        let bgra = matches!(
-            self.gpu.format,
-            wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Bgra8UnormSrgb
-        );
-        if bgra {
-            for pixel in pixels.chunks_exact_mut(4) {
-                pixel.swap(0, 2);
-            }
-        }
-        Ok(CapturedImage {
-            width,
-            height,
-            rgba: pixels,
+        let mut pending = self.begin_capture(scene, values, view, overlay, time_seconds)?;
+        self.gpu
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .map_err(|error| RenderError::Surface(format!("capture polling: {error}")))?;
+        pending.try_complete()?.ok_or_else(|| {
+            RenderError::Surface("capture mapping did not complete after GPU wait".to_owned())
         })
     }
 
@@ -944,6 +876,8 @@ impl Renderer {
 }
 
 mod buffers;
+mod capture;
+pub use capture::PendingCapture;
 pub(crate) mod curtain_occlusion;
 mod frame;
 mod groups;

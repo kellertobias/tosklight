@@ -110,12 +110,16 @@ pub(crate) struct RedrawGate {
 }
 
 impl RedrawGate {
-    pub fn should_draw(&mut self, state: RedrawState, time_driven: bool) -> bool {
-        if !time_driven && self.last.as_ref() == Some(&state) {
-            return false;
-        }
+    pub fn should_draw(&self, state: &RedrawState, time_driven: bool) -> bool {
+        time_driven || self.last.as_ref() != Some(state)
+    }
+
+    pub fn succeeded(&mut self, state: RedrawState) {
         self.last = Some(state);
-        true
+    }
+
+    pub fn invalidate(&mut self) {
+        self.last = None;
     }
 }
 
@@ -155,45 +159,60 @@ mod tests {
     }
 
     #[test]
+    fn failed_or_unsubmitted_picture_remains_due_and_resume_invalidates_success() {
+        let mut gate = RedrawGate::default();
+        assert!(gate.should_draw(&state(7), false));
+        assert!(gate.should_draw(&state(7), false));
+        gate.succeeded(state(7));
+        assert!(!gate.should_draw(&state(7), false));
+        gate.invalidate();
+        assert!(gate.should_draw(&state(7), false));
+    }
+
+    #[test]
     fn identical_static_picture_is_suppressed() {
         let mut gate = RedrawGate::default();
-        assert!(gate.should_draw(state(7), false));
-        assert!(!gate.should_draw(state(7), false));
+        assert!(gate.should_draw(&state(7), false));
+        gate.succeeded(state(7));
+        assert!(!gate.should_draw(&state(7), false));
     }
 
     #[test]
     fn changed_picture_or_time_driven_state_draws() {
         let mut gate = RedrawGate::default();
-        assert!(gate.should_draw(state(7), false));
-        assert!(gate.should_draw(state(8), false));
-        assert!(gate.should_draw(state(8), true));
+        assert!(gate.should_draw(&state(7), false));
+        gate.succeeded(state(7));
+        assert!(gate.should_draw(&state(8), false));
+        gate.succeeded(state(8));
+        assert!(gate.should_draw(&state(8), true));
     }
 
     #[test]
     fn camera_size_selection_and_overlay_are_part_of_the_identity() {
         let base = state(7);
         let mut gate = RedrawGate::default();
-        assert!(gate.should_draw(base.clone(), false));
+        assert!(gate.should_draw(&base, false));
+        gate.succeeded(base.clone());
         let mut changed = base.clone();
         changed.view.camera.position.x += 1.0;
-        assert!(gate.should_draw(changed, false));
+        assert!(gate.should_draw(&changed, false));
         let mut changed = base.clone();
         changed.size.0 += 1;
-        assert!(gate.should_draw(changed, false));
+        assert!(gate.should_draw(&changed, false));
         let mut changed = base.clone();
         changed.selection.insert(Uuid::nil());
-        assert!(gate.should_draw(changed, false));
+        assert!(gate.should_draw(&changed, false));
         let mut changed = base;
         changed.overlay.push(OverlayQuad {
             rect: [0.0; 4],
             uv_rect: [0.0; 4],
             colour: [1.0; 4],
         });
-        assert!(gate.should_draw(changed, false));
+        assert!(gate.should_draw(&changed, false));
 
         let mut changed = state(7);
         changed.media_revision += 1;
-        assert!(gate.should_draw(changed, false));
+        assert!(gate.should_draw(&changed, false));
     }
 }
 

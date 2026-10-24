@@ -9,13 +9,16 @@ use tauri::Manager;
 
 pub(super) const PHASES_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_PHASES";
 const PHASES: &str = "static-camera-hidden";
+const ANIMATED_PHASES: &str = "animated-camera-hidden";
 static RUNNING: AtomicBool = AtomicBool::new(false);
 
 pub(super) fn configured(value: Option<&str>) -> Result<Option<String>, String> {
     match value {
         None => Ok(None),
-        Some(PHASES) => Ok(Some(PHASES.to_owned())),
-        _ => Err(format!("{PHASES_ENV} must be {PHASES}")),
+        Some(value @ (PHASES | ANIMATED_PHASES)) => Ok(Some(value.to_owned())),
+        _ => Err(format!(
+            "{PHASES_ENV} must be {PHASES} or {ANIMATED_PHASES}"
+        )),
     }
 }
 
@@ -31,12 +34,12 @@ pub(super) fn validate(
     if label != "main"
         || !report.is_some_and(Path::is_absolute)
         || !matches!(layout, Some("single" | "dual"))
-        || phases != Some(PHASES)
+        || !matches!(phases, Some(PHASES | ANIMATED_PHASES))
         || profile != "stage-500"
-        || dynamics
+        || dynamics != (phases == Some(ANIMATED_PHASES))
         || duration < 40
     {
-        return Err("Baseline phases require an isolated main report, fixed static Stage-500, explicit opt-in and at least 40 seconds".into());
+        return Err("Baseline phases require an isolated main report, fixed Stage-500 with matching Dynamics mode, explicit opt-in and at least 40 seconds".into());
     }
     Ok(())
 }
@@ -184,6 +187,39 @@ mod tests {
         assert_eq!(configured(None).unwrap(), None);
         assert!(configured(Some("true")).is_err());
         assert!(configured(Some("static-camera-hidden")).unwrap().is_some());
+    }
+    #[test]
+    fn animated_phase_requires_an_explicit_matching_workload() {
+        let report = std::env::temp_dir().join("animated-phases.jsonl");
+        assert!(
+            configured(Some("animated-camera-hidden"))
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            validate(
+                "main",
+                Some(&report),
+                Some("dual"),
+                Some("animated-camera-hidden"),
+                "stage-500",
+                true,
+                40
+            )
+            .is_ok()
+        );
+        assert!(
+            validate(
+                "main",
+                Some(&report),
+                Some("dual"),
+                Some("animated-camera-hidden"),
+                "stage-500",
+                false,
+                40
+            )
+            .is_err()
+        );
     }
     #[test]
     fn visibility_guard_rejects_live_or_ambiguous_windows() {

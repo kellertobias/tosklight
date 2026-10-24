@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases } from "./nativePackagedStagePhases";
-import type { DesktopBridge, PackagedStageBenchmarkConfig } from "./platform/desktop/types";
+import { hiddenCompositorIntervals, newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases } from "./nativePackagedStagePhases";
+import type { DesktopBridge, PackagedStageBenchmarkConfig, StageCompositorObservation } from "./platform/desktop/types";
 const config = { baselinePhases: "static-camera-hidden", baselineLayout: "dual", stageEnabled: true, profile: "stage-500", durationSeconds: 40 } as PackagedStageBenchmarkConfig;
 const identities = [{ paneId: "main:a", attachmentId: "1" }, { paneId: "main:b", attachmentId: "2" }];
 
@@ -76,4 +76,53 @@ it("keeps hidden compositor attempts, submissions, occlusion and acquire cost se
 	expect(report.rows[0].compositorCounters?.values.drawAttempts).toBe(0);
 	expect(report.rows[2].compositorCounters).toMatchObject({ nominalPollMillis: 100, beforeArrivalLagMillis: 80, afterArrivalLagMillis: 80 });
 	expect(report.rows[2].compositorCounters?.boundary).toContain("not arrival");
+});
+
+it("labels animated hidden/resume evidence separately from static idling", async () => {
+	let clock = 1_000_000;
+	const desktop = {
+		stagePaneCamera: async () => [clock, 0, 0, 0, 0, 1], sendStagePaneInput: async () => {},
+		exercisePackagedStageBenchmarkVisibility: async () => {
+			const hiddenEpochMicros = clock * 1_000; clock += 10_000;
+			return { hiddenEpochMicros, revealedEpochMicros: clock * 1_000, hiddenVerified: true, revealedVerified: true, observations: [] };
+		},
+	} as unknown as DesktopBridge;
+	const report = newBaselinePhaseReport();
+	await runBaselinePhases({ config: { ...config, baselinePhases: "animated-camera-hidden" }, desktop, report,
+		panes: () => identities, signal: new AbortController().signal,
+		now: () => clock, sleep: async (millis) => { clock += millis; } });
+	expect(report.status).toBe("completed");
+	expect(report.rows.map((row) => row.phase)).toEqual(["animated", "camera", "hidden", "revealed"]);
+});
+
+
+function compositorObservation(observedEpochMicros: number, submissions = 0): StageCompositorObservation {
+	return { paneId: "main:a", attachmentId: "1", observedEpochMicros,
+		measurement: { drawAttempts: 5, submissions, occluded: 0, timeouts: 0, reconfigures: 0, errors: 0,
+			cpuWallMicros: 20, acquireWallMicros: submissions * 10, cleanSkips: 0, hiddenSkips: 5 - submissions,
+			busySkips: 0, pacedSkips: 0, gpuSamples: [] },
+	} as unknown as StageCompositorObservation;
+}
+it("retains native drain intervals with unknown first start instead of assigning edge counters to hidden steady state", () => {
+	const batches = [1_000_000, 1_100_000, 1_200_000].map((time, index) => ({ observedEpochMicros: time + 10,
+		windowVisible: false as const, samples: { frames: [], heartbeats: [], compositors: [compositorObservation(time, index === 0 ? 2 : 0)] } }));
+	const evidence = hiddenCompositorIntervals(batches, identities);
+	expect(evidence.invalid).toBe(0);
+	expect(evidence.rows.map((row) => [row.startObservedEpochMicros, row.endObservedEpochMicros])).toEqual([
+		[null, 1_000_000], [1_000_000, 1_100_000], [1_100_000, 1_200_000],
+	]);
+	expect(evidence.rows[0].counters.submissions).toBe(2);
+	expect(evidence.rows[1].potentialAcquireAttemptsUpperBound).toBe(0);
+	expect(evidence.rows[0]).not.toHaveProperty("gpuSamples");
+});
+it("bounds interval storage and exposes invalid counter/timestamp inputs", () => {
+	const batches = Array.from({ length: 300 }, (_, index) => ({ observedEpochMicros: (index + 1) * 100_000,
+		windowVisible: false as const, samples: { frames: [], heartbeats: [], compositors: [compositorObservation((index + 1) * 100_000)] } }));
+	const evidence = hiddenCompositorIntervals(batches, identities);
+	expect(evidence.rows).toHaveLength(240);
+	expect(evidence.overflow).toBe(60);
+	const bad = compositorObservation(2_000_000);
+	bad.measurement.drawAttempts = -1;
+	expect(hiddenCompositorIntervals([{ observedEpochMicros: 2_000_010, windowVisible: false, samples: { frames: [], heartbeats: [], compositors: [bad] } }], identities).invalid).toBe(1);
+	expect(hiddenCompositorIntervals([batches[1], batches[0]], identities).invalid).toBe(1);
 });

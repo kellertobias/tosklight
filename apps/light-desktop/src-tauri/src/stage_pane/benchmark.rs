@@ -4,7 +4,7 @@ use super::{PaneRect, Running, StagePane, StagePanes};
 /// the pane module. Unexpected input fails the owned channel instead of silently disappearing.
 pub(super) fn forward_heartbeat(
     message: super::FromHelper,
-    outbox: &std::sync::mpsc::Sender<super::FromRenderer>,
+    outbox: &std::sync::mpsc::SyncSender<super::FromRenderer>,
 ) -> Result<(), std::sync::mpsc::SendError<super::FromRenderer>> {
     let super::FromHelper::BenchmarkHeartbeat {
         epoch_micros,

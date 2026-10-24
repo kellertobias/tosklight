@@ -18,6 +18,7 @@ pub(crate) fn run() {
             crate::stage_pane::stage_pane_available,
             crate::stage_pane::open_stage_pane,
             crate::stage_pane::set_stage_pane,
+            crate::stage_pane::set_stage_pane_visibility,
             crate::stage_pane::close_stage_pane,
             crate::stage_pane::stage_pane_input,
             crate::stage_pane::set_stage_pane_picture,

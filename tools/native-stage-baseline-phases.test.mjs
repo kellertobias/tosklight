@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateBaselinePhases } from "./native-stage-baseline-phases.mjs";
+import { evaluateBaselinePhases, evaluateSteadyHiddenCompositor } from "./native-stage-baseline-phases.mjs";
 
 function fixture() {
   const names = ["static", "camera", "hidden", "revealed"];
@@ -46,4 +46,45 @@ test("compositor GPU samples use their scoped submission epoch, independently of
   assert.equal(hidden.compositor.sampledGpuMicros, 16);
   assert.equal(hidden.compositor.counters.values.occluded, 95);
   assert.equal(hidden.helperSubmissions, 1000);
+});
+
+
+function interiorEvidence() {
+  const evidence = fixture().nativeStage.phases;
+  const counters = (submissions = 0) => ({ drawAttempts: 4, submissions, acquireWallMicros: submissions * 20,
+    occluded: 0, timeouts: 0, reconfigures: 0, errors: 0, cleanSkips: 0, hiddenSkips: 4 - submissions, busySkips: 0, pacedSkips: 0 });
+  evidence.hiddenCompositorIntervals = { invalid: 0, overflow: 0, limit: 240, rows: evidence.attachmentsBeforeHidden.flatMap((pane) => [
+    { ...pane, startObservedEpochMicros: null, endObservedEpochMicros: 120_100_000, counters: counters(4), potentialAcquireAttemptsUpperBound: 4 },
+    { ...pane, startObservedEpochMicros: 120_100_000, endObservedEpochMicros: 120_300_000, counters: counters(2), potentialAcquireAttemptsUpperBound: 2 },
+    { ...pane, startObservedEpochMicros: 120_300_000, endObservedEpochMicros: 120_400_000, counters: counters(), potentialAcquireAttemptsUpperBound: 0 },
+    { ...pane, startObservedEpochMicros: 120_400_000, endObservedEpochMicros: 120_500_000, counters: counters(), potentialAcquireAttemptsUpperBound: 0 },
+  ]) };
+  return evidence;
+}
+test("steady hidden excludes unknown and settling spans, exposes actual per-pane coverage and no GPU-zero claim", () => {
+  const report = evaluateSteadyHiddenCompositor(interiorEvidence());
+  assert.equal(report.status, "zero-submissions-and-acquire-wall-observed");
+  assert.equal(report.zeroAcquireAdmissionsObserved, true);
+  assert.equal(report.lanes.length, 2);
+  assert.ok(report.lanes.every((lane) => lane.coveredMicros === 200_000 && lane.intervals === 2 && lane.submissions === 0));
+  assert.equal(report.lanes[0].eligibleWindowMicros, 9_750_000);
+  assert.ok(report.boundary.includes("No GPU utilization"));
+});
+test("real interior work is reported and insufficient or corrupted evidence remains unverified", () => {
+  const work = interiorEvidence();
+  const row = work.hiddenCompositorIntervals.rows[2];
+  row.counters.submissions = 1; row.counters.acquireWallMicros = 10; row.counters.hiddenSkips--;
+  row.potentialAcquireAttemptsUpperBound = 1;
+  assert.equal(evaluateSteadyHiddenCompositor(work).status, "work-observed");
+  for (const corrupt of [
+    (e) => { e.hiddenCompositorIntervals.rows = e.hiddenCompositorIntervals.rows.filter((row) => row.paneId === "main:live"); },
+    (e) => { e.hiddenCompositorIntervals.overflow = 1; },
+    (e) => { e.hiddenCompositorIntervals.invalid = 1; },
+    (e) => { e.hiddenCompositorIntervals.rows[2].potentialAcquireAttemptsUpperBound = 2; },
+    (e) => { e.hiddenCompositorIntervals.rows[3].startObservedEpochMicros--; },
+  ]) {
+    const evidence = interiorEvidence(); corrupt(evidence);
+    assert.equal(evaluateSteadyHiddenCompositor(evidence).status, "unverified");
+  }
+  assert.equal(evaluateSteadyHiddenCompositor(fixture().nativeStage.phases).status, "unverified");
 });

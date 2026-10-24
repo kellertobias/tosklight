@@ -297,7 +297,7 @@ impl Application {
         let forced = self.options.capture.is_some()
             || self.options.verify_only
             || self.options.benchmark_seconds.is_some();
-        if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
+        if !forced && !self.redraw_gate.should_draw(&redraw_state, time_driven) {
             self.next_frame = now + Duration::from_millis(50);
             return None;
         }
@@ -309,7 +309,11 @@ impl Application {
             event_loop.exit();
             return None;
         }
-        Some(renderer.render(&session.scene, values, view, &self.overlay, time))
+        let result = renderer.render(&session.scene, values, view, &self.overlay, time);
+        if result.is_ok() {
+            self.redraw_gate.succeeded(redraw_state);
+        }
+        Some(result)
     }
 }
 

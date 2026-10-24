@@ -2,7 +2,7 @@
 use serde::Serialize;
 use std::sync::{
     Arc,
-    atomic::{AtomicU8, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
 };
 
 pub(super) fn open_device(
@@ -50,6 +50,11 @@ pub(crate) struct CompositorGpuSample {
 pub(crate) struct CompositorMeasurements {
     pub draw_attempts: u64,
     pub submissions: u64,
+    pub clean_skips: u64,
+    pub hidden_skips: u64,
+    pub busy_skips: u64,
+    pub paced_skips: u64,
+    pub retries: u64,
     pub occluded: u64,
     pub timeouts: u64,
     pub reconfigures: u64,
@@ -125,6 +130,7 @@ pub(super) struct GpuTiming {
     period: f64,
     // 0 = waiting, 1 = frame GPU work complete, 2 = mapped, 3 = mapping failed.
     ready: Arc<AtomicU8>,
+    cancelled: Arc<AtomicBool>,
     phase: ReadbackPhase,
     pending: Option<CompositorGpuSample>,
     next_sample_id: u64,
@@ -162,6 +168,7 @@ impl GpuTiming {
             }),
             period: f64::from(queue.get_timestamp_period()),
             ready: Arc::new(AtomicU8::new(0)),
+            cancelled: Arc::new(AtomicBool::new(false)),
             phase: ReadbackPhase::Idle,
             pending: None,
             next_sample_id: 0,
@@ -169,17 +176,17 @@ impl GpuTiming {
     }
 
     pub fn writes(&self) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        self.pending
-            .is_none()
-            .then_some(wgpu::RenderPassTimestampWrites {
+        (self.pending.is_none() && !self.cancelled.load(Ordering::Acquire)).then_some(
+            wgpu::RenderPassTimestampWrites {
                 query_set: &self.queries,
                 beginning_of_pass_write_index: Some(0),
                 end_of_pass_write_index: Some(1),
-            })
+            },
+        )
     }
 
     pub fn resolve(&mut self, submission_id: u64, scope: CompositorScope) -> bool {
-        if self.pending.is_some() {
+        if self.pending.is_some() || self.cancelled.load(Ordering::Acquire) {
             return false;
         }
         // Reserve this query pair and its immutable identity only. Metal timestamp counters
@@ -201,18 +208,31 @@ impl GpuTiming {
 
     /// Called exactly once after the render submission. This callback never waits or maps.
     pub fn request_readback(&mut self) {
-        if self.phase != ReadbackPhase::AwaitingSubmission {
+        if self.phase != ReadbackPhase::AwaitingSubmission || self.cancelled.load(Ordering::Acquire)
+        {
             return;
         }
         self.phase = ReadbackPhase::AwaitingFrame;
         let ready = self.ready.clone();
+        let cancelled = self.cancelled.clone();
         self.queue.on_submitted_work_done(move || {
-            ready.store(1, Ordering::Release);
+            if !cancelled.load(Ordering::Acquire) {
+                ready.store(1, Ordering::Release);
+            }
         });
+    }
+
+    /// Keep resources alive for already queued operations, but never enqueue a deferred resolve
+    /// after retirement's terminal queue fence. Called on the same UI thread as collect().
+    pub fn cancel(&mut self) {
+        self.cancelled.store(true, Ordering::Release);
     }
 
     /// Encode the resolve in a fresh command buffer after the frame's completion callback.
     fn begin_mapping(&mut self) {
+        if self.cancelled.load(Ordering::Acquire) {
+            return;
+        }
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -231,7 +251,7 @@ impl GpuTiming {
     }
 
     fn collect(&mut self, invalid: &mut u64) -> Result<Option<CompositorGpuSample>, ()> {
-        if self.pending.is_none() {
+        if self.pending.is_none() || self.cancelled.load(Ordering::Acquire) {
             return Ok(None);
         }
         match self.ready.swap(0, Ordering::Acquire) {

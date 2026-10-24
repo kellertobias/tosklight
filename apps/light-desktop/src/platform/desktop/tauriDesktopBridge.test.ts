@@ -161,3 +161,9 @@ describe("Tauri desktop bridge", () => {
 		);
 	});
 });
+
+
+it("reports resident Stage visibility through its scoped native command", async () => {
+	await tauriDesktopBridge.setStagePaneVisibility("pane-7", false);
+	expect(mocks.invoke).toHaveBeenLastCalledWith("set_stage_pane_visibility", { paneId: "pane-7", visible: false });
+});

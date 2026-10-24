@@ -149,6 +149,8 @@ export const tauriDesktopBridge: DesktopBridge = {
 		invoke("open_stage_pane", { paneId, live3d, geometry }),
 	setStagePane: (paneId, geometry) =>
 		invoke("set_stage_pane", { paneId, geometry }),
+	setStagePaneVisibility: (paneId, visible) =>
+		invoke("set_stage_pane_visibility", { paneId, visible }),
 	closeStagePane: (paneId) => invoke("close_stage_pane", { paneId }),
 	sendStagePaneInput: (gesture, x, y, paneId) =>
 		invoke("stage_pane_input", { paneId, gesture, x, y }),

@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// FramePresented now carries GPU sample identity/provenance. Postcard shapes are not
-// additive: reject stale helpers rather than decode ambiguous measurement evidence.
-pub const PROTOCOL_MAJOR: u16 = 10;
+// Shared slot ownership and completed-frame readiness change postcard payload shapes.
+// Reject stale helpers before exchanging surfaces that they could overwrite while sampled.
+pub const PROTOCOL_MAJOR: u16 = 11;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 1;
 
@@ -35,6 +35,23 @@ pub enum FrameTransport {
     /// A surface both processes address on the GPU: `IOSurface` on macOS, a shared DXGI handle on
     /// Windows. The helper draws into it and the desk samples it; nothing is copied.
     Shared,
+}
+
+/// One immutable rendered picture in a raster-generation slot.
+///
+/// A release names the exact picture, never just a reusable slot. Generation and sequence start
+/// at one; two shared slots are sufficient to retain the front while rendering its replacement.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+pub struct FrameId {
+    pub generation: u64,
+    pub slot: u8,
+    pub sequence: u64,
+}
+
+impl FrameId {
+    pub fn is_valid(self) -> bool {
+        self.generation > 0 && self.slot < 2 && self.sequence > 0
+    }
 }
 
 /// What this build can do on the platform it was compiled for.
@@ -97,7 +114,10 @@ pub enum ToHelper {
     /// A helper filling its own window never receives this. One drawing the desk's Stage pane
     /// receives it whenever the layout moves, and scissors itself to it — the surrounding chrome
     /// belongs to the webview, and a renderer that overshot would paint over the sheet.
-    Pane { pane: crate::pane::PaneRect },
+    Pane {
+        pane: crate::pane::PaneRect,
+        scale: f32,
+    },
     /// Close the window and exit. The desk waits briefly, then kills.
     Shutdown,
     /// Draw the desk's Stage pane instead of a window of the helper's own.
@@ -180,6 +200,10 @@ pub enum ToHelper {
     /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
     /// one per `pointermove`.
     Input { input: PaneInput },
+    /// Display visibility only; providers and camera/input handling continue while hidden.
+    Visibility { visible: bool },
+    /// Sampling of this exact picture has finished. The active shared front stays retained.
+    ReleaseFrame { frame: FrameId },
 }
 
 /// Which way the Stage is being looked at.
@@ -306,6 +330,7 @@ pub enum FromHelper {
     /// The pane rectangle is sent rather than the whole window partly for this reason, and
     /// [`crate::framing::MAX_FRAME`] bounds what can cross.
     Frame {
+        frame: FrameId,
         width: u32,
         height: u32,
         rgba: Vec<u8>,
@@ -370,8 +395,11 @@ pub enum FromHelper {
     /// A surface the desk can sample, for [`FrameTransport::Shared`].
     ///
     /// Sent whenever the surface is created or replaced — which is every pane resize, since a
-    /// shared surface is a fixed size. The desk drops the previous one when this arrives.
+    /// shared surface is a fixed size. Importing does not make it ready; the previous front stays
+    /// alive until its replacement has completed composition.
     Surface {
+        generation: u64,
+        slot: u8,
         handle: SharedSurfaceHandle,
         width: u32,
         height: u32,
@@ -389,6 +417,9 @@ pub enum FromHelper {
         idle_unchanged: bool,
         draw_healthy: bool,
     },
+    /// The helper GPU has finished writing this shared picture. It may now be sampled, and must
+    /// remain immutable until the desk releases its exact identity.
+    FrameReady { frame: FrameId },
 }
 
 /// A GPU surface named in a way the other process can open.
@@ -513,6 +544,7 @@ mod tests {
             },
             ToHelper::View { payload: vec![9] },
             ToHelper::Pane {
+                scale: 1.0,
                 pane: crate::pane::PaneRect {
                     x: 224.0,
                     y: 40.0,
@@ -521,6 +553,14 @@ mod tests {
                 },
             },
             ToHelper::Shutdown,
+            ToHelper::Visibility { visible: false },
+            ToHelper::ReleaseFrame {
+                frame: FrameId {
+                    generation: 2,
+                    slot: 1,
+                    sequence: 42,
+                },
+            },
             ToHelper::Embed {
                 pane: crate::pane::PaneRect {
                     x: 0.0,
@@ -569,15 +609,26 @@ mod tests {
     #[test]
     fn every_answer_survives_the_round_trip() {
         let answers = [
+            FromHelper::FrameReady {
+                frame: FrameId {
+                    generation: 2,
+                    slot: 1,
+                    sequence: 42,
+                },
+            },
             FromHelper::Capabilities {
                 transports: vec![FrameTransport::Copy, FrameTransport::Shared],
             },
             FromHelper::Surface {
+                generation: 1,
+                slot: 0,
                 handle: SharedSurfaceHandle::IoSurfaceId(4_919),
                 width: 1_920,
                 height: 1_080,
             },
             FromHelper::Surface {
+                generation: 1,
+                slot: 0,
                 handle: SharedSurfaceHandle::DxgiSharedHandle(0xdead_beef),
                 width: 640,
                 height: 360,
@@ -644,6 +695,11 @@ mod tests {
     #[test]
     fn a_rendered_frame_crosses_the_channel() {
         let frame = FromHelper::Frame {
+            frame: FrameId {
+                generation: 1,
+                slot: 0,
+                sequence: 1,
+            },
             width: 4,
             height: 2,
             rgba: vec![0xab; 4 * 2 * 4],
@@ -658,6 +714,11 @@ mod tests {
     fn a_frame_larger_than_the_channel_allows_is_refused() {
         let pixels = crate::framing::MAX_FRAME / 4 + 1_024;
         let frame = FromHelper::Frame {
+            frame: FrameId {
+                generation: 1,
+                slot: 0,
+                sequence: 1,
+            },
             width: pixels as u32,
             height: 1,
             rgba: vec![0; pixels * 4],
@@ -888,6 +949,8 @@ mod benchmark_heartbeat_tests {
         );
         assert_eq!(
             encode(&FromHelper::Surface {
+                generation: 1,
+                slot: 0,
                 handle: SharedSurfaceHandle::IoSurfaceId(1),
                 width: 1,
                 height: 1
@@ -913,6 +976,30 @@ mod benchmark_heartbeat_tests {
         assert_eq!(
             decode::<FromHelper>(&encode(&heartbeat).unwrap()).unwrap(),
             heartbeat
+        );
+    }
+    #[test]
+    fn frame_ownership_identity_requires_a_real_generation_slot_and_sequence() {
+        let frame = FrameId {
+            generation: 1,
+            slot: 1,
+            sequence: 1,
+        };
+        assert!(frame.is_valid());
+        assert!(
+            !FrameId {
+                generation: 0,
+                ..frame
+            }
+            .is_valid()
+        );
+        assert!(!FrameId { slot: 2, ..frame }.is_valid());
+        assert!(
+            !FrameId {
+                sequence: 0,
+                ..frame
+            }
+            .is_valid()
         );
     }
 }

@@ -1,9 +1,9 @@
-const names = ["static", "camera", "hidden", "revealed"];
 const finiteCamera = (camera) => Array.isArray(camera) && camera.length === 6 && camera.every(Number.isFinite);
 const sorted = (panes) => (panes ?? []).map((pane) => `${pane.paneId}\0${pane.attachmentId}`).sort();
 
 /** Phase completion is measurement evidence only, never a GPU reduction/display acceptance pass. */
 export function evaluateBaselinePhases(complete, configuration, matchingRows) {
+  const names = [configuration.phases === "animated-camera-hidden" ? "animated" : "static", "camera", "hidden", "revealed"];
   const evidence = complete.nativeStage?.phases;
   const failures = [];
   const rows = evidence?.rows;
@@ -61,5 +61,60 @@ export function evaluateBaselinePhases(complete, configuration, matchingRows) {
       sampledGpuMicros: covered.reduce((sum, row) => sum + row.gpuSampleMicrosSum, 0),
       boundary: "Whole-bucket helper submissions and sparse timing samples; not total GPU time/s or displayed FPS" };
   });
-  return { measurementStatus: failures.length ? "incomplete" : "ready-for-review", evidence, summaries, failures };
+  return { measurementStatus: failures.length ? "incomplete" : "ready-for-review", evidence, summaries, failures,
+    steadyHiddenCompositor: evaluateSteadyHiddenCompositor(evidence),
+    steadyStaticCompositor: { status: "unverified", reason: "Only phase-boundary aggregate arrivals are retained for static; no native counter interval series establishes steady static compositor work" } };
+}
+
+/** Exclude unknown startup spans and the first250ms after verified native hide. */
+export function evaluateSteadyHiddenCompositor(evidence) {
+  const retained = evidence?.hiddenCompositorIntervals;
+  const visibility = evidence?.nativeVisibility;
+  const expected = evidence?.attachmentsBeforeHidden ?? [];
+  const unverified = (reason) => ({ status: "unverified", reason,
+    boundary: "Native compositor counter intervals only; zero counters are not proof of zero GPU utilization" });
+  if (!retained || retained.invalid || retained.overflow || !Array.isArray(retained.rows) || retained.rows.length > 240)
+    return unverified("Bounded hidden compositor intervals are missing, invalid or overflowed");
+  if (!visibility?.hiddenVerified || !visibility?.revealedVerified || !Number.isSafeInteger(visibility.hiddenEpochMicros) || !Number.isSafeInteger(visibility.revealedEpochMicros) || !expected.length)
+    return unverified("Verified native hidden boundaries or owned pane identities are missing");
+  if (expected.length > 2 || new Set(sorted(expected)).size !== expected.length || expected.some((pane) => !pane.paneId?.startsWith("main:") || !pane.attachmentId))
+    return unverified("Owned hidden pane identities are invalid");
+  const eligibleStart = visibility.hiddenEpochMicros + 250_000;
+  const finish = visibility.revealedEpochMicros;
+  const lanes = [];
+  for (const pane of expected) {
+    const rows = retained.rows.filter((row) => row.paneId === pane.paneId && row.attachmentId === pane.attachmentId &&
+      Number.isSafeInteger(row.startObservedEpochMicros) && Number.isSafeInteger(row.endObservedEpochMicros) &&
+      row.startObservedEpochMicros >= eligibleStart && row.endObservedEpochMicros <= finish && row.endObservedEpochMicros > row.startObservedEpochMicros);
+    if (!rows.length) return unverified(`No wholly interior native intervals for ${pane.paneId}`);
+    let previous = null;
+    let covered = 0;
+    for (const row of rows) {
+      if (previous !== null && row.startObservedEpochMicros < previous) return unverified("Native compositor intervals overlap or are reordered");
+      for (const name of ["drawAttempts", "submissions", "acquireWallMicros", "occluded", "timeouts", "reconfigures", "errors"])
+        if (!Number.isSafeInteger(row.counters?.[name]) || row.counters[name] < 0) return unverified("Native compositor interval counters are invalid");
+      const skipNames = ["cleanSkips", "hiddenSkips", "busySkips", "pacedSkips"];
+      const known = skipNames.every((name) => Number.isSafeInteger(row.counters[name]) && row.counters[name] >= 0);
+      const expectedUpper = known ? row.counters.drawAttempts - skipNames.reduce((total, name) => total + row.counters[name], 0) : null;
+      if ((expectedUpper !== null && expectedUpper < 0) || row.potentialAcquireAttemptsUpperBound !== expectedUpper)
+        return unverified("Compositor acquisition admission accounting is inconsistent");
+      previous = row.endObservedEpochMicros;
+      covered += row.endObservedEpochMicros - row.startObservedEpochMicros;
+    }
+    const sum = (name) => rows.reduce((total, row) => total + row.counters[name], 0);
+    const upperKnown = rows.every((row) => Number.isSafeInteger(row.potentialAcquireAttemptsUpperBound) && row.potentialAcquireAttemptsUpperBound >= 0);
+    lanes.push({ ...pane, intervals: rows.length, firstObservedEpochMicros: rows[0].startObservedEpochMicros,
+      lastObservedEpochMicros: rows.at(-1).endObservedEpochMicros, coveredMicros: covered,
+      eligibleWindowMicros: Math.max(0, finish - eligibleStart),
+      drawAttempts: sum("drawAttempts"), submissions: sum("submissions"),
+      acquireWallMicros: sum("acquireWallMicros"), occluded: sum("occluded"), timeouts: sum("timeouts"),
+      errors: sum("errors"), reconfigures: sum("reconfigures"),
+      potentialAcquireAttemptsUpperBound: upperKnown ? rows.reduce((total, row) => total + row.potentialAcquireAttemptsUpperBound, 0) : null,
+    });
+  }
+  return { status: lanes.every((lane) => lane.submissions === 0 && lane.acquireWallMicros === 0)
+      ? "zero-submissions-and-acquire-wall-observed" : "work-observed",
+    settlingExcludedMicros: 250_000, eligibleStartEpochMicros: eligibleStart, endEpochMicros: finish, lanes,
+    zeroAcquireAdmissionsObserved: lanes.every((lane) => lane.potentialAcquireAttemptsUpperBound === 0),
+    boundary: "Wholly interior native compositor counter intervals with actual per-pane coverage. Zero acquire wall time can be quantized; zero acquisition admissions require the skip-accounted upper bound. No GPU utilization or total GPU-time claim." };
 }

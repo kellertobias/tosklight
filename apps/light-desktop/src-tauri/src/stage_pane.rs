@@ -18,54 +18,36 @@
 
 use crate::stage_compositor::StageCompositor;
 mod benchmark;
+mod closing;
+mod tick;
+mod transport;
+mod visibility;
+mod writer;
+use transport::{FromRenderer, read_renderer};
+use visibility::PaneVisibility;
+use writer::PaneWriter;
 mod picture;
 use benchmark::{BenchmarkAttachment, benchmark_attachment};
 pub(crate) use benchmark::{FrameTelemetry, PaneHeartbeat, StagePaneBenchmarkSamples};
 pub(crate) use picture::Picture;
 use std::collections::HashMap;
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
-use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, SyncSender, TryRecvError};
+use std::sync::{Arc, Mutex, OnceLock};
 use viz_helper::handshake::{HelperIdentity, greet_helper};
 use viz_helper::pane::PaneRect;
 use viz_helper::protocol::{
     DeskEndpoint, FrameTransport, FromHelper, PaneInput, SharedSurfaceHandle, ToHelper, decode,
-    encode, supported_transports,
+    supported_transports,
 };
 use viz_helper::{SupervisedHelper, framing};
-
-/// What the reading thread hands the desk.
-enum FromRenderer {
-    /// A surface both processes address, replacing whatever was being drawn.
-    Surface {
-        handle: SharedSurfaceHandle,
-        width: u32,
-        height: u32,
-    },
-    /// A frame that came through the pipe.
-    Frame {
-        width: u32,
-        height: u32,
-        rgba: Vec<u8>,
-    },
-    Presented(FrameTelemetry),
-    BenchmarkHeartbeat(PaneHeartbeat),
-    /// Where the camera now is.
-    Camera([f32; 6]),
-    /// What the operator pointed at in the pane.
-    Picked {
-        fixture: Option<String>,
-        additive: bool,
-    },
-    /// Something the operator has to see. Not fatal on its own.
-    Trouble(String),
-    /// The channel ended, with the reason.
-    Finished(String),
-}
 
 /// The embedded Stage, while there is one.
 #[derive(Default)]
 pub(crate) struct StagePane {
     inner: Mutex<Option<Running>>,
+    retiring: std::sync::atomic::AtomicBool,
+    retirement_done: tokio::sync::Notify,
+    retirement_error: Mutex<Option<String>>,
     /// The last thing that went wrong, for the interface to show and act on.
     trouble: Mutex<Option<String>>,
     /// What the operator has pointed at since the interface last asked.
@@ -101,6 +83,7 @@ struct RegisteredPane {
 }
 
 impl StagePanes {
+    #[cfg(test)]
     fn ensure_owner_available(&self, key: &str, live_3d: bool) -> Result<(), String> {
         let panes = self.panes.lock().map_err(|_| "the Stage pane registry")?;
         Self::ensure_owner_available_in(&panes, key, live_3d)
@@ -143,6 +126,7 @@ impl StagePanes {
         surface_size: (u32, u32),
         pane_rect: PaneRect,
         scale: f32,
+        window_visible: bool,
     ) -> Result<(), String>
     where
         T: raw_window_handle::HasWindowHandle
@@ -167,6 +151,7 @@ impl StagePanes {
             pane_rect,
             scale,
             format!("stage-pane:{key}"),
+            window_visible,
         ) {
             if let Ok(mut panes) = self.panes.lock()
                 && let Some(registered) = panes.get_mut(&key)
@@ -190,14 +175,19 @@ impl StagePanes {
         pane.close()
     }
 
-    fn drawing_panes(&self) -> Vec<Arc<StagePane>> {
+    fn drawing_panes(&self) -> Vec<(String, Arc<StagePane>)> {
         self.panes.lock().map_or_else(
             |_| Vec::new(),
             |panes| {
                 panes
-                    .values()
-                    .filter(|registered| registered.pane.is_drawing())
-                    .map(|registered| Arc::clone(&registered.pane))
+                    .iter()
+                    .filter(|(_, registered)| registered.pane.needs_pump())
+                    .map(|(key, registered)| {
+                        (
+                            key.split(':').next().unwrap_or_default().to_owned(),
+                            Arc::clone(&registered.pane),
+                        )
+                    })
                     .collect()
             },
         )
@@ -224,11 +214,12 @@ impl StagePanes {
 }
 
 struct Running {
-    helper: SupervisedHelper,
+    helper: Option<SupervisedHelper>,
     /// Where the renderer hands over each surface, while the transport shares one.
     #[cfg(target_os = "macos")]
     rendezvous: Option<viz_surface::rendezvous::Rendezvous>,
-    to_helper: Option<std::process::ChildStdin>,
+    to_helper: Option<PaneWriter>,
+    channel_error: Option<String>,
     inbox: Receiver<FromRenderer>,
     compositor: StageCompositor,
     identity: HelperIdentity,
@@ -237,6 +228,7 @@ struct Running {
     pane: PaneRect,
     scale: f32,
     surface_size: (u32, u32),
+    visibility: PaneVisibility,
 }
 
 impl StagePane {
@@ -253,6 +245,7 @@ impl StagePane {
         pane: PaneRect,
         scale: f32,
         target: String,
+        window_visible: bool,
     ) -> Result<(), String>
     where
         T: raw_window_handle::HasWindowHandle
@@ -262,32 +255,9 @@ impl StagePane {
             + 'static,
     {
         self.close()?;
+        self.assert_openable()?;
         let benchmark = benchmark_attachment()?;
-        let program = match crate::visualizer::helper_binary() {
-            Ok(program) => program,
-            Err(error) => {
-                eprintln!("stage pane: no renderer beside the application: {error}");
-                return Err(error);
-            }
-        };
-        // `--embed` opens no helper window: the desk owns the window and pane rectangle.
-        let mut helper = crate::portable::renderer(program, vec!["--embed".to_owned()]);
-        if let Err(error) = helper.start() {
-            eprintln!("stage pane: the renderer would not start: {error}");
-            return Err(error);
-        }
-        let (mut to_helper, mut from_helper) = helper
-            .take_channel()
-            .ok_or("the renderer started without a channel")?;
-        eprintln!("stage pane: renderer started, greeting it");
-        let identity = match greet_helper(&mut to_helper, &mut from_helper, "ToskLight Stage") {
-            Ok(identity) => identity,
-            Err(error) => {
-                helper.stop();
-                eprintln!("stage pane: the renderer would not agree a protocol: {error}");
-                return Err(error.to_string());
-            }
-        };
+        let (mut helper, to_helper, from_helper, identity) = start_helper()?;
         // A surface has no name this channel can carry, so a shared transport needs a channel a
         // mach right can cross. Opening one is also the only honest test of whether this process
         // may: a restricted process cannot register a name, and then the pair shares pixels
@@ -306,22 +276,30 @@ impl StagePane {
         #[cfg(not(target_os = "macos"))]
         let surface_service: Option<String> = None;
 
-        // What both sides can do decides what happens next — including nothing at all, which is
-        // the desk keeping its web renderer rather than an error anybody has to handle.
-        let Some(transport) = identity.embeddable_with(&desk_transports(surface_service.is_some()))
-        else {
-            helper.stop();
-            eprintln!(
-                "stage pane: no shared transport; desk offers {:?}, renderer offers {:?}",
-                desk_transports(surface_service.is_some()),
-                identity.transports
-            );
-            return Err(
-                "this renderer and this desk share no way to move a picture between them"
-                    .to_owned(),
-            );
+        let transport = match crate::packaged_benchmark::baseline_transport(
+            &identity,
+            desk_transports(surface_service.is_some()),
+        ) {
+            Ok(transport) => transport,
+            Err(error) => {
+                helper.stop();
+                return Err(error);
+            }
         };
 
+        let (outbox, inbox) = std::sync::mpsc::sync_channel(128);
+        std::thread::Builder::new()
+            .name("stage-pane-channel".into())
+            .spawn(move || read_renderer(from_helper, &outbox))
+            .map_err(|error| error.to_string())?;
+
+        let to_helper = match PaneWriter::start(to_helper) {
+            Ok(writer) => writer,
+            Err(error) => {
+                helper.stop();
+                return Err(error);
+            }
+        };
         let compositor =
             match StageCompositor::attach(window, surface_size.0, surface_size.1, scale) {
                 Ok(compositor) => compositor,
@@ -332,17 +310,12 @@ impl StagePane {
                 }
             };
 
-        let (outbox, inbox) = channel();
-        std::thread::Builder::new()
-            .name("stage-pane-channel".into())
-            .spawn(move || read_renderer(from_helper, &outbox))
-            .map_err(|error| error.to_string())?;
-
         let mut running = Running {
-            helper,
+            helper: Some(helper),
             #[cfg(target_os = "macos")]
             rendezvous,
             to_helper: Some(to_helper),
+            channel_error: None,
             inbox,
             compositor,
             identity,
@@ -351,6 +324,7 @@ impl StagePane {
             pane,
             scale,
             surface_size,
+            visibility: PaneVisibility::new(pane, window_visible),
         };
         running.compositor.set_pane(pane, scale);
         running.send(&Picture::startup().into_helper());
@@ -369,6 +343,7 @@ impl StagePane {
             }),
             surface_service,
         });
+        running.refresh_visibility();
         // A renderer starts looking wherever its defaults put it. An operator who aimed this pane,
         // switched to another built-in and came back should find their view, not a reset one — so
         // the camera the last renderer reported is given straight back to this one.
@@ -394,6 +369,7 @@ impl StagePane {
         self.drawing
             .store(true, std::sync::atomic::Ordering::Release);
         *self.trouble.lock().map_err(|_| "the Stage pane")? = None;
+        wake_pump();
         Ok(())
     }
 
@@ -409,11 +385,13 @@ impl StagePane {
             return Ok(());
         };
         running.pane = pane;
+        running.visibility.set_geometry(pane);
         running.scale = scale;
         running.surface_size = surface_size;
         running.compositor.resize(surface_size.0, surface_size.1);
         running.compositor.set_pane(pane, scale);
-        running.send(&ToHelper::Pane { pane });
+        running.send(&ToHelper::Pane { pane, scale });
+        running.refresh_visibility();
         Ok(())
     }
 
@@ -438,114 +416,6 @@ impl StagePane {
         Ok(())
     }
 
-    /// Take what has arrived and draw. Driven from the desk's own loop, on the thread that owns
-    /// the window, because that is where a surface may be presented.
-    pub(crate) fn tick(&self) -> Result<(), String> {
-        let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
-        let Some(running) = guard.as_mut() else {
-            return Ok(());
-        };
-        let mut trouble = None;
-        let mut ended = false;
-        let mut picked: Vec<(Option<String>, bool)> = Vec::new();
-        let mut latest_camera = None;
-        loop {
-            match running.inbox.try_recv() {
-                Ok(FromRenderer::Surface {
-                    handle,
-                    width,
-                    height,
-                }) => {
-                    // A surface that cannot be opened is not the end of the pane: the renderer
-                    // replaces it on the next resize, and the last good picture stays up.
-                    let adoption = running.adopt(handle, width, height);
-                    if let Some(benchmark) = running.benchmark.as_mut() {
-                        benchmark.source_ready = adoption.is_ok();
-                        benchmark.draw_healthy &= adoption.is_ok();
-                    }
-                    if let Err(detail) = adoption {
-                        trouble = Some(detail);
-                    }
-                }
-                Ok(FromRenderer::Frame {
-                    width,
-                    height,
-                    rgba,
-                }) => {
-                    let adoption = running.compositor.accept_copy(width, height, &rgba);
-                    if let Some(benchmark) = running.benchmark.as_mut() {
-                        benchmark.source_ready = adoption.is_ok();
-                        benchmark.draw_healthy &= adoption.is_ok();
-                    }
-                    if let Err(detail) = adoption {
-                        trouble = Some(detail);
-                    }
-                }
-                Ok(FromRenderer::Presented(sample)) => {
-                    self.record_benchmark_frame(running, sample)?
-                }
-                Ok(FromRenderer::BenchmarkHeartbeat(heartbeat)) => {
-                    self.record_benchmark_heartbeat(running, heartbeat)?
-                }
-                Ok(FromRenderer::Camera(camera)) => latest_camera = Some(camera),
-                Ok(FromRenderer::Picked { fixture, additive }) => {
-                    // Straight to the interface, which owns what is selected. The desk is only
-                    // carrying the answer between the renderer that resolved the geometry and the
-                    // one place allowed to decide what it means.
-                    picked.push((fixture, additive));
-                }
-                Ok(FromRenderer::Trouble(detail)) => trouble = Some(detail),
-                Ok(FromRenderer::Finished(detail)) => {
-                    trouble = Some(detail);
-                    ended = true;
-                }
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    ended = true;
-                    break;
-                }
-            }
-        }
-        if ended {
-            // The renderer has gone. The supervisor would start another, but a fresh process has
-            // not been greeted and has never been told where the pane is, so it would draw
-            // nothing and the desk would hold a still picture of a rig that has since moved.
-            // Taking the pane down instead is what lets the interface see it stop and go back to
-            // the web renderer — which is the fallback existing for exactly this.
-            running.compositor.clear_source();
-            let _ = running.compositor.draw();
-            running.helper.stop();
-            *guard = None;
-            self.drawing
-                .store(false, std::sync::atomic::Ordering::Release);
-            drop(guard);
-            if let Some(detail) = trouble {
-                *self.trouble.lock().map_err(|_| "the Stage pane")? = Some(detail);
-            }
-            return Ok(());
-        }
-        let result = running.compositor.draw();
-        if let Some(benchmark) = running.benchmark.as_mut() {
-            benchmark.draw_healthy = result.is_ok() && benchmark.source_ready;
-        }
-        drop(guard);
-        if let Some(camera) = latest_camera {
-            *self.camera.lock().map_err(|_| "the Stage pane")? = Some(camera);
-        }
-        for (fixture, additive) in picked {
-            self.picked
-                .lock()
-                .map_err(|_| "the Stage pane")?
-                .push((fixture, additive));
-        }
-        if let Some(detail) = trouble.or_else(|| result.clone().err()) {
-            *self.trouble.lock().map_err(|_| "the Stage pane")? = Some(detail);
-        }
-        result
-    }
-
-    /// What went wrong most recently, if anything has.
-    /// Where the renderer's camera is, if it has said.
     pub(crate) fn camera(&self) -> Result<Option<[f32; 6]>, String> {
         Ok(*self.camera.lock().map_err(|_| "the Stage pane")?)
     }
@@ -583,6 +453,9 @@ impl StagePane {
 
     /// What is drawing and how it reaches the desk, for the diagnostics an operator reads.
     pub(crate) fn description(&self) -> Result<Option<String>, String> {
+        if !self.is_drawing() {
+            return Ok(None);
+        }
         let guard = self.inner.lock().map_err(|_| "the Stage pane")?;
         Ok(guard.as_ref().map(|running| {
             let transport = match running.transport {
@@ -597,78 +470,62 @@ impl StagePane {
     pub(crate) fn is_drawing(&self) -> bool {
         self.drawing.load(std::sync::atomic::Ordering::Acquire)
     }
-
-    pub(crate) fn close(&self) -> Result<(), String> {
-        self.drawing
-            .store(false, std::sync::atomic::Ordering::Release);
-        let mut guard = self.inner.lock().map_err(|_| "the Stage pane")?;
-        if let Some(running) = guard.as_mut() {
-            running.send(&ToHelper::Shutdown);
-            // One empty frame before anything is torn down.
-            //
-            // A swapchain keeps showing the last thing presented to it, and the interface above is
-            // transparent wherever it paints nothing — so a pane closed without this leaves its
-            // final Stage on the window for good. What that looks like is every built-in screen
-            // drawn over a Stage that is no longer there.
-            running.compositor.clear_source();
-            let _ = running.compositor.draw();
-            running.helper.stop();
-        }
-        *guard = None;
-        self.clear_benchmark_samples()?;
-        Ok(())
-    }
 }
 
 impl Running {
     /// Take the surface the renderer announced.
     ///
-    /// The message only says one is waiting; the right itself came through the rendezvous, because
-    /// a mach port name means nothing outside the task holding it and so cannot travel down the
-    /// channel the message did.
-    fn adopt(
-        &mut self,
-        #[cfg_attr(target_os = "macos", allow(unused_variables))] handle: SharedSurfaceHandle,
-        width: u32,
-        height: u32,
-    ) -> Result<(), String> {
-        #[cfg(target_os = "macos")]
-        {
-            let Some(rendezvous) = self.rendezvous.as_ref() else {
-                return Err("a surface arrived with nowhere to have come from".to_owned());
-            };
-            // Already queued: the renderer sends the right before the message that announces it.
-            let port = rendezvous
-                .receive(SURFACE_PATIENCE)?
-                .ok_or("the renderer announced a surface it never handed over")?;
-            return self.compositor.adopt_shared_port(port, width, height);
-        }
-        #[cfg(not(target_os = "macos"))]
-        {
-            self.compositor.adopt_shared(handle, width, height)
-        }
-    }
-
     /// A renderer that has died is not an error to send to: the desk carries on either way, and
     /// the next thing it sends will find a channel again or report that it did not.
     fn send(&mut self, message: &ToHelper) {
-        let Some(to_helper) = self.to_helper.as_mut() else {
+        if self.channel_error.is_some() {
             return;
-        };
-        let Ok(payload) = encode(message) else {
-            return;
-        };
-        if framing::write_frame(to_helper, &payload).is_err() {
-            self.to_helper = None;
+        }
+        if let Some(writer) = self.to_helper.as_ref() {
+            if let Err(detail) = writer.send(message.clone()) {
+                self.channel_error = Some(detail);
+                self.to_helper = None;
+            }
         }
     }
 }
 
-/// How long to wait for a right the renderer says it has already sent.
-///
-/// Short: the message announcing it is written after the right, so by the time this reads there is
-/// something queued. The wait exists for the scheduling gap between two processes, not for work.
-const SURFACE_PATIENCE: std::time::Duration = std::time::Duration::from_millis(500);
+fn start_helper() -> Result<
+    (
+        SupervisedHelper,
+        std::process::ChildStdin,
+        std::process::ChildStdout,
+        HelperIdentity,
+    ),
+    String,
+> {
+    let program = match crate::visualizer::helper_binary() {
+        Ok(program) => program,
+        Err(error) => {
+            eprintln!("stage pane: no renderer beside the application: {error}");
+            return Err(error);
+        }
+    };
+    // `--embed` opens no helper window: the desk owns the window and pane rectangle.
+    let mut helper = crate::portable::renderer(program, vec!["--embed".to_owned()]);
+    if let Err(error) = helper.start() {
+        eprintln!("stage pane: the renderer would not start: {error}");
+        return Err(error);
+    }
+    let (mut to_helper, mut from_helper) = helper
+        .take_channel()
+        .ok_or("the renderer started without a channel")?;
+    eprintln!("stage pane: renderer started, greeting it");
+    let identity = match greet_helper(&mut to_helper, &mut from_helper, "ToskLight Stage") {
+        Ok(identity) => identity,
+        Err(error) => {
+            helper.stop();
+            eprintln!("stage pane: the renderer would not agree a protocol: {error}");
+            return Err(error.to_string());
+        }
+    };
+    Ok((helper, to_helper, from_helper, identity))
+}
 
 /// Names each rendezvous a desk opens, so two panes in one process never collide.
 fn surface_service_counter() -> u64 {
@@ -698,180 +555,68 @@ pub(crate) fn embedding_possible() -> bool {
     crate::visualizer::helper_binary().is_ok()
 }
 
-/// The reading thread: decode what the renderer says until the channel ends.
-fn read_renderer(mut from_helper: impl std::io::Read, outbox: &Sender<FromRenderer>) {
-    loop {
-        let frame = match framing::read_frame(&mut from_helper) {
-            Ok(frame) => frame,
-            Err(error) => {
-                let _ = outbox.send(FromRenderer::Finished(error.to_string()));
-                return;
-            }
-        };
-        let sent = match decode::<FromHelper>(&frame) {
-            Ok(FromHelper::Surface {
-                handle,
-                width,
-                height,
-            }) => outbox.send(FromRenderer::Surface {
-                handle,
-                width,
-                height,
-            }),
-            Ok(FromHelper::Frame {
-                width,
-                height,
-                rgba,
-            }) => outbox.send(FromRenderer::Frame {
-                width,
-                height,
-                rgba,
-            }),
-            Ok(FromHelper::FramePresented {
-                sequence,
-                source_frame,
-                source_input_epoch_micros,
-                presented_epoch_micros,
-                cpu_micros,
-                acquire_micros,
-                gpu_micros,
-                gpu_sample_id,
-                gpu_sample_matches_frame,
-                transport,
-                instances,
-                draw_calls,
-                degraded,
-                renderer,
-                quality,
-                mode,
-                follow_preload,
-                width,
-                height,
-            }) => outbox.send(FromRenderer::Presented(FrameTelemetry {
-                pane_id: String::new(),
-                attachment_id: String::new(),
-                sequence,
-                source_frame,
-                source_input_epoch_micros,
-                presented_epoch_micros,
-                cpu_micros,
-                acquire_micros,
-                gpu_micros,
-                gpu_sample_id,
-                gpu_sample_matches_frame,
-                transport: match transport {
-                    viz_helper::protocol::FrameTransport::Shared => "shared",
-                    viz_helper::protocol::FrameTransport::Copy => "copy",
-                },
-                instances,
-                draw_calls,
-                degraded,
-                renderer,
-                quality: match quality {
-                    viz_helper::protocol::RenderQuality::Draft => "draft",
-                    viz_helper::protocol::RenderQuality::Standard => "standard",
-                    viz_helper::protocol::RenderQuality::High => "high",
-                    viz_helper::protocol::RenderQuality::Ultra => "ultra",
-                },
-                mode,
-                follow_preload,
-                width,
-                height,
-            })),
-            Ok(heartbeat @ FromHelper::BenchmarkHeartbeat { .. }) => {
-                benchmark::forward_heartbeat(heartbeat, outbox)
-            }
-            Ok(FromHelper::Camera {
-                x,
-                y,
-                z,
-                pan,
-                tilt,
-                distance,
-            }) => outbox.send(FromRenderer::Camera([x, y, z, pan, tilt, distance])),
-            Ok(FromHelper::Picked { fixture, additive }) => {
-                outbox.send(FromRenderer::Picked { fixture, additive })
-            }
-            Ok(FromHelper::Error { detail }) => outbox.send(FromRenderer::Trouble(detail)),
-            Ok(FromHelper::Stopping { detail }) => outbox.send(FromRenderer::Finished(detail)),
-            // The greeting is over; anything belonging to it arriving now is a stream out of step.
-            Ok(FromHelper::Ready { .. } | FromHelper::Capabilities { .. }) => Ok(()),
-            Err(detail) => outbox.send(FromRenderer::Finished(detail)),
-        };
-        if sent.is_err() {
-            return;
-        }
+/// No attached surface means no UI pump work. A helper message wakes this fallback wait.
+const IDLE: std::time::Duration = std::time::Duration::from_millis(250);
+const FRAME_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+static PUMP_WAKE: OnceLock<SyncSender<()>> = OnceLock::new();
+
+pub(super) fn wake_pump() {
+    if let Some(wake) = PUMP_WAKE.get() {
+        let _ = wake.try_send(());
     }
 }
 
-/// How often the desk draws its pane, while it has one.
-///
-/// The surface is presented with vsync, so this only has to be at least as fast as the display;
-/// the swapchain does the actual pacing and this loop blocks in `present` rather than spinning.
-const TICK: std::time::Duration = std::time::Duration::from_millis(8);
-
-/// How often the pump looks for a pane to start drawing, while there is none.
-///
-/// Deliberately far slower, and it costs the main thread nothing: with no pane there is nothing to
-/// draw, and a task posted to the main thread every few milliseconds from startup competes with
-/// the interface's own first paint on the one thread that can do either.
-const IDLE: std::time::Duration = std::time::Duration::from_millis(250);
-
-/// How long to wait for a posted frame before deciding the main thread is busy with something else.
-const FRAME_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
-
-/// Always yielded between frames, so the interface's own work is never starved by a renderer that
-/// happens to be keeping up perfectly.
-const MINIMUM_YIELD: std::time::Duration = std::time::Duration::from_millis(2);
-
-/// Drive the pane from the thread that owns the window.
-///
-/// A surface may only be presented on the main thread on macOS, and the frame has to be drawn
-/// whether or not the interface is doing anything, so the desk paces it rather than the web layer
-/// asking for each frame across an IPC boundary.
-///
-/// Each frame is waited for before the next is posted. Posting on a fixed interval instead looks
-/// equivalent and is not: a frame blocks in `present` until the display is ready, so posting
-/// faster than the display retires them queues work on the one thread the interface also draws
-/// on, without bound. What the operator sees is a beachball over a window that is busy drawing.
+/// One UI task at a time, then wait until an exact compositor deadline or fresh helper input.
+/// There is no fixed 8ms quantization or minimum 2ms floor on the 60Hz presentation deadline.
 pub(crate) fn drive(app: &tauri::AppHandle) {
     let handle = app.clone();
+    let (wake, events) = std::sync::mpsc::sync_channel(1);
+    if PUMP_WAKE.set(wake).is_err() {
+        return;
+    }
     std::thread::Builder::new()
         .name("stage-pane".into())
         .spawn(move || {
             use tauri::Manager;
             loop {
-                // Asked off the main thread, and without the lock a frame takes, so a desk with no
-                // pane never reaches the interface's thread at all.
                 let panes = handle.state::<StagePanes>().drawing_panes();
                 if panes.is_empty() {
-                    std::thread::sleep(IDLE);
+                    let _ = events.recv_timeout(IDLE);
                     continue;
                 }
-                let started = std::time::Instant::now();
+                while events.try_recv().is_ok() {}
                 let (done, wait) = std::sync::mpsc::channel();
-                let handle = handle.clone();
-                let posted = handle.clone().run_on_main_thread(move || {
-                    for pane in panes {
+                let owner = handle.clone();
+                let posted = handle.run_on_main_thread(move || {
+                    let mut deadline = std::time::Instant::now() + IDLE;
+                    for (label, pane) in panes {
+                        let Some(window) = owner.get_webview_window(&label) else {
+                            let _ = pane.window_destroyed();
+                            deadline =
+                                deadline.min(std::time::Instant::now() + pane.next_poll_delay());
+                            continue;
+                        };
+                        let visible = window.is_visible().unwrap_or(false)
+                            && !window.is_minimized().unwrap_or(true);
+                        let _ = pane.set_window_visible(visible);
                         let _ = pane.tick();
+                        deadline = deadline.min(std::time::Instant::now() + pane.next_poll_delay());
                     }
-                    // Tells this thread the main thread is free again, so the next frame is not
-                    // stacked on top of one still waiting for the display.
-                    let _ = done.send(());
+                    let measured = std::time::Instant::now();
+                    let _ = done.send((measured, deadline.saturating_duration_since(measured)));
                 });
                 if posted.is_err() {
-                    // The application is going away, which is the only reason posting fails.
                     return;
                 }
-                if wait.recv_timeout(FRAME_TIMEOUT).is_err() {
-                    // The main thread is busy with something else entirely. Backing off is better
-                    // than adding to it.
-                    std::thread::sleep(IDLE);
-                    continue;
-                }
-                // Whatever is left of the frame after drawing it, and never nothing: a frame that
-                // took longer than the interval still yields the thread before the next.
-                std::thread::sleep(TICK.saturating_sub(started.elapsed()).max(MINIMUM_YIELD));
+                // A timeout is not cancellation: keep the same outstanding UI receipt.
+                let (measured, delay) = loop {
+                    match wait.recv_timeout(FRAME_TIMEOUT) {
+                        Ok(completed) => break completed,
+                        Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+                    }
+                };
+                let _ = events.recv_timeout(delay.saturating_sub(measured.elapsed()));
             }
         })
         .ok();
@@ -942,10 +687,11 @@ pub(crate) fn open_stage_pane(
     panes.open(
         key,
         live_3d,
-        Arc::new(window),
+        Arc::new(window.clone()),
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
         geometry.scale,
+        window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true),
     )
 }
 
@@ -968,12 +714,25 @@ pub(crate) fn set_stage_pane(
 }
 
 #[tauri::command]
-pub(crate) fn close_stage_pane(
+pub(crate) fn set_stage_pane_visibility(
     window: tauri::WebviewWindow,
     panes: tauri::State<'_, StagePanes>,
     pane_id: String,
+    visible: bool,
 ) -> Result<(), String> {
-    panes.close(&format!("{}:{pane_id}", window.label()))
+    if let Some(pane) = panes.pane(&format!("{}:{pane_id}", window.label()))? {
+        pane.set_web_visible(visible)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn close_stage_pane(
+    window: tauri::WebviewWindow,
+    pane_id: String,
+) -> Result<(), String> {
+    let key = format!("{}:{pane_id}", window.label());
+    closing::close_command(window, key).await
 }
 
 /// What the operator did over the pane, already coalesced by the web layer into one step.

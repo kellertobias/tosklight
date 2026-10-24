@@ -5,7 +5,7 @@ import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage
 test("baseline configuration preserves normal runs and declares fixed pixel budget", () => {
   assert.equal(readNativeBaselineConfig({}), null);
   assert.deepEqual(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual" }), {
-    layout: "dual", quality: "draft", view: "lines_3d", atmosphereAmount: 0, helperScheduling: "natural",
+    layout: "dual", requestedTransport: "auto", quality: "draft", view: "lines_3d", atmosphereAmount: 0, helperScheduling: "natural",
     physicalPixelArea: 2073600, laneWidth: 1920, laneHeight: 540, display: "internal" });
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "all" }));
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single", LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ: "120" }));
@@ -40,4 +40,33 @@ test("phase supplement requires explicit fixed and static configuration", () => 
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "unknown" }));
   assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "static-camera-hidden", LIGHT_PACKAGED_STAGE_DYNAMICS: "1" }));
   assert.equal(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "static-camera-hidden" }).phases, "static-camera-hidden");
+});
+
+test("animated suspension requires Dynamics and remains distinct from static evidence", () => {
+  const env = { LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_PACKAGED_BENCH_PHASES: "animated-camera-hidden" };
+  assert.throws(() => readNativeBaselineConfig(env));
+  assert.equal(readNativeBaselineConfig({ ...env, LIGHT_PACKAGED_STAGE_DYNAMICS: "1" }).phases, "animated-camera-hidden");
+});
+
+test("transport overrides require fixed layout and reject unknown conditions before launch", () => {
+  for (const transport of ["", "bogus", "Shared"])
+    assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single", LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT: transport }));
+  assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT: "copy" }));
+  for (const requestedTransport of ["auto", "copy", "shared"])
+    assert.equal(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single", LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT: requestedTransport }).requestedTransport, requestedTransport);
+});
+
+test("explicit transport requires matching helper and compositor evidence", () => {
+  const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single", LIGHT_STAGE_PACKAGED_BENCH_TRANSPORT: "copy" });
+  const helper = { paneId: "live", followPreload: false, gpuSampleCount: 1, width: 1920, height: 1080, mode: "lines_3d", quality: "draft", transport: "copy" };
+  const compositor = { samples: 1, scope: ["live", "one", 1, { sourceSize: [1920, 1080], transport: "copy" }] };
+  const complete = { nativeStage: { gpuObservations: { rows: [helper], counts: {}, compositor: { rows: [compositor], totals: {} } } } };
+  assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, true);
+  helper.transport = "shared";
+  assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
+  helper.transport = "copy";
+  compositor.scope[3].transport = "shared";
+  assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
+  delete helper.transport;
+  assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
 });

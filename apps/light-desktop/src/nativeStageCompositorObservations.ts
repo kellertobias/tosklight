@@ -1,16 +1,20 @@
 import type { StageCompositorObservation } from "./platform/desktop/types";
 
+const schedulingCounters = new Set(["cleanSkips", "hiddenSkips", "busySkips", "pacedSkips", "retries"]);
+
 /** Bounded intervals, separate from the helper; samples never estimate total GPU cost. */
 export class NativeStageCompositorObservations {
 	private readonly scopes = new Map<string, { samples: number; microsSum: number; microsMax: number }>();
 	private readonly attachments = new Map<string, number>();
 	private readonly totals = { drawAttempts: 0, submissions: 0, occluded: 0, timeouts: 0,
+		cleanSkips: 0, hiddenSkips: 0, busySkips: 0, pacedSkips: 0, retries: 0,
 		reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuInvalidSamples: 0, gpuSampleOverflow: 0,
 		cpuWallMicros: 0, acquireWallMicros: 0 };
 	private unavailable = new Set<string>();
 	private overflow = 0;
 	private invalid = 0;
 	private repeated = 0;
+	private readonly unavailableCounters = { cleanSkips: 0, hiddenSkips: 0, busySkips: 0, pacedSkips: 0, retries: 0 };
 
 	record(observations: readonly StageCompositorObservation[]) {
 		for (const observation of observations) {
@@ -22,7 +26,11 @@ export class NativeStageCompositorObservations {
 			const measurement = observation.measurement;
 			for (const name of Object.keys(this.totals) as Array<keyof typeof this.totals>) {
 				const value = measurement[name];
-				if (Number.isFinite(value) && value >= 0) this.totals[name] += value;
+				if (value === undefined && schedulingCounters.has(name)) {
+					this.unavailableCounters[name as keyof typeof this.unavailableCounters]++;
+					continue;
+				}
+				if (typeof value === "number" && Number.isFinite(value) && value >= 0) this.totals[name] += value;
 				else this.invalid++;
 			}
 			if (measurement.gpuTimingUnavailable && this.unavailable.size < 64) this.unavailable.add(measurement.gpuTimingUnavailable.slice(0, 512));
@@ -47,9 +55,10 @@ export class NativeStageCompositorObservations {
 
 	report() {
 		return { totals: { ...this.totals }, overflow: this.overflow, invalid: this.invalid,
+			unavailableCounters: { ...this.unavailableCounters },
 			repeatedSamples: this.repeated, unavailable: [...this.unavailable],
 			actualDisplayedFrames: null,
-			boundary: "Compositor render-pass samples and elapsed CPU wall time. Sparse samples are not total GPU time per second; submit/completion is not display.",
+			boundary: "Compositor render-pass samples and elapsed CPU wall time. Clean/hidden skips do not acquire, encode, submit or present; busy/paced skips retain dirty work and retries do not establish a frame. Missing historical counters are unavailable, not measured zeros. Sparse samples are not total GPU time per second; submit/completion is not display.",
 			rows: [...this.scopes].map(([key, value]) => ({ scope: JSON.parse(key), ...value,
 				microsMean: value.microsSum / value.samples })) };
 	}
