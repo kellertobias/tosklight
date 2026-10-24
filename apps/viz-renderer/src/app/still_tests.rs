@@ -87,8 +87,13 @@ fn still_controls_show_both_engines_reasons_cancel_and_saved_actions() {
     status.phase = Phase::Saved {
         path: std::path::PathBuf::from("/saved/image.png"),
     };
+    status.engine = Some(Engine::Ultimate);
     ui.reset();
     ui.observe(Some(status.clone()));
+    let saved = ui.content().0.join(" ");
+    assert!(saved.contains("3840 × 2160 image saved"));
+    assert!(saved.contains("Ultimate · Blender"));
+    assert!(saved.contains("16:9 framing"));
     assert!(!ui.modal());
     ui.draw(&mut overlay, 1280.0, 720.0);
     assert!(matches!(ui.action_at(300.0, 584.0), Some(ui::Action::Open)));
