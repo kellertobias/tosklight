@@ -164,6 +164,10 @@ impl LinesRenderer {
             &frame.meshes,
             replaced,
             instances_changed,
+            batch::CameraState {
+                clip_from_world: camera.view_projection,
+                eye_world: camera.position,
+            },
         )?;
         if replaced || instances_changed {
             let segments = frame

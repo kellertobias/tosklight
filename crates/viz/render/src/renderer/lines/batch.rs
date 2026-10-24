@@ -10,26 +10,49 @@ use crate::{
     renderer::RenderError,
 };
 use bytemuck::{Pod, Zeroable};
+use glam::{Mat4, Vec3};
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
+
+/// Only projection and eye affect instance records; ink and physical line width stay uniform.
+#[derive(Clone, Copy, PartialEq)]
+pub(super) struct CameraState {
+    pub clip_from_world: Mat4,
+    pub eye_world: Vec3,
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
 struct WireInstance {
-    model: [[f32; 4]; 4],
-    normal0: [f32; 4],
-    normal1: [f32; 4],
-    normal2: [f32; 4],
+    clip_from_local: [[f32; 4]; 4],
+    /// w=0 retains every silhouette candidate when a singular inverse cannot classify it.
+    local_eye: [f32; 4],
 }
-impl From<&MeshInstance> for WireInstance {
-    fn from(value: &MeshInstance) -> Self {
+impl WireInstance {
+    fn new(value: &MeshInstance, camera: CameraState) -> Self {
+        let model = Mat4::from_cols_array_2d(&value.model);
+        let determinant = model.determinant();
+        // The exact-zero guard also permits glam's checked builds to handle collapsed models.
+        let local_eye = if model.is_finite() && determinant.is_finite() && determinant != 0.0 {
+            let inverse = model.inverse();
+            let eye = inverse.transform_point3(camera.eye_world);
+            if inverse.is_finite() && eye.is_finite() {
+                eye.extend(1.0).to_array()
+            } else {
+                [0.0; 4]
+            }
+        } else {
+            [0.0; 4]
+        };
         Self {
-            model: value.model,
-            normal0: value.normal0,
-            normal1: value.normal1,
-            normal2: value.normal2,
+            clip_from_local: (camera.clip_from_world * model).to_cols_array_2d(),
+            local_eye,
         }
     }
+}
+
+fn transforms_changed(previous: Option<CameraState>, camera: CameraState, instances: bool) -> bool {
+    instances || previous != Some(camera)
 }
 
 #[derive(Default)]
@@ -37,6 +60,7 @@ pub(super) struct Batch {
     layout: Vec<(MeshKind, usize)>,
     chunks: Vec<Chunk>,
     instances: u32,
+    camera: Option<CameraState>,
 }
 struct Chunk {
     _static_buffers: [wgpu::Buffer; 5],
@@ -44,8 +68,9 @@ struct Chunk {
     instance_bytes: Vec<u8>,
     links: Vec<(usize, usize)>,
     group: wgpu::BindGroup,
-    depth_vertices: u32,
-    edge_vertices: u32,
+    depth_indices: u32,
+    edge_indices: wgpu::Buffer,
+    edge_index_count: u32,
 }
 
 impl Batch {
@@ -59,6 +84,7 @@ impl Batch {
         drawn: &[(MeshKind, Vec<MeshInstance>)],
         assets_changed: bool,
         instances_changed: bool,
+        camera: CameraState,
     ) -> Result<(), RenderError> {
         if device.limits().max_storage_buffers_per_shader_stage < 6 {
             return Err(failure(
@@ -94,24 +120,29 @@ impl Batch {
             })?;
             let chunks = plans
                 .into_iter()
-                .map(|plan| Chunk::new(device, queue, pipelines, drawn, plan))
+                .map(|plan| Chunk::new(device, queue, pipelines, drawn, plan, camera))
                 .collect();
             self.chunks = chunks;
             self.instances = instances;
             self.layout = layout;
-        } else if instances_changed {
+        } else if transforms_changed(self.camera, camera, instances_changed) {
             for chunk in &mut self.chunks {
-                chunk.update(device, queue, drawn);
+                chunk.update(device, queue, drawn, camera);
             }
         }
+        self.camera = Some(camera);
         Ok(())
     }
     pub(super) fn draw_depth(&self, pass: &mut wgpu::RenderPass<'_>) -> u32 {
         let mut draws = 0;
         for chunk in &self.chunks {
-            if chunk.depth_vertices > 0 {
+            if chunk.depth_indices > 0 {
                 pass.set_bind_group(1, &chunk.group, &[]);
-                pass.draw(0..chunk.depth_vertices, 0..1);
+                pass.set_index_buffer(
+                    chunk._static_buffers[2].slice(..),
+                    wgpu::IndexFormat::Uint32,
+                );
+                pass.draw_indexed(0..chunk.depth_indices, 0, 0..1);
                 draws += 1;
             }
         }
@@ -120,9 +151,10 @@ impl Batch {
     pub(super) fn draw_edges(&self, pass: &mut wgpu::RenderPass<'_>) -> u32 {
         let mut draws = 0;
         for chunk in &self.chunks {
-            if chunk.edge_vertices > 0 {
+            if chunk.edge_index_count > 0 {
                 pass.set_bind_group(1, &chunk.group, &[]);
-                pass.draw(0..chunk.edge_vertices, 0..1);
+                pass.set_index_buffer(chunk.edge_indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..chunk.edge_index_count, 0, 0..1);
                 draws += 1;
             }
         }
@@ -140,6 +172,7 @@ impl Chunk {
         pipelines: &Pipelines,
         drawn: &[(MeshKind, Vec<MeshInstance>)],
         plan: plan::ChunkPlan,
+        camera: CameraState,
     ) -> Self {
         let static_buffers = [
             storage(
@@ -152,15 +185,11 @@ impl Chunk {
                 "wireframe batch positions",
                 bytemuck::cast_slice(&plan.positions),
             ),
+            depth_indices(device, bytemuck::cast_slice(&plan.indices)),
             storage(
                 device,
-                "wireframe batch indices",
-                bytemuck::cast_slice(&plan.indices),
-            ),
-            storage(
-                device,
-                "wireframe batch triangle references",
-                bytemuck::cast_slice(&plan.triangles),
+                "wireframe batch virtual vertices",
+                bytemuck::cast_slice(&plan.vertices),
             ),
             storage(
                 device,
@@ -191,10 +220,11 @@ impl Chunk {
             instance_bytes: Vec::new(),
             links: plan.links,
             group,
-            depth_vertices: plan.triangles.len() as u32 * 3,
-            edge_vertices: plan.edge_refs.len() as u32 * 6,
+            depth_indices: plan.indices.len() as u32,
+            edge_indices: edge_indices(device, bytemuck::cast_slice(&plan.edge_indices)),
+            edge_index_count: plan.edge_indices.len() as u32,
         };
-        chunk.update(device, queue, drawn);
+        chunk.update(device, queue, drawn, camera);
         chunk
     }
     fn update(
@@ -202,11 +232,12 @@ impl Chunk {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         drawn: &[(MeshKind, Vec<MeshInstance>)],
+        camera: CameraState,
     ) {
         let transforms: Vec<_> = self
             .links
             .iter()
-            .map(|&(kind, instance)| WireInstance::from(&drawn[kind].1[instance]))
+            .map(|&(kind, instance)| WireInstance::new(&drawn[kind].1[instance], camera))
             .collect();
         // Layout never changes in this branch, so capacity/group identity stays fixed.
         buffers::upload_changed(
@@ -228,4 +259,24 @@ fn storage(device: &wgpu::Device, label: &str, bytes: &[u8]) -> wgpu::Buffer {
 }
 fn failure(detail: &str) -> RenderError {
     RenderError::Surface(format!("wireframe batching: {detail}"))
+}
+
+fn depth_indices(device: &wgpu::Device, bytes: &[u8]) -> wgpu::Buffer {
+    let empty = [0u8; 16];
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("wireframe batch depth indices"),
+        contents: if bytes.is_empty() { &empty } else { bytes },
+        // Preserve the common six-binding batch layout; only the index assembler reads this
+        // buffer. The depth shader reads the virtual-vertex map directly via vertex_index.
+        usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::STORAGE,
+    })
+}
+
+fn edge_indices(device: &wgpu::Device, bytes: &[u8]) -> wgpu::Buffer {
+    let empty = [0u8; 16];
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("wireframe batch AA quad indices"),
+        contents: if bytes.is_empty() { &empty } else { bytes },
+        usage: wgpu::BufferUsages::INDEX,
+    })
 }

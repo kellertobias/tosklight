@@ -1,10 +1,11 @@
 use super::super::Segment;
-use super::{WireInstance, plan};
+use super::{CameraState, WireInstance, plan, transforms_changed};
 use crate::{
     instances::{MeshInstance, MeshKind},
     mesh,
 };
 use bytemuck::Zeroable;
+use glam::{Mat3, Mat4, Quat, Vec3};
 
 fn edges(count: usize) -> Vec<Segment> {
     vec![Segment::zeroed(); count]
@@ -15,7 +16,7 @@ fn instances(count: usize) -> Vec<MeshInstance> {
 
 #[test]
 fn wire_storage_layout_is_exact_and_ignores_material_channels() {
-    assert_eq!(size_of::<WireInstance>(), 112);
+    assert_eq!(size_of::<WireInstance>(), 80);
     assert_eq!(size_of::<plan::Reference>(), 8);
     let a = MeshInstance::zeroed();
     let mut b = a;
@@ -23,8 +24,8 @@ fn wire_storage_layout_is_exact_and_ignores_material_channels() {
     b.emissive = [2.0; 4];
     b.surface = [3.0; 4];
     assert_eq!(
-        bytemuck::bytes_of(&WireInstance::from(&a)),
-        bytemuck::bytes_of(&WireInstance::from(&b))
+        bytemuck::bytes_of(&WireInstance::new(&a, camera())),
+        bytemuck::bytes_of(&WireInstance::new(&b, camera()))
     );
 }
 
@@ -46,7 +47,7 @@ fn storage_boundaries_split_instances_without_duplicating_geometry_within_a_chun
     .unwrap();
     assert_eq!(
         plans.iter().map(|p| p.links.len()).collect::<Vec<_>>(),
-        [2, 2, 1]
+        [2, 2, 1] // 96 edge-index bytes per instance are now the tightest binding.
     );
     assert_eq!(
         plans
@@ -57,14 +58,20 @@ fn storage_boundaries_split_instances_without_duplicating_geometry_within_a_chun
     );
     for p in &plans {
         assert_eq!(p.positions.len(), data.vertices.len());
-        assert_eq!(p.indices.len(), data.indices.len());
+        assert_eq!(p.indices.len(), p.links.len() * data.indices.len());
         assert_eq!(p.edges.len(), edges.len());
-        assert_eq!(p.triangles.len(), p.links.len() * data.indices.len() / 3);
+        assert_eq!(p.vertices.len(), p.links.len() * data.vertices.len());
         assert_eq!(p.edge_refs.len(), p.links.len() * edges.len());
+        assert_eq!(p.edge_indices.len(), p.edge_refs.len() * 6);
         assert!(
-            p.triangles
+            p.edge_indices
                 .iter()
-                .all(|r| r.offset as usize + 2 < p.indices.len()
+                .all(|&i| (i as usize) < p.edge_refs.len() * 4)
+        );
+        assert!(
+            p.vertices
+                .iter()
+                .all(|r| (r.offset as usize) < p.positions.len()
                     && (r.instance as usize) < p.links.len())
         );
         assert!(
@@ -107,14 +114,14 @@ fn merged_assets_rebase_indices_and_references_deterministically() {
         data.indices[0] + data.vertices.len() as u32
     );
     assert_eq!(
-        p.triangles[data.indices.len() / 3].offset,
-        data.indices.len() as u32
+        p.vertices[data.vertices.len()].offset,
+        data.vertices.len() as u32
     );
     assert_eq!(p.edge_refs[edges.len()].offset, edges.len() as u32);
     assert_eq!(p.links, second[0].links);
     assert_eq!(
-        bytemuck::cast_slice::<_, u8>(&p.triangles),
-        bytemuck::cast_slice::<_, u8>(&second[0].triangles)
+        bytemuck::cast_slice::<_, u8>(&p.vertices),
+        bytemuck::cast_slice::<_, u8>(&second[0].vertices)
     );
 }
 
@@ -146,4 +153,208 @@ fn oversize_assets_and_invalid_indices_fail_without_truncation() {
         4096,
     );
     assert!(result.err().unwrap().to_string().contains("out-of-range"));
+}
+
+#[test]
+fn indexed_depth_reuses_triangle_corners_without_aliasing_instance_transforms() {
+    let data = mesh::unit_plane();
+    let edges = edges(4);
+    let drawn = vec![(MeshKind::Plane, instances(2))];
+    let plans = plan::build(
+        &drawn,
+        |_| {
+            Some(plan::Asset {
+                data: &data,
+                edges: &edges,
+            })
+        },
+        4096,
+    )
+    .unwrap();
+    let p = &plans[0];
+    assert_eq!(p.positions.len(), 4, "actual positions stored only once");
+    assert_eq!(
+        p.vertices.len(),
+        8,
+        "four transformed virtual vertices per instance"
+    );
+    assert_eq!(
+        p.indices.len(),
+        12,
+        "two complete quads, with every authored triangle"
+    );
+    assert_eq!(&p.indices[..6], &data.indices);
+    assert_eq!(
+        &p.indices[6..],
+        &data.indices.iter().map(|i| i + 4).collect::<Vec<_>>()
+    );
+    for virtual_index in 0..8 {
+        let reference = &p.vertices[virtual_index];
+        assert_eq!(reference.offset, virtual_index as u32 % 4);
+        assert_eq!(reference.instance, virtual_index as u32 / 4);
+    }
+    // Resolve every indexed corner exactly as the vertex shader does: identical source geometry,
+    // but the two draws' old instance IDs survive merging into one indexed draw.
+    for (corner, &virtual_index) in p.indices.iter().enumerate() {
+        let reference = &p.vertices[virtual_index as usize];
+        assert_eq!(reference.offset, data.indices[corner % 6]);
+        assert_eq!(reference.instance, (corner / 6) as u32);
+    }
+}
+
+#[test]
+fn indexed_aa_quad_corners_match_original_six_vertices_for_every_edge() {
+    // Former shader semantics: (choose end point, signed screen-normal side).
+    let original = [
+        (false, -1),
+        (false, 1),
+        (true, 1),
+        (false, -1),
+        (true, 1),
+        (true, -1),
+    ];
+    for edge in [0, 1, 1000] {
+        let indices = plan::quad_indices(edge).unwrap();
+        for (corner_index, virtual_vertex) in indices.into_iter().enumerate() {
+            assert_eq!(virtual_vertex as usize / 4, edge);
+            let corner = virtual_vertex % 4;
+            let canonical = (corner >= 2, if corner == 1 || corner == 2 { 1 } else { -1 });
+            assert_eq!(
+                canonical, original[corner_index],
+                "triangle coverage and AA coordinates preserved"
+            );
+        }
+        assert_eq!(
+            indices[0], indices[3],
+            "shared first corner can reuse vertex result"
+        );
+        assert_eq!(
+            indices[2], indices[4],
+            "shared third corner can reuse vertex result"
+        );
+    }
+    assert!(plan::quad_indices(u32::MAX as usize / 4 + 1).is_err());
+}
+
+#[test]
+fn aa_index_budget_splits_chunks_before_index_buffer_overflow() {
+    let data = mesh::MeshData::default();
+    let edges = edges(32);
+    let drawn = vec![(MeshKind::Plane, instances(3))];
+    let p = plan::build(
+        &drawn,
+        |_| {
+            Some(plan::Asset {
+                data: &data,
+                edges: &edges,
+            })
+        },
+        2048,
+    )
+    .unwrap();
+    assert_eq!(
+        p.iter().map(|chunk| chunk.links.len()).collect::<Vec<_>>(),
+        [2, 1]
+    );
+    for chunk in p {
+        assert_eq!(
+            chunk.edge_indices.len(),
+            chunk.links.len() * edges.len() * 6
+        );
+        for (edge, indices) in chunk.edge_indices.chunks_exact(6).enumerate() {
+            assert_eq!(indices, &plan::quad_indices(edge).unwrap());
+        }
+    }
+}
+
+fn camera() -> CameraState {
+    let eye = Vec3::new(7.0, 5.0, 11.0);
+    CameraState {
+        clip_from_world: Mat4::perspective_rh(0.8, 1.7, 0.1, 100.0)
+            * Mat4::look_at_rh(eye, Vec3::ZERO, Vec3::Y),
+        eye_world: eye,
+    }
+}
+
+#[test]
+fn clip_and_local_facing_preserve_nonuniform_and_mirrored_affine_models() {
+    let camera = camera();
+    let point = Vec3::new(0.7, -0.2, 0.4);
+    let midpoint = Vec3::new(-0.3, 0.8, 0.1);
+    let normals = [Vec3::X, Vec3::Y, Vec3::Z, Vec3::new(0.3, -0.6, 0.8)];
+    for scale in [
+        Vec3::ONE,
+        Vec3::new(0.2, 3.0, 1.4),
+        Vec3::new(-0.2, 3.0, 1.4),
+        Vec3::new(-0.2, -3.0, 1.4),
+    ] {
+        let model = Mat4::from_scale_rotation_translation(
+            scale,
+            Quat::from_rotation_y(0.73) * Quat::from_rotation_x(-0.31),
+            Vec3::new(2.0, -0.5, 1.0),
+        );
+        let mut source = MeshInstance::zeroed();
+        source.model = model.to_cols_array_2d();
+        let record = WireInstance::new(&source, camera);
+        assert_eq!(record.local_eye[3], 1.0);
+        let old_clip = camera.clip_from_world * (model * point.extend(1.0));
+        let new_clip = Mat4::from_cols_array_2d(&record.clip_from_local) * point.extend(1.0);
+        assert!((old_clip - new_clip).length() < 0.00003 * old_clip.length().max(1.0));
+        let normal_matrix = Mat3::from_mat4(model).inverse().transpose();
+        let world_direction = camera.eye_world - model.transform_point3(midpoint);
+        let local_direction =
+            Vec3::from_array(record.local_eye[..3].try_into().unwrap()) - midpoint;
+        for normal in normals {
+            let old_facing = (normal_matrix * normal).dot(world_direction);
+            let new_facing = normal.dot(local_direction);
+            assert!((old_facing - new_facing).abs() < 0.0001 * old_facing.abs().max(1.0));
+            assert_eq!(old_facing.is_sign_positive(), new_facing.is_sign_positive());
+        }
+    }
+}
+
+#[test]
+fn tiny_finite_scales_remain_classifiable_and_invalid_inverses_keep_candidates() {
+    let mut source = MeshInstance::zeroed();
+    source.model = Mat4::from_scale(Vec3::splat(0.00000001)).to_cols_array_2d();
+    let tiny = WireInstance::new(&source, camera());
+    assert_eq!(
+        tiny.local_eye[3], 1.0,
+        "no determinant epsilon discards tiny models"
+    );
+    for scale in [Vec3::new(0.0, 1.0, 1.0), Vec3::new(1e-39, 1.0, 1.0)] {
+        source.model = Mat4::from_scale(scale).to_cols_array_2d();
+        let record = WireInstance::new(&source, camera());
+        assert_eq!(record.local_eye, [0.0; 4]);
+        assert!(
+            record.local_eye[3] < 0.5,
+            "shader conservatively keeps silhouette candidates"
+        );
+        assert!(Mat4::from_cols_array_2d(&record.clip_from_local).is_finite());
+    }
+}
+
+#[test]
+fn camera_only_changes_refresh_records_without_rebuilding_geometry() {
+    let initial = camera();
+    assert!(transforms_changed(None, initial, false));
+    assert!(!transforms_changed(Some(initial), initial, false));
+    assert!(transforms_changed(Some(initial), initial, true));
+    let mut source = MeshInstance::zeroed();
+    source.model = Mat4::IDENTITY.to_cols_array_2d();
+    let before = WireInstance::new(&source, initial);
+    let mut eye_changed = initial;
+    eye_changed.eye_world.x += 1.0;
+    let mut projection_changed = initial;
+    projection_changed.clip_from_world =
+        Mat4::from_scale(Vec3::new(0.8, 1.0, 1.0)) * initial.clip_from_world;
+    for next in [eye_changed, projection_changed] {
+        assert!(
+            transforms_changed(Some(initial), next, false),
+            "TechnicalLinesInstances revision may stay unchanged during camera motion"
+        );
+        let after = WireInstance::new(&source, next);
+        assert_ne!(bytemuck::bytes_of(&before), bytemuck::bytes_of(&after));
+        assert!(!transforms_changed(Some(next), next, false));
+    }
 }
