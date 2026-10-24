@@ -42,9 +42,10 @@ fn part_transforms(scene: &Scene, model: &viz_scene::FixtureModel) -> Vec<(Strin
         0,
         0,
         model,
-        &[],
+        (0.0, 0.0),
         &SceneValues::default(),
         &[],
+        None,
     );
     model
         .parts

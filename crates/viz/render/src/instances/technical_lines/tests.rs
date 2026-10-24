@@ -256,3 +256,46 @@ fn changing_dimmer_colour_and_primaries_never_rebuilds_body_or_changes_body_byte
         before
     );
 }
+
+#[test]
+fn direct_body_lookup_keeps_first_emitter_identity_when_heads_are_interleaved() {
+    let (mut scene, mut values, style) = rig();
+    scene.emitters.swap(0, 1);
+    scene.emitters.push(scene.emitters[0].clone());
+    values.emitters.push(EmitterValues::default());
+    values.emitters[0].pan = 0.2;
+    values.emitters[1].pan = 0.8;
+    values.emitters[2].pan = 0.6;
+    assert_eq!(first_emitter_indices(&scene), vec![Some(1), Some(0)]);
+    let mut cache = TechnicalLinesInstances::default();
+    cache.update(&scene, &values, &style);
+    let angles = head_angles(&scene, &values);
+    for (fixture, emitter) in [(0, 1), (1, 0)] {
+        let model = cache.bodies[fixture]
+            .frame
+            .meshes
+            .iter()
+            .find(|(kind, _)| *kind == MeshKind::ModelPart(0, 1))
+            .unwrap()
+            .1[0]
+            .model;
+        let expected = Mat4::from_rotation_translation(
+            Quat::from_rotation_y(angles[emitter].0.to_radians()),
+            scene.fixtures[fixture].position,
+        ) * Mat4::from_scale(Vec3::splat(
+            scene.models[0].scale_to(scene.fixtures[fixture].body.size),
+        ));
+        assert_eq!(model, expected.to_cols_array_2d());
+    }
+}
+
+#[test]
+fn selected_emitter_iteration_addresses_only_the_requested_slot() {
+    let items: Vec<_> = (0..500).collect();
+    assert_eq!(
+        selected_items(&items, Some(499)).collect::<Vec<_>>(),
+        vec![(499, &499)]
+    );
+    assert_eq!(selected_items(&items, Some(500)).count(), 0);
+    assert_eq!(selected_items(&items, None).count(), 500);
+}

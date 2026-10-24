@@ -1,11 +1,12 @@
 //! Full-resolution, single-sample technical edges. No light/material/post-processing resources.
+mod batch;
 mod buffers;
 mod geometry;
 mod pipelines;
 #[cfg(test)]
 mod tests;
 
-use super::{FrameStats, context::FrameContext};
+use super::{FrameStats, RenderError, context::FrameContext};
 use crate::{
     buffers::DynamicBuffer,
     camera::ResolvedCamera,
@@ -43,6 +44,7 @@ pub(super) struct LinesRenderer {
     depth: wgpu::TextureView,
     size: (u32, u32),
     geometry: HashMap<MeshKind, geometry::Geometry>,
+    batch: batch::Batch,
     instances: TechnicalLinesInstances,
     uploaded_revision: Option<u64>,
     assets_changed: bool,
@@ -80,6 +82,7 @@ impl LinesRenderer {
             depth: pipelines::depth(device, context.size),
             size: context.size,
             geometry: HashMap::new(),
+            batch: batch::Batch::default(),
             instances: TechnicalLinesInstances::default(),
             uploaded_revision: None,
             assets_changed: false,
@@ -99,9 +102,9 @@ impl LinesRenderer {
         view: &ViewConfiguration,
         _time_seconds: f32,
         crowd_amount: f32,
-    ) -> FrameStats {
-        self.prepare(context, scene, values, view, crowd_amount);
-        self.draw(context, encoder, view)
+    ) -> Result<FrameStats, RenderError> {
+        self.prepare(context, scene, values, view, crowd_amount)?;
+        Ok(self.draw(context, encoder, view))
     }
 
     pub(super) fn assets_changed(&self) -> bool {
@@ -115,7 +118,7 @@ impl LinesRenderer {
         values: &SceneValues,
         view: &ViewConfiguration,
         crowd_amount: f32,
-    ) {
+    ) -> Result<(), RenderError> {
         if self.size != context.size {
             self.depth = pipelines::depth(context.device, context.size);
             self.size = context.size;
@@ -150,26 +153,19 @@ impl LinesRenderer {
         let frame = self.instances.frame();
         // Content identity is deliberately checked even if the instance pose did not change:
         // replacing a GLB in a reused model slot must never show the preceding asset's edges.
-        let replaced = geometry::ensure(
-            &mut self.geometry,
-            context,
-            &self.pipelines,
-            scene,
-            &frame.meshes,
-        );
+        let replaced = geometry::ensure(&mut self.geometry, scene, &frame.meshes);
         self.assets_changed = replaced;
-        if replaced || self.uploaded_revision != Some(revision) {
-            for (kind, instances) in &frame.meshes {
-                if let Some(mesh) = self.geometry.get_mut(kind) {
-                    buffers::upload_changed(
-                        context.device,
-                        context.queue,
-                        &mut mesh.instances,
-                        &mut mesh.instance_bytes,
-                        instances,
-                    );
-                }
-            }
+        let instances_changed = self.uploaded_revision != Some(revision);
+        self.batch.prepare(
+            context.device,
+            context.queue,
+            &self.pipelines,
+            &self.geometry,
+            &frame.meshes,
+            replaced,
+            instances_changed,
+        )?;
+        if replaced || instances_changed {
             let segments = frame
                 .lines
                 .chunks_exact(2)
@@ -203,6 +199,7 @@ impl LinesRenderer {
             }
             self.uploaded_revision = Some(revision);
         }
+        Ok(())
     }
 
     fn draw(
@@ -242,31 +239,13 @@ impl LinesRenderer {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        let mut draw_calls = 0;
-        let mut instances_total = 0;
         pass.set_bind_group(0, &self.camera_group, &[]);
-        // Actual triangles only write depth. They hide rear edges without drawing shaded solids,
-        // proxy boxes, or a second full-screen colour buffer.
+        // Shared geometry and stable instance maps remove one pair of draws per model part.
+        // Bounded chunks retain every actual triangle and feature edge.
         pass.set_pipeline(&self.pipelines.depth);
-        for mesh in self.geometry.values().filter(|m| m.instances.length > 0) {
-            pass.set_vertex_buffer(0, mesh.mesh.vertices.slice(..));
-            pass.set_vertex_buffer(1, mesh.instances.buffer.slice(..));
-            pass.set_index_buffer(mesh.mesh.indices.slice(..), wgpu::IndexFormat::Uint32);
-            pass.draw_indexed(0..mesh.mesh.index_count, 0, 0..mesh.instances.length);
-            draw_calls += 1;
-            instances_total += mesh.instances.length;
-        }
+        let mut draw_calls = self.batch.draw_depth(&mut pass);
         pass.set_pipeline(&self.pipelines.edges);
-        for mesh in self
-            .geometry
-            .values()
-            .filter(|m| m.instances.length > 0 && m.edge_count > 0)
-        {
-            pass.set_bind_group(1, &mesh.edge_group, &[]);
-            pass.set_vertex_buffer(0, mesh.instances.buffer.slice(..));
-            pass.draw(0..mesh.edge_count * 6, 0..mesh.instances.length);
-            draw_calls += 1;
-        }
+        draw_calls += self.batch.draw_edges(&mut pass);
         if self.guides.length > 0 {
             pass.set_pipeline(&self.pipelines.guides);
             pass.set_bind_group(1, &self.guide_group, &[]);
@@ -275,7 +254,7 @@ impl LinesRenderer {
         }
         drop(pass);
         FrameStats {
-            instances: instances_total,
+            instances: self.batch.instance_count(),
             draw_calls,
             render_scale: 1.0,
             ..Default::default()

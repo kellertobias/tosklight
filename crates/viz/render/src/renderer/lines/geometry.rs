@@ -1,8 +1,6 @@
-//! Model-content keyed, current-scene bounded geometry and instance allocations.
-use super::super::context::FrameContext;
-use super::{Segment, pipelines::Pipelines};
+//! Model-content keyed, current-scene bounded CPU geometry. Batch uploads share each asset.
+use super::Segment;
 use crate::{
-    buffers::{DynamicBuffer, GpuMesh},
     instances::{MeshInstance, MeshKind},
     mesh::{self, MeshData, Vertex},
 };
@@ -10,21 +8,15 @@ use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     hash::Hasher,
 };
-use wgpu::util::DeviceExt;
 
 pub(super) struct Geometry {
-    pub mesh: GpuMesh,
-    pub edge_group: wgpu::BindGroup,
-    pub edge_count: u32,
-    pub instances: DynamicBuffer,
-    pub instance_bytes: Vec<u8>,
+    pub data: MeshData,
+    pub edges: Vec<Segment>,
     fingerprint: u64,
 }
 
 pub(super) fn ensure(
     retained: &mut HashMap<MeshKind, Geometry>,
-    context: &FrameContext<'_>,
-    pipelines: &Pipelines,
     scene: &viz_scene::Scene,
     drawn: &[(MeshKind, Vec<MeshInstance>)],
 ) -> bool {
@@ -35,21 +27,34 @@ pub(super) fn ensure(
             .any(|(drawn, instances)| drawn == kind && !instances.is_empty())
     });
     let mut changed = retained.len() != previous_count;
-    for (kind, instances) in drawn.iter().filter(|(_, instances)| !instances.is_empty()) {
+    for (kind, _) in drawn.iter().filter(|(_, instances)| !instances.is_empty()) {
         let Some(fingerprint) = fingerprint(scene, *kind) else {
+            changed |= retained.remove(kind).is_some();
             continue;
         };
         if retained
             .get(kind)
-            .is_some_and(|mesh| mesh.fingerprint == fingerprint)
+            .is_some_and(|g| g.fingerprint == fingerprint)
         {
             continue;
         }
-        let Some(data) = mesh_data(scene, *kind) else {
+        let Some(mut data) = mesh_data(scene, *kind) else {
             continue;
         };
+        let valid_indices = data
+            .indices
+            .chunks_exact(3)
+            .filter(|triangle| {
+                triangle
+                    .iter()
+                    .all(|index| (*index as usize) < data.vertices.len())
+            })
+            .flatten()
+            .copied()
+            .collect();
+        data.indices = valid_indices;
         if data.vertices.is_empty() || data.indices.is_empty() {
-            retained.remove(kind);
+            changed |= retained.remove(kind).is_some();
             continue;
         }
         let edges = mesh::feature_edges::EdgeGeometry::from_mesh(&data)
@@ -66,33 +71,12 @@ pub(super) fn ensure(
                 a: [edge.normal_a[0], edge.normal_a[1], edge.normal_a[2], 0.0],
                 b: [edge.normal_b[0], edge.normal_b[1], edge.normal_b[2], 0.0],
             })
-            .collect::<Vec<_>>();
-        let empty = [Segment {
-            start: [0.0; 4],
-            end: [0.0; 4],
-            a: [0.0; 4],
-            b: [0.0; 4],
-        }];
-        let buffer = context
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("retained model feature edges"),
-                contents: bytemuck::cast_slice(if edges.is_empty() { &empty } else { &edges }),
-                usage: wgpu::BufferUsages::STORAGE,
-            });
+            .collect();
         retained.insert(
             *kind,
             Geometry {
-                mesh: GpuMesh::new(context.device, "wireframe actual geometry", &data),
-                edge_group: pipelines.segment_group(context.device, &buffer),
-                edge_count: edges.len() as u32,
-                instances: DynamicBuffer::new(
-                    context.device,
-                    "wireframe changed instances",
-                    wgpu::BufferUsages::VERTEX,
-                    (instances.len().max(1) * size_of::<MeshInstance>()) as u64,
-                ),
-                instance_bytes: Vec::new(),
+                data,
+                edges,
                 fingerprint,
             },
         );

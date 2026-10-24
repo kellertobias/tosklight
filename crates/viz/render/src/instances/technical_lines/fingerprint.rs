@@ -18,7 +18,7 @@ impl Write for Key {
 }
 impl Key {
     pub fn add(&mut self, value: &impl serde::Serialize) {
-        serde_json::to_writer(&mut *self, value).expect("instance metadata is serializable");
+        postcard::to_io(value, &mut *self).expect("instance metadata is serializable");
         self.0.write_u8(0xff);
     }
     pub fn finish(&self) -> u64 {

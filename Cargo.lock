@@ -8395,6 +8395,7 @@ dependencies = [
  "light-fixture",
  "naga",
  "pollster",
+ "postcard",
  "serde",
  "serde_json",
  "uuid",

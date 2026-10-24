@@ -79,6 +79,14 @@ impl TechnicalLinesInstances {
         shared.add(&values.position_points);
         let shared = shared.finish();
         let models: Vec<_> = scene.models.iter().map(model_key).collect();
+        let fixture_keys: Vec<_> = scene
+            .fixtures
+            .iter()
+            .enumerate()
+            .map(|(index, fixture)| {
+                fixture_key(scene, values, fixture, index, shared, &models).finish()
+            })
+            .collect();
         let grouped = grouped_selection(scene, &values.selected_fixtures);
         let angles = head_angles(scene, values);
 
@@ -89,14 +97,10 @@ impl TechnicalLinesInstances {
         self.emitters
             .resize_with(scene.emitters.len(), Entry::default);
         // Per-fixture lookup is calculated once rather than searching all emitters for every key.
-        let mut first_emitter = vec![None; scene.fixtures.len()];
-        for (index, emitter) in scene.emitters.iter().enumerate() {
-            if let Some(first) = first_emitter.get_mut(emitter.fixture_index as usize) {
-                first.get_or_insert(index);
-            }
-        }
+        let first_emitter = first_emitter_indices(scene);
         for (index, fixture) in scene.fixtures.iter().enumerate() {
-            let mut key = fixture_key(scene, values, fixture, index, shared, &models);
+            let mut key = Key::default();
+            key.add(&fixture_keys[index]);
             key.add(&values.selected_fixtures.contains(&fixture.fixture_id));
             key.add(&grouped.contains(&fixture.fixture_id));
             if let Some(emitter) = first_emitter[index] {
@@ -104,15 +108,15 @@ impl TechnicalLinesInstances {
             }
             changed |= self.bodies[index].update(key.finish(), || {
                 let mut frame = FrameInstances::default();
-                push_bodies(
+                push_body(
                     &mut frame,
                     scene,
                     &angles,
                     values,
                     style,
-                    &values.selected_fixtures,
-                    &values.position_points,
-                    Some(index),
+                    index,
+                    &grouped,
+                    first_emitter[index],
                 );
                 // Lines uses its own global ink. These PBR channels never influence its passes,
                 // and must not cause uploads when only a dimmer or source primary changes.
@@ -126,7 +130,7 @@ impl TechnicalLinesInstances {
                 frame
             });
         }
-        changed |= self.update_emitters(scene, values, style, &angles, shared, &models);
+        changed |= self.update_emitters(scene, values, style, &angles, shared, &fixture_keys);
         changed |= self.update_scenery(scene, values, style, shared);
         if changed {
             self.rebuild_frame();
@@ -141,7 +145,7 @@ impl TechnicalLinesInstances {
         style: &FrameStyle,
         angles: &[(f32, f32)],
         shared: u64,
-        models: &[u64],
+        fixture_keys: &[u64],
     ) -> bool {
         let mut changed = false;
         for (index, emitter) in scene.emitters.iter().enumerate() {
@@ -167,19 +171,7 @@ impl TechnicalLinesInstances {
             } else {
                 key.add(&false);
             }
-            if let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) {
-                key.add(
-                    &fixture_key(
-                        scene,
-                        values,
-                        fixture,
-                        emitter.fixture_index as usize,
-                        shared,
-                        models,
-                    )
-                    .finish(),
-                );
-            }
+            key.add(&fixture_keys.get(emitter.fixture_index as usize));
             changed |= self.emitters[index].update(key.finish(), || {
                 let mut frame = FrameInstances::default();
                 push_emitters(&mut frame, scene, values, angles, style, Some(index));
@@ -291,5 +283,7 @@ fn append(frame: &mut FrameInstances, source: &FrameInstances) {
     frame.media_panels.extend_from_slice(&source.media_panels);
 }
 
+#[cfg(test)]
+mod performance;
 #[cfg(test)]
 mod tests;

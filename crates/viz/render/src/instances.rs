@@ -372,16 +372,7 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
     scenery::push_scenery(&mut frame, scene, values, style);
     crowd::push_crowds(&mut frame, scene, style);
     media::push_media(&mut frame, scene, style);
-    push_bodies(
-        &mut frame,
-        scene,
-        &head_angles,
-        values,
-        style,
-        &values.selected_fixtures,
-        &values.position_points,
-        None,
-    );
+    push_bodies(&mut frame, scene, &head_angles, values, style);
     push_emitters(&mut frame, scene, values, &head_angles, style, None);
     effects::push_effects(&mut frame, scene, values, style);
     frame
@@ -425,21 +416,11 @@ fn push_model(
     fixture_index: usize,
     model_index: u32,
     model: &viz_scene::FixtureModel,
-    head_angles: &[(f32, f32)],
+    (pan, tilt): (f32, f32),
     values: &SceneValues,
     points: &[viz_scene::PointPose],
+    emitter_value: Option<&EmitterValues>,
 ) {
-    let (pan, tilt) = scene
-        .emitters
-        .iter()
-        .position(|emitter| emitter.fixture_index == fixture_index as u32)
-        .and_then(|index| head_angles.get(index).copied())
-        .unwrap_or((0.0, 0.0));
-    let emitter_value = scene
-        .emitters
-        .iter()
-        .position(|emitter| emitter.fixture_index == fixture_index as u32)
-        .and_then(|index| values.emitters.get(index));
     let pan_rotation = Quat::from_rotation_y(pan.to_radians());
     let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
     // A model authored at another size is scaled to the profile's physical dimensions, so a rig
@@ -545,152 +526,190 @@ fn push_selection_cage(
     push_box_outline(frame, base * Mat4::from_scale(cage_size), selected_ink, 1.0);
 }
 
-#[allow(clippy::too_many_arguments)]
 fn push_bodies(
     frame: &mut FrameInstances,
     scene: &Scene,
     head_angles: &[(f32, f32)],
     values: &SceneValues,
     style: &FrameStyle,
-    selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
-    points: &[viz_scene::PointPose],
-    only_fixture: Option<usize>,
 ) {
-    let grouped = grouped_selection(scene, selection);
-    for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
-        if only_fixture.is_some_and(|index| index != fixture_index) {
-            continue;
+    let grouped = grouped_selection(scene, &values.selected_fixtures);
+    let first = first_emitter_indices(scene);
+    for (fixture_index, first_emitter) in first.into_iter().enumerate() {
+        push_body(
+            frame,
+            scene,
+            head_angles,
+            values,
+            style,
+            fixture_index,
+            &grouped,
+            first_emitter,
+        );
+    }
+}
+
+/// One already-indexed fixture. Incremental callers never scan unrelated fixtures or emitters.
+#[allow(clippy::too_many_arguments)]
+fn push_body(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    head_angles: &[(f32, f32)],
+    values: &SceneValues,
+    style: &FrameStyle,
+    fixture_index: usize,
+    grouped: &std::collections::HashSet<viz_scene::uuid::Uuid>,
+    first_emitter: Option<usize>,
+) {
+    let fixture = &scene.fixtures[fixture_index];
+    let selection = &values.selected_fixtures;
+    let points = &values.position_points;
+    // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
+    // has none at all.
+    if fixture.drawn_as_scenery || fixture.invisible {
+        return;
+    }
+    let (fixture_position, fixture_orientation) = fixture.placed_by(points);
+    let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
+    let size = fixture.body.size;
+    let selected = selection.contains(&fixture.fixture_id);
+    let selected_ink = selection_ink(style, grouped, fixture.fixture_id);
+    // A view that draws no models draws the outline of a box the size of the fixture, standing
+    // and turned where the fixture does. Outline rather than a solid: this view simulates no
+    // light, so a solid box has nothing to reveal it and would be a black shape in a black
+    // room. It is the fixture's own footprint rather than a token, because an operator judging
+    // whether two heads will foul each other needs the box to be the size of the thing.
+    if !style.fixture_models {
+        let (ink, opacity) = if selected {
+            (selected_ink, 1.0)
+        } else {
+            (style.symbol_ink, 0.75)
+        };
+        push_box_outline(frame, base * Mat4::from_scale(size), ink, opacity);
+        return;
+    }
+    let angles = first_emitter
+        .and_then(|index| head_angles.get(index).copied())
+        .unwrap_or((0.0, 0.0));
+    // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
+    // are what a fixture gets when its library entry has no geometry to offer.
+    if let Some(model_index) = fixture.model
+        && let Some(model) = scene.models.get(model_index as usize)
+    {
+        push_model(
+            frame,
+            scene,
+            fixture,
+            fixture_index,
+            model_index,
+            model,
+            angles,
+            values,
+            points,
+            first_emitter.and_then(|index| values.emitters.get(index)),
+        );
+        if selected {
+            push_selection_cage(frame, base, size, selected_ink);
         }
-        // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
-        // has none at all.
-        if fixture.drawn_as_scenery || fixture.invisible {
-            continue;
-        }
-        let (fixture_position, fixture_orientation) = fixture.placed_by(points);
-        let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
-        let size = fixture.body.size;
-        let selected = selection.contains(&fixture.fixture_id);
-        let selected_ink = selection_ink(style, &grouped, fixture.fixture_id);
-        // A view that draws no models draws the outline of a box the size of the fixture, standing
-        // and turned where the fixture does. Outline rather than a solid: this view simulates no
-        // light, so a solid box has nothing to reveal it and would be a black shape in a black
-        // room. It is the fixture's own footprint rather than a token, because an operator judging
-        // whether two heads will foul each other needs the box to be the size of the thing.
-        if !style.fixture_models {
-            let (ink, opacity) = if selected {
-                (selected_ink, 1.0)
-            } else {
-                (style.symbol_ink, 0.75)
-            };
-            push_box_outline(frame, base * Mat4::from_scale(size), ink, opacity);
-            continue;
-        }
-        // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
-        // are what a fixture gets when its library entry has no geometry to offer.
-        if let Some(model_index) = fixture.model
-            && let Some(model) = scene.models.get(model_index as usize)
-        {
-            push_model(
-                frame,
-                scene,
-                fixture,
-                fixture_index,
-                model_index,
-                model,
-                head_angles,
-                values,
-                points,
-            );
-            if selected {
-                push_selection_cage(frame, base, size, selected_ink);
-            }
-            continue;
-        }
-        match fixture.body.kind {
-            BodyKind::MovingHead => {
-                let (pan, tilt) = scene
-                    .emitters
-                    .iter()
-                    .position(|emitter| emitter.fixture_index == fixture_index as u32)
-                    .and_then(|index| head_angles.get(index).copied())
-                    .unwrap_or((0.0, 0.0));
-                let pan_rotation = Quat::from_rotation_y(pan.to_radians());
-                let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
-                // Base plate hangs from the rig point.
+        return;
+    }
+    match fixture.body.kind {
+        BodyKind::MovingHead => {
+            let (pan, tilt) = angles;
+            let pan_rotation = Quat::from_rotation_y(pan.to_radians());
+            let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
+            // Base plate hangs from the rig point.
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale_rotation_translation(
+                    Vec3::new(size.x, size.y * 0.28, size.z),
+                    Quat::IDENTITY,
+                    Vec3::new(0.0, size.y * 0.36, 0.0),
+                ),
+                BODY_COLOUR,
+                0.55,
+                Vec3::ZERO,
+                0.35,
+            ));
+            let yoke = base * Mat4::from_quat(pan_rotation);
+            for side in [-1.0_f32, 1.0] {
                 frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale_rotation_translation(
-                        Vec3::new(size.x, size.y * 0.28, size.z),
+                    yoke * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x * 0.14, size.y * 0.5, size.z * 0.3),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, size.y * 0.36, 0.0),
+                        Vec3::new(side * size.x * 0.42, 0.0, 0.0),
                     ),
-                    BODY_COLOUR,
-                    0.55,
-                    Vec3::ZERO,
-                    0.35,
-                ));
-                let yoke = base * Mat4::from_quat(pan_rotation);
-                for side in [-1.0_f32, 1.0] {
-                    frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                        yoke * Mat4::from_scale_rotation_translation(
-                            Vec3::new(size.x * 0.14, size.y * 0.5, size.z * 0.3),
-                            Quat::IDENTITY,
-                            Vec3::new(side * size.x * 0.42, 0.0, 0.0),
-                        ),
-                        YOKE_COLOUR,
-                        0.5,
-                        Vec3::ZERO,
-                        0.4,
-                    ));
-                }
-                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-                    yoke * Mat4::from_quat(tilt_rotation)
-                        * Mat4::from_scale_rotation_translation(
-                            Vec3::new(size.x * 0.66, size.y * 0.62, size.z * 0.66),
-                            Quat::IDENTITY,
-                            Vec3::ZERO,
-                        ),
-                    BODY_COLOUR,
-                    0.45,
-                    Vec3::ZERO,
-                    0.5,
-                ));
-            }
-            BodyKind::Bar | BodyKind::Matrix => {
-                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale(size),
-                    BODY_COLOUR,
-                    0.6,
-                    Vec3::ZERO,
-                    0.2,
-                ));
-            }
-            BodyKind::Lantern => {
-                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-                    base * Mat4::from_scale_rotation_translation(
-                        Vec3::new(size.x, size.z, size.y),
-                        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-                        Vec3::ZERO,
-                    ),
-                    BODY_COLOUR,
+                    YOKE_COLOUR,
                     0.5,
                     Vec3::ZERO,
                     0.4,
                 ));
             }
-            BodyKind::Machine | BodyKind::Generic => {
-                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale(size),
-                    BODY_COLOUR,
-                    0.65,
-                    Vec3::ZERO,
-                    0.15,
-                ));
-            }
+            frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                yoke * Mat4::from_quat(tilt_rotation)
+                    * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x * 0.66, size.y * 0.62, size.z * 0.66),
+                        Quat::IDENTITY,
+                        Vec3::ZERO,
+                    ),
+                BODY_COLOUR,
+                0.45,
+                Vec3::ZERO,
+                0.5,
+            ));
         }
-        if selected {
-            push_selection_cage(frame, base, size, selected_ink);
+        BodyKind::Bar | BodyKind::Matrix => {
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale(size),
+                BODY_COLOUR,
+                0.6,
+                Vec3::ZERO,
+                0.2,
+            ));
+        }
+        BodyKind::Lantern => {
+            frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                base * Mat4::from_scale_rotation_translation(
+                    Vec3::new(size.x, size.z, size.y),
+                    Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                    Vec3::ZERO,
+                ),
+                BODY_COLOUR,
+                0.5,
+                Vec3::ZERO,
+                0.4,
+            ));
+        }
+        BodyKind::Machine | BodyKind::Generic => {
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale(size),
+                BODY_COLOUR,
+                0.65,
+                Vec3::ZERO,
+                0.15,
+            ));
         }
     }
+    if selected {
+        push_selection_cage(frame, base, size, selected_ink);
+    }
+}
+
+fn first_emitter_indices(scene: &Scene) -> Vec<Option<usize>> {
+    let mut first = vec![None; scene.fixtures.len()];
+    for (index, emitter) in scene.emitters.iter().enumerate() {
+        if let Some(slot) = first.get_mut(emitter.fixture_index as usize) {
+            slot.get_or_insert(index);
+        }
+    }
+    first
+}
+
+fn selected_items<T>(items: &[T], only: Option<usize>) -> impl Iterator<Item = (usize, &T)> {
+    items
+        .iter()
+        .enumerate()
+        .skip(only.unwrap_or(0))
+        .take(only.map_or(items.len(), |_| 1))
 }
 
 /// Resolve one emitter's world pose from its fixture, pan, and tilt.
@@ -837,10 +856,7 @@ fn push_emitters(
     only_emitter: Option<usize>,
 ) {
     let fallback = EmitterValues::default();
-    for (index, emitter) in scene.emitters.iter().enumerate() {
-        if only_emitter.is_some_and(|wanted| wanted != index) {
-            continue;
-        }
+    for (index, emitter) in selected_items(&scene.emitters, only_emitter) {
         let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) else {
             continue;
         };

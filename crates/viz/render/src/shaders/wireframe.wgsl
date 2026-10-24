@@ -8,14 +8,18 @@ struct Camera {
 struct Segment { start:vec4<f32>, end:vec4<f32>, a:vec4<f32>, b:vec4<f32> };
 @group(0) @binding(0) var<uniform> camera:Camera;
 @group(1) @binding(0) var<storage,read> segments:array<Segment>;
-struct Instance {
-    @location(3) m0:vec4<f32>, @location(4) m1:vec4<f32>,
-    @location(5) m2:vec4<f32>, @location(6) m3:vec4<f32>,
-    @location(7) n0:vec4<f32>, @location(8) n1:vec4<f32>, @location(9) n2:vec4<f32>,
-    @location(10) colour:vec4<f32>, @location(11) emissive:vec4<f32>, @location(12) surface:vec4<f32>,
+struct WireInstance {
+    model:mat4x4<f32>, n0:vec4<f32>, n1:vec4<f32>, n2:vec4<f32>,
 };
-@vertex fn depth_vertex(@location(0) p:vec3<f32>, i:Instance)->@builtin(position) vec4<f32> {
-    return camera.view_projection * mat4x4<f32>(i.m0,i.m1,i.m2,i.m3) * vec4<f32>(p,1.0);
+struct DrawRef { offset:u32, instance:u32 };
+@group(1) @binding(1) var<storage,read> instances:array<WireInstance>;
+@group(1) @binding(2) var<storage,read> positions:array<vec4<f32>>;
+@group(1) @binding(3) var<storage,read> indices:array<u32>;
+@group(1) @binding(4) var<storage,read> triangles:array<DrawRef>;
+@group(1) @binding(5) var<storage,read> edge_refs:array<DrawRef>;
+@vertex fn depth_vertex(@builtin(vertex_index) vertex:u32)->@builtin(position) vec4<f32> {
+    let draw_ref=triangles[vertex/3u];
+    return camera.view_projection * instances[draw_ref.instance].model * positions[indices[draw_ref.offset+vertex%3u]];
 }
 @fragment fn depth_fragment()->@location(0) vec4<f32> { return vec4<f32>(0.0); }
 struct LineOutput {
@@ -49,8 +53,8 @@ fn expanded(a_in:vec4<f32>,b_in:vec4<f32>,ca:vec4<f32>,cb:vec4<f32>,index:u32,vi
     out.position=p;out.colour=select(colour_a,colour_b,far);out.across=side*half_width;
     return out;
 }
-@vertex fn edge_vertex(i:Instance,@builtin(vertex_index) vertex:u32)->LineOutput {
-    let edge=segments[vertex/6u];let model=mat4x4<f32>(i.m0,i.m1,i.m2,i.m3);
+@vertex fn edge_vertex(@builtin(vertex_index) vertex:u32)->LineOutput {
+    let draw_ref=edge_refs[vertex/6u];let edge=segments[draw_ref.offset];let i=instances[draw_ref.instance];let model=i.model;
     let normal=mat3x3<f32>(i.n0.xyz,i.n1.xyz,i.n2.xyz);
     let a=model*vec4<f32>(edge.start.xyz,1.0);let b=model*vec4<f32>(edge.end.xyz,1.0);
     let direction=camera.eye.xyz-(a.xyz+b.xyz)*0.5;

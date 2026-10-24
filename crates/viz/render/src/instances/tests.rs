@@ -149,9 +149,10 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
             0,
             0,
             &model,
-            &[(pan, tilt)],
+            (pan, tilt),
             &SceneValues::default(),
             &[],
+            None,
         );
         let take = |part_index: u32| {
             frame

@@ -18,7 +18,7 @@ fn standalone_wireframe_shader_validates_without_lighting_bindings() {
             .iter()
             .filter(|(_, v)| v.binding.is_some())
             .count(),
-        2
+        7
     );
 }
 
@@ -186,6 +186,14 @@ fn rear_model_edges_are_occluded_by_actual_front_triangles() {
         front.rgba,
         capture(&mut renderer, &scene, &v).rgba,
         "no x-ray rear edges or proxy occluders"
+    );
+    // Positive control: move the second instance through its existing batch mapping, without a
+    // new scene revision. It must appear after leaving the actual foreground occluder.
+    scene.fixtures[1].position.x = 2.5;
+    assert_ne!(
+        front.rgba,
+        capture(&mut renderer, &scene, &v).rgba,
+        "changed instance transforms update retained batch references"
     );
 }
 

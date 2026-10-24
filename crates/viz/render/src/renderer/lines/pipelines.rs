@@ -1,9 +1,9 @@
 //! Uniform-only unlit pipelines: actual depth, analytic feature edges and coloured guides.
-use crate::{instances::MeshInstance, mesh::Vertex};
 
 pub(super) struct Pipelines {
     pub camera_layout: wgpu::BindGroupLayout,
     segment_layout: wgpu::BindGroupLayout,
+    batch_layout: wgpu::BindGroupLayout,
     pub depth: wgpu::RenderPipeline,
     pub edges: wgpu::RenderPipeline,
     pub guides: wgpu::RenderPipeline,
@@ -36,13 +36,29 @@ impl Pipelines {
                 count: None,
             }],
         });
-        let depth_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("wireframe depth"),
-            bind_group_layouts: &[Some(&camera_layout)],
-            immediate_size: 0,
+        let entries = (0..6)
+            .map(|binding| wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            })
+            .collect::<Vec<_>>();
+        let batch_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("wireframe shared geometry and instance maps"),
+            entries: &entries,
         });
         let edge_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("wireframe segments"),
+            label: Some("wireframe batched depth and edges"),
+            bind_group_layouts: &[Some(&camera_layout), Some(&batch_layout)],
+            immediate_size: 0,
+        });
+        let guide_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("wireframe guides"),
             bind_group_layouts: &[Some(&camera_layout), Some(&segment_layout)],
             immediate_size: 0,
         });
@@ -53,12 +69,12 @@ impl Pipelines {
         let depth = pipeline(
             device,
             &module,
-            &depth_layout,
+            &edge_layout,
             format,
             "wireframe actual depth",
             "depth_vertex",
             "depth_fragment",
-            &[Some(Vertex::LAYOUT), Some(MeshInstance::LAYOUT)],
+            &[],
             true,
         );
         let edges = pipeline(
@@ -69,13 +85,13 @@ impl Pipelines {
             "wireframe feature edges",
             "edge_vertex",
             "line_fragment",
-            &[Some(MeshInstance::LAYOUT)],
+            &[],
             false,
         );
         let guides = pipeline(
             device,
             &module,
-            &edge_layout,
+            &guide_layout,
             format,
             "wireframe aim/grid/selection",
             "guide_vertex",
@@ -86,10 +102,30 @@ impl Pipelines {
         Self {
             camera_layout,
             segment_layout,
+            batch_layout,
             depth,
             edges,
             guides,
         }
+    }
+    pub(super) fn batch_group(
+        &self,
+        device: &wgpu::Device,
+        buffers: &[&wgpu::Buffer; 6],
+    ) -> wgpu::BindGroup {
+        let entries = buffers
+            .iter()
+            .enumerate()
+            .map(|(binding, buffer)| wgpu::BindGroupEntry {
+                binding: binding as u32,
+                resource: buffer.as_entire_binding(),
+            })
+            .collect::<Vec<_>>();
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("wireframe retained batch"),
+            layout: &self.batch_layout,
+            entries: &entries,
+        })
     }
     pub fn segment_group(&self, device: &wgpu::Device, buffer: &wgpu::Buffer) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {

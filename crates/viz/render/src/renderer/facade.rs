@@ -197,7 +197,7 @@ impl Renderer {
                 view,
                 time_seconds,
                 self.crowd_amount,
-            );
+            )?;
             self.active_samples = 1;
             (stats, context.size, lines.assets_changed())
         } else {
