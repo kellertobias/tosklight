@@ -19,6 +19,7 @@ pub struct FrozenStill {
     values: SceneValues,
     view: ViewConfiguration,
     time_seconds: f32,
+    crowd_amount: f32,
     media: FrozenMedia,
     origin: StillOrigin,
 }
@@ -31,6 +32,21 @@ impl FrozenStill {
         media: FrozenMedia,
         origin: StillOrigin,
     ) -> Result<Self, String> {
+        Self::new_with_crowd_amount(scene, values, view, time_seconds, media, origin, 1.0)
+    }
+    /// Freeze the invocation-time local crowd preference before any engine chooser.
+    pub fn new_with_crowd_amount(
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        time_seconds: f32,
+        media: FrozenMedia,
+        origin: StillOrigin,
+        crowd_amount: f32,
+    ) -> Result<Self, String> {
+        if !crowd_amount.is_finite() || !(0.0..=1.0).contains(&crowd_amount) {
+            return Err("still capture requires a finite crowd amount between zero and one".into());
+        }
         if !time_seconds.is_finite() || time_seconds < 0.0 {
             return Err("still capture requires a finite resolved scene time".into());
         }
@@ -40,9 +56,13 @@ impl FrozenStill {
             values: values.clone(),
             view: view.clone(),
             time_seconds,
+            crowd_amount,
             media,
             origin,
         })
+    }
+    pub fn crowd_amount(&self) -> f32 {
+        self.crowd_amount
     }
     pub fn scene(&self) -> &Scene {
         &self.scene
@@ -98,6 +118,7 @@ impl FrozenStill {
     /// Run on the job worker: device creation and submission must never block the UI thread.
     pub fn begin_native(&self) -> Result<NativeStill, String> {
         let mut renderer = Renderer::headless_still()?;
+        renderer.set_crowd_amount(self.crowd_amount);
         renderer.restore_frozen_media(&self.media)?;
         let pending = renderer
             .begin_capture(
@@ -187,6 +208,66 @@ mod tests {
         assert_ne!(frozen.values().frame, values.frame);
         assert_eq!(frozen.origin(), &origin);
         assert_eq!(frozen.time_seconds(), 12.5);
+    }
+    #[test]
+    fn crowd_preference_is_frozen_and_invalid_amounts_are_rejected() {
+        let scene = Scene::default();
+        let values = SceneValues::default();
+        let view = ViewConfiguration::default();
+        let origin = StillOrigin {
+            pane_id: "live".into(),
+            follow_preload: false,
+        };
+        let mut live_amount = 0.25;
+        let frozen = FrozenStill::new_with_crowd_amount(
+            &scene,
+            &values,
+            &view,
+            1.0,
+            FrozenMedia::default(),
+            origin.clone(),
+            live_amount,
+        )
+        .unwrap();
+        live_amount = 1.0;
+        assert_eq!(frozen.crowd_amount(), 0.25);
+        assert_ne!(frozen.crowd_amount(), live_amount);
+        for amount in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+            assert!(
+                FrozenStill::new_with_crowd_amount(
+                    &scene,
+                    &values,
+                    &view,
+                    1.0,
+                    FrozenMedia::default(),
+                    origin.clone(),
+                    amount,
+                )
+                .is_err()
+            );
+        }
+        for amount in [0.0, 0.5, 1.0] {
+            assert_eq!(
+                FrozenStill::new_with_crowd_amount(
+                    &scene,
+                    &values,
+                    &view,
+                    1.0,
+                    FrozenMedia::default(),
+                    origin.clone(),
+                    amount,
+                )
+                .unwrap()
+                .crowd_amount(),
+                amount
+            );
+        }
+        assert_eq!(
+            FrozenStill::new(&scene, &values, &view, 1.0, FrozenMedia::default(), origin,)
+                .unwrap()
+                .crowd_amount(),
+            1.0
+        );
     }
     #[test]
     fn still_preserves_orthographic_mode_and_rejects_invalid_time() {

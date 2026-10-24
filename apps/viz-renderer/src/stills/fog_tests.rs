@@ -99,12 +99,13 @@ fn ultimate_image(
                 configured_blender: Some(blender),
                 destination: Some(destination),
                 probe_timeout: Duration::from_secs(30),
-                ultimate_timeout: Duration::from_secs(600),
+                // The background CPU budget reserves desk capacity; fog at 4K is deliberately offline.
+                ultimate_timeout: Duration::from_secs(1800),
                 ..Default::default()
             },
         )
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(660);
+    let deadline = Instant::now() + Duration::from_secs(1860);
     let mut chose = false;
     loop {
         let status = jobs.status().unwrap();

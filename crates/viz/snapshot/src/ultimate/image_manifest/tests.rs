@@ -230,3 +230,63 @@ fn manifest_and_media_mutation_or_asset_escape_are_rejected() {
         assert!(validation::checked_asset(&scratch.0, "escape.bin").is_err());
     }
 }
+
+#[test]
+fn frozen_crowd_amount_controls_actual_glb_population_without_capture_budget_cap() {
+    let mut scene = Scene::default();
+    scene.crowds.push(viz_scene::CrowdArea {
+        id: Uuid::from_u128(951),
+        name: "Frozen audience".into(),
+        position: Vec3::ZERO,
+        rotation_degrees: Vec3::ZERO,
+        width_metres: 30.0,
+        depth_metres: 20.0,
+        posture: viz_scene::CrowdPosture::StandingStill,
+        density: viz_scene::CrowdDensity::Dense,
+        seed: 42,
+    });
+    let view = ViewConfiguration::default();
+    let values = SceneValues::default();
+    let media = FrozenMedia::default();
+    let build = |amount| {
+        ImageManifest::build_with_crowd_amount(&scene, &values, &view, 1.0, &media, amount).unwrap()
+    };
+    let nodes = |image: &ImageManifest| {
+        let length = u32::from_le_bytes(image.geometry[12..16].try_into().unwrap()) as usize;
+        let gltf: serde_json::Value =
+            serde_json::from_slice(&image.geometry[20..20 + length]).unwrap();
+        gltf["nodes"].as_array().unwrap().len()
+    };
+    let authored = scene.crowds[0].width_metres
+        * scene.crowds[0].depth_metres
+        * scene.crowds[0].density.people_per_square_metre();
+    assert!(
+        authored * 0.5 > 384.0,
+        "partial capture must exceed the live budget"
+    );
+    let none = build(0.0);
+    let half = build(0.5);
+    let full = build(1.0);
+    assert_eq!(none.crowd_amount, 0.0);
+    assert_eq!(half.crowd_amount, 0.5);
+    assert_eq!(full.crowd_amount, 1.0);
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&half.bytes().unwrap()).unwrap()["crowd_amount"],
+        0.5
+    );
+    assert!(
+        nodes(&half) > nodes(&none),
+        "requested audience must reach the GLB"
+    );
+    assert_eq!(
+        nodes(&full) - nodes(&none),
+        2 * (nodes(&half) - nodes(&none)),
+        "half amount is preserved even when it exceeds the live 384-person budget"
+    );
+    for amount in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+        assert!(
+            ImageManifest::build_with_crowd_amount(&scene, &values, &view, 1.0, &media, amount,)
+                .is_err()
+        );
+    }
+}

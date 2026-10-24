@@ -99,12 +99,13 @@ fn prepare_image(
     if !blender_available {
         return (None, legacy());
     }
-    let prepared = ImageManifest::build(
+    let prepared = ImageManifest::build_with_crowd_amount(
         job.frozen.scene(),
         job.frozen.values(),
         job.frozen.view(),
         job.frozen.time_seconds(),
         job.frozen.media(),
+        job.frozen.crowd_amount(),
     )
     .and_then(|manifest| {
         UltimateEligibility::inspect_image(&manifest).map(|eligibility| (manifest, eligibility))

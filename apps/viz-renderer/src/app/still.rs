@@ -109,7 +109,7 @@ impl Application {
                 .renderer
                 .as_ref()
                 .ok_or("Renderer is not ready for a 4K image")?;
-            FrozenStill::new(
+            FrozenStill::new_with_crowd_amount(
                 &session.scene,
                 &session.values,
                 &view,
@@ -119,6 +119,7 @@ impl Application {
                     pane_id: "architect".into(),
                     follow_preload: false,
                 },
+                renderer.crowd_amount(),
             )
         })();
         let result = frozen.and_then(|frozen| {

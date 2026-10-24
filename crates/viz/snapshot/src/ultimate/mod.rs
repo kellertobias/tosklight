@@ -1,5 +1,6 @@
 //! Worker-owned Blender image rendering. This is independent of legacy scene-snapshot retention.
 //! All entry points that start a process block their calling worker, never a live/UI thread.
+mod background_policy;
 mod eligibility;
 mod image_manifest;
 mod optics_manifest;
@@ -94,19 +95,15 @@ pub fn render_ultimate(
         ("image_media.py", include_str!("image_media.py")),
         ("image_optics.py", include_str!("image_optics.py")),
         ("image_fog.py", include_str!("image_fog.py")),
+        ("background_policy.py", include_str!("background_policy.py")),
     ] {
         std::fs::write(stage.directory.join(name), source)?;
     }
     let staged_png = stage.directory.join("image.png");
-    let mut command = tokio::process::Command::new(&blender.executable);
+    let policy = background_policy::BackgroundPolicy::discover();
+    let mut command = policy.command(&blender.executable);
     command
-        .args([
-            "--background",
-            "--factory-startup",
-            "--python-exit-code",
-            "13",
-            "--python",
-        ])
+        .args(["--python-exit-code", "13", "--python"])
         .arg(&script)
         .arg("--")
         .arg(if request.eligibility.image_backend() {
@@ -117,8 +114,9 @@ pub fn render_ultimate(
         .arg(&request.frozen_directory)
         .arg(&staged_png);
     progress(UltimateProgress::Rendering(format!(
-        "Blender {} — preparing frozen 4K image",
-        blender.version
+        "Blender {} — preparing frozen 4K image; {}",
+        blender.version,
+        policy.description()
     )));
     let result = process::run(command, request.timeout, &cancel, |line| {
         progress(UltimateProgress::Rendering(line.to_owned()));

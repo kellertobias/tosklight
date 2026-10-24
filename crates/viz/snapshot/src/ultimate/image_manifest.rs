@@ -1,4 +1,6 @@
 //! Capture-only, immutable Cycles input. Built before the chooser; no later scene/media queries.
+#[cfg(test)]
+mod fidelity_tests;
 mod fog;
 mod geometry;
 mod media;
@@ -26,6 +28,8 @@ pub struct ImageManifest {
     pub scene_revision: u64,
     pub values_frame: u64,
     pub time_seconds: f32,
+    /// Invocation-time local preference; capture budgets never increase this requested amount.
+    pub crowd_amount: f32,
     pub geometry_file: String,
     pub geometry_hash: u64,
     pub show: String,
@@ -72,6 +76,21 @@ impl ImageManifest {
         time_seconds: f32,
         frozen: &FrozenMedia,
     ) -> Result<Self, UltimateError> {
+        Self::build_with_crowd_amount(scene, values, view, time_seconds, frozen, 1.0)
+    }
+    pub fn build_with_crowd_amount(
+        scene: &Scene,
+        values: &SceneValues,
+        view: &ViewConfiguration,
+        time_seconds: f32,
+        frozen: &FrozenMedia,
+        crowd_amount: f32,
+    ) -> Result<Self, UltimateError> {
+        if !crowd_amount.is_finite() || !(0.0..=1.0).contains(&crowd_amount) {
+            return Err(UltimateError::Failed(
+                "Frozen crowd amount must be between zero and one".into(),
+            ));
+        }
         if !time_seconds.is_finite() || time_seconds < 0.0 {
             return Err(UltimateError::Failed(
                 "Frozen image time must be finite".into(),
@@ -97,6 +116,7 @@ impl ImageManifest {
         let mut style = FrameStyle {
             quality: viz_scene::RenderQuality::Ultra,
             camera_position: Some(camera.position),
+            crowd_amount,
             crowd_person_budget: usize::MAX,
             effect_particle_budget: usize::MAX,
             media_content: true,
@@ -116,6 +136,9 @@ impl ImageManifest {
         let optics = OpticsManifest::build(scene, values, view, time_seconds);
         let fog = fog::FogManifest::build(scene, values, view, time_seconds)?;
         let mut unsupported = optics.reasons().to_vec();
+        if view.mode.is_plot() {
+            unsupported.push("Ultimate does not yet preserve 2D plan symbols/outlines; choose Ultra to keep this orthographic view".into());
+        }
         if scene.emitters.len() != values.emitters.len() {
             unsupported.push("resolved emitter values are incomplete for this scene".into());
         }
@@ -145,6 +168,7 @@ impl ImageManifest {
             scene_revision: scene.revision,
             values_frame: values.frame,
             time_seconds,
+            crowd_amount,
             geometry_file: crate::GEOMETRY_FILE.into(),
             geometry_hash: hash(&geometry),
             show: scene.show_name.clone(),

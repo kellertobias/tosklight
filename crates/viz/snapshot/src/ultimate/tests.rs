@@ -232,7 +232,7 @@ fn managed_fake_backend_publishes_4k_and_leaves_frozen_package_and_user_images_i
     let executable_path = scratch.0.join("fake-blender");
     let quoted = serde_json::to_string(source_png.to_str().unwrap()).unwrap();
     let script = format!(
-        "#!/usr/bin/env python3\nimport sys,shutil\nif '--python-expr' in sys.argv:\n print('TOSKLIGHT_BLENDER_PROBE={{\"version\":\"test\",\"gltf\":true,\"cycles\":true}}',flush=True)\nelse:\n shutil.copyfile({quoted},sys.argv[-1])\n print('TOSKLIGHT_PROGRESS image written',flush=True)\n"
+        "#!/usr/bin/env python3\nimport sys,shutil,os,pathlib,runpy\nif '--python-expr' in sys.argv:\n print('TOSKLIGHT_BLENDER_PROBE={{\"version\":\"test\",\"gltf\":true,\"cycles\":true}}',flush=True)\nelse:\n budget=sys.argv.index('--threads')\n assert budget<sys.argv.index('--python')\n threads=int(sys.argv[budget+1])\n assert 1<=threads<=8 and os.environ['TOSKLIGHT_CAPTURE_THREADS']==str(threads)\n script=pathlib.Path(sys.argv[sys.argv.index('--python')+1])\n runpy.run_path(str(script.with_name('parent_guard.py')))['install_parent_guard']()\n shutil.copyfile({quoted},sys.argv[-1])\n print('TOSKLIGHT_PROGRESS image written',flush=True)\n"
     );
     executable(&executable_path, &script);
     let cancel = Arc::new(AtomicBool::new(false));
@@ -252,6 +252,7 @@ fn managed_fake_backend_publishes_4k_and_leaves_frozen_package_and_user_images_i
         render_ultimate(&request, &capabilities, cancel, |state| states.push(state)).unwrap();
     assert_eq!((image.width, image.height), (3840, 2160));
     assert!(matches!(states.last(), Some(UltimateProgress::Saved(_))));
+    assert!(states.iter().any(|state|matches!(state,UltimateProgress::Rendering(detail) if detail.contains("background CPU limit"))));
     assert!(image.path.is_file());
     assert_eq!(fs::read(destination).unwrap(), b"existing user image");
     assert!(frozen.join(crate::DOCUMENT_FILE).is_file());

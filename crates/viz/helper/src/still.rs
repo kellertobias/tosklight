@@ -19,7 +19,13 @@ impl Engine {
                 "Ultra quality — regular ToskLight renderer; separate full-quality 4K image, with live quality unchanged"
             }
             Self::Ultimate => {
-                "Ultimate quality — Blender/Cycles offline renderer; may take substantially longer and requires a supported frozen look"
+                concat!(
+                    "Ultimate quality — Blender/Cycles offline renderer; may take substantially longer. ",
+                    "Known differences: aluminium, multiplex and fabric procedural finishes use plain PBR materials; ",
+                    "floor grid and selection guides are omitted; native bloom is not reproduced. ",
+                    "Cycles physical beam lighting, source softness, fog transport, global illumination and AgX tone mapping can differ. ",
+                    "Choose Ultra for the native ToskLight appearance."
+                )
             }
         }
     }
@@ -84,6 +90,26 @@ pub struct Status {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn ultimate_chooser_discloses_known_native_appearance_differences() {
+        let explanation = Engine::Ultimate.explanation();
+        for detail in [
+            "aluminium, multiplex and fabric",
+            "plain PBR",
+            "floor grid and selection guides",
+            "native bloom is not reproduced",
+            "physical beam lighting",
+            "fog transport",
+            "AgX",
+            "Choose Ultra",
+        ] {
+            assert!(
+                explanation.contains(detail),
+                "missing chooser disclosure: {detail}"
+            );
+        }
+    }
+
     #[test]
     fn chooser_contract_names_engines_and_preserves_typed_job_identity() {
         let phase = Phase::NeedsChoice {

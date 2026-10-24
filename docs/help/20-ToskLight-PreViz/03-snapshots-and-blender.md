@@ -11,8 +11,8 @@ Visualizer **Quick Settings**. With that view focused, press **Cmd+Shift+R** on 
 **Ctrl+Shift+R** on Windows/Linux. The shortcut is inactive while entering text, using the Desk
 command line, or choosing in a modal dialog. Cmd/Ctrl+S keeps its existing scene-snapshot behavior.
 
-The action freezes that pane's camera, Live or Follow Preload values, and available media pixels
-before checking Blender or asking for quality. Moving the rig while the choice is open does not
+The action freezes that pane's camera, Live or Follow Preload values, crowd amount, and available
+media pixels before checking Blender or asking for quality. Moving the rig while the choice is open does not
 change the captured moment. Both engines produce a new **3840 × 2160 PNG**; they do not enlarge
 the live pane's raster. The camera keeps its vertical field of view with 16:9 framing, so the image
 can show more or less at the sides than a differently shaped pane. An orthographic view stays
@@ -26,6 +26,11 @@ When a usable Blender is installed, choose:
   differ from the native preview. Any unsupported frozen feature is listed beside the choice;
   choose Ultra when Ultimate cannot represent that look.
 
+Ultimate currently uses plain materials for aluminium, multiplex and fabric finishes, omits the
+floor grid and selection guides, and does not reproduce native bloom. Beam softness, fog and
+indirect lighting can also look different. For 2D plans or active laser scans, choose Ultra; the
+Ultimate choice explains why it is unavailable.
+
 Without Blender, the action uses Ultra. A broken configured installation reports its problem and
 keeps Ultra available. Rendering does not change the live quality preference: Draft remains Draft.
 Missing media frames are identified explicitly; the image uses only the frozen known fallback or
@@ -36,6 +41,11 @@ or **Reveal**. Another image can start when the current job and its cleanup fini
 cannot interrupt GPU work already submitted, so cleanup can take time. Images are saved in the
 Visualizer **Images** folder beside **Snapshots** and are not deleted by the twelve-snapshot
 retention rule below.
+
+Offline Blender images use at most eight CPU threads and no more than half the available CPU
+threads, with a minimum of one. ToskLight lowers the new Blender process's CPU priority where
+available. This preserves image quality and leaves more capacity for the desk, but does not
+guarantee output deadlines under resource contention.
 
 ## Find a snapshot
 

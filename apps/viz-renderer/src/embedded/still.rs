@@ -23,7 +23,7 @@ pub(super) fn service(state: &mut PaneState, source: &mut HelperSource, epoch: I
                     return;
                 }
                 let time = epoch.elapsed().as_secs_f32();
-                let result = FrozenStill::new(
+                let result = FrozenStill::new_with_crowd_amount(
                     &state.scene,
                     &state.values,
                     &state.view,
@@ -33,6 +33,7 @@ pub(super) fn service(state: &mut PaneState, source: &mut HelperSource, epoch: I
                         pane_id: pane_id.clone(),
                         follow_preload: state.following_preload,
                     },
+                    state.renderer.crowd_amount(),
                 )
                 .and_then(|frozen| {
                     state.stills.start(

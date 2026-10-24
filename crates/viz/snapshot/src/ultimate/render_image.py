@@ -25,6 +25,8 @@ else:
     snapshot, geometry = frozen.read_snapshot(folder)
 print("TOSKLIGHT_PROGRESS importing frozen geometry", flush=True)
 bpy.ops.wm.read_factory_settings(use_empty=True)
+from background_policy import apply_background_policy
+apply_background_policy(bpy.context.scene)
 bpy.context.scene.unit_settings.system = "METRIC"
 bpy.context.scene.unit_settings.length_unit = "METERS"
 frozen.import_geometry(geometry)
