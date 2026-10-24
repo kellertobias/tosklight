@@ -18,8 +18,70 @@ fn standalone_wireframe_shader_validates_without_lighting_bindings() {
             .iter()
             .filter(|(_, v)| v.binding.is_some())
             .count(),
-        7
+        8
     );
+}
+
+#[test]
+fn projected_edge_storage_and_compute_shader_match_the_render_reader() {
+    for (source, writable) in [
+        (include_str!("../../shaders/wireframe.wgsl"), false),
+        (include_str!("../../shaders/wireframe_compute.wgsl"), true),
+    ] {
+        let module = naga::front::wgsl::parse_str(source).expect("technical shader parses");
+        naga::valid::Validator::new(
+            naga::valid::ValidationFlags::all(),
+            naga::valid::Capabilities::all(),
+        )
+        .validate(&module)
+        .expect("technical shader validates");
+        let record = module
+            .types
+            .iter()
+            .find(|(_, ty)| ty.name.as_deref() == Some("ProjectedEdge"))
+            .unwrap()
+            .1;
+        let naga::TypeInner::Struct { span, .. } = record.inner else {
+            panic!("projected record must be a struct")
+        };
+        assert_eq!(span as usize, size_of::<super::batch::ProjectedEdge>());
+        let output = module
+            .global_variables
+            .iter()
+            .find(|(_, value)| {
+                value
+                    .binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.group == 2 && binding.binding == 0)
+            })
+            .unwrap()
+            .1;
+        let naga::AddressSpace::Storage { access } = output.space else {
+            panic!("projected record must be storage")
+        };
+        assert!(access.contains(naga::StorageAccess::LOAD));
+        assert_eq!(access.contains(naga::StorageAccess::STORE), writable);
+        assert_eq!(
+            module
+                .global_variables
+                .iter()
+                .filter(|(_, value)| matches!(value.space, naga::AddressSpace::Storage { .. }))
+                .count(),
+            7
+        );
+        if writable {
+            let entry = module
+                .entry_points
+                .iter()
+                .find(|entry| entry.name == "project_edges")
+                .unwrap();
+            assert_eq!(entry.stage, naga::ShaderStage::Compute);
+            assert_eq!(
+                entry.workgroup_size,
+                [super::batch::PROJECTION_WORKGROUP, 1, 1]
+            );
+        }
+    }
 }
 
 fn fixture_scene() -> Scene {

@@ -17,6 +17,8 @@ struct DrawRef { offset:u32, instance:u32 };
 @group(1) @binding(3) var<storage,read> indices:array<u32>;
 @group(1) @binding(4) var<storage,read> depth_vertices:array<DrawRef>;
 @group(1) @binding(5) var<storage,read> edge_refs:array<DrawRef>;
+struct ProjectedEdge { start:vec4<f32>, end:vec4<f32>, normal:vec2<f32>, pad:vec2<f32> };
+@group(2) @binding(0) var<storage,read> projected_edges:array<ProjectedEdge>;
 @vertex fn depth_vertex(@builtin(vertex_index) vertex:u32)->@builtin(position) vec4<f32> {
     // Indexed draw IDs address instance-specific virtual vertices. Shared triangle corners can
     // reuse their transformed result, while the underlying model positions remain shared.
@@ -55,14 +57,16 @@ fn expanded(a_in:vec4<f32>,b_in:vec4<f32>,ca:vec4<f32>,cb:vec4<f32>,corner:u32,v
     return out;
 }
 @vertex fn edge_vertex(@builtin(vertex_index) vertex:u32)->LineOutput {
-    let draw_ref=edge_refs[vertex/4u];let edge=segments[draw_ref.offset];let i=instances[draw_ref.instance];
-    // dot(M^-T*n, eye-M*midpoint) == dot(n, inverse(M)*eye-midpoint).
-    // Both adjacent normals use the same local direction, including mirrored/nonuniform models.
-    let direction=i.local_eye.xyz-(edge.start.xyz+edge.end.xyz)*0.5;
-    let facing_a=dot(edge.a.xyz,direction);let facing_b=dot(edge.b.xyz,direction);
-    let silhouette=i.local_eye.w<0.5 || facing_a*facing_b<=0.0;
-    return expanded(i.clip_from_local*vec4<f32>(edge.start.xyz,1.0),
-        i.clip_from_local*vec4<f32>(edge.end.xyz,1.0),camera.ink,camera.ink,vertex%4u,edge.start.w>0.5 || silhouette);
+    let edge=projected_edges[vertex/4u];
+    let corner=vertex%4u;
+    let side=select(-1.0,1.0,corner==1u || corner==2u);
+    var p=select(edge.start,edge.end,corner>=2u);
+    let half_width=camera.screen.z;
+    p.x+=edge.normal.x*side*half_width*2.0/camera.screen.x*p.w;
+    p.y+=edge.normal.y*side*half_width*2.0/camera.screen.y*p.w;
+    var out:LineOutput;
+    out.position=p;out.colour=camera.ink;out.across=side*half_width;
+    return out;
 }
 // Guides remain a six-vertex non-indexed list; translate to canonical corners explicitly.
 fn guide_corner(vertex:u32)->u32 {

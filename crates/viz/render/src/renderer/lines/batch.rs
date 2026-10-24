@@ -19,6 +19,19 @@ use wgpu::util::DeviceExt;
 pub(super) struct CameraState {
     pub clip_from_world: Mat4,
     pub eye_world: Vec3,
+    pub viewport: [u32; 2],
+}
+
+pub(super) const PROJECTION_WORKGROUP: u32 = 64;
+
+/// Exact storage stride shared by compute output and the four-corner vertex reader.
+#[repr(C)]
+#[derive(Clone, Copy, Pod, Zeroable)]
+pub(super) struct ProjectedEdge {
+    start: [f32; 4],
+    end: [f32; 4],
+    normal: [f32; 2],
+    pad: [f32; 2],
 }
 
 #[repr(C)]
@@ -71,6 +84,11 @@ struct Chunk {
     depth_indices: u32,
     edge_indices: wgpu::Buffer,
     edge_index_count: u32,
+    _projected: wgpu::Buffer,
+    projected_read: wgpu::BindGroup,
+    projected_write: wgpu::BindGroup,
+    edge_count: u32,
+    projection_dirty: bool,
 }
 
 impl Batch {
@@ -86,9 +104,16 @@ impl Batch {
         instances_changed: bool,
         camera: CameraState,
     ) -> Result<(), RenderError> {
-        if device.limits().max_storage_buffers_per_shader_stage < 6 {
+        if device.limits().max_storage_buffers_per_shader_stage < 7 {
             return Err(failure(
-                "the GPU exposes fewer than six vertex storage bindings",
+                "the GPU exposes fewer than seven storage bindings for edge preprocessing",
+            ));
+        }
+        if device.limits().max_compute_invocations_per_workgroup < PROJECTION_WORKGROUP
+            || device.limits().max_compute_workgroup_size_x < PROJECTION_WORKGROUP
+        {
+            return Err(failure(
+                "the GPU cannot dispatch a 64-thread edge preprocessing workgroup",
             ));
         }
         let layout: Vec<_> = drawn
@@ -109,6 +134,7 @@ impl Batch {
                     })
                 },
                 limit,
+                device.limits().max_compute_workgroups_per_dimension,
             )?;
             let instances = plans.iter().try_fold(0u32, |total, plan| {
                 total
@@ -126,12 +152,48 @@ impl Batch {
             self.instances = instances;
             self.layout = layout;
         } else if transforms_changed(self.camera, camera, instances_changed) {
+            let viewport_changed = self
+                .camera
+                .is_none_or(|previous| previous.viewport != camera.viewport);
             for chunk in &mut self.chunks {
                 chunk.update(device, queue, drawn, camera);
+                chunk.projection_dirty |= viewport_changed;
             }
         }
         self.camera = Some(camera);
         Ok(())
+    }
+    /// All chunks share one timed compute pass. Clean frames retain their projected edge data.
+    pub(super) fn project(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder,
+        pipelines: &Pipelines,
+        camera: &wgpu::BindGroup,
+        timer: Option<&crate::timing::GpuTimer>,
+    ) {
+        if !self
+            .chunks
+            .iter()
+            .any(|chunk| chunk.edge_count > 0 && chunk.projection_dirty)
+        {
+            return;
+        }
+        let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("wireframe edge projection all chunks"),
+            timestamp_writes: timer
+                .and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull)),
+        });
+        pass.set_pipeline(&pipelines.project);
+        pass.set_bind_group(0, camera, &[]);
+        for chunk in &mut self.chunks {
+            if chunk.edge_count == 0 || !chunk.projection_dirty {
+                continue;
+            }
+            pass.set_bind_group(1, &chunk.group, &[]);
+            pass.set_bind_group(2, &chunk.projected_write, &[]);
+            pass.dispatch_workgroups(chunk.edge_count.div_ceil(PROJECTION_WORKGROUP), 1, 1);
+            chunk.projection_dirty = false;
+        }
     }
     pub(super) fn draw_depth(&self, pass: &mut wgpu::RenderPass<'_>) -> u32 {
         let mut draws = 0;
@@ -153,6 +215,7 @@ impl Batch {
         for chunk in &self.chunks {
             if chunk.edge_index_count > 0 {
                 pass.set_bind_group(1, &chunk.group, &[]);
+                pass.set_bind_group(2, &chunk.projected_read, &[]);
                 pass.set_index_buffer(chunk.edge_indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..chunk.edge_index_count, 0, 0..1);
                 draws += 1;
@@ -214,6 +277,14 @@ impl Chunk {
                 &static_buffers[4],
             ],
         );
+        let projected = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("wireframe retained projected edges"),
+            size: (plan.edge_refs.len().max(1) * size_of::<ProjectedEdge>()) as u64,
+            usage: wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+        let (projected_read, projected_write) = pipelines.projected_groups(device, &projected);
+        let edge_count = plan.edge_refs.len() as u32;
         let mut chunk = Self {
             _static_buffers: static_buffers,
             instances,
@@ -223,6 +294,11 @@ impl Chunk {
             depth_indices: plan.indices.len() as u32,
             edge_indices: edge_indices(device, bytemuck::cast_slice(&plan.edge_indices)),
             edge_index_count: plan.edge_indices.len() as u32,
+            _projected: projected,
+            projected_read,
+            projected_write,
+            edge_count,
+            projection_dirty: true,
         };
         chunk.update(device, queue, drawn, camera);
         chunk
@@ -239,6 +315,10 @@ impl Chunk {
             .iter()
             .map(|&(kind, instance)| WireInstance::new(&drawn[kind].1[instance], camera))
             .collect();
+        if self.instance_bytes == bytemuck::cast_slice::<_, u8>(&transforms) {
+            return;
+        }
+        self.projection_dirty = true;
         // Layout never changes in this branch, so capacity/group identity stays fixed.
         buffers::upload_changed(
             device,

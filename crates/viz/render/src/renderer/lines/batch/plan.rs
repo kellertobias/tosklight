@@ -1,6 +1,6 @@
 //! CPU-only checked allocation planning; chunks never discard instances to fit a GPU limit.
 use super::super::Segment;
-use super::{WireInstance, failure};
+use super::{PROJECTION_WORKGROUP, ProjectedEdge, WireInstance, failure};
 use crate::{
     instances::{MeshInstance, MeshKind},
     mesh::MeshData,
@@ -36,7 +36,14 @@ pub(super) fn build<'a>(
     drawn: &[(MeshKind, Vec<MeshInstance>)],
     asset: impl Fn(MeshKind) -> Option<Asset<'a>>,
     limit: u64,
+    max_workgroups: u32,
 ) -> Result<Vec<ChunkPlan>, RenderError> {
+    let max_edges = u64::from(max_workgroups) * u64::from(PROJECTION_WORKGROUP);
+    if max_edges == 0 {
+        return Err(failure(
+            "the GPU exposes no compute workgroups for edge preprocessing",
+        ));
+    }
     let mut chunks = Vec::new();
     let mut current = ChunkPlan::default();
     for (kind_index, (kind, instances)) in drawn.iter().enumerate() {
@@ -53,7 +60,7 @@ pub(super) fn build<'a>(
             return Err(failure("model contains an out-of-range triangle index"));
         }
         for instance in 0..instances.len() {
-            if !current.fits(*kind, asset, limit) {
+            if !current.fits(*kind, asset, limit, max_edges) {
                 if current.links.is_empty() {
                     return Err(failure(&format!(
                         "asset {kind:?} and one instance exceed the {limit}-byte storage budget; simplify the fixture model"
@@ -61,7 +68,7 @@ pub(super) fn build<'a>(
                 }
                 chunks.push(current);
                 current = ChunkPlan::default();
-                if !current.fits(*kind, asset, limit) {
+                if !current.fits(*kind, asset, limit, max_edges) {
                     return Err(failure(&format!(
                         "asset {kind:?} and one instance exceed the {limit}-byte storage budget; simplify the fixture model"
                     )));
@@ -77,7 +84,7 @@ pub(super) fn build<'a>(
 }
 
 impl ChunkPlan {
-    fn fits(&self, kind: MeshKind, asset: Asset<'_>, limit: u64) -> bool {
+    fn fits(&self, kind: MeshKind, asset: Asset<'_>, limit: u64, max_edges: u64) -> bool {
         let new = !self.assets.contains_key(&kind);
         let add = |length: usize, count: usize, stride: usize| {
             length
@@ -109,6 +116,9 @@ impl ChunkPlan {
                 asset.edges.len(),
                 size_of::<Reference>(),
             )
+            && add(self.edge_refs.len(), asset.edges.len(), size_of::<ProjectedEdge>())
+            && self.edge_refs.len().checked_add(asset.edges.len())
+                .is_some_and(|count| count as u64 <= max_edges)
             && self
                 .indices
                 .len()

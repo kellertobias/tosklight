@@ -4,6 +4,9 @@ pub(super) struct Pipelines {
     pub camera_layout: wgpu::BindGroupLayout,
     segment_layout: wgpu::BindGroupLayout,
     batch_layout: wgpu::BindGroupLayout,
+    projected_read_layout: wgpu::BindGroupLayout,
+    projected_write_layout: wgpu::BindGroupLayout,
+    pub project: wgpu::ComputePipeline,
     pub depth: wgpu::RenderPipeline,
     pub edges: wgpu::RenderPipeline,
     pub guides: wgpu::RenderPipeline,
@@ -14,7 +17,7 @@ impl Pipelines {
             label: Some("wireframe camera only"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -23,40 +26,54 @@ impl Pipelines {
                 count: None,
             }],
         });
-        let segment_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("wireframe geometry only"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        });
-        let entries = (0..6)
-            .map(|binding| wgpu::BindGroupLayoutEntry {
-                binding,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            })
-            .collect::<Vec<_>>();
-        let batch_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("wireframe shared geometry and instance maps"),
-            entries: &entries,
-        });
-        let edge_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("wireframe batched depth and edges"),
+        let segment_layout = storage_layout(
+            device,
+            "wireframe guides",
+            wgpu::ShaderStages::VERTEX,
+            true,
+            1,
+        );
+        let batch_layout = storage_layout(
+            device,
+            "wireframe shared geometry and instance maps",
+            wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::COMPUTE,
+            true,
+            6,
+        );
+        let projected_read_layout = storage_layout(
+            device,
+            "wireframe projected edges read",
+            wgpu::ShaderStages::VERTEX,
+            true,
+            1,
+        );
+        let projected_write_layout = storage_layout(
+            device,
+            "wireframe projected edges write",
+            wgpu::ShaderStages::COMPUTE,
+            false,
+            1,
+        );
+        let depth_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("wireframe batched actual depth"),
             bind_group_layouts: &[Some(&camera_layout), Some(&batch_layout)],
             immediate_size: 0,
         });
+        let edge_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("wireframe batched preprojected edges"),
+            bind_group_layouts: &[
+                Some(&camera_layout),
+                Some(&batch_layout),
+                Some(&projected_read_layout),
+            ],
+            immediate_size: 0,
+        });
+        let project = projection_pipeline(
+            device,
+            &camera_layout,
+            &batch_layout,
+            &projected_write_layout,
+        );
         let guide_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("wireframe guides"),
             bind_group_layouts: &[Some(&camera_layout), Some(&segment_layout)],
@@ -69,7 +86,7 @@ impl Pipelines {
         let depth = pipeline(
             device,
             &module,
-            &edge_layout,
+            &depth_layout,
             format,
             "wireframe actual depth",
             "depth_vertex",
@@ -103,6 +120,9 @@ impl Pipelines {
             camera_layout,
             segment_layout,
             batch_layout,
+            projected_read_layout,
+            projected_write_layout,
+            project,
             depth,
             edges,
             guides,
@@ -128,15 +148,101 @@ impl Pipelines {
         })
     }
     pub fn segment_group(&self, device: &wgpu::Device, buffer: &wgpu::Buffer) -> wgpu::BindGroup {
-        device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("wireframe retained segments"),
-            layout: &self.segment_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        })
+        storage_group(
+            device,
+            "wireframe retained segments",
+            &self.segment_layout,
+            buffer,
+        )
     }
+    pub fn projected_groups(
+        &self,
+        device: &wgpu::Device,
+        buffer: &wgpu::Buffer,
+    ) -> (wgpu::BindGroup, wgpu::BindGroup) {
+        (
+            storage_group(
+                device,
+                "wireframe projected edges read",
+                &self.projected_read_layout,
+                buffer,
+            ),
+            storage_group(
+                device,
+                "wireframe projected edges write",
+                &self.projected_write_layout,
+                buffer,
+            ),
+        )
+    }
+}
+
+fn storage_group(
+    device: &wgpu::Device,
+    label: &str,
+    layout: &wgpu::BindGroupLayout,
+    buffer: &wgpu::Buffer,
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some(label),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    })
+}
+
+fn storage_layout(
+    device: &wgpu::Device,
+    label: &str,
+    visibility: wgpu::ShaderStages,
+    read_only: bool,
+    count: u32,
+) -> wgpu::BindGroupLayout {
+    let entries = (0..count)
+        .map(|binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Storage { read_only },
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        })
+        .collect::<Vec<_>>();
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some(label),
+        entries: &entries,
+    })
+}
+
+fn projection_pipeline(
+    device: &wgpu::Device,
+    camera: &wgpu::BindGroupLayout,
+    batch: &wgpu::BindGroupLayout,
+    projected: &wgpu::BindGroupLayout,
+) -> wgpu::ComputePipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("wireframe once per edge projection"),
+        bind_group_layouts: &[Some(camera), Some(batch), Some(projected)],
+        immediate_size: 0,
+    });
+    let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("wireframe edge projection compute"),
+        source: wgpu::ShaderSource::Wgsl(
+            include_str!("../../shaders/wireframe_compute.wgsl").into(),
+        ),
+    });
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("wireframe edge projection compute"),
+        layout: Some(&layout),
+        module: &module,
+        entry_point: Some("project_edges"),
+        compilation_options: Default::default(),
+        cache: None,
+    })
 }
 
 #[allow(clippy::too_many_arguments)]

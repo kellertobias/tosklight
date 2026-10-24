@@ -167,6 +167,7 @@ impl LinesRenderer {
             batch::CameraState {
                 clip_from_world: camera.view_projection,
                 eye_world: camera.position,
+                viewport: [context.size.0, context.size.1],
             },
         )?;
         if replaced || instances_changed {
@@ -207,11 +208,13 @@ impl LinesRenderer {
     }
 
     fn draw(
-        &self,
+        &mut self,
         context: &FrameContext<'_>,
         encoder: &mut wgpu::CommandEncoder,
         view: &ViewConfiguration,
     ) -> FrameStats {
+        self.batch
+            .project(encoder, &self.pipelines, &self.camera_group, context.timer);
         let background = view.background_colour();
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("wireframe depth and analytic edges"),

@@ -1,5 +1,5 @@
 use super::super::Segment;
-use super::{CameraState, WireInstance, plan, transforms_changed};
+use super::{CameraState, ProjectedEdge, WireInstance, plan, transforms_changed};
 use crate::{
     instances::{MeshInstance, MeshKind},
     mesh,
@@ -18,6 +18,7 @@ fn instances(count: usize) -> Vec<MeshInstance> {
 fn wire_storage_layout_is_exact_and_ignores_material_channels() {
     assert_eq!(size_of::<WireInstance>(), 80);
     assert_eq!(size_of::<plan::Reference>(), 8);
+    assert_eq!(size_of::<ProjectedEdge>(), 48);
     let a = MeshInstance::zeroed();
     let mut b = a;
     b.base_colour = [1.0; 4];
@@ -43,11 +44,12 @@ fn storage_boundaries_split_instances_without_duplicating_geometry_within_a_chun
             })
         },
         256,
+        65535,
     )
     .unwrap();
     assert_eq!(
         plans.iter().map(|p| p.links.len()).collect::<Vec<_>>(),
-        [2, 2, 1] // 96 edge-index bytes per instance are now the tightest binding.
+        [1, 1, 1, 1, 1] // 192 projected-output bytes per instance are the tightest binding.
     );
     assert_eq!(
         plans
@@ -101,6 +103,7 @@ fn merged_assets_rebase_indices_and_references_deterministically() {
                 })
             },
             4096,
+            65535,
         )
         .unwrap()
     };
@@ -139,6 +142,7 @@ fn oversize_assets_and_invalid_indices_fail_without_truncation() {
             })
         },
         256,
+        65535,
     );
     assert!(result.err().unwrap().to_string().contains("exceed"));
     data.indices[0] = u32::MAX;
@@ -151,6 +155,7 @@ fn oversize_assets_and_invalid_indices_fail_without_truncation() {
             })
         },
         4096,
+        65535,
     );
     assert!(result.err().unwrap().to_string().contains("out-of-range"));
 }
@@ -169,6 +174,7 @@ fn indexed_depth_reuses_triangle_corners_without_aliasing_instance_transforms() 
             })
         },
         4096,
+        65535,
     )
     .unwrap();
     let p = &plans[0];
@@ -237,7 +243,7 @@ fn indexed_aa_quad_corners_match_original_six_vertices_for_every_edge() {
 }
 
 #[test]
-fn aa_index_budget_splits_chunks_before_index_buffer_overflow() {
+fn projected_output_budget_splits_chunks_without_losing_aa_indices() {
     let data = mesh::MeshData::default();
     let edges = edges(32);
     let drawn = vec![(MeshKind::Plane, instances(3))];
@@ -250,13 +256,15 @@ fn aa_index_budget_splits_chunks_before_index_buffer_overflow() {
             })
         },
         2048,
+        65535,
     )
     .unwrap();
     assert_eq!(
         p.iter().map(|chunk| chunk.links.len()).collect::<Vec<_>>(),
-        [2, 1]
+        [1, 1, 1]
     );
     for chunk in p {
+        assert!(chunk.edge_refs.len() * size_of::<ProjectedEdge>() <= 2048);
         assert_eq!(
             chunk.edge_indices.len(),
             chunk.links.len() * edges.len() * 6
@@ -267,12 +275,68 @@ fn aa_index_budget_splits_chunks_before_index_buffer_overflow() {
     }
 }
 
+#[test]
+fn dispatch_limit_splits_chunks_without_dropping_a_single_edge() {
+    let data = mesh::unit_plane();
+    let edges = edges(4);
+    let drawn = vec![(MeshKind::Plane, instances(17))];
+    let chunks = plan::build(
+        &drawn,
+        |_| {
+            Some(plan::Asset {
+                data: &data,
+                edges: &edges,
+            })
+        },
+        65536,
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|chunk| chunk.links.len())
+            .collect::<Vec<_>>(),
+        [16, 1]
+    );
+    assert_eq!(
+        chunks
+            .iter()
+            .map(|chunk| chunk.edge_refs.len())
+            .sum::<usize>(),
+        17 * 4
+    );
+    for chunk in chunks {
+        assert!(
+            chunk
+                .edge_refs
+                .len()
+                .div_ceil(super::PROJECTION_WORKGROUP as usize)
+                <= 1
+        );
+        assert_eq!(chunk.edge_indices.len(), chunk.edge_refs.len() * 6);
+    }
+    assert!(
+        plan::build(
+            &drawn,
+            |_| Some(plan::Asset {
+                data: &data,
+                edges: &edges
+            }),
+            65536,
+            0
+        )
+        .is_err()
+    );
+}
+
 fn camera() -> CameraState {
     let eye = Vec3::new(7.0, 5.0, 11.0);
     CameraState {
         clip_from_world: Mat4::perspective_rh(0.8, 1.7, 0.1, 100.0)
             * Mat4::look_at_rh(eye, Vec3::ZERO, Vec3::Y),
         eye_world: eye,
+        viewport: [640, 360],
     }
 }
 
@@ -357,4 +421,18 @@ fn camera_only_changes_refresh_records_without_rebuilding_geometry() {
         assert_ne!(bytemuck::bytes_of(&before), bytemuck::bytes_of(&after));
         assert!(!transforms_changed(Some(next), next, false));
     }
+}
+
+#[test]
+fn viewport_only_changes_invalidate_projection_even_when_clip_records_are_unchanged() {
+    let before = camera();
+    let mut after = before;
+    after.viewport = [1280, 720];
+    assert!(transforms_changed(Some(before), after, false));
+    let mut source = MeshInstance::zeroed();
+    source.model = Mat4::IDENTITY.to_cols_array_2d();
+    assert_eq!(
+        bytemuck::bytes_of(&WireInstance::new(&source, before)),
+        bytemuck::bytes_of(&WireInstance::new(&source, after))
+    );
 }
