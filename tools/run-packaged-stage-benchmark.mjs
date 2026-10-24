@@ -259,10 +259,12 @@ try {
         await waitForRecord(samplesPath, (record) => record.kind === "stage-started", (controlDurationSeconds + 30) * 1_000);
         const afterNoStage = await runtimeDiagnostics(prepared.session);
         const noStageOutputWindow = await takeOutputWindow(prepared.session);
+        const networkAfterNoStage = networkCapture?.snapshot() ?? null;
         memoryPhase = "capture";
         records = await waitForRecord(samplesPath, (record) => record.kind === "packaged-stage-capture-complete", 240_000);
         runtime = { before, afterNoStage, after: await runtimeDiagnostics(prepared.session),
-            outputWindows: { noStage: noStageOutputWindow, capture: await takeOutputWindow(prepared.session) } };
+            outputWindows: { noStage: noStageOutputWindow, capture: await takeOutputWindow(prepared.session) },
+            networkCapture: { before: networkBefore, afterNoStage: networkAfterNoStage, after: networkCapture?.snapshot() ?? null } };
     } else if (profile === "improved-beam-spike") {
 		memoryPhase = "improved-beam-spike";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
