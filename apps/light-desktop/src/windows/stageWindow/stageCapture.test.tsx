@@ -82,6 +82,7 @@ it("routes Follow Preload and ignores other panes, stale requests and foreign jo
 	const dialog = screen.getByRole("dialog", { name: "Render 4K quality" });
 	expect(within(dialog).getByText(/Follow Preload scene frozen/)).toBeInTheDocument();
 	expect(within(dialog).getByText(/Live quality remains unchanged/)).toBeInTheDocument();
+	expect(within(dialog).getByText("camera")).toBeInTheDocument();
 	push(status({ saved: { path: "/wrong.png" } }, { jobId: "foreign" }));
 	expect(screen.queryByText("/wrong.png")).not.toBeInTheDocument();
 });
@@ -109,8 +110,10 @@ it("explains unavailable Ultimate honestly, chooses Ultra and cancels the owned 
 it("shows saved path and owned Open/Reveal actions, then rejects late terminal observations", async () => {
 	mount(); const button = screen.getByRole("button", { name: /Render 4K Live/ });
 	await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button);
-	push(status({ saved: { path: "/captures/frozen-4k.png" } }));
+	push(status({ saved: { path: "/captures/frozen-4k.png" } }, { engine: "ultra" }));
 	expect(screen.getByText("/captures/frozen-4k.png")).toBeInTheDocument();
+	expect(screen.getByText("Ultra · ToskLight · 3840 × 2160")).toBeInTheDocument();
+	expect(screen.getByText("camera")).toBeInTheDocument();
 	fireEvent.click(screen.getByRole("button", { name: "Open image" })); fireEvent.click(screen.getByRole("button", { name: "Reveal image" }));
 	expect(open.mock.calls).toEqual([["live", false], ["live", true]]);
 	push(status({ failed: { detail: "late failure" } }));

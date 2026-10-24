@@ -41,6 +41,8 @@ export function StageCaptureControls({ capture, paneId, followPreload }: {
 			{capture.status?.notice && <span role="status">{capture.status.notice}</span>}
 			{capture.error && <span role="alert">{capture.error}</span>}
 			{saved && <><code className="stage-capture-path">{saved}</code>
+				{capture.status?.engine && <span>{capture.status.engine === "ultimate" ? "Ultimate · Blender" : "Ultra · ToskLight"} · 3840 × 2160</span>}
+				{capture.status?.framing && <span>{capture.status.framing}</span>}
 				{capture.canOpenSaved && <><button type="button" onClick={() => { void capture.openSaved(false); }}>Open image</button>
 					<button type="button" onClick={() => { void capture.openSaved(true); }}>Reveal image</button></>}
 			</>}
@@ -50,6 +52,7 @@ export function StageCaptureControls({ capture, paneId, followPreload }: {
 			policy={{ backdrop: false, escape: !capture.commandPending, explicit: !capture.commandPending }} onClose={() => { void capture.cancel(); }}>
 			<div className="stage-capture-dialog-content">
 				<p>{capture.status?.followPreload ? "Follow Preload" : "Live"} scene frozen · 3840 × 2160. Live quality remains unchanged.</p>
+				<p>{capture.status?.framing}</p>
 				<p>Installed Blender: {choice.blenderVersion}</p>
 				<p><strong>Ultra quality · ToskLight</strong><br />{choice.ultraExplanation}</p>
 				<p><strong>Ultimate quality · Blender</strong><br />{choice.ultimateExplanation}</p>

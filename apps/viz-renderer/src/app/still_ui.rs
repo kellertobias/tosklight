@@ -245,7 +245,13 @@ impl StillUi {
                 ]
             }
             Phase::Saved { path } => {
-                lines.extend(["4K image saved".into(), path.display().to_string()]);
+                lines.extend(["3840 × 2160 image saved".into(), path.display().to_string()]);
+                if let Some(engine) = status.engine {
+                    lines.push(match engine {
+                        crate::stills::Engine::Ultra => "Ultra · ToskLight".into(),
+                        crate::stills::Engine::Ultimate => "Ultimate · Blender".into(),
+                    });
+                }
                 vec![
                     ("Open", Some(Action::Open)),
                     ("Reveal", Some(Action::Reveal)),
