@@ -18,6 +18,7 @@ pub(super) struct Producer {
     count: usize,
     visible: bool,
     next: Instant,
+    flow: Option<super::flow::Flow>,
 }
 
 impl Producer {
@@ -29,13 +30,26 @@ impl Producer {
             count: if shared { 2 } else { 1 },
             visible: true,
             next: now,
+            flow: None,
         }
     }
 
+    pub(super) fn with_flow(mut self, flow: Option<super::flow::Flow>) -> Self {
+        self.flow = flow;
+        self
+    }
+    pub(super) fn ready_send_returned(&mut self, frame: FrameId) {
+        if let Some(flow) = self.flow.as_mut() {
+            flow.frame("ready_send_returned", frame, None);
+        }
+    }
     /// True once on a hidden-to-visible edge; the caller invalidates its successful image stamp.
     pub fn set_visible(&mut self, visible: bool, now: Instant) -> bool {
         let resumed = visible && !self.visible;
         self.visible = visible;
+        if !visible && let Some(flow) = self.flow.as_mut() {
+            flow.wait(now, false);
+        }
         if resumed {
             self.next = now;
         }
@@ -57,6 +71,12 @@ impl Producer {
     }
 
     pub fn begin(&mut self, now: Instant) -> Option<FrameId> {
+        if let Some(flow) = self.flow.as_mut() {
+            flow.wait(
+                now,
+                self.visible && now >= self.next && !self.slots[..self.count].contains(&Slot::Free),
+            );
+        }
         if !self.available(now) {
             return None;
         }
@@ -77,17 +97,26 @@ impl Producer {
             sequence: self.sequence.checked_add(1)?,
         };
         self.slots[slot] = Slot::Rendering(frame);
+        if let Some(flow) = self.flow.as_mut() {
+            flow.frame("begin_reserved", frame, None);
+        }
         Some(frame)
     }
 
     pub fn cancel(&mut self, frame: FrameId) {
         if self.slots.get(frame.slot as usize) == Some(&Slot::Rendering(frame)) {
             self.slots[frame.slot as usize] = Slot::Free;
+            if let Some(flow) = self.flow.as_mut() {
+                flow.frame("reservation_cancelled", frame, None);
+            }
         }
     }
 
     pub fn submitted(&mut self, frame: FrameId) {
         self.sequence = frame.sequence;
+        if let Some(flow) = self.flow.as_mut() {
+            flow.frame("gpu_submission_returned", frame, None);
+        }
     }
 
     /// A GPU callback can arrive late after a resize; only its exact reservation can become ready.
@@ -96,14 +125,24 @@ impl Producer {
             return false;
         }
         self.slots[frame.slot as usize] = Slot::Desk(frame);
+        if let Some(flow) = self.flow.as_mut() {
+            flow.frame("gpu_completed_observed", frame, None);
+        }
         true
     }
 
     pub fn release(&mut self, frame: FrameId) -> bool {
-        if self.slots.get(frame.slot as usize) != Some(&Slot::Desk(frame)) {
+        let accepted = self.slots.get(frame.slot as usize) == Some(&Slot::Desk(frame));
+        if let Some(flow) = self.flow.as_mut() {
+            flow.frame("release_received_observed", frame, Some(accepted));
+        }
+        if !accepted {
             return false;
         }
         self.slots[frame.slot as usize] = Slot::Free;
+        if let Some(flow) = self.flow.as_mut() {
+            flow.wait(Instant::now(), false);
+        }
         true
     }
 
@@ -116,6 +155,9 @@ impl Producer {
             .any(|slot| matches!(slot, Slot::Rendering(_)))
         {
             return Ok(false);
+        }
+        if let Some(flow) = self.flow.as_mut() {
+            flow.wait(now, false);
         }
         self.generation = self
             .generation

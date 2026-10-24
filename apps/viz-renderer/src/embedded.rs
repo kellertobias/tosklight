@@ -23,6 +23,7 @@
 mod benchmark;
 mod benchmark_pacing;
 mod cpu_runtime;
+mod flow;
 mod mechanics;
 mod pass_profile;
 mod picture;
@@ -314,7 +315,12 @@ impl PaneState {
             producer: producer::Producer::new(
                 embedding.transport == FrameTransport::Shared,
                 Instant::now(),
-            ),
+            )
+            .with_flow(flow::Flow::from_environment(
+                crate::helper_source::benchmark_reporting_enabled(
+                    std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").as_deref(),
+                ),
+            )),
             completions,
             completed,
             pending_copy: None,

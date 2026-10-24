@@ -32,6 +32,7 @@ impl PaneState {
         while let Ok(frame) = self.completions.try_recv() {
             if self.producer.completed(frame) {
                 source.send_frame_ready(frame);
+                self.producer.ready_send_returned(frame);
             }
         }
         for frame in source.take_released_frames() {
@@ -121,6 +122,7 @@ impl PaneState {
                     // Both messages use the same writer: pixels always precede readiness.
                     source.send_frame(frame, image.width, image.height, image.rgba);
                     source.send_frame_ready(frame);
+                    self.producer.ready_send_returned(frame);
                 }
             }
             Err(error) => {
