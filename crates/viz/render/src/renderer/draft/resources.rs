@@ -2,6 +2,11 @@ use super::super::{Globals, SceneBuffers, Targets, build_scene_group};
 use crate::targets::HDR_FORMAT;
 
 pub(in crate::renderer) struct DraftPasses {
+    pub(super) fused: super::fused::FusedComposite,
+    #[cfg(test)]
+    pub(super) force_legacy_composite: bool,
+    #[cfg(test)]
+    pub(in crate::renderer) last_fused_composite: bool,
     pub preparation: super::preparation::Preparation,
     pub size: (u32, u32),
     pub beam: wgpu::TextureView,
@@ -49,6 +54,7 @@ impl DraftPasses {
         scene_layout: &wgpu::BindGroupLayout,
         buffers: &SceneBuffers,
         targets: &Targets,
+        format: wgpu::TextureFormat,
     ) -> Self {
         let globals = uniform(device, "Draft beam globals", size_of::<Globals>() as u64);
         let settings = uniform(device, "Draft upsample settings", 16);
@@ -116,7 +122,14 @@ impl DraftPasses {
         });
         let upsample_group =
             upsample_group(device, &upsample_layout, &beam, &targets.depth, &settings);
+        let fused =
+            super::fused::FusedComposite::new(device, &upsample_layout, &targets.shaded, format);
         Self {
+            fused,
+            #[cfg(test)]
+            force_legacy_composite: false,
+            #[cfg(test)]
+            last_fused_composite: false,
             preparation: Default::default(),
             size,
             beam,
@@ -128,6 +141,17 @@ impl DraftPasses {
             upsample_layout,
         }
     }
+    #[cfg(test)]
+    pub(in crate::renderer) fn force_legacy_for_test(&mut self, legacy: bool) {
+        self.force_legacy_composite = legacy;
+    }
+    pub(in crate::renderer) fn fuses_composite(&self, beams: bool, lasers: bool) -> bool {
+        #[cfg(test)]
+        if self.force_legacy_composite {
+            return false;
+        }
+        beams && !lasers
+    }
     pub(in crate::renderer) fn resize(&mut self, device: &wgpu::Device, targets: &Targets) {
         let size = (targets.width, targets.height);
         if self.size == size {
@@ -135,6 +159,7 @@ impl DraftPasses {
         }
         self.size = size;
         self.beam = beam_target(device, size);
+        self.fused.resize(device, &targets.shaded);
         self.upsample_group = upsample_group(
             device,
             &self.upsample_layout,
@@ -156,7 +181,7 @@ impl DraftPasses {
         queue.write_buffer(
             &self.settings,
             0,
-            bytemuck::cast_slice(&[globals.params[2], globals.params[3], 0.0, 0.0]),
+            bytemuck::cast_slice(&[globals.params[2], globals.params[3], globals.params[0], 0.0]),
         );
     }
 }
@@ -168,7 +193,10 @@ fn uniform(device: &wgpu::Device, label: &str, size: u64) -> wgpu::Buffer {
         mapped_at_creation: false,
     })
 }
-fn texture_entry(binding: u32, sample_type: wgpu::TextureSampleType) -> wgpu::BindGroupLayoutEntry {
+pub(super) fn texture_entry(
+    binding: u32,
+    sample_type: wgpu::TextureSampleType,
+) -> wgpu::BindGroupLayoutEntry {
     wgpu::BindGroupLayoutEntry {
         binding,
         visibility: wgpu::ShaderStages::FRAGMENT,

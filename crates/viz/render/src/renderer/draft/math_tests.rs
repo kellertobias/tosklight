@@ -113,6 +113,15 @@ fn dedicated_draft_shaders_parse_and_validate_without_gpu() {
             "upsample",
             include_str!("../../shaders/draft_upsample.wgsl").to_owned(),
         ),
+        (
+            "fused composite",
+            concat!(
+                include_str!("../../shaders/draft_upsample.wgsl"),
+                "\n",
+                include_str!("../../shaders/draft_composite.wgsl")
+            )
+            .to_owned(),
+        ),
     ] {
         let module = naga::front::wgsl::parse_str(&source)
             .unwrap_or_else(|error| panic!("{name}: {}", error.emit_to_string(&source)));

@@ -11,7 +11,7 @@ struct Settings { near: f32, far: f32, pad0: f32, pad1: f32 };
 fn linear(depth: f32) -> f32 {
     return settings.near * settings.far / max(settings.far - depth * (settings.far - settings.near), 1e-6);
 }
-@fragment fn fragment_main(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
+fn upsample_beam(pixel: vec4<f32>) -> vec4<f32> {
     let full_size = vec2<i32>(textureDimensions(geometry_depth));
     let half_size = vec2<i32>(textureDimensions(beam_colour));
     let uv = pixel.xy / vec2<f32>(full_size);
@@ -35,4 +35,8 @@ fn linear(depth: f32) -> f32 {
     // shafts would leak through opaque scenery; leave that unsupported pixel transparent.
     if (weight_sum <= 1e-6) { return vec4<f32>(0.0); }
     return colour / weight_sum;
+}
+
+@fragment fn fragment_main(@builtin(position) pixel: vec4<f32>) -> @location(0) vec4<f32> {
+    return upsample_beam(pixel);
 }

@@ -85,6 +85,14 @@ impl ShadedRenderer {
         let beams_drawn =
             plan.draw_beams && self.beam_instances.length > 0 && values.atmosphere.density > 0.0005;
         let lasers_drawn = plan.draw_beams && self.laser_instances.length > 0;
+        let fused = self
+            .draft
+            .as_ref()
+            .is_some_and(|draft| draft.fuses_composite(beams_drawn, lasers_drawn));
+        #[cfg(test)]
+        if let Some(draft) = self.draft.as_mut() {
+            draft.last_fused_composite = fused;
+        }
         let mut draw_calls = 0_u32;
         let mut instance_total = 0_u32;
         self.opaque_pass(
@@ -97,7 +105,7 @@ impl ShadedRenderer {
         );
         if beams_drawn {
             if self.draft.is_some() {
-                self.draft_beam_pass(encoder, context.timer);
+                self.draft_beam_pass(encoder, context.timer, fused);
             } else {
                 self.beam_pass(encoder, context.timer);
             }
@@ -105,14 +113,18 @@ impl ShadedRenderer {
         if lasers_drawn {
             self.laser_pass(encoder, context.timer);
         }
-        self.post_passes(
-            encoder,
-            context.queue,
-            &plan,
-            view,
-            context.output,
-            context.timer,
-        );
+        if fused {
+            self.draft_composite_pass(encoder, context.output, context.timer);
+        } else {
+            self.post_passes(
+                encoder,
+                context.queue,
+                &plan,
+                view,
+                context.output,
+                context.timer,
+            );
+        }
         let quality_reduction = super::QualityReduction {
             lights: (self.frame.lights.len() as u32 > self.lights.length)
                 .then_some((self.frame.lights.len() as u32, self.lights.length)),

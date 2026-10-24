@@ -126,6 +126,28 @@ impl Renderer {
         BASE_EXPOSURE
     }
 
+    #[cfg(test)]
+    pub(in crate::renderer) fn force_draft_legacy_composite_for_test(&mut self, legacy: bool) {
+        self.draft
+            .as_mut()
+            .expect("render Draft first")
+            .scene
+            .draft
+            .as_mut()
+            .unwrap()
+            .force_legacy_for_test(legacy);
+    }
+    #[cfg(test)]
+    pub(in crate::renderer) fn draft_composite_state_for_test(&self) -> (bool, u32) {
+        let scene = &self.draft.as_ref().expect("render Draft first").scene;
+        (
+            scene.draft.as_ref().unwrap().last_fused_composite,
+            scene.laser_instances.length,
+        )
+    }
+    pub fn crowd_amount(&self) -> f32 {
+        self.crowd_amount
+    }
     pub fn set_crowd_amount(&mut self, amount: f32) {
         self.crowd_amount = amount.clamp(0.0, 1.0);
     }

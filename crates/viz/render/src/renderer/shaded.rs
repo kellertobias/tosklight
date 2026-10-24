@@ -169,6 +169,7 @@ impl ShadedRenderer {
                 &layouts.scene,
                 &buffers,
                 &targets,
+                context.format,
             )
         });
         Self {

@@ -478,3 +478,141 @@ fn independent_curtain_interval_union_preserves_overlaps_touching_and_input_orde
         );
     }
 }
+
+fn assert_composite_rounding_only(fused: &CapturedImage, legacy: &CapturedImage) {
+    assert_eq!((fused.width, fused.height), (legacy.width, legacy.height));
+    // Legacy source-over rounds once through Rgba16Float before ACES. The fused path keeps
+    // f32 until the output attachment, so permit two 8-bit steps, never a changed silhouette.
+    let largest = fused
+        .rgba
+        .iter()
+        .zip(&legacy.rgba)
+        .map(|(a, b)| a.abs_diff(*b))
+        .max()
+        .unwrap();
+    assert!(
+        largest <= 2,
+        "fused/legacy image delta exceeds HDR-rounding tolerance: {largest}"
+    );
+}
+fn add_visible_laser(scene: &mut Scene, values: &mut SceneValues) {
+    let mut emitter = scene.emitters[0].clone();
+    emitter.kind = EmitterKind::Laser;
+    emitter.label = "Fused-composite laser ordering witness".into();
+    emitter.laser = Some(LaserOptics {
+        optical_power_watts: 5.0,
+        aperture_metres: 0.03,
+        ..Default::default()
+    });
+    scene.emitters.push(emitter);
+    values.emitters.push(EmitterValues {
+        intensity: 1.0,
+        colour: [0.0, 1.0, 0.0],
+        ..Default::default()
+    });
+    values.laser_scans = vec![
+        LaserScan::default(),
+        LaserScan {
+            points: vec![
+                ScanPoint {
+                    x: -0.2,
+                    y: 0.0,
+                    colour: [0.0, 1.0, 0.0],
+                    dwell: 1.0,
+                },
+                ScanPoint {
+                    x: 0.2,
+                    y: 0.0,
+                    colour: [0.0, 1.0, 0.0],
+                    dwell: 1.0,
+                },
+            ],
+            points_per_second: 30_000.0,
+            ..Default::default()
+        },
+    ];
+}
+fn assert_fused_resize_rebinds(
+    renderer: &mut Renderer,
+    scene: &Scene,
+    values: &SceneValues,
+    view: &ViewConfiguration,
+) {
+    renderer.resize(641, 361);
+    let resized = capture(renderer, scene, values, view);
+    assert_eq!((resized.width, resized.height), (641, 361));
+    assert_eq!(renderer.draft_composite_state_for_test(), (true, 0));
+    renderer.force_draft_legacy_composite_for_test(true);
+    let legacy = capture(renderer, scene, values, view);
+    assert_composite_rounding_only(&resized, &legacy);
+    renderer.force_draft_legacy_composite_for_test(false);
+    renderer.resize(513, 289);
+}
+#[test]
+#[ignore = "requires explicitly serialized native GPU acceptance"]
+fn fused_composite_matches_legacy_and_preserves_lasers_and_clear_air() {
+    let mut renderer = Renderer::headless(513, 289).expect("requested native GPU required");
+    let (mut scene, mut values, mut view) = rig();
+    values.atmosphere.density = 0.35;
+    view.camera.position = Vec3::new(0.0, 2.0, 6.0);
+    view.camera.target = Vec3::new(0.0, 2.0, 0.0);
+    scene.scenery.push(SceneryObject {
+        kind: SceneryKind::Wall,
+        position: Vec3::new(0.0, 2.0, 1.1),
+        size: Vec3::new(1.2, 5.0, 0.1),
+        colour: [0.0; 3],
+        roughness: 1.0,
+        ..Default::default()
+    });
+    let fused = capture(&mut renderer, &scene, &values, &view);
+    assert_eq!(renderer.draft_composite_state_for_test(), (true, 0));
+    renderer.force_draft_legacy_composite_for_test(true);
+    let legacy = capture(&mut renderer, &scene, &values, &view);
+    assert_eq!(renderer.draft_composite_state_for_test(), (false, 0));
+    assert_composite_rounding_only(&fused, &legacy);
+    for x in [-0.55, 0.0, 0.55] {
+        let rgb = receiver(&fused, &scene, &view, Vec3::new(x, 2.0, 1.15));
+        assert!(
+            rgb.iter().all(|value| *value < 3.0),
+            "fused foreground shaft leak: {rgb:?}"
+        );
+    }
+    renderer.force_draft_legacy_composite_for_test(false);
+    assert_fused_resize_rebinds(&mut renderer, &scene, &values, &view);
+    values.atmosphere.density = 0.0;
+    let no_beam = capture(&mut renderer, &scene, &values, &view);
+    assert_eq!(renderer.draft_composite_state_for_test(), (false, 0));
+    let mut fresh = Renderer::headless(513, 289).expect("requested native GPU required");
+    let fresh_no_beam = capture(&mut fresh, &scene, &values, &view);
+    assert_eq!(
+        no_beam.rgba, fresh_no_beam.rgba,
+        "previous beam texture must never leak into clear air"
+    );
+    values.atmosphere.density = 0.35;
+    scene
+        .scenery
+        .retain(|object| object.kind != SceneryKind::Wall);
+    values.emitters[0].intensity = 0.05;
+    let without_laser = capture(&mut renderer, &scene, &values, &view);
+    add_visible_laser(&mut scene, &mut values);
+    let laser = capture(&mut renderer, &scene, &values, &view);
+    let (fused_used, laser_instances) = renderer.draft_composite_state_for_test();
+    assert!(
+        !fused_used && laser_instances > 0,
+        "active laser must retain ordered legacy path"
+    );
+    assert!(
+        laser
+            .rgba
+            .chunks_exact(4)
+            .zip(without_laser.rgba.chunks_exact(4))
+            .any(|(a, b)| i16::from(a[1]) - i16::from(b[1]) > 8),
+        "laser must add visible green energy"
+    );
+    renderer.force_draft_legacy_composite_for_test(true);
+    let forced = capture(&mut renderer, &scene, &values, &view);
+    assert_eq!(
+        laser.rgba, forced.rgba,
+        "laser path is exactly the established path"
+    );
+}

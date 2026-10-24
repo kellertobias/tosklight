@@ -2,16 +2,38 @@ use super::super::ShadedRenderer;
 use crate::timing::GpuTimer;
 
 impl ShadedRenderer {
-    pub(in crate::renderer) fn draft_beam_pass(
+    pub(in crate::renderer) fn draft_composite_pass(
         &self,
         encoder: &mut wgpu::CommandEncoder,
+        output: &wgpu::TextureView,
         timer: Option<&GpuTimer>,
     ) {
         let draft = self
             .draft
             .as_ref()
+            .expect("Draft fused pass requires Draft resources");
+        draft
+            .fused
+            .encode(encoder, &draft.upsample_group, output, timer);
+    }
+
+    pub(in crate::renderer) fn draft_beam_pass(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        timer: Option<&GpuTimer>,
+        fused: bool,
+    ) {
+        let draft = self
+            .draft
+            .as_ref()
             .expect("Draft pass requires Draft resources");
-        let timing = timer.and_then(|timer| timer.render_opening(crate::timing::GpuPass::Beams));
+        let timing = timer.and_then(|timer| {
+            if fused {
+                timer.render_writes(crate::timing::GpuPass::Beams)
+            } else {
+                timer.render_opening(crate::timing::GpuPass::Beams)
+            }
+        });
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Draft reduced-resolution beams"),
@@ -37,6 +59,9 @@ impl ShadedRenderer {
             pass.set_vertex_buffer(1, self.beam_instances.buffer.slice(..));
             pass.set_index_buffer(self.cone.indices.slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..self.cone.index_count, 0, 0..self.beam_instances.length);
+        }
+        if fused {
+            return;
         }
         let timing = timer.and_then(|timer| timer.render_closing(crate::timing::GpuPass::Beams));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

@@ -1,4 +1,5 @@
 //! Model-content keyed, current-scene bounded CPU geometry. Batch uploads share each asset.
+mod depth;
 use super::Segment;
 use crate::{
     instances::{MeshInstance, MeshKind},
@@ -72,6 +73,11 @@ pub(super) fn ensure(
                 b: [edge.normal_b[0], edge.normal_b[1], edge.normal_b[2], 0.0],
             })
             .collect();
+        // Feature topology above sees the original source mesh. Only this Lines depth cache
+        // discards exact UV/normal seam duplicates; the scene's models and picking stay intact.
+        if matches!(kind, MeshKind::ModelPart(..)) {
+            depth::deduplicate_positions(&mut data);
+        }
         retained.insert(
             *kind,
             Geometry {
