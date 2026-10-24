@@ -204,6 +204,20 @@ impl StageCompositor {
         // Stage. Done after configuring, so the layer exists to be ordered.
         #[cfg(target_os = "macos")]
         viz_surface::send_surface_layer_to_back(&compositor.surface);
+        if benchmark
+            && std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT")
+                .is_some_and(|path| std::path::Path::new(&path).is_absolute())
+            && let Some(identity) = viz_surface::surface_layer_identity(&compositor.surface)
+        {
+            eprintln!(
+                "[stage-layer-identity] pid={} surface={}x{} scale={} {}",
+                std::process::id(),
+                width,
+                height,
+                scale,
+                identity
+            );
+        }
         Ok(compositor)
     }
 

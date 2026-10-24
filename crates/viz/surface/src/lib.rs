@@ -36,6 +36,9 @@ pub mod rendezvous;
 #[cfg(target_os = "macos")]
 pub use rendezvous::OwnedSurfacePort;
 
+mod diagnostics;
+pub use diagnostics::surface_layer_identity;
+
 use viz_helper::protocol::SharedSurfaceHandle;
 
 /// The texture format both sides use.
