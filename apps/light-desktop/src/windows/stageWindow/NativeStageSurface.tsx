@@ -1,4 +1,6 @@
-import { useRef } from "react";
+import { useRef, type KeyboardEvent } from "react";
+import { useModalKeyboardOwnership } from "@tosklight/ui/modals";
+import { isStageCaptureShortcut } from "./stageCaptureShortcut";
 import type { NativeStagePane } from "./useNativeStagePane";
 
 /**
@@ -21,16 +23,32 @@ const SELECT_SLOP = 4;
 /** Metres the camera walks per key press. Shift takes longer strides. */
 const FLY_STEP = 0.35;
 
+function handleStageKey(event: KeyboardEvent<HTMLDivElement>, capturing: boolean, pane: NativeStagePane,
+	modalOwnsKeyboard: boolean, onCapture?: () => void) {
+	if (capturing && onCapture && isStageCaptureShortcut(event, modalOwnsKeyboard)) {
+		event.preventDefault(); event.stopPropagation(); onCapture(); return;
+	}
+	if (!capturing || modalOwnsKeyboard || event.metaKey || event.ctrlKey || event.altKey) return;
+	const step = event.shiftKey ? FLY_STEP * 4 : FLY_STEP;
+	const walk: Record<string, [number, number]> = { w: [step, 0], s: [-step, 0], a: [0, -step], d: [0, step] };
+	const move = walk[event.key.toLowerCase()];
+	if (!move) return;
+	event.preventDefault(); event.stopPropagation(); pane.send("fly", move[1], move[0]);
+}
+
 export function NativeStageSurface({
 	pane,
 	interactive = true,
 	plan = false,
+	onCapture,
 }: {
 	pane: NativeStagePane;
 	interactive?: boolean;
 	/** A plan view, which slides rather than orbits. */
 	plan?: boolean;
+	onCapture?: () => void;
 }) {
+	const modalOwnsKeyboard = useModalKeyboardOwnership();
 	const dragging = useRef<{ x: number; y: number; button: number } | null>(null);
 	/** How far the pointer travelled, so a drag to aim the camera is not read as a click to select. */
 	const travelled = useRef(0);
@@ -126,21 +144,7 @@ export function NativeStageSurface({
 			 * travel any further.
 			 */
 			tabIndex={0}
-			onKeyDown={(event) => {
-				if (!capturing || event.metaKey || event.ctrlKey || event.altKey) return;
-				const step = event.shiftKey ? FLY_STEP * 4 : FLY_STEP;
-				const walk: Record<string, [number, number]> = {
-					w: [step, 0],
-					s: [-step, 0],
-					a: [0, -step],
-					d: [0, step],
-				};
-				const move = walk[event.key.toLowerCase()];
-				if (!move) return;
-				event.preventDefault();
-				event.stopPropagation();
-				pane.send("fly", move[1], move[0]);
-			}}
+			onKeyDown={(event) => handleStageKey(event, capturing, pane, modalOwnsKeyboard(), onCapture)}
 			onContextMenu={(event) => event.preventDefault()}
 		/>
 	);

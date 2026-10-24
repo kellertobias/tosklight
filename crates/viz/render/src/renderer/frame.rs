@@ -62,8 +62,13 @@ impl ShadedRenderer {
         time_seconds: f32,
     ) -> FrameStats {
         self.resize(context.size);
+        if self.draft.is_some() {
+            self.ensure_model_meshes(scene);
+        }
         let plan = self.plan_frame(scene, values, view, media_atlas);
-        self.ensure_model_meshes(scene);
+        if self.draft.is_none() {
+            self.ensure_model_meshes(scene);
+        }
         let shadows_changed = self.assign_shadows(scene.revision, view, plan.shadow_budget);
         self.upload_frame(scene, context.device, context.queue, media_atlas);
         self.write_globals(&plan, values, view, time_seconds, context.queue);
@@ -91,7 +96,11 @@ impl ShadedRenderer {
             &mut instance_total,
         );
         if beams_drawn {
-            self.beam_pass(encoder, context.timer);
+            if self.draft.is_some() {
+                self.draft_beam_pass(encoder, context.timer);
+            } else {
+                self.beam_pass(encoder, context.timer);
+            }
         }
         if lasers_drawn {
             self.laser_pass(encoder, context.timer);
@@ -145,7 +154,9 @@ impl ShadedRenderer {
     ) -> FramePlan {
         let plot = view.mode.is_plot();
         let (volumetric_steps, shadow_budget, adaptive_scale, adaptive_degraded) =
-            if view.quality == viz_scene::RenderQuality::Ultra {
+            if self.capture_quality {
+                (64, super::MAX_SHADOWS as u32, 1.0, false)
+            } else if view.quality == viz_scene::RenderQuality::Ultra {
                 let (steps, shadows, scale) = self.ultra_budget.settings();
                 (steps, shadows, scale, self.ultra_budget.degraded())
             } else {
@@ -158,7 +169,7 @@ impl ShadedRenderer {
             };
         // A plan is drawn at the display's own resolution whatever the tier says: a stage plot is
         // outlines and type, and a cheaper tier must not soften the lines an operator prints.
-        self.set_target_scale(if plot {
+        self.set_target_scale(if plot || self.draft.is_some() {
             1.0
         } else {
             view.quality.resolution_scale() * adaptive_scale
@@ -211,19 +222,27 @@ impl ShadedRenderer {
                 _ => |_| true,
             },
             crowd_amount: self.crowd_amount,
-            crowd_person_budget: match view.quality {
-                viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
-                viz_scene::RenderQuality::High => 384,
-                viz_scene::RenderQuality::Ultra => {
-                    (1_024.0 * adaptive_scale * adaptive_scale).round() as usize
+            crowd_person_budget: if self.capture_quality {
+                usize::MAX
+            } else {
+                match view.quality {
+                    viz_scene::RenderQuality::Draft | viz_scene::RenderQuality::Standard => 0,
+                    viz_scene::RenderQuality::High => 384,
+                    viz_scene::RenderQuality::Ultra => {
+                        (1_024.0 * adaptive_scale * adaptive_scale).round() as usize
+                    }
                 }
             },
-            effect_particle_budget: match view.quality {
-                viz_scene::RenderQuality::Draft => 128,
-                viz_scene::RenderQuality::Standard => 512,
-                viz_scene::RenderQuality::High => 2_048,
-                viz_scene::RenderQuality::Ultra => {
-                    (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
+            effect_particle_budget: if self.capture_quality {
+                usize::MAX
+            } else {
+                match view.quality {
+                    viz_scene::RenderQuality::Draft => 128,
+                    viz_scene::RenderQuality::Standard => 512,
+                    viz_scene::RenderQuality::High => 2_048,
+                    viz_scene::RenderQuality::Ultra => {
+                        (8_192.0 * adaptive_scale * adaptive_scale).round() as usize
+                    }
                 }
             },
             camera_position: None,
@@ -249,14 +268,22 @@ impl ShadedRenderer {
             bounds,
         );
         style.camera_position = Some(camera.position);
-        self.frame = crate::instances::build(scene, values, &style);
+        let assets_changed = self.assets_changed();
+        let changed = self.draft.as_mut().is_none_or(|draft| {
+            draft
+                .preparation
+                .update(scene, values, &style, assets_changed)
+        });
+        if changed {
+            self.frame = crate::instances::build(scene, values, &style);
+        }
         FramePlan {
             plot,
             draw_beams,
             passes: PassPlan::for_view(view),
             volumetric_steps,
             shadow_budget,
-            render_scale: if plot {
+            render_scale: if plot || self.draft.is_some() {
                 1.0
             } else {
                 view.quality.resolution_scale() * adaptive_scale
@@ -291,6 +318,7 @@ impl ShadedRenderer {
         };
         let chosen = shadow_candidates(&self.frame.lights, budget, projector_budget);
         let signature = shadow_geometry_signature(scene_revision, &self.frame.lights, &chosen);
+        let signature = shadow_occluder_signature(signature, &self.frame.meshes);
         let changed = self.shadow_signature != Some(signature);
         self.shadow_signature = Some(signature);
         let tile = SHADOW_TILE_EDGE as f32 / super::SHADOW_ATLAS_EDGE as f32;
@@ -457,6 +485,9 @@ impl ShadedRenderer {
             },
         };
         queue.write_buffer(&self.globals_buffer, 0, bytemuck::bytes_of(&globals));
+        if let Some(draft) = &self.draft {
+            draft.write_globals(queue, &globals);
+        }
     }
 
     /// Sort the rig's lights into screen tiles, so a fragment tests the handful over it rather
@@ -692,7 +723,8 @@ impl ShadedRenderer {
     ) {
         let exposure = plan.exposure;
         let drawn = plan.plot || !view.mode.simulates_light();
-        let bloom = plan.passes.bloom;
+        // Draft aliases unused bloom bindings to HDR and must never write a bloom pass.
+        let bloom = plan.passes.bloom && self.draft.is_none();
         let composite_exposure = if drawn { 1.0 } else { exposure };
         if bloom {
             queue.write_buffer(
@@ -826,6 +858,36 @@ fn shadow_geometry_signature(scene_revision: u64, lights: &[GpuLight], chosen: &
             value.to_bits().hash(&mut signature);
         }
     }
+    signature.finish()
+}
+
+/// Shadow vertices depend only on mesh content (invalidated by AssetCache) and model poses.
+/// Materials, emissive/media pixels, surface finish and visibility-only cutaway flags cannot
+/// change this depth-only pass. Canonical hashes avoid redraws from equivalent instance ordering.
+fn shadow_occluder_signature(
+    base: u64,
+    meshes: &[(MeshKind, Vec<crate::instances::MeshInstance>)],
+) -> u64 {
+    let mut groups = Vec::with_capacity(meshes.len());
+    for (kind, instances) in meshes.iter().filter(|(_, instances)| !instances.is_empty()) {
+        let mut poses = Vec::with_capacity(instances.len());
+        for instance in instances {
+            let mut pose = std::collections::hash_map::DefaultHasher::new();
+            for value in instance.model.iter().flatten() {
+                value.to_bits().hash(&mut pose);
+            }
+            poses.push(pose.finish());
+        }
+        poses.sort_unstable();
+        let mut group = std::collections::hash_map::DefaultHasher::new();
+        kind.hash(&mut group);
+        poses.hash(&mut group);
+        groups.push(group.finish());
+    }
+    groups.sort_unstable();
+    let mut signature = std::collections::hash_map::DefaultHasher::new();
+    base.hash(&mut signature);
+    groups.hash(&mut signature);
     signature.finish()
 }
 
@@ -989,6 +1051,35 @@ mod tests {
             shadow_geometry_signature(12, &[first], &[0]),
             shadow_geometry_signature(12, &[next_frame], &[0])
         );
+    }
+
+    #[test]
+    fn opaque_shadow_pose_key_tracks_motion_insertion_removal_and_kind_without_material_churn() {
+        let mut instance = crate::instances::MeshInstance::zeroed();
+        instance.model = Mat4::IDENTITY.to_cols_array_2d();
+        let original = vec![(MeshKind::Cube, vec![instance])];
+        let before = shadow_occluder_signature(12, &original);
+        let mut changed = original.clone();
+        changed[0].1[0].base_colour = [0.1, 0.2, 0.3, 0.8];
+        changed[0].1[0].emissive = [0.9; 4];
+        changed[0].1[0].surface = [3.0, 1.0, 0.0, 0.0];
+        assert_eq!(before, shadow_occluder_signature(12, &changed));
+        changed[0].1[0].model[3][0] = 0.25;
+        assert_ne!(before, shadow_occluder_signature(12, &changed));
+        assert_ne!(before, shadow_occluder_signature(12, &[]));
+        assert_ne!(
+            before,
+            shadow_occluder_signature(12, &[(MeshKind::Sphere, vec![instance])])
+        );
+        changed[0].1.push(instance);
+        let multiple = shadow_occluder_signature(12, &changed);
+        changed[0].1.reverse();
+        assert_eq!(multiple, shadow_occluder_signature(12, &changed));
+        assert_ne!(before, multiple);
+        changed.push((MeshKind::Sphere, vec![instance]));
+        let grouped = shadow_occluder_signature(12, &changed);
+        changed.reverse();
+        assert_eq!(grouped, shadow_occluder_signature(12, &changed));
     }
 
     /// A point in front of the lamp has to land inside the map, or the light is shadowing itself

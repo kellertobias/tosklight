@@ -19,6 +19,7 @@
 use crate::stage_compositor::StageCompositor;
 mod benchmark;
 mod closing;
+pub(crate) mod still;
 mod tick;
 mod transport;
 mod visibility;
@@ -45,6 +46,7 @@ use viz_helper::{SupervisedHelper, framing};
 #[derive(Default)]
 pub(crate) struct StagePane {
     inner: Mutex<Option<Running>>,
+    capture: Mutex<still::CaptureState>,
     retiring: std::sync::atomic::AtomicBool,
     retirement_done: tokio::sync::Notify,
     retirement_error: Mutex<Option<String>>,
@@ -75,6 +77,8 @@ pub(crate) struct StagePane {
 #[derive(Default)]
 pub(crate) struct StagePanes {
     panes: Mutex<HashMap<String, RegisteredPane>>,
+    /// Admission only; ongoing ownership is derived from the current panes' capture states.
+    capture_start_gate: Mutex<()>,
 }
 
 struct RegisteredPane {
@@ -172,7 +176,9 @@ impl StagePanes {
             registered.live_3d = false;
             Arc::clone(&registered.pane)
         };
-        pane.close()
+        let result = pane.close();
+        pane.capture_interrupted("Stage pane closed");
+        result
     }
 
     fn drawing_panes(&self) -> Vec<(String, Arc<StagePane>)> {
@@ -685,14 +691,18 @@ pub(crate) fn open_stage_pane(
     }
     let key = format!("{}:{pane_id}", window.label());
     panes.open(
-        key,
+        key.clone(),
         live_3d,
         Arc::new(window.clone()),
         (geometry.surface_width, geometry.surface_height),
         geometry.rect(),
         geometry.scale,
         window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(true),
-    )
+    )?;
+    panes
+        .pane(&key)?
+        .ok_or("Stage pane did not attach")?
+        .register_capture(window, pane_id)
 }
 
 #[tauri::command]

@@ -317,20 +317,41 @@ mod tests {
         scene.media_sections.push(viz_scene::MediaSection {
             id: viz_scene::uuid::Uuid::new_v4(),
             surface_id: viz_scene::uuid::Uuid::new_v4(),
-            name: "TV".into(), source_id: None, fallback_source_id: None,
-            position, rotation_degrees: rotation, size: Vec3::new(2.0, 1.0, 0.1),
-            crop: viz_scene::MediaCrop { left: 0.0, top: 0.0, width: 1.0, height: 1.0 },
-            kind: MediaSectionKind::Tv { bezel_metres: 0.03, spill: 0.0 },
+            name: "TV".into(),
+            source_id: None,
+            fallback_source_id: None,
+            position,
+            rotation_degrees: rotation,
+            size: Vec3::new(2.0, 1.0, 0.1),
+            crop: viz_scene::MediaCrop {
+                left: 0.0,
+                top: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            kind: MediaSectionKind::Tv {
+                bezel_metres: 0.03,
+                spill: 0.0,
+            },
         });
         let mut frame = FrameInstances::default();
         push_media(&mut frame, &scene, &FrameStyle::default());
         let local = Mat4::from_rotation_translation(orientation, position).inverse();
-        let panel_depth = local.transform_point3(frame.media_panels[0].model.transform_point3(Vec3::ZERO)).z;
+        let panel_depth = local
+            .transform_point3(frame.media_panels[0].model.transform_point3(Vec3::ZERO))
+            .z;
         for (_, instances) in &frame.meshes {
             for instance in instances {
-                let front = local.transform_point3(Mat4::from_cols_array_2d(&instance.model)
-                    .transform_point3(Vec3::new(0.0, 0.0, 0.5))).z;
-                assert!(panel_depth > front + 0.0001, "texture behind TV solid: {panel_depth} <= {front}");
+                let front = local
+                    .transform_point3(
+                        Mat4::from_cols_array_2d(&instance.model)
+                            .transform_point3(Vec3::new(0.0, 0.0, 0.5)),
+                    )
+                    .z;
+                assert!(
+                    panel_depth > front + 0.0001,
+                    "texture behind TV solid: {panel_depth} <= {front}"
+                );
             }
         }
     }

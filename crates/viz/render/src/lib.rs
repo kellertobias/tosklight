@@ -17,11 +17,14 @@ mod mesh;
 pub mod overlay;
 mod pick;
 mod renderer;
+pub mod still;
 mod targets;
 mod timing;
 
 pub use camera::{CameraControl, Ray, ResolvedCamera};
-pub use export::{GeometryInstance, GeometryMesh, SceneGeometry, scene_geometry};
+pub use export::{
+    GeometryInstance, GeometryMesh, SceneGeometry, scene_geometry, scene_geometry_with_style,
+};
 pub use gpu::PresentationSurface;
 pub use instances::{
     EmitterPose, FrameInstances, FrameStyle, GOBO_SLOTS, SemanticLight, build as build_instances,

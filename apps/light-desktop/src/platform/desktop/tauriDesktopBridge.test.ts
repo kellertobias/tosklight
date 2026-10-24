@@ -143,6 +143,25 @@ describe("Tauri desktop bridge", () => {
 		expect(requested).toHaveBeenCalledOnce();
 	});
 
+	it("routes frozen image commands and pushed native status without polling or frontend paths", async () => {
+		const handler = vi.fn();
+		await tauriDesktopBridge.startStagePaneCapture?.("preload", "request");
+		await tauriDesktopBridge.chooseStagePaneCapture?.("preload", "job", "ultimate");
+		await tauriDesktopBridge.cancelStagePaneCapture?.("preload", "job");
+		await tauriDesktopBridge.openStagePaneCapture?.("preload", true);
+		await tauriDesktopBridge.onStageStill?.(handler);
+		expect(mocks.invoke.mock.calls).toEqual([
+			["start_stage_pane_capture", { paneId: "preload", requestId: "request" }],
+			["choose_stage_pane_capture", { paneId: "preload", jobId: "job", engine: "ultimate" }],
+			["cancel_stage_pane_capture", { paneId: "preload", jobId: "job" }],
+			["open_stage_pane_capture", { paneId: "preload", reveal: true }],
+		]);
+		expect(mocks.listen).toHaveBeenCalledWith("stage-still", expect.any(Function));
+		const payload = { paneId: "preload", requestId: "request", status: null, error: "helper closed" };
+		mocks.listen.mock.calls.at(-1)?.[1]({ payload });
+		expect(handler).toHaveBeenCalledWith(payload);
+	});
+
 	// Every native window command the bridge issues is rejected at runtime unless the desktop
 	// capability grants it, and a rejected destroy leaves a screen window that cannot be closed.
 	it("runs on capabilities that grant every native window command it issues", () => {

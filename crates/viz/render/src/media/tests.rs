@@ -157,3 +157,80 @@ fn frozen_media_restore_preserves_source_fallback_expiry_pixels_and_flicker() {
             .is_none()
     );
 }
+
+#[test]
+fn immutable_show_fallbacks_freeze_without_gpu_and_do_not_replace_adopted_pixels() {
+    let id = Uuid::new_v4();
+    let fallback = Uuid::new_v4();
+    let mut scene = viz_scene::Scene::default();
+    scene.media_sections.push(viz_scene::MediaSection {
+        id: Uuid::new_v4(),
+        surface_id: Uuid::new_v4(),
+        name: "wall".into(),
+        source_id: Some(id),
+        fallback_source_id: Some(fallback),
+        position: glam::Vec3::ZERO,
+        rotation_degrees: glam::Vec3::ZERO,
+        size: glam::Vec3::ONE,
+        crop: viz_scene::MediaCrop {
+            left: 0.0,
+            top: 0.0,
+            width: 1.0,
+            height: 1.0,
+        },
+        kind: viz_scene::MediaSectionKind::Tv {
+            bezel_metres: 0.01,
+            spill: 0.0,
+        },
+    });
+    for source_id in [id, fallback] {
+        scene.media_sources.push(viz_scene::MediaSourceBinding {
+            id: source_id,
+            server_id: Uuid::nil(),
+            host: String::new(),
+            port: 0,
+            advertised_source_id: 0,
+            name: source_id.to_string(),
+            aspect_ratio: None,
+            fallback_rgba: Some(vec![40; (EDGE * EDGE * 4) as usize]),
+        });
+    }
+    let now = Instant::now();
+    let mut retained = RetainedFrames::default();
+    let adopted = retained.prepare(&frame(id, 17, 90)).unwrap().unwrap();
+    retained.adopt(Arc::clone(&adopted));
+    let frozen = retained
+        .snapshot(
+            now,
+            &HashMap::from([(id, now)]),
+            &HashSet::new(),
+            &HashMap::new(),
+        )
+        .with_scene_fallbacks(&scene)
+        .unwrap();
+    assert_eq!(frozen.sources().len(), 2);
+    let actual = frozen
+        .sources()
+        .iter()
+        .find(|s| s.frame.source_id == id)
+        .unwrap();
+    assert!(Arc::ptr_eq(&actual.frame, &adopted));
+    assert_eq!(actual.frame.sequence, 17);
+    scene.media_sources[1].fallback_rgba.as_mut().unwrap()[0] = 12;
+    assert_eq!(
+        frozen
+            .sources()
+            .iter()
+            .find(|s| s.frame.source_id == fallback)
+            .unwrap()
+            .frame
+            .rgba[0],
+        40
+    );
+    scene.media_sources[1]
+        .fallback_rgba
+        .as_mut()
+        .unwrap()
+        .clear();
+    assert!(FrozenMedia::default().with_scene_fallbacks(&scene).is_err());
+}

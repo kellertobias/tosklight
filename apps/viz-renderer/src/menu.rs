@@ -16,6 +16,7 @@ pub enum MenuCommand {
     CloseShowFile,
     ConnectToDesk,
     TakeSnapshot,
+    Render4kImage,
     QuickSettings,
 }
 
@@ -28,6 +29,7 @@ pub struct ApplicationMenu {
     close: MenuId,
     desk: MenuId,
     snapshot: MenuId,
+    render_4k: MenuId,
     settings: MenuId,
 }
 
@@ -50,6 +52,8 @@ impl ApplicationMenu {
             true,
             Some(Accelerator::new(Some(Modifiers::META), Code::KeyS)),
         );
+        // Winit owns the shortcut so repeats, IME and text/modal focus can be rejected.
+        let render_4k = MenuItem::new("Render 4K Image", true, None);
         let settings = MenuItem::new(
             "Quick Settings\u{2026}",
             true,
@@ -75,6 +79,7 @@ impl ApplicationMenu {
             &close,
             &PredefinedMenuItem::separator(),
             &snapshot,
+            &render_4k,
             &PredefinedMenuItem::separator(),
             &desk,
         ])
@@ -100,6 +105,7 @@ impl ApplicationMenu {
             close: close.id().clone(),
             desk: desk.id().clone(),
             snapshot: snapshot.id().clone(),
+            render_4k: render_4k.id().clone(),
             settings: settings.id().clone(),
         })
     }
@@ -124,6 +130,8 @@ impl ApplicationMenu {
             Some(MenuCommand::ConnectToDesk)
         } else if event.id == self.snapshot {
             Some(MenuCommand::TakeSnapshot)
+        } else if event.id == self.render_4k {
+            Some(MenuCommand::Render4kImage)
         } else if event.id == self.settings {
             Some(MenuCommand::QuickSettings)
         } else {

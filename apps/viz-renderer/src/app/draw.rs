@@ -129,6 +129,13 @@ impl Application {
             time,
             motion_was_active,
         );
+        self.last_still_frame = Some(super::still::ResolvedFrame {
+            view: view.clone(),
+            time,
+            scene_revision: session.scene.revision,
+            show_id: session.scene.show_id,
+            values_frame: values.frame,
+        });
         session.values = values;
         let Some(result) = result else {
             return None;
@@ -285,6 +292,7 @@ impl Application {
             width,
             height,
         );
+        self.still_ui.draw(&mut self.overlay, width, height);
         let media_identity = self.media_revision ^ renderer.media_presentation_identity();
         let redraw_state = crate::redraw::RedrawState::new(
             session.scene.revision,
@@ -599,8 +607,11 @@ impl Application {
         }
 
         // Held movement keys are applied once per frame so speed follows frame time.
+        self.observe_still();
         let mode = self.view_mode();
-        self.apply_walk(mode, delta.clamp(0.0, 0.1));
+        if !self.still_ui.modal() {
+            self.apply_walk(mode, delta.clamp(0.0, 0.1));
+        }
         let (width, height) = self.surface_size();
 
         // Collect whatever the snapshot workers finished, and keep the panel's list in step with

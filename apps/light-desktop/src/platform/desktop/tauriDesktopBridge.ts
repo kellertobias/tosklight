@@ -5,6 +5,7 @@ import type {
 	DesktopUnsubscribe,
 	DesktopWindowState,
 	StagePaneBenchmarkObservations,
+	StageStillEvent,
 } from "./types";
 
 const coreApi = () => import("@tauri-apps/api/core");
@@ -149,6 +150,14 @@ export const tauriDesktopBridge: DesktopBridge = {
 		invoke("open_stage_pane", { paneId, live3d, geometry }),
 	setStagePane: (paneId, geometry) =>
 		invoke("set_stage_pane", { paneId, geometry }),
+	openStagePaneCapture: (paneId, reveal) => invoke("open_stage_pane_capture", { paneId, reveal }),
+	startStagePaneCapture: (paneId, requestId) => invoke("start_stage_pane_capture", { paneId, requestId }),
+	chooseStagePaneCapture: (paneId, jobId, engine) => invoke("choose_stage_pane_capture", { paneId, jobId, engine }),
+	cancelStagePaneCapture: (paneId, jobId) => invoke("cancel_stage_pane_capture", { paneId, jobId }),
+	onStageStill: async (handler) => {
+		const api = await eventApi();
+		return api.listen<StageStillEvent>("stage-still", (event) => handler(event.payload));
+	},
 	setStagePaneVisibility: (paneId, visible) =>
 		invoke("set_stage_pane_visibility", { paneId, visible }),
 	closeStagePane: (paneId) => invoke("close_stage_pane", { paneId }),

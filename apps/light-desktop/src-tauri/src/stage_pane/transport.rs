@@ -24,6 +24,7 @@ pub(super) enum FromRenderer {
     BenchmarkHeartbeat(PaneHeartbeat),
     /// Where the camera now is.
     Camera([f32; 6]),
+    Still(viz_helper::still::Status),
     /// What the operator pointed at in the pane.
     Picked {
         fixture: Option<String>,
@@ -175,6 +176,7 @@ pub(super) fn read_renderer(
             Ok(FromHelper::Picked { fixture, additive }) => {
                 outbox.send(FromRenderer::Picked { fixture, additive })
             }
+            Ok(FromHelper::StillStatus { status }) => outbox.send(FromRenderer::Still(status)),
             Ok(FromHelper::Error { detail }) => outbox.send(FromRenderer::Trouble(detail)),
             Ok(FromHelper::Stopping { detail }) => outbox.send(FromRenderer::Finished(detail)),
             // The greeting is over; anything belonging to it arriving now is a stream out of step.

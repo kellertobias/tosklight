@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 // Reject stale helpers before exchanging surfaces that they could overwrite while sampled.
 pub const PROTOCOL_MAJOR: u16 = 11;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
-pub const PROTOCOL_MINOR: u16 = 1;
+pub const PROTOCOL_MINOR: u16 = 2;
 
 /// How a rendered pane gets from the helper to the desk.
 ///
@@ -103,12 +103,18 @@ pub enum ToHelper {
         title: String,
     },
     /// A complete scene, replacing whatever is displayed.
-    Scene { payload: Vec<u8> },
+    Scene {
+        payload: Vec<u8>,
+    },
     /// Live values for the scene already sent. Dropped if no scene has arrived: values addressed
     /// to a scene the helper does not have would be values for the wrong rig.
-    Values { payload: Vec<u8> },
+    Values {
+        payload: Vec<u8>,
+    },
     /// The view — mode, camera, quality.
-    View { payload: Vec<u8> },
+    View {
+        payload: Vec<u8>,
+    },
     /// Where in the window the helper may draw, in the logical points the web layout works in.
     ///
     /// A helper filling its own window never receives this. One drawing the desk's Stage pane
@@ -192,18 +198,38 @@ pub enum ToHelper {
     ///
     /// Sent rather than inferred. The renderer resolves what is under a pointer and reports it;
     /// what that means for the selection is the desk's, so the answer comes back the same way.
-    Selection { fixtures: Vec<String> },
+    Selection {
+        fixtures: Vec<String>,
+    },
     /// Pointer and camera intent picked up by the web layer over the pane.
     ///
     /// A `WKWebView` on top of a native surface wins AppKit hit-testing whatever CSS says, so pane
     /// input cannot fall through to the surface underneath. It is captured in the web layer and
     /// forwarded, already coalesced into a per-frame delta — one message per gesture step, never
     /// one per `pointermove`.
-    Input { input: PaneInput },
+    Input {
+        input: PaneInput,
+    },
     /// Display visibility only; providers and camera/input handling continue while hidden.
-    Visibility { visible: bool },
+    Visibility {
+        visible: bool,
+    },
     /// Sampling of this exact picture has finished. The active shared front stays retained.
-    ReleaseFrame { frame: FrameId },
+    ReleaseFrame {
+        frame: FrameId,
+    },
+    /// Freeze this pane before probing Blender or asking for an engine.
+    CaptureStart {
+        request_id: String,
+        pane_id: String,
+    },
+    CaptureChoose {
+        job_id: crate::still::StillJobId,
+        engine: crate::still::Engine,
+    },
+    CaptureCancel {
+        job_id: crate::still::StillJobId,
+    },
 }
 
 /// Which way the Stage is being looked at.
@@ -420,6 +446,8 @@ pub enum FromHelper {
     /// The helper GPU has finished writing this shared picture. It may now be sampled, and must
     /// remain immutable until the desk releases its exact identity.
     FrameReady { frame: FrameId },
+    /// Latest bounded capture-job state; independent of live frame transport.
+    StillStatus { status: crate::still::Status },
 }
 
 /// A GPU surface named in a way the other process can open.

@@ -196,11 +196,8 @@ impl TechnicalLinesInstances {
             &scene.physics_scenery,
             &values.physics_frames,
         ));
-        key.add(&(
-            &scene.media_sections,
-            &scene.media_sources,
-            &scene.media_projectors,
-        ));
+        // Source pixels and discovery metadata cannot change unlit physical media geometry.
+        key.add(&(&scene.media_sections, &scene.media_projectors));
         let mut selected: Vec<_> = values.selected_fixtures.iter().copied().collect();
         selected.sort_unstable();
         key.add(&(&selected, &scene.venue_groups));

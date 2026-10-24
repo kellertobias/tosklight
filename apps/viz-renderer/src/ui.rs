@@ -229,7 +229,7 @@ fn contrasting_ink(background: [f32; 4]) -> [f32; 4] {
     }
 }
 
-fn ui_scale(width: f32) -> f32 {
+pub(crate) fn ui_scale(width: f32) -> f32 {
     if width >= 2400.0 {
         3.0
     } else if width >= 1200.0 {
@@ -625,6 +625,7 @@ mod tests {
             | Row::Connect => QuickSettingsTab::Source,
             Row::Quality
             | Row::Focus
+            | Row::Render4kImage
             | Row::Appearance
             | Row::Background
             | Row::Ambient
@@ -749,6 +750,7 @@ mod tests {
                 vec![
                     Row::Quality,
                     Row::Focus,
+                    Row::Render4kImage,
                     Row::Ambient,
                     Row::Exposure,
                     Row::FogAmount,

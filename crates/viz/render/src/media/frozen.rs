@@ -24,6 +24,73 @@ impl FrozenMedia {
         &self.sources
     }
 
+    /// Merge immutable show-owned fallback pixels at the freeze boundary, with no network,
+    /// decoder, texture allocation or GPU upload. Adopted frames remain authoritative.
+    pub fn with_scene_fallbacks(mut self, scene: &viz_scene::Scene) -> Result<Self, String> {
+        let wanted: HashSet<_> = scene
+            .media_sections
+            .iter()
+            .flat_map(|section| [section.source_id, section.fallback_source_id])
+            .flatten()
+            .collect();
+        if wanted.len() > (MAX_SOURCES - 1) as usize {
+            return Err(format!(
+                "The frozen scene needs {} media sources; the native atlas supports {}",
+                wanted.len(),
+                MAX_SOURCES - 1
+            ));
+        }
+        self.sources
+            .retain(|source| wanted.contains(&source.frame.source_id));
+        let mut declared = HashSet::new();
+        for source in scene
+            .media_sources
+            .iter()
+            .filter(|source| wanted.contains(&source.id))
+        {
+            if !declared.insert(source.id) {
+                return Err("The frozen scene repeats a media source identity".into());
+            }
+            if let Some(pixels) = source.fallback_rgba.as_ref() {
+                if pixels.len() != (EDGE * EDGE * 4) as usize {
+                    return Err(format!(
+                        "Frozen fallback {} is not {EDGE}x{EDGE} RGBA8",
+                        source.name
+                    ));
+                }
+            }
+        }
+        for source in scene
+            .media_sources
+            .iter()
+            .filter(|source| wanted.contains(&source.id))
+        {
+            if self
+                .sources
+                .iter()
+                .any(|frozen| frozen.frame.source_id == source.id)
+            {
+                continue;
+            }
+            if let Some(pixels) = source.fallback_rgba.as_ref() {
+                self.sources.push(FrozenMediaSource {
+                    frame: Arc::new(MediaFrame {
+                        source_id: source.id,
+                        sequence: 1,
+                        width: EDGE,
+                        height: EDGE,
+                        rgba: pixels.clone(),
+                        persistent: true,
+                    }),
+                    available: true,
+                    flicker: 0.0,
+                });
+            }
+        }
+        self.sources.sort_by_key(|source| source.frame.source_id);
+        Ok(self)
+    }
+
     /// Restore into a fresh capture-only atlas. Frozen availability is held indefinitely;
     /// expired sources still receive layers because a fallback ignores live availability.
     /// The original frames, live atlas and their persistent flags are never changed.

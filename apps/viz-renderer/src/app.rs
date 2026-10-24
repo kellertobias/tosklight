@@ -65,8 +65,10 @@ impl viz_render::PresentationSurface for WindowSurface {
 mod benchmark;
 mod draw;
 mod input;
+mod native_input;
 mod renderer_settings;
 mod sources;
+mod still;
 
 use sources::canonical_demo_show_path;
 
@@ -84,6 +86,10 @@ pub struct Application {
     snapshots: crate::snapshots::Snapshots,
     /// Whether a `--snapshot` run has already asked for its one capture.
     snapshot_requested: bool,
+    still_jobs: crate::stills::StillJobs,
+    still_ui: still::StillUi,
+    last_still_frame: Option<still::ResolvedFrame>,
+    ime_composing: bool,
     camera: CameraControl,
     modifiers: ModifiersState,
     /// Which mouse buttons are currently held. The right button turns the camera on the spot —
@@ -295,6 +301,10 @@ impl Application {
             quick_settings,
             snapshots: crate::snapshots::Snapshots::default(),
             snapshot_requested: false,
+            still_jobs: crate::stills::StillJobs::default(),
+            still_ui: still::StillUi::default(),
+            last_still_frame: None,
+            ime_composing: false,
             camera: CameraControl::default(),
             modifiers: ModifiersState::empty(),
             turning: false,
@@ -468,6 +478,9 @@ impl Application {
     }
 
     fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: Key, text: Option<String>) {
+        if self.handle_still_key(&key) {
+            return;
+        }
         if self.quick_settings_chord(&key) {
             self.toggle_quick_settings();
             return;
@@ -653,6 +666,7 @@ impl Application {
                 self.snapshots.export(index, blender);
             }
             QuickSettingsOutcome::FocusView => self.focus_view(),
+            QuickSettingsOutcome::Render4kImage => self.render_4k_image(),
             QuickSettingsOutcome::Close
             | QuickSettingsOutcome::AppliedLocally
             | QuickSettingsOutcome::Invalid(_)
@@ -899,21 +913,12 @@ impl ApplicationHandler for Application {
                     renderer.resize(size.width, size.height);
                 }
             }
+            WindowEvent::Ime(event) => {
+                self.ime_composing =
+                    matches!(event, winit::event::Ime::Preedit(ref text, _) if !text.is_empty());
+            }
             WindowEvent::KeyboardInput { event, .. } => {
-                let pressed = event.state == ElementState::Pressed;
-                // Movement keys are held, not typed, so they are tracked in both directions and
-                // never reach the Quick Settings text fields.
-                let movement = self.track_walk_key(&event.logical_key, pressed);
-                if movement && !self.quick_settings.open && !self.command_chord() {
-                    return;
-                }
-                if pressed {
-                    self.handle_key(
-                        event_loop,
-                        event.logical_key.clone(),
-                        event.text.map(|text| text.to_string()),
-                    );
-                }
+                self.keyboard_event(event_loop, event);
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // The window may have landed on a display that refreshes at another rate. Only the
@@ -943,6 +948,12 @@ impl ApplicationHandler for Application {
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 trace_input(&format!("button {button:?} {state:?}"));
+                if pressed && button == MouseButton::Left && self.click_still_panel() {
+                    return;
+                }
+                if self.still_ui.modal() {
+                    return;
+                }
                 if pressed
                     && button == MouseButton::Left
                     && self.hotspot_under_cursor() == Some(ui::Hotspot::OpenSettings)
@@ -972,7 +983,8 @@ impl ApplicationHandler for Application {
                 // drag has to work there too.
                 let previous = self.cursor;
                 self.cursor = (position.x, position.y);
-                let dragging = self.turning || self.panning_camera_plane;
+                let dragging =
+                    !self.still_ui.modal() && (self.turning || self.panning_camera_plane);
                 trace_input(&format!(
                     "cursor {:.1},{:.1} dragging {dragging} device {}",
                     position.x, position.y, self.drag_moved_by_device
@@ -987,6 +999,14 @@ impl ApplicationHandler for Application {
                 }
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
+                if self.still_ui.modal()
+                    || self
+                        .still_ui
+                        .contains(self.cursor.0 as f32, self.cursor.1 as f32)
+                {
+                    self.scroll_still_panel(delta);
+                    return;
+                }
                 trace_input(&format!("wheel {delta:?} phase {phase:?}"));
                 let amount = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y,
@@ -1050,6 +1070,9 @@ impl ApplicationHandler for Application {
         _device: DeviceId,
         event: DeviceEvent,
     ) {
+        if self.still_ui.modal() {
+            return;
+        }
         match event {
             DeviceEvent::MouseMotion { delta } => {
                 if !self.turning && !self.panning_camera_plane {
@@ -1089,6 +1112,7 @@ impl ApplicationHandler for Application {
                 crate::menu::MenuCommand::CloseShowFile => self.close_show_file(),
                 crate::menu::MenuCommand::ConnectToDesk => self.close_show_file(),
                 crate::menu::MenuCommand::TakeSnapshot => self.take_snapshot(),
+                crate::menu::MenuCommand::Render4kImage => self.render_4k_image(),
                 crate::menu::MenuCommand::QuickSettings => {
                     self.toggle_quick_settings();
                 }

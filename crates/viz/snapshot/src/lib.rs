@@ -13,6 +13,7 @@
 mod blender;
 mod document;
 mod gltf;
+pub mod ultimate;
 
 pub use blender::{BLENDER_ENV, ExportError, ExportedBlend, export_blend, find_blender};
 pub use document::{

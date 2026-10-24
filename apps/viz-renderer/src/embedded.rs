@@ -26,6 +26,7 @@ mod cpu_runtime;
 mod mechanics;
 mod picture;
 mod producer;
+mod still;
 mod transport;
 use crate::helper_source::{Embedding, HelperSource};
 use benchmark::{BenchmarkDrawWitness, BenchmarkHeartbeatClock};
@@ -103,6 +104,17 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 .collect();
         }
         picture::apply(&mut state, &source, &mut rig);
+        // A Picture just before Capture may switch Live/Preload. Resolve that lane through
+        // the provider's cached authoritative output before freezing; do not tag old Live values
+        // as Preload while waiting for the next ordinary loop. poll() never waits for network I/O.
+        if source.has_capture_start() {
+            if let Some(rig) = rig.as_mut() {
+                if drain(rig.poll(), &mut state, epoch) {
+                    return Ok(());
+                }
+            }
+        }
+
         state.poll_transport(&mut source)?;
         let visible = source.visible()
             && embedding.pane.width.is_finite()
@@ -125,6 +137,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
             false,
         );
         picture::prepare(&mut state, &mut source, &embedding)?;
+        still::service(&mut state, &mut source, epoch);
         benchmark::draw_and_observe(&mut state, epoch, &mut source, &mut heartbeat_clock);
         // Input, source changes and GPU callbacks stay responsive independently of the 60 Hz
         // render deadline. A skipped/hidden turn never prepares scene geometry or submits GPU work.
@@ -262,6 +275,9 @@ struct PaneState {
     presented_frames: u64,
     benchmark: Option<BenchmarkDrawWitness>,
     cpu: cpu_runtime::CpuRuntime,
+    stills: crate::stills::StillJobs,
+    last_still_status: Option<viz_helper::still::Status>,
+    still_blender: Option<std::path::PathBuf>,
 }
 
 impl PaneState {
@@ -281,6 +297,12 @@ impl PaneState {
         );
         Ok(Self {
             renderer,
+            stills: crate::stills::StillJobs::default(),
+            last_still_status: None,
+            still_blender: crate::settings::Preferences::restored(
+                &crate::settings::Options::default(),
+            )
+            .blender_path(),
             scene: Scene::default(),
             values: SceneValues::default(),
             view: ViewConfiguration::default(),

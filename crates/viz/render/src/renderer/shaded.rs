@@ -3,6 +3,7 @@ use super::context::FrameContext;
 use super::*;
 
 pub(super) struct ShadedRenderer {
+    pub(super) draft: Option<super::draft::DraftPasses>,
     pub(super) device: wgpu::Device,
     pub(super) queue: wgpu::Queue,
     pub(super) size: (u32, u32),
@@ -75,6 +76,7 @@ pub(super) struct ShadedRenderer {
     /// Whether the beam pass had to skip volumes to hold the budget.
     pub(super) beam_overflow: bool,
     pub(super) ultra_budget: UltraBudget,
+    pub(super) capture_quality: bool,
     pub(super) crowd_amount: f32,
 }
 
@@ -84,9 +86,29 @@ impl ShadedRenderer {
         samples: u32,
         media_atlas: &crate::media::MediaAtlas,
     ) -> Self {
+        Self::new_with_mode(context, samples, media_atlas, false)
+    }
+
+    pub(super) fn new_draft(
+        context: &FrameContext<'_>,
+        media_atlas: &crate::media::MediaAtlas,
+    ) -> Self {
+        Self::new_with_mode(context, 1, media_atlas, true)
+    }
+
+    fn new_with_mode(
+        context: &FrameContext<'_>,
+        samples: u32,
+        media_atlas: &crate::media::MediaAtlas,
+        draft_mode: bool,
+    ) -> Self {
         let device = context.device.clone();
         let queue = context.queue.clone();
-        let targets = Targets::new(&device, context.size.0, context.size.1, samples);
+        let targets = if draft_mode {
+            Targets::new_draft(&device, context.size.0, context.size.1)
+        } else {
+            Targets::new(&device, context.size.0, context.size.1, samples)
+        };
         let multisample = wgpu::MultisampleState {
             count: samples,
             ..Default::default()
@@ -106,7 +128,7 @@ impl ShadedRenderer {
         // What the shaders may see, what they are compiled from, and the pipelines that result.
         let layouts = Layouts::new(&device, samples);
         let pipeline_layouts = PipelineLayouts::new(&device, &layouts);
-        let modules = Modules::new(&device, samples);
+        let modules = Modules::new(&device, samples, draft_mode);
         let pipelines = Pipelines::new(
             &device,
             &layouts,
@@ -140,7 +162,17 @@ impl ShadedRenderer {
         let media_bind_group =
             build_media_group(&device, &layouts.media, &media_atlas.view, &media_sampler);
 
+        let draft = draft_mode.then(|| {
+            super::draft::DraftPasses::new(
+                &device,
+                context.size,
+                &layouts.scene,
+                &buffers,
+                &targets,
+            )
+        });
         Self {
+            draft,
             device,
             queue,
             size: context.size,
@@ -205,6 +237,7 @@ impl ShadedRenderer {
             media_content_enabled: true,
             beam_overflow: false,
             ultra_budget: UltraBudget::default(),
+            capture_quality: false,
             crowd_amount: 1.0,
         }
     }
@@ -217,7 +250,9 @@ impl ShadedRenderer {
     }
 
     pub(super) fn observe_gpu_micros(&mut self, micros: u64) {
-        self.ultra_budget.observe(micros);
+        if !self.capture_quality {
+            self.ultra_budget.observe(micros);
+        }
     }
 
     pub(super) fn assets_changed(&self) -> bool {
@@ -256,7 +291,14 @@ impl ShadedRenderer {
     pub(super) fn rebuild_targets(&mut self) {
         let device = self.device.clone();
         let (width, height) = self.scaled_size();
-        self.targets = Targets::new(&device, width, height, self.samples);
+        self.targets = if self.draft.is_some() {
+            Targets::new_draft(&device, width, height)
+        } else {
+            Targets::new(&device, width, height, self.samples)
+        };
+        if let Some(draft) = self.draft.as_mut() {
+            draft.resize(&device, &self.targets);
+        }
         let tiles = self.targets.tile_count();
         self.tile_counts
             .ensure(&device, (tiles * 4).max(256) as u64);
@@ -432,5 +474,15 @@ impl ShadedRenderer {
             &self.tile_counts,
             &self.tile_lights,
         );
+        if let Some(draft) = self.draft.as_mut() {
+            draft.scene = build_scene_group(
+                &device,
+                &self.scene_layout,
+                &draft.globals,
+                &self.lights,
+                &self.tile_counts,
+                &self.tile_lights,
+            );
+        }
     }
 }

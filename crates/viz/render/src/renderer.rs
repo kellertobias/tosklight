@@ -222,6 +222,7 @@ impl QualityReduction {
 }
 
 mod context;
+mod draft;
 mod facade;
 mod lines;
 mod overlay;

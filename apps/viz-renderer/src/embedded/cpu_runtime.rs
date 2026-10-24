@@ -5,6 +5,8 @@ use viz_scene::{PersistencePreference, Scene, SceneValues, ViewConfiguration};
 pub(super) struct CpuRuntime {
     pub(super) lasers: crate::lasers::Lasers,
     physics: crate::physics::Physics,
+    effects: Option<crate::effects::Effects>,
+    effects_active: bool,
     next: Instant,
     dirty: bool,
 }
@@ -18,6 +20,8 @@ impl CpuRuntime {
         Self {
             lasers,
             physics,
+            effects: None,
+            effects_active: false,
             next: now,
             dirty: false,
         }
@@ -44,6 +48,30 @@ impl CpuRuntime {
         // is_time_driven true on either side. Retain that visible transition until submission.
         let before: Vec<_> = values.physics_frames.iter().map(physics_pose).collect();
         self.lasers.run(scene, values, time);
+        if scene
+            .emitters
+            .iter()
+            .any(|emitter| emitter.kind == viz_scene::EmitterKind::Effect)
+        {
+            self.effects
+                .get_or_insert_with(crate::effects::Effects::new)
+                .run(scene, values, time);
+        } else {
+            // No fixture retains this VM: release compiled programs and clocks with the scene.
+            self.effects = None;
+        }
+        let effects_active =
+            scene
+                .emitters
+                .iter()
+                .zip(&values.effect_frames)
+                .any(|(emitter, frame)| {
+                    emitter.kind == viz_scene::EmitterKind::Effect && !frame.emitters.is_empty()
+                });
+        // Provider snapshots contain only slots and can clear the previous produced frame before
+        // this call. Retain its activity separately so a script turning off invalidates the picture.
+        self.dirty |= effects_active != self.effects_active;
+        self.effects_active = effects_active;
         self.physics.run(
             scene,
             values,
@@ -260,3 +288,6 @@ mod tests {
         assert!(cpu.dirty());
     }
 }
+
+#[cfg(test)]
+mod effect_tests;

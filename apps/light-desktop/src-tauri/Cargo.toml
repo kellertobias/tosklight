@@ -19,7 +19,7 @@ tauri = { version = "2", features = ["unstable", "macos-private-api"] }
 tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["process"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.25"

@@ -165,6 +165,15 @@ fn material(instance: &viz_render::GeometryInstance) -> Value {
 
 /// Write `geometry` as a self-contained GLB.
 pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
+    write_glb_with_names(geometry, generator, &HashMap::new())
+}
+
+/// Capture-only stable placement names, without changing legacy export names or geometry.
+pub(crate) fn write_glb_with_names(
+    geometry: &SceneGeometry,
+    generator: &str,
+    names: &HashMap<usize, String>,
+) -> Vec<u8> {
     let mut binary = Binary::default();
     let mut materials: Vec<Value> = Vec::new();
     let mut material_indices: HashMap<SurfaceKey, usize> = HashMap::new();
@@ -192,7 +201,7 @@ pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
         primitives.push(Some((position, normal, indices)));
     }
 
-    for instance in &geometry.instances {
+    for (placement_index, instance) in geometry.instances.iter().enumerate() {
         let Some(Some((position, normal, indices))) =
             primitives.get(instance.mesh as usize).copied()
         else {
@@ -230,10 +239,14 @@ pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
                 index
             }
         };
-        nodes.push(json!({
+        let mut node = json!({
             "mesh": mesh_index,
             "matrix": flatten(instance.transform),
-        }));
+        });
+        if let Some(name) = names.get(&placement_index) {
+            node["name"] = json!(name);
+        }
+        nodes.push(node);
     }
 
     let roots: Vec<usize> = (0..nodes.len()).collect();

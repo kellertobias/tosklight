@@ -299,3 +299,31 @@ fn selected_emitter_iteration_addresses_only_the_requested_slot() {
     assert_eq!(selected_items(&items, Some(500)).count(), 0);
     assert_eq!(selected_items(&items, None).count(), 500);
 }
+
+#[test]
+fn media_pixels_and_source_discovery_do_not_rebuild_unlit_geometry() {
+    let (mut scene, values, style) = rig();
+    let id = viz_scene::uuid::Uuid::new_v4();
+    scene.media_sources.push(viz_scene::MediaSourceBinding {
+        id,
+        server_id: id,
+        host: String::new(),
+        port: 0,
+        advertised_source_id: 0,
+        name: "Fallback".into(),
+        aspect_ratio: Some(1.0),
+        fallback_rgba: Some(vec![0; 512 * 512 * 4]),
+    });
+    let mut cache = TechnicalLinesInstances::default();
+    cache.update(&scene, &values, &style);
+    let revision = cache.revision();
+    scene.media_sources[0]
+        .fallback_rgba
+        .as_mut()
+        .unwrap()
+        .fill(255);
+    scene.media_sources[0].host = "changed-discovery-host".into();
+    cache.update(&scene, &values, &style);
+    assert_eq!(cache.revision(), revision);
+    assert_eq!(cache.scenery.builds, 1);
+}

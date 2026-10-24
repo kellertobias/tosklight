@@ -28,6 +28,16 @@ pub struct Targets {
 
 impl Targets {
     pub fn new(device: &Device, width: u32, height: u32, samples: u32) -> Self {
+        Self::with_bloom(device, width, height, samples, true)
+    }
+
+    /// Draft never renders bloom. Reuse its HDR views for the required, zero-weight post binding.
+    /// This allocates no bloom textures and never schedules a pass writing those alias views.
+    pub(crate) fn new_draft(device: &Device, width: u32, height: u32) -> Self {
+        Self::with_bloom(device, width, height, 1, false)
+    }
+
+    fn with_bloom(device: &Device, width: u32, height: u32, samples: u32, bloom: bool) -> Self {
         let width = width.max(1);
         let height = height.max(1);
         let samples = samples.max(1);
@@ -41,28 +51,30 @@ impl Targets {
             hdr_texture.create_view(&wgpu::TextureViewDescriptor::default())
         };
         let depth = depth_target(device, width, height, samples);
-        let bloom_width = (width / 2).max(1);
-        let bloom_height = (height / 2).max(1);
-        // The blur reads its own texel size from the texture it samples, so the halved dimensions
-        // are not carried on the struct.
-        let bloom_a = colour_texture(
-            device,
-            "viz bloom a",
-            bloom_width,
-            bloom_height,
-            HDR_FORMAT,
-            1,
-        )
-        .create_view(&wgpu::TextureViewDescriptor::default());
-        let bloom_b = colour_texture(
-            device,
-            "viz bloom b",
-            bloom_width,
-            bloom_height,
-            HDR_FORMAT,
-            1,
-        )
-        .create_view(&wgpu::TextureViewDescriptor::default());
+        let (bloom_a, bloom_b) =
+            if let Some((bloom_width, bloom_height)) = bloom_size(width, height, bloom) {
+                let a = colour_texture(
+                    device,
+                    "viz bloom a",
+                    bloom_width,
+                    bloom_height,
+                    HDR_FORMAT,
+                    1,
+                )
+                .create_view(&wgpu::TextureViewDescriptor::default());
+                let b = colour_texture(
+                    device,
+                    "viz bloom b",
+                    bloom_width,
+                    bloom_height,
+                    HDR_FORMAT,
+                    1,
+                )
+                .create_view(&wgpu::TextureViewDescriptor::default());
+                (a, b)
+            } else {
+                (shaded.clone(), shaded.clone())
+            };
         Self {
             width,
             height,
@@ -128,4 +140,18 @@ fn depth_target(device: &Device, width: u32, height: u32, samples: u32) -> Textu
             view_formats: &[],
         })
         .create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+fn bloom_size(width: u32, height: u32, enabled: bool) -> Option<(u32, u32)> {
+    enabled.then_some(((width / 2).max(1), (height / 2).max(1)))
+}
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn draft_allocates_no_bloom_extent_and_other_tiers_keep_existing_half_targets() {
+        assert_eq!(super::bloom_size(1920, 1080, false), None);
+        assert_eq!(super::bloom_size(1920, 1080, true), Some((960, 540)));
+        assert_eq!(super::bloom_size(513, 289, true), Some((256, 144)));
+        assert_eq!(super::bloom_size(1, 1, true), Some((1, 1)));
+    }
 }

@@ -107,6 +107,10 @@ fn accept_message(
             pane.record_benchmark_heartbeat(running, heartbeat)?;
             None
         }
+        FromRenderer::Still(status) => {
+            pane.accept_still(status)?;
+            None
+        }
         FromRenderer::Camera(camera) => {
             events.camera = Some(camera);
             None
@@ -136,6 +140,9 @@ fn accept_message(
 }
 
 fn publish_events(pane: &StagePane, events: InboxEvents) -> Result<(), String> {
+    if events.ended {
+        pane.capture_interrupted(events.trouble.as_deref().unwrap_or("renderer stopped"));
+    }
     if let Some(camera) = events.camera {
         *pane.camera.lock().map_err(|_| "the Stage pane")? = Some(camera);
     }

@@ -28,10 +28,20 @@ pub(super) struct Modules {
 }
 
 impl Modules {
-    pub(super) fn new(device: &wgpu::Device, samples: u32) -> Self {
+    pub(super) fn new(device: &wgpu::Device, samples: u32, draft: bool) -> Self {
         let surface_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz surface"),
-            source: wgpu::ShaderSource::Wgsl(format!("{COMMON_WGSL}\n{SURFACE_WGSL}").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "{COMMON_WGSL}\n{}",
+                    if draft {
+                        include_str!("../shaders/draft_surface.wgsl")
+                    } else {
+                        SURFACE_WGSL
+                    }
+                )
+                .into(),
+            ),
         });
         let media_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz media"),
@@ -40,10 +50,19 @@ impl Modules {
         // The beam pass reads the depth the geometry left behind. Multisampled depth is a
         // different WGSL type, so the declaration follows the sample count the adapter gave us;
         // the load itself is written once and takes sample 0 either way.
+        let beam_source = if draft {
+            format!(
+                "{}\n{}",
+                include_str!("../shaders/draft_integral.wgsl"),
+                include_str!("../shaders/draft_beam.wgsl")
+            )
+        } else {
+            BEAM_WGSL.to_owned()
+        };
         let beam_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz beam"),
             source: wgpu::ShaderSource::Wgsl(
-                format!("{COMMON_WGSL}\n{BEAM_WGSL}")
+                format!("{COMMON_WGSL}\n{beam_source}")
                     .replace(SCENE_DEPTH_BINDING, scene_depth_binding(samples))
                     .into(),
             ),

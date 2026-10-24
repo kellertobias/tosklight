@@ -9,6 +9,8 @@ chrono.workspace = true
 glam.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+png.workspace = true
+tokio = { workspace = true, features = ["process"] }
 viz-render.workspace = true
 viz-scene.workspace = true
 

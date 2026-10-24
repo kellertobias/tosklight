@@ -169,7 +169,28 @@ export interface StagePaneBenchmarkObservations {
 	heartbeats: StagePaneBenchmarkHeartbeat[];
 }
 
+/** The native still-job contract; live Stage settings are never changed by these commands. */
+export type StageStillEngine = "ultra" | "ultimate";
+export type StageStillPhase = "queued" | "checkingBlender" | "writing" | "cancelled"
+	| { needsChoice: { blenderVersion: string; ultimateReasons: string[]; ultraExplanation: string; ultimateExplanation: string } }
+	| { rendering: { detail: string } } | { cancelling: { detail: string } }
+	| { saved: { path: string } } | { failed: { detail: string } };
+export interface StageStillStatus {
+	jobId: string; requestId: string | null; paneId: string; followPreload: boolean;
+	sceneRevision: number; valuesFrame: number; timeSeconds: number;
+	width: number; height: number; framing: string;
+	engine: StageStillEngine | null; notice: string | null; phase: StageStillPhase;
+}
+export interface StageStillEvent {
+	paneId: string; requestId: string; status: StageStillStatus | null; error: string | null;
+}
+
 export interface DesktopBridge {
+	startStagePaneCapture?(paneId: string, requestId: string): Promise<void>;
+	openStagePaneCapture?(paneId: string, reveal: boolean): Promise<void>;
+	chooseStagePaneCapture?(paneId: string, jobId: string, engine: StageStillEngine): Promise<void>;
+	cancelStagePaneCapture?(paneId: string, jobId: string): Promise<void>;
+	onStageStill?(handler: (event: StageStillEvent) => void): Promise<DesktopUnsubscribe>;
 	readonly available: boolean;
 	/** Choose one machine-local folder without exposing native APIs to feature code. */
 	selectFolder(): Promise<string | null>;

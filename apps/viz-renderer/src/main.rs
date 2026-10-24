@@ -27,6 +27,7 @@ mod session;
 mod settings;
 mod showfile;
 mod snapshots;
+mod stills;
 mod ui;
 
 use settings::Options;

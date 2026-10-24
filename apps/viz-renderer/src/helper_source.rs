@@ -43,6 +43,7 @@ enum FromChannel {
     Selection(Vec<String>),
     Visibility(bool),
     Released(viz_helper::protocol::FrameId),
+    Still(viz_helper::protocol::ToHelper),
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -93,6 +94,7 @@ pub struct HelperSource {
     selection: Option<Vec<String>>,
     visible: bool,
     released: Vec<viz_helper::protocol::FrameId>,
+    still_request: Option<viz_helper::protocol::ToHelper>,
 }
 
 impl HelperSource {
@@ -137,6 +139,7 @@ impl HelperSource {
             selection: None,
             visible: true,
             released: Vec::new(),
+            still_request: None,
         })
     }
 
@@ -316,6 +319,18 @@ impl HelperSource {
     }
 
     /// Take the pane input that arrived since the last frame.
+    pub fn has_capture_start(&self) -> bool {
+        matches!(self.still_request, Some(ToHelper::CaptureStart { .. }))
+    }
+
+    pub fn take_still_request(&mut self) -> Option<ToHelper> {
+        self.still_request.take()
+    }
+
+    pub fn send_still_status(&mut self, status: viz_helper::still::Status) {
+        self.send(viz_helper::protocol::FromHelper::StillStatus { status });
+    }
+
     pub fn take_input(&mut self) -> Vec<viz_helper::protocol::PaneInput> {
         std::mem::take(&mut self.input)
     }
@@ -367,6 +382,9 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 desk,
                 surface_service,
             })),
+            message @ (ToHelper::CaptureStart { .. }
+            | ToHelper::CaptureChoose { .. }
+            | ToHelper::CaptureCancel { .. }) => outbox.send(FromChannel::Still(message)),
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             picture @ ToHelper::Picture { .. } => outbox.send(FromChannel::Picture(picture)),
             ToHelper::Selection { fixtures } => outbox.send(FromChannel::Selection(fixtures)),
@@ -395,6 +413,12 @@ impl SceneProvider for HelperSource {
 
     fn poll(&mut self) -> Vec<ProviderEvent> {
         let mut events = Vec::new();
+        // Capture is an ordered barrier. Later camera/picture/value messages cannot be folded
+        // into the invocation before the owner has applied prior events and frozen its state.
+        if self.still_request.is_some() {
+            return events;
+        }
+
         if let Some(detail) = self.to_desk.failure() {
             if !self.finished {
                 self.finished = true;
@@ -444,6 +468,11 @@ impl SceneProvider for HelperSource {
                 Ok(FromChannel::Selection(fixtures)) => self.selection = Some(fixtures),
                 Ok(FromChannel::Visibility(visible)) => self.visible = visible,
                 Ok(FromChannel::Released(frame)) => self.released.push(frame),
+                Ok(FromChannel::Still(request)) => {
+                    self.still_request = Some(request);
+                    break;
+                }
+
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {
@@ -864,6 +893,82 @@ mod tests {
         assert!(
             !source.capabilities().uses_network_input,
             "the desk decodes DMX, not this"
+        );
+    }
+    #[test]
+    fn capture_barrier_preserves_prior_input_and_blocks_later_picture_until_frozen() {
+        let before = ViewConfiguration {
+            mode: viz_scene::ViewMode::Lines3d,
+            ..Default::default()
+        };
+        let after = ViewConfiguration {
+            mode: viz_scene::ViewMode::TopDown,
+            ..Default::default()
+        };
+        let messages = [
+            scene_message(1),
+            ToHelper::View {
+                payload: encode(&before).unwrap(),
+            },
+            ToHelper::Input {
+                input: viz_helper::protocol::PaneInput::Orbit { dx: 1.0, dy: 2.0 },
+            },
+            ToHelper::CaptureStart {
+                request_id: "invocation".into(),
+                pane_id: "preload".into(),
+            },
+            ToHelper::View {
+                payload: encode(&after).unwrap(),
+            },
+            ToHelper::Input {
+                input: viz_helper::protocol::PaneInput::Orbit { dx: 99.0, dy: 99.0 },
+            },
+        ];
+        let mut source = HelperSource::start(
+            std::io::Cursor::new(desk_channel(&messages)),
+            Vec::new(),
+            "test".into(),
+        )
+        .unwrap();
+        let mut prior = Vec::new();
+        for _ in 0..200 {
+            prior.extend(source.poll());
+            if source.has_capture_start() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(source.has_capture_start());
+        assert!(
+            prior
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==before.mode))
+        );
+        assert!(
+            !prior
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==after.mode))
+        );
+        assert_eq!(
+            source.take_input(),
+            vec![viz_helper::protocol::PaneInput::Orbit { dx: 1.0, dy: 2.0 }]
+        );
+        assert!(
+            source.poll().is_empty(),
+            "later messages remain queued while freeze is pending"
+        );
+        assert!(
+            matches!(source.take_still_request(),Some(ToHelper::CaptureStart{request_id,..}) if request_id=="invocation")
+        );
+        let later = drain(&mut source);
+        assert!(
+            later
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==after.mode))
+        );
+        assert_eq!(
+            source.take_input(),
+            vec![viz_helper::protocol::PaneInput::Orbit { dx: 99.0, dy: 99.0 }]
         );
     }
 }

@@ -20,6 +20,7 @@ pub enum Row {
     Port,
     Quality,
     Focus,
+    Render4kImage,
     Appearance,
     Background,
     Ambient,
@@ -98,6 +99,7 @@ impl Row {
             Self::Port => "Port",
             Self::Quality => "Render quality",
             Self::Focus => "Focus",
+            Self::Render4kImage => "Render 4K Image",
             Self::Appearance => "Appearance",
             Self::Background => "Background color",
             Self::Ambient => "Environment brightness",
@@ -166,6 +168,7 @@ pub enum QuickSettingsOutcome {
     SourceChanged(ProviderKind),
     /// Reframe the camera around the current rig.
     FocusView,
+    Render4kImage,
     /// Quality or fog changed and applies immediately without reconnecting.
     AppliedLocally,
     /// The staged edit is invalid; the message is shown in place.
@@ -256,6 +259,7 @@ impl QuickSettings {
             QuickSettingsTab::Rendering => vec![
                 Row::Quality,
                 Row::Focus,
+                Row::Render4kImage,
                 Row::Ambient,
                 Row::Exposure,
                 Row::FogAmount,
@@ -529,6 +533,7 @@ impl QuickSettings {
         }
         match row {
             Row::Focus => QuickSettingsOutcome::FocusView,
+            Row::Render4kImage => QuickSettingsOutcome::Render4kImage,
             Row::Snapshot(index) => {
                 let Some(snapshot) = self.snapshots.get(index) else {
                     return QuickSettingsOutcome::None;
@@ -649,6 +654,12 @@ impl QuickSettings {
             Row::Port => self.staged.port_text.clone(),
             Row::Quality => preferences.quality_label(),
             Row::Focus => "Frame rig".into(),
+            Row::Render4kImage => if cfg!(target_os = "macos") {
+                "Cmd+Shift+R"
+            } else {
+                "Ctrl+Shift+R"
+            }
+            .into(),
             Row::Appearance => preferences.theme.label().to_owned(),
             Row::Background => background_label(preferences.background),
             Row::Ambient => format!("{:.0}%", preferences.ambient * 100.0),

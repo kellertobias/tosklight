@@ -1,3 +1,5 @@
+import { StageCaptureControls } from "./StageCaptureControls";
+import { useStageCapture } from "./useStageCapture";
 import { NativeStageSurface } from "./NativeStageSurface";
 import type { StageOptionsModel } from "./types";
 import { useNativeStagePane } from "./useNativeStagePane";
@@ -38,6 +40,7 @@ export function StageRendererView({
 	interactive?: boolean;
 }) {
 	const pane = useNativeStagePane(active, options.view !== "2d");
+	const capture = useStageCapture(pane.id, active && interactive && pane.active);
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
 	 * the desk's, and a renderer holding its own idea of it would be a second answer to the one
@@ -71,7 +74,9 @@ export function StageRendererView({
 				pane={pane}
 				interactive={interactive}
 				plan={options.view === "2d"}
+				onCapture={capture.available && active && interactive ? () => { void capture.start(); } : undefined}
 			/>
+			{active && interactive && <StageCaptureControls capture={capture} paneId={pane.id} followPreload={options.followPreload} />}
 			{active && !pane.active && (
 				<div className="stage-unavailable" role="status">
 					<strong>No Stage on this screen</strong>

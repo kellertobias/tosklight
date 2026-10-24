@@ -65,7 +65,18 @@ pub fn scene_geometry(scene: &Scene, values: &SceneValues) -> SceneGeometry {
         plot: false,
         ..FrameStyle::default()
     };
-    let frame = instances::build(scene, values, &style);
+    scene_geometry_with_style(scene, values, &style)
+}
+
+/// Export the exact supplied frame policy. Image jobs pass their frozen Ultra/full-budget style;
+/// legacy scene packages retain the existing default policy through `scene_geometry`.
+/// This does not advance effects, motion, physics or time: values must already be resolved.
+pub fn scene_geometry_with_style(
+    scene: &Scene,
+    values: &SceneValues,
+    style: &FrameStyle,
+) -> SceneGeometry {
+    let frame = instances::build(scene, values, style);
     let mut geometry = SceneGeometry::default();
     for (kind, placements) in &frame.meshes {
         if placements.is_empty() {

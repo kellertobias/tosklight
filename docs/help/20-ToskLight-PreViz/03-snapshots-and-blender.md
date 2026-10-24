@@ -4,6 +4,39 @@ Press **Cmd+S** (Ctrl+S on Windows/Linux) or **File > Take Snapshot** in the Vis
 the current rig, fixture values and camera. The status line confirms it without interrupting output.
 A snapshot stores the scene, not a screenshot.
 
+## Render a 4K image
+
+Use **Render 4K** in a Control Stage pane, or **File > Render 4K Image** / the rendering row in
+Visualizer **Quick Settings**. With that view focused, press **Cmd+Shift+R** on macOS or
+**Ctrl+Shift+R** on Windows/Linux. The shortcut is inactive while entering text, using the Desk
+command line, or choosing in a modal dialog. Cmd/Ctrl+S keeps its existing scene-snapshot behavior.
+
+The action freezes that pane's camera, Live or Follow Preload values, and available media pixels
+before checking Blender or asking for quality. Moving the rig while the choice is open does not
+change the captured moment. Both engines produce a new **3840 × 2160 PNG**; they do not enlarge
+the live pane's raster. The camera keeps its vertical field of view with 16:9 framing, so the image
+can show more or less at the sides than a differently shaped pane. An orthographic view stays
+orthographic. A 3D Lines invocation renders the same camera with full lighting.
+
+When a usable Blender is installed, choose:
+
+- **Ultra quality — regular ToskLight renderer:** a separate full-quality native render.
+- **Ultimate quality — Blender:** ToskLight launches a managed Cycles render and saves the final
+  image. It can take substantially longer. Its physical lighting and AgX color transform can
+  differ from the native preview. Any unsupported frozen feature is listed beside the choice;
+  choose Ultra when Ultimate cannot represent that look.
+
+Without Blender, the action uses Ultra. A broken configured installation reports its problem and
+keeps Ultra available. Rendering does not change the live quality preference: Draft remains Draft.
+Missing media frames are identified explicitly; the image uses only the frozen known fallback or
+black, never a later server frame substituted after the choice.
+
+Progress, cancellation, failures and the saved path appear in the view. After success, use **Open**
+or **Reveal**. Another image can start when the current job and its cleanup finish. Cancellation
+cannot interrupt GPU work already submitted, so cleanup can take time. Images are saved in the
+Visualizer **Images** folder beside **Snapshots** and are not deleted by the twelve-snapshot
+retention rule below.
+
 ## Find a snapshot
 
 **Quick Settings** lists the newest twelve snapshots and their folder. Taking another removes the
