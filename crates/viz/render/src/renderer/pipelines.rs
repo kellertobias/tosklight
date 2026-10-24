@@ -6,7 +6,7 @@
 
 use super::layouts::{Layouts, PipelineLayouts};
 use super::{
-    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, MEDIA_WGSL, OVERLAY_WGSL, POST_WGSL,
+    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, MEDIA_WGSL, POST_WGSL,
     SCENE_DEPTH_BINDING, SHADOW_PRELUDE_WGSL, SHADOW_WGSL, SURFACE_WGSL, scene_depth_binding,
 };
 use crate::instances::{BeamInstance, GpuMediaPanel, LaserInstance, LineVertex, MeshInstance};
@@ -25,7 +25,6 @@ pub(super) struct Modules {
     pub cull: wgpu::ShaderModule,
     pub post: wgpu::ShaderModule,
     pub shadow: wgpu::ShaderModule,
-    pub overlay: wgpu::ShaderModule,
 }
 
 impl Modules {
@@ -77,10 +76,6 @@ impl Modules {
                 format!("{SHADOW_PRELUDE_WGSL}\n{SHADOW_WGSL}").into(),
             ),
         });
-        let overlay_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("viz overlay"),
-            source: wgpu::ShaderSource::Wgsl(OVERLAY_WGSL.into()),
-        });
         Self {
             surface: surface_module,
             media: media_module,
@@ -90,7 +85,6 @@ impl Modules {
             cull: cull_module,
             post: post_module,
             shadow: shadow_module,
-            overlay: overlay_module,
         }
     }
 }
@@ -107,7 +101,6 @@ pub(super) struct Pipelines {
     pub extract: wgpu::RenderPipeline,
     pub blur: wgpu::RenderPipeline,
     pub composite: wgpu::RenderPipeline,
-    pub overlay: wgpu::RenderPipeline,
 }
 
 impl Pipelines {
@@ -151,7 +144,6 @@ impl Pipelines {
                 "composite",
                 surface_format,
             ),
-            overlay: overlay_pipeline(device, pipeline_layouts, modules, surface_format),
         }
     }
 }
@@ -425,13 +417,12 @@ fn cull_pipeline(
     })
 }
 
-fn overlay_pipeline(
+pub(super) fn overlay_pipeline(
     device: &wgpu::Device,
-    layouts: &PipelineLayouts,
-    modules: &Modules,
+    overlay_pipeline_layout: &wgpu::PipelineLayout,
+    overlay_module: &wgpu::ShaderModule,
     surface_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
-    let (overlay_pipeline_layout, overlay_module) = (&layouts.overlay, &modules.overlay);
     let format = surface_format;
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

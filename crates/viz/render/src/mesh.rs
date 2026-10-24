@@ -3,6 +3,8 @@
 //! Fixture models resolve to these proxies whenever no model asset is available, so a
 //! light-producing head is always visible.
 
+pub mod feature_edges;
+
 use crate::instances::MeshKind;
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3};

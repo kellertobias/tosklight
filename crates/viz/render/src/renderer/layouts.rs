@@ -19,7 +19,6 @@ pub(super) struct Layouts {
     pub composite: wgpu::BindGroupLayout,
     pub shadow: wgpu::BindGroupLayout,
     pub shadow_draw: wgpu::BindGroupLayout,
-    pub overlay: wgpu::BindGroupLayout,
     pub media: wgpu::BindGroupLayout,
 }
 
@@ -33,7 +32,6 @@ impl Layouts {
             composite: composite_layout(device),
             shadow: shadow_layout(device),
             shadow_draw: shadow_draw_layout(device),
-            overlay: overlay_layout(device),
             media: media_layout(device),
         }
     }
@@ -48,7 +46,6 @@ pub(super) struct PipelineLayouts {
     pub cull: wgpu::PipelineLayout,
     pub post: wgpu::PipelineLayout,
     pub composite: wgpu::PipelineLayout,
-    pub overlay: wgpu::PipelineLayout,
 }
 
 impl PipelineLayouts {
@@ -105,12 +102,6 @@ impl PipelineLayouts {
                 bind_group_layouts: &[Some(scene_layout), Some(depth_layout)],
                 immediate_size: 0,
             });
-        let overlay_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("viz overlay layout"),
-                bind_group_layouts: &[Some(&layouts.overlay)],
-                immediate_size: 0,
-            });
         Self {
             surface: surface_pipeline_layout,
             beam: beam_pipeline_layout,
@@ -119,7 +110,6 @@ impl PipelineLayouts {
             cull: cull_pipeline_layout,
             post: post_pipeline_layout,
             composite: composite_pipeline_layout,
-            overlay: overlay_pipeline_layout,
         }
     }
 }
@@ -367,7 +357,7 @@ fn shadow_draw_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-fn overlay_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+pub(super) fn overlay_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: Some("viz overlay"),
         entries: &[

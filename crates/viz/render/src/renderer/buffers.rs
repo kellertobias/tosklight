@@ -28,7 +28,6 @@ pub(super) struct SceneBuffers {
     pub beam_instances: DynamicBuffer,
     pub laser_instances: DynamicBuffer,
     pub line_vertices: DynamicBuffer,
-    pub overlay_quads: DynamicBuffer,
     pub media_panels: DynamicBuffer,
 }
 
@@ -118,12 +117,6 @@ impl SceneBuffers {
                 "viz line vertices",
                 BufferUsages::VERTEX,
                 (size_of::<LineVertex>() * 2048) as u64,
-            ),
-            overlay_quads: DynamicBuffer::new(
-                device,
-                "viz overlay quads",
-                BufferUsages::VERTEX,
-                (size_of::<crate::overlay::OverlayQuad>() * 4096) as u64,
             ),
             media_panels: DynamicBuffer::new(
                 device,

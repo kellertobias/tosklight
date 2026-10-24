@@ -120,7 +120,7 @@ fn floor_level(
         .capture(scene, values, view, &crate::Overlay::default(), 0.0)
         .expect("curtain regression capture");
     assert!(
-        renderer.frame.lights.last().unwrap().shadow[0] < 0.0,
+        renderer.shaded_frame().lights.last().unwrap().shadow[0] < 0.0,
         "the measured lamp must remain outside the shadow-map budget"
     );
     if let Some(directory) = std::env::var_os("VIZ_OPTICS_CAPTURE_DIR") {
@@ -288,7 +288,7 @@ fn off_axis_rear_lamp_cannot_illuminate_the_front_of_opaque_folds() {
             let image = renderer
                 .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
                 .unwrap();
-            assert!(renderer.frame.lights.last().unwrap().shadow[0] < 0.0);
+            assert!(renderer.shaded_frame().lights.last().unwrap().shadow[0] < 0.0);
             let camera = crate::ResolvedCamera::resolve(
                 &view.camera,
                 view.mode,

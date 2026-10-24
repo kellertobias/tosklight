@@ -3,7 +3,6 @@
 //! Every glyph, meter and icon the renderer draws over the picture comes out of one small atlas
 //! built at startup, so the status line and Quick Settings cost one pipeline and one draw.
 
-use super::layouts::Layouts;
 use wgpu::BufferUsages;
 
 /// The overlay's uniform buffer, atlas and bind group.
@@ -16,7 +15,7 @@ impl OverlayAtlas {
     pub(super) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
-        layouts: &Layouts,
+        overlay_layout: &wgpu::BindGroupLayout,
         icon: Option<&[u8]>,
     ) -> Self {
         let gpu_queue = queue;
@@ -62,7 +61,6 @@ impl OverlayAtlas {
             min_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         });
-        let overlay_layout = &layouts.overlay;
         let overlay_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("viz overlay"),
             layout: overlay_layout,

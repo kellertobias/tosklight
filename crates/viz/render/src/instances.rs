@@ -16,8 +16,10 @@ mod fixture_appearance;
 mod floor_grid;
 mod frame_style;
 mod optical_wheels;
+mod technical_lines;
 
 pub use frame_style::{FrameStyle, MediaAppearance};
+pub use technical_lines::TechnicalLinesInstances;
 
 pub const MAX_OPTICAL_WHEELS: usize = 8;
 
@@ -378,8 +380,9 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
         style,
         &values.selected_fixtures,
         &values.position_points,
+        None,
     );
-    push_emitters(&mut frame, scene, values, &head_angles, style);
+    push_emitters(&mut frame, scene, values, &head_angles, style, None);
     effects::push_effects(&mut frame, scene, values, style);
     frame
 }
@@ -542,6 +545,7 @@ fn push_selection_cage(
     push_box_outline(frame, base * Mat4::from_scale(cage_size), selected_ink, 1.0);
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_bodies(
     frame: &mut FrameInstances,
     scene: &Scene,
@@ -550,9 +554,13 @@ fn push_bodies(
     style: &FrameStyle,
     selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
     points: &[viz_scene::PointPose],
+    only_fixture: Option<usize>,
 ) {
     let grouped = grouped_selection(scene, selection);
     for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
+        if only_fixture.is_some_and(|index| index != fixture_index) {
+            continue;
+        }
         // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
         // has none at all.
         if fixture.drawn_as_scenery || fixture.invisible {
@@ -826,9 +834,13 @@ fn push_emitters(
     values: &SceneValues,
     head_angles: &[(f32, f32)],
     style: &FrameStyle,
+    only_emitter: Option<usize>,
 ) {
     let fallback = EmitterValues::default();
     for (index, emitter) in scene.emitters.iter().enumerate() {
+        if only_emitter.is_some_and(|wanted| wanted != index) {
+            continue;
+        }
         let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) else {
             continue;
         };
@@ -838,50 +850,34 @@ fn push_emitters(
         } else {
             Vec3::from(fixture.installed_colour)
         };
-        let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
+        let angles = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let Some(mut pose) = resolved_emitter_pose(
+        let Some(pose) = drawing_emitter_pose(
             scene,
             fixture,
             emitter,
             value,
-            pan,
-            tilt,
+            angles,
             &values.position_points,
+            optics.half_angle,
         ) else {
             continue;
         };
         let model = fixture
             .model
             .and_then(|index| scene.models.get(index as usize));
-        if value.physical_pose.is_none()
-            && let Some(scanner_pose) = model.and_then(|model| {
-                fixture_appearance::scanner_emitter_pose(
-                    model,
-                    fixture,
-                    emitter,
-                    pan,
-                    tilt,
-                    value.zoom,
-                    &values.position_points,
-                )
-            })
-        {
-            pose = scanner_pose;
-        }
-        pose.half_angle = optics.half_angle;
         // What an observer still has, not what the desk is sending this instant. For most heads
         // the two agree; for a strobe or a laser they are the whole point of the difference.
         let intensity = value.retained_visible_intensity();
         if emitter.kind == EmitterKind::Laser {
-            push_laser_emitter(
+            push_laser_view(
                 frame,
                 emitter,
                 value,
                 values.laser_scans.get(index),
                 pose,
-                intensity,
                 installed_colour,
+                style,
             );
             continue;
         }
@@ -937,34 +933,100 @@ fn push_emitters(
             if !lit {
                 continue;
             }
-            let light_index = push_gpu_light(
-                frame,
-                fixture,
-                emitter,
-                value,
-                pose,
-                origin,
-                cell_intensity,
-                cell_colour,
-                optics,
-                apex_offset,
-            );
-            if style.draw_beams {
-                push_beam(
+            if style.emitter_apertures || style.draw_beams {
+                let light_index = push_gpu_light(
                     frame,
-                    origin,
+                    fixture,
+                    emitter,
+                    value,
                     pose,
-                    light_index,
+                    origin,
                     cell_intensity,
                     cell_colour,
+                    optics,
                     apex_offset,
                 );
+                if style.draw_beams {
+                    push_beam(
+                        frame,
+                        origin,
+                        pose,
+                        light_index,
+                        cell_intensity,
+                        cell_colour,
+                        apex_offset,
+                    );
+                }
             }
             if style.draw_aim_lines {
                 push_aim_line(frame, origin, pose, cell_intensity, cell_colour);
             }
         }
         frame.poses.push(pose);
+    }
+}
+
+/// Physical hierarchy owns a declared lens pose; a legacy scanner instead aims from its mirror.
+fn drawing_emitter_pose(
+    scene: &Scene,
+    fixture: &FixtureInstance,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    (pan, tilt): (f32, f32),
+    points: &[viz_scene::PointPose],
+    half_angle: f32,
+) -> Option<EmitterPose> {
+    let mut pose = resolved_emitter_pose(scene, fixture, emitter, value, pan, tilt, points)?;
+    let model = fixture
+        .model
+        .and_then(|index| scene.models.get(index as usize));
+    if value.physical_pose.is_none()
+        && let Some(scanner_pose) = model.and_then(|model| {
+            fixture_appearance::scanner_emitter_pose(
+                model, fixture, emitter, pan, tilt, value.zoom, points,
+            )
+        })
+    {
+        pose = scanner_pose;
+    }
+    pose.half_angle = half_angle;
+    Some(pose)
+}
+
+/// Technical views retain the projector pose and a single aim, without its scan/aperture work.
+fn push_laser_view(
+    frame: &mut FrameInstances,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    scan: Option<&viz_scene::LaserScan>,
+    pose: EmitterPose,
+    installed_colour: Vec3,
+    style: &FrameStyle,
+) {
+    let intensity = value.retained_visible_intensity();
+    if style.emitter_apertures || style.draw_beams {
+        push_laser_emitter(
+            frame,
+            emitter,
+            value,
+            scan,
+            pose,
+            intensity,
+            installed_colour,
+        );
+    } else {
+        frame.poses.push(pose);
+        if style.draw_aim_lines && intensity > 0.002 {
+            push_aim_line(
+                frame,
+                pose.origin,
+                pose,
+                intensity,
+                Vec3::from(value.colour) * installed_colour,
+            );
+        } else if style.aim_guides {
+            push_aim_guide(frame, pose.origin, pose, style.faint_ink);
+        }
     }
 }
 

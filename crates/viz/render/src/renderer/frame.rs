@@ -1,16 +1,17 @@
 //! Drawing one frame: what is uploaded, in what order the passes run, and what each of them is.
 //!
 //! The renderer itself holds the resources; this is what it does with them. Every pass is its own
-//! method so the order of a frame can be read at a glance in [`Renderer::render`] — cull, shadows,
-//! opaque, beams, lasers, bloom, composite, overlay — with the detail of any one of them a step
-//! away rather than inline.
+//! method so the shaded ordering stays explicit: cull, shadows, opaque, beams, lasers, bloom
+//! and composite. The facade owns presentation, overlay and timestamp resolution.
 
+use super::context::FrameContext;
 use super::{
-    BLOOM_MIX, FrameStats, Globals, MAX_SHADOWS, RenderError, Renderer, SHADOW_DRAW_STRIDE,
-    SHADOW_TILE_EDGE, SHADOW_TILES_PER_ROW,
+    BLOOM_MIX, FrameStats, Globals, MAX_SHADOWS, SHADOW_DRAW_STRIDE, SHADOW_TILE_EDGE,
+    SHADOW_TILES_PER_ROW, ShadedRenderer,
 };
 use crate::camera::ResolvedCamera;
 use crate::instances::{FrameStyle, GpuCurtainShadow, GpuLight, MeshKind};
+use crate::timing::GpuTimer;
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3};
 use std::hash::{Hash, Hasher};
@@ -48,55 +49,29 @@ impl PassPlan {
     }
 }
 
-impl Renderer {
-    pub fn render(
+impl ShadedRenderer {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn encode(
         &mut self,
+        context: &FrameContext<'_>,
+        encoder: &mut wgpu::CommandEncoder,
         scene: &Scene,
         values: &SceneValues,
         view: &ViewConfiguration,
-        overlay: &crate::overlay::Overlay,
+        media_atlas: &crate::media::MediaAtlas,
         time_seconds: f32,
-    ) -> Result<FrameStats, RenderError> {
-        let started = std::time::Instant::now();
-        // Progress asynchronous timestamp mappings without ever waiting for the GPU. Without this
-        // poll, native backends are allowed to leave a completed map callback queued forever.
-        let _ = self.gpu.device.poll(wgpu::PollType::Poll);
-        if let Some(timer) = self.timer.as_mut() {
-            timer.collect();
-        }
-        let plan = self.plan_frame(scene, values, view);
-        let timing_context = self.observe_gpu_sample(scene, view);
-        let device = self.gpu.device.clone();
-        let queue = self.gpu.queue.clone();
-
+    ) -> FrameStats {
+        self.resize(context.size);
+        let plan = self.plan_frame(scene, values, view, media_atlas);
+        self.ensure_model_meshes(scene);
         let shadows_changed = self.assign_shadows(scene.revision, view, plan.shadow_budget);
-        self.upload_frame(scene, &device, &queue);
-        self.write_globals(&plan, values, view, time_seconds, &queue);
-
-        let capture = self.capture_request.take();
-        let before_acquire = std::time::Instant::now();
-        let mut acquire_micros = 0;
-        let (frame, output) = match &capture {
-            Some(view) => (None, view.clone()),
-            None => {
-                let frame = self.acquire()?;
-                acquire_micros = before_acquire.elapsed().as_micros() as u64;
-                let view = frame
-                    .texture
-                    .create_view(&wgpu::TextureViewDescriptor::default());
-                (Some(frame), view)
-            }
-        };
-
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("viz frame"),
-        });
-
+        self.upload_frame(scene, context.device, context.queue, media_atlas);
+        self.write_globals(&plan, values, view, time_seconds, context.queue);
         if plan.passes.cull {
-            self.cull_pass(&mut encoder);
+            self.cull_pass(encoder, context.timer);
         }
         if plan.passes.shadows && shadows_changed {
-            self.shadow_pass(&mut encoder);
+            self.shadow_pass(encoder, context.timer);
         }
 
         // Multisampled colour is resolved by whichever shaded pass writes last, so the samples
@@ -108,39 +83,27 @@ impl Renderer {
         let mut draw_calls = 0_u32;
         let mut instance_total = 0_u32;
         self.opaque_pass(
-            &mut encoder,
+            encoder,
             view,
+            context.timer,
             beams_drawn,
             &mut draw_calls,
             &mut instance_total,
         );
         if beams_drawn {
-            self.beam_pass(&mut encoder);
+            self.beam_pass(encoder, context.timer);
         }
         if lasers_drawn {
-            self.laser_pass(&mut encoder);
+            self.laser_pass(encoder, context.timer);
         }
-        self.post_passes(&mut encoder, &queue, &plan, view, &output);
-        if !overlay.is_empty() {
-            self.overlay_pass(&mut encoder, &device, &queue, overlay, &output);
-        }
-
-        if let Some(timer) = self.timer.as_mut() {
-            timer.resolve(&mut encoder, timing_context);
-        }
-        queue.submit(Some(encoder.finish()));
-        if let Some(timer) = self.timer.as_mut() {
-            timer.request_readback();
-        }
-        if let Some(frame) = frame {
-            queue.present(frame);
-        }
-
-        let gpu_passes = self
-            .timer
-            .as_ref()
-            .map(crate::timing::GpuTimer::timings)
-            .unwrap_or_default();
+        self.post_passes(
+            encoder,
+            context.queue,
+            &plan,
+            view,
+            context.output,
+            context.timer,
+        );
         let quality_reduction = super::QualityReduction {
             lights: (self.frame.lights.len() as u32 > self.lights.length)
                 .then_some((self.frame.lights.len() as u32, self.lights.length)),
@@ -153,9 +116,7 @@ impl Renderer {
                 .then_some((self.frame.particles_requested, self.frame.particles_drawn)),
             ultra_gpu_budget: plan.adaptive_degraded,
         };
-        self.stats = FrameStats {
-            cpu_micros: started.elapsed().as_micros() as u64,
-            acquire_micros,
+        FrameStats {
             lights: self.lights.length,
             beams: self.beam_instances.length,
             instances: instance_total,
@@ -165,55 +126,13 @@ impl Renderer {
             // Only report degradation the renderer actually applied this frame.
             degraded: quality_reduction.is_active(),
             quality_reduction,
-            gpu_micros: gpu_passes.total_micros(),
-            gpu_sample_id: self
-                .timer
-                .as_ref()
-                .filter(|t| t.timings().total_micros().is_some())
-                .map(|t| t.sample_id()),
-            gpu_sample_matches_frame: self
-                .timer
-                .as_ref()
-                .is_some_and(|t| t.sample_matches(timing_context)),
-            gpu_passes,
             volumetric_steps: plan.volumetric_steps,
             shadow_budget: plan.shadow_budget,
             render_scale: plan.render_scale,
             crowd_authored: self.frame.crowd_authored,
             crowd_drawn: self.frame.crowd_drawn,
-        };
-        Ok(self.stats)
-    }
-
-    /// Attribute completed GPU work to the scope which submitted it, never to a new view.
-    fn observe_gpu_sample(
-        &mut self,
-        scene: &Scene,
-        view: &ViewConfiguration,
-    ) -> crate::timing::TimingContext {
-        let context = crate::timing::TimingContext {
-            scene_revision: scene.revision,
-            show_id: scene.show_id.map(|id| id.as_u128()),
-            mode: view.mode,
-            quality: view.quality,
-            size: (self.gpu.config.width, self.gpu.config.height),
-            render_size: (self.targets.width, self.targets.height),
-            generation: 0,
+            ..Default::default()
         }
-        .following(self.timing_context);
-        self.timing_context = Some(context);
-        if let Some(timer) = self.timer.as_ref()
-            && timer.sample_id() != self.last_timing_sample
-        {
-            self.last_timing_sample = timer.sample_id();
-            if timer.sample_matches(context)
-                && view.quality == viz_scene::RenderQuality::Ultra
-                && let Some(micros) = timer.timings().total_micros()
-            {
-                self.ultra_budget.observe(micros);
-            }
-        }
-        context
     }
 
     /// Everything about this frame that is decided before anything is uploaded or drawn.
@@ -222,6 +141,7 @@ impl Renderer {
         scene: &Scene,
         values: &SceneValues,
         view: &ViewConfiguration,
+        media_atlas: &crate::media::MediaAtlas,
     ) -> FramePlan {
         let plot = view.mode.is_plot();
         let (volumetric_steps, shadow_budget, adaptive_scale, adaptive_degraded) =
@@ -249,7 +169,7 @@ impl Renderer {
             .media_surfaces_with_sources()
             .into_iter()
             .map(|(surface, source, fallback)| {
-                let (average, flicker) = self.media_atlas.appearance(source, fallback);
+                let (average, flicker) = media_atlas.appearance(source, fallback);
                 (
                     surface,
                     crate::instances::MediaAppearance {
@@ -322,7 +242,12 @@ impl Renderer {
         } else {
             scene.bounds
         };
-        let camera = ResolvedCamera::resolve(&view.camera, view.mode, self.gpu.aspect(), bounds);
+        let camera = ResolvedCamera::resolve(
+            &view.camera,
+            view.mode,
+            self.size.0 as f32 / self.size.1.max(1) as f32,
+            bounds,
+        );
         style.camera_position = Some(camera.position);
         self.frame = crate::instances::build(scene, values, &style);
         FramePlan {
@@ -390,16 +315,22 @@ impl Renderer {
         }
         if self
             .shadow_matrices
-            .upload(&self.gpu.device.clone(), &self.gpu.queue.clone(), &matrices)
+            .upload(&self.device.clone(), &self.queue.clone(), &matrices)
         {
             self.rebuild_shadow_groups();
         }
-        self.gpu.queue.write_buffer(&self.shadow_draws, 0, &draws);
+        self.queue.write_buffer(&self.shadow_draws, 0, &draws);
         changed
     }
 
     /// Everything this frame draws, uploaded to the buffers the passes read.
-    fn upload_frame(&mut self, scene: &Scene, device: &wgpu::Device, queue: &wgpu::Queue) {
+    fn upload_frame(
+        &mut self,
+        scene: &Scene,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        media_atlas: &crate::media::MediaAtlas,
+    ) {
         let packed_blockers =
             super::curtain_occlusion::pack(&mut self.frame.lights, &self.frame.curtain_blockers);
         let blockers_grew = if packed_blockers.is_empty() {
@@ -425,9 +356,6 @@ impl Renderer {
         if invalidated {
             self.rebuild_scene_groups();
         }
-        // A fixture model becomes GPU geometry the first frame it is drawn, and stays until the
-        // scene changes. Building it here keeps model loading out of the per-frame path.
-        self.ensure_model_meshes(scene);
         self.ensure_gobo_atlas(scene);
         for (kind, instances) in &self.frame.meshes {
             if let Some(buffer) = self.mesh_instances.get_mut(kind) {
@@ -462,8 +390,7 @@ impl Renderer {
                     model: panel.model.to_cols_array_2d(),
                     crop: panel.crop,
                     material: [
-                        self.media_atlas
-                            .layer_with_fallback(panel.source_id, panel.fallback_source_id)
+                        media_atlas.layer_with_fallback(panel.source_id, panel.fallback_source_id)
                             as f32,
                         material[0],
                         material[1],
@@ -534,12 +461,9 @@ impl Renderer {
 
     /// Sort the rig's lights into screen tiles, so a fragment tests the handful over it rather
     /// than every light in the show.
-    fn cull_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+    fn cull_pass(&self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
         if self.lights.length > 0 {
-            let timing = self
-                .timer
-                .as_ref()
-                .and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull));
+            let timing = timer.and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull));
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("viz light cull"),
                 timestamp_writes: timing,
@@ -554,14 +478,11 @@ impl Renderer {
 
     /// Shadow maps, drawn before anything reads them. Every map is a tile of one atlas, so the
     /// whole budget costs one attachment and one clear.
-    fn shadow_pass(&self, encoder: &mut wgpu::CommandEncoder) {
+    fn shadow_pass(&self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
         if self.shadow_count == 0 {
             return;
         }
-        let timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Shadow));
+        let timing = timer.and_then(|timer| timer.render_writes(crate::timing::GpuPass::Shadow));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz shadows"),
             color_attachments: &[],
@@ -616,6 +537,7 @@ impl Renderer {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         view: &ViewConfiguration,
+        timer: Option<&GpuTimer>,
         beams_drawn: bool,
         draw_calls: &mut u32,
         instance_total: &mut u32,
@@ -623,10 +545,7 @@ impl Renderer {
         let resolve_in_opaque = (!beams_drawn)
             .then(|| self.targets.resolve_target())
             .flatten();
-        let timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Opaque));
+        let timing = timer.and_then(|timer| timer.render_writes(crate::timing::GpuPass::Opaque));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz opaque"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -697,11 +616,8 @@ impl Renderer {
     }
 
     /// The volumetric shafts, added into the picture the geometry left behind.
-    fn beam_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        let timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Beams));
+    fn beam_pass(&self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
+        let timing = timer.and_then(|timer| timer.render_writes(crate::timing::GpuPass::Beams));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz beams"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -732,11 +648,8 @@ impl Renderer {
     /// way a beam volume is: a laser path is visible in clear air too, just dimmer, because
     /// the beam is bright enough that even the little scattering an empty room provides shows
     /// it. That is why a laser show can run in a venue where a lantern's shaft is invisible.
-    fn laser_pass(&self, encoder: &mut wgpu::CommandEncoder) {
-        let timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Lasers));
+    fn laser_pass(&self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
+        let timing = timer.and_then(|timer| timer.render_writes(crate::timing::GpuPass::Lasers));
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("viz lasers"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -775,6 +688,7 @@ impl Renderer {
         plan: &FramePlan,
         view: &ViewConfiguration,
         output: &wgpu::TextureView,
+        timer: Option<&GpuTimer>,
     ) {
         let exposure = plan.exposure;
         let drawn = plan.plot || !view.mode.simulates_light();
@@ -786,10 +700,8 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&[exposure, 1.0_f32, 1.0, 0.0]),
             );
-            let bloom_opening = self
-                .timer
-                .as_ref()
-                .and_then(|timer| timer.render_opening(crate::timing::GpuPass::Bloom));
+            let bloom_opening =
+                timer.and_then(|timer| timer.render_opening(crate::timing::GpuPass::Bloom));
             fullscreen_pass_timed(
                 encoder,
                 "viz bloom extract",
@@ -810,10 +722,8 @@ impl Renderer {
                 0,
                 bytemuck::cast_slice(&[exposure, 1.0_f32, 0.0, 1.0]),
             );
-            let bloom_closing = self
-                .timer
-                .as_ref()
-                .and_then(|timer| timer.render_closing(crate::timing::GpuPass::Bloom));
+            let bloom_closing =
+                timer.and_then(|timer| timer.render_closing(crate::timing::GpuPass::Bloom));
             fullscreen_pass_timed(
                 encoder,
                 "viz bloom blur v",
@@ -833,10 +743,8 @@ impl Renderer {
                 0.0,
             ]),
         );
-        let composite_timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Composite));
+        let composite_timing =
+            timer.and_then(|timer| timer.render_writes(crate::timing::GpuPass::Composite));
         fullscreen_pass_timed(
             encoder,
             "viz composite",
@@ -845,53 +753,6 @@ impl Renderer {
             output,
             composite_timing,
         );
-    }
-
-    /// The status line, Quick Settings and plan labels, drawn over the finished picture.
-    fn overlay_pass(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        overlay: &crate::overlay::Overlay,
-        output: &wgpu::TextureView,
-    ) {
-        self.overlay_quads.upload(device, queue, &overlay.quads);
-        queue.write_buffer(
-            &self.overlay_globals,
-            0,
-            bytemuck::cast_slice(&[
-                self.gpu.config.width as f32,
-                self.gpu.config.height as f32,
-                1.0 / self.gpu.config.width as f32,
-                1.0 / self.gpu.config.height as f32,
-            ]),
-        );
-        let timing = self
-            .timer
-            .as_ref()
-            .and_then(|timer| timer.render_writes(crate::timing::GpuPass::Overlay));
-        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("viz overlay"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: output,
-                depth_slice: None,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Load,
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: timing,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        pass.set_pipeline(&self.overlay_pipeline);
-        pass.set_bind_group(0, &self.overlay_bind_group, &[]);
-        pass.set_vertex_buffer(0, self.overlay_quads.buffer.slice(..));
-        pass.draw(0..6, 0..self.overlay_quads.length);
-        drop(pass);
     }
 }
 

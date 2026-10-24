@@ -364,7 +364,7 @@ fn a_crowded_tile_keeps_every_light_and_stays_stable_across_frames() {
             let image = renderer
                 .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
                 .unwrap();
-            assert_eq!(renderer.frame.lights.len(), count);
+            assert_eq!(renderer.shaded_frame().lights.len(), count);
             let measured = receiver_level(&image, &scene, &view, Vec3::ZERO);
             assert!(
                 (measured - expected).abs() <= 2.0,
