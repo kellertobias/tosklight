@@ -1,12 +1,29 @@
 //! Deciding when the next frame is due.
 //!
-//! The visualizer presents one frame per display refresh, and works out when that refresh is due
-//! from how long each frame waited for the display to hand back a drawable. This is not a frame
-//! rate limiter: the drawable is only released on the refresh, so a frame started any earlier
+//! Display-driven modes estimate refresh timing from how long acquisition waits for a drawable.
+//! Draft and 3D Lines additionally limit steady scheduled rendering to 60 Hz.
+//! The drawable is only released on the refresh, so a frame started any earlier
 //! spends the difference blocked inside the graphics driver — on the same thread that delivers
 //! mouse and keyboard events. An unpaced window ends up seconds behind the operator's hand.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
+use viz_scene::{RenderQuality, ViewMode};
+
+/// Keep steady low-GPU rendering within 60 Hz without adding CPU work to that period.
+/// Input/reveal redraw requests remain immediate; the caller keeps static skip deadlines.
+pub fn low_gpu_deadline(
+    existing: Instant,
+    started: Instant,
+    quality: RenderQuality,
+    mode: ViewMode,
+) -> Instant {
+    if quality != RenderQuality::Draft && mode != ViewMode::Lines3d {
+        return existing;
+    }
+    started
+        .checked_add(Duration::from_nanos(16_666_667))
+        .map_or(existing, |floor| existing.max(floor))
+}
 
 /// Frame pacing for a display whose refresh rate the window system will not name: 60 Hz.
 pub const DEFAULT_FRAME_INTERVAL: Duration = Duration::from_micros(16_667);
@@ -47,6 +64,63 @@ pub fn paced_interval(current: Duration, waited: Duration) -> Duration {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn low_gpu_floor_uses_frame_start_instead_of_completion() {
+        let started = Instant::now();
+        let completed = started + Duration::from_millis(4);
+        let adaptive = completed + Duration::from_millis(2);
+        let next = low_gpu_deadline(adaptive, started, RenderQuality::Draft, ViewMode::Full3d);
+        assert_eq!(
+            next.duration_since(started),
+            Duration::from_nanos(16_666_667)
+        );
+        assert!(next < completed + Duration::from_nanos(16_666_667));
+    }
+    #[test]
+    fn slower_and_static_deadlines_are_never_pulled_forward() {
+        let started = Instant::now();
+        for delay in [20, 50, 100] {
+            let existing = started + Duration::from_millis(delay);
+            assert_eq!(
+                low_gpu_deadline(existing, started, RenderQuality::Draft, ViewMode::Full3d),
+                existing
+            );
+            assert_eq!(
+                low_gpu_deadline(existing, started, RenderQuality::Ultra, ViewMode::Lines3d),
+                existing
+            );
+        }
+    }
+    #[test]
+    fn low_gpu_selection_uses_effective_quality_and_view_without_changing_other_tiers() {
+        let started = Instant::now();
+        let fast = started + Duration::from_millis(8);
+        for quality in [
+            RenderQuality::Standard,
+            RenderQuality::High,
+            RenderQuality::Ultra,
+        ] {
+            for mode in [ViewMode::Full3d, ViewMode::Simple3d, ViewMode::TopDown] {
+                assert_eq!(low_gpu_deadline(fast, started, quality, mode), fast);
+            }
+        }
+        for quality in [
+            RenderQuality::Draft,
+            RenderQuality::Standard,
+            RenderQuality::High,
+            RenderQuality::Ultra,
+        ] {
+            assert_eq!(
+                low_gpu_deadline(fast, started, quality, ViewMode::Lines3d),
+                started + Duration::from_nanos(16_666_667)
+            );
+        }
+        assert_eq!(
+            low_gpu_deadline(fast, started, RenderQuality::Draft, ViewMode::Simple3d),
+            started + Duration::from_nanos(16_666_667)
+        );
+    }
 
     /// How long a frame would wait for a display refreshing every `period` seconds when the pace
     /// brings it round `interval` after the last one was presented.

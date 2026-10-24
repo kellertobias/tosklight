@@ -37,6 +37,10 @@ to inspect fine lighting detail.
 bloom passes. A held static view does not need recurring render submissions. Camera movement and
 moving heads still redraw the real rig.
 
+Standalone Draft and 3D Lines use a 60 Hz ceiling for steady animation, including on 120 Hz screens.
+Immediate input or reveal redraws can occur sooner; static pictures stop GPU submissions.
+Standard, High and Ultra lighting views retain display-driven pacing.
+
 **Reset physics scenery** is a separate authoritative show-control action. It restores every
 released physics body on the selected renderer target to its authored pose. Re-selecting a view,
 losing DMX, or reconnecting is not a reset.

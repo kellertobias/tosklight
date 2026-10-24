@@ -149,6 +149,10 @@ impl Application {
             &mut self.frame_interval,
             &mut self.next_frame,
         );
+        // Anchor the low-GPU ceiling to frame start, preserving slower adaptive/retry deadlines.
+        // Static skips returned above; immediate input redraws remain independent of this pace.
+        self.next_frame =
+            crate::pacing::low_gpu_deadline(self.next_frame, now, view.quality, view.mode);
         if self.options.verify_only && self.presented_frames >= 2 {
             event_loop.exit();
         }
