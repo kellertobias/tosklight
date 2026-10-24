@@ -1,5 +1,6 @@
 //! Portable bounded geometry batching. Only transforms change between layout updates.
 mod plan;
+mod projection;
 #[cfg(test)]
 mod tests;
 
@@ -23,6 +24,7 @@ pub(super) struct CameraState {
 }
 
 pub(super) const PROJECTION_WORKGROUP: u32 = 64;
+pub(super) use projection::{ProjectedHeader, projected_size};
 
 /// Exact storage stride shared by compute output and the four-corner vertex reader.
 #[repr(C)]
@@ -84,7 +86,7 @@ struct Chunk {
     depth_indices: u32,
     edge_indices: wgpu::Buffer,
     edge_index_count: u32,
-    _projected: wgpu::Buffer,
+    projected: wgpu::Buffer,
     projected_read: wgpu::BindGroup,
     projected_write: wgpu::BindGroup,
     edge_count: u32,
@@ -178,6 +180,13 @@ impl Batch {
         {
             return;
         }
+        // Clear only the atomic indirect index count. Other header fields stay initialized,
+        // and clean chunks retain both their compacted records and their last draw count.
+        for chunk in &self.chunks {
+            if chunk.edge_count > 0 && chunk.projection_dirty {
+                encoder.clear_buffer(&chunk.projected, 0, Some(size_of::<u32>() as u64));
+            }
+        }
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some("wireframe edge projection all chunks"),
             timestamp_writes: timer
@@ -217,7 +226,7 @@ impl Batch {
                 pass.set_bind_group(1, &chunk.group, &[]);
                 pass.set_bind_group(2, &chunk.projected_read, &[]);
                 pass.set_index_buffer(chunk.edge_indices.slice(..), wgpu::IndexFormat::Uint32);
-                pass.draw_indexed(0..chunk.edge_index_count, 0, 0..1);
+                pass.draw_indexed_indirect(&chunk.projected, 0);
                 draws += 1;
             }
         }
@@ -279,10 +288,13 @@ impl Chunk {
         );
         let projected = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("wireframe retained projected edges"),
-            size: (plan.edge_refs.len().max(1) * size_of::<ProjectedEdge>()) as u64,
-            usage: wgpu::BufferUsages::STORAGE,
+            size: projected_size(plan.edge_refs.len()).expect("validated projected allocation"),
+            usage: wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::INDIRECT
+                | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        queue.write_buffer(&projected, 0, bytemuck::bytes_of(&ProjectedHeader::empty()));
         let (projected_read, projected_write) = pipelines.projected_groups(device, &projected);
         let edge_count = plan.edge_refs.len() as u32;
         let mut chunk = Self {
@@ -294,7 +306,7 @@ impl Chunk {
             depth_indices: plan.indices.len() as u32,
             edge_indices: edge_indices(device, bytemuck::cast_slice(&plan.edge_indices)),
             edge_index_count: plan.edge_indices.len() as u32,
-            _projected: projected,
+            projected,
             projected_read,
             projected_write,
             edge_count,

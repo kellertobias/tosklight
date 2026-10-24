@@ -61,6 +61,32 @@ fn projected_edge_storage_and_compute_shader_match_the_render_reader() {
         };
         assert!(access.contains(naga::StorageAccess::LOAD));
         assert_eq!(access.contains(naga::StorageAccess::STORE), writable);
+        let naga::TypeInner::Struct { ref members, span } = module.types[output.ty].inner else {
+            panic!("projected storage must carry the indirect header and runtime records")
+        };
+        assert_eq!(
+            members
+                .iter()
+                .map(|member| member.offset)
+                .collect::<Vec<_>>(),
+            [0, 4, 8, 12, 16, 20, 32]
+        );
+        assert_eq!(
+            span, 80,
+            "32-byte header and one minimum 48-byte runtime record"
+        );
+        assert_eq!(members[6].name.as_deref(), Some("records"));
+        let naga::TypeInner::Array { stride, .. } = module.types[members[6].ty].inner else {
+            panic!("compacted edge array expected")
+        };
+        assert_eq!(stride, 48);
+        assert_eq!(
+            matches!(
+                module.types[members[0].ty].inner,
+                naga::TypeInner::Atomic(_)
+            ),
+            writable
+        );
         assert_eq!(
             module
                 .global_variables

@@ -24,6 +24,7 @@ mod benchmark;
 mod benchmark_pacing;
 mod cpu_runtime;
 mod mechanics;
+mod pass_profile;
 mod picture;
 mod producer;
 mod still;
@@ -698,6 +699,13 @@ impl PaneState {
         self.cpu.succeeded();
         self.presented_frames = frame.sequence;
         if let Some(benchmark) = self.benchmark.as_mut() {
+            benchmark.profile_passes(
+                &stats,
+                &self.view,
+                self.size,
+                self.scene.revision,
+                self.following_preload,
+            );
             if let Some(candidate) = benchmark_candidate {
                 benchmark.last_success = Some(candidate);
             }

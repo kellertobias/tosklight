@@ -27,7 +27,7 @@ how much the renderer spends on volumetrics, shadows and bloom, and applies imme
 without the Visualizer reconnecting or reloading the show.
 
 **Draft** keeps fixture geometry, labels and lasers at the view's physical resolution, with a
-simpler diffuse surface shader and a separate half-resolution beam layer. Uniform unshadowed
+simpler diffuse surface shader and a separate beam layer at 35% of each physical dimension. Uniform unshadowed
 beam segments use analytic integration; optical and shadowed segments retain bounded sampling.
 Opaque scenery still blocks light. The result is an interactive approximation for aim, color and
 scene relationships; use Ultra or a [4K image render](03-snapshots-and-blender.md#render-a-4k-image)

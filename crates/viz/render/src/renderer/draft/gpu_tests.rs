@@ -188,7 +188,7 @@ fn actual_par_odd_physical_geometry_and_backend_switches_preserve_hq() {
         (geometry.width, geometry.height, backend.scene.samples),
         (513, 289, 1)
     );
-    assert_eq!((beams.width, beams.height), (257, 145));
+    assert_eq!((beams.width, beams.height), (180, 102));
     assert_eq!(
         backend.scene.targets.bloom_a.texture(),
         backend.scene.targets.shaded.texture()
@@ -408,7 +408,7 @@ fn curtain_blocks_rear_lamp_beyond_two_cached_shadow_slots() {
 
 #[test]
 #[ignore = "requires explicitly serialized native GPU acceptance"]
-fn half_resolution_beams_do_not_leak_across_full_resolution_opaque_silhouette() {
+fn reduced_resolution_beams_do_not_leak_across_full_resolution_opaque_silhouette() {
     let mut renderer = Renderer::headless(513, 289).expect("requested native GPU required");
     let (mut scene, mut values, mut view) = rig();
     scene.scenery.clear();

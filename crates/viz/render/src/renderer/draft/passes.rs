@@ -14,7 +14,7 @@ impl ShadedRenderer {
         let timing = timer.and_then(|timer| timer.render_opening(crate::timing::GpuPass::Beams));
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Draft half-resolution beams"),
+                label: Some("Draft reduced-resolution beams"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &draft.beam,
                     depth_slice: None,

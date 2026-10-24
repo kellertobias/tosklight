@@ -1,5 +1,8 @@
 use super::super::Segment;
-use super::{CameraState, ProjectedEdge, WireInstance, plan, transforms_changed};
+use super::{
+    CameraState, ProjectedEdge, ProjectedHeader, WireInstance, plan, projected_size,
+    transforms_changed,
+};
 use crate::{
     instances::{MeshInstance, MeshKind},
     mesh,
@@ -19,6 +22,7 @@ fn wire_storage_layout_is_exact_and_ignores_material_channels() {
     assert_eq!(size_of::<WireInstance>(), 80);
     assert_eq!(size_of::<plan::Reference>(), 8);
     assert_eq!(size_of::<ProjectedEdge>(), 48);
+    assert_eq!(size_of::<ProjectedHeader>(), 32);
     let a = MeshInstance::zeroed();
     let mut b = a;
     b.base_colour = [1.0; 4];
@@ -49,7 +53,7 @@ fn storage_boundaries_split_instances_without_duplicating_geometry_within_a_chun
     .unwrap();
     assert_eq!(
         plans.iter().map(|p| p.links.len()).collect::<Vec<_>>(),
-        [1, 1, 1, 1, 1] // 192 projected-output bytes per instance are the tightest binding.
+        [1, 1, 1, 1, 1] // 32-byte header + 192 projected bytes per instance are tightest.
     );
     assert_eq!(
         plans
@@ -264,7 +268,7 @@ fn projected_output_budget_splits_chunks_without_losing_aa_indices() {
         [1, 1, 1]
     );
     for chunk in p {
-        assert!(chunk.edge_refs.len() * size_of::<ProjectedEdge>() <= 2048);
+        assert!(projected_size(chunk.edge_refs.len()).unwrap() <= 2048);
         assert_eq!(
             chunk.edge_indices.len(),
             chunk.links.len() * edges.len() * 6
@@ -272,6 +276,72 @@ fn projected_output_budget_splits_chunks_without_losing_aa_indices() {
         for (edge, indices) in chunk.edge_indices.chunks_exact(6).enumerate() {
             assert_eq!(indices, &plan::quad_indices(edge).unwrap());
         }
+    }
+}
+
+#[test]
+fn projected_header_is_indirect_compatible_and_only_counter_reset_preserves_draw_constants() {
+    let mut header = ProjectedHeader::empty();
+    header.index_count = 42;
+    let words: &[u32] = bytemuck::cast_slice(std::slice::from_ref(&header));
+    assert_eq!(words, &[42, 1, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(std::mem::offset_of!(ProjectedHeader, index_count), 0);
+    assert_eq!(std::mem::offset_of!(ProjectedHeader, instance_count), 4);
+    assert_eq!(std::mem::offset_of!(ProjectedHeader, first_index), 8);
+    assert_eq!(std::mem::offset_of!(ProjectedHeader, base_vertex), 12);
+    assert_eq!(std::mem::offset_of!(ProjectedHeader, first_instance), 16);
+    // This is the exact four-byte GPU clear before dirty projection, with no reset on clean
+    // frames. Constants and the reserved draw count survive every read-only frame unchanged.
+    let retained = header;
+    assert_eq!(retained.index_count, 42);
+    bytemuck::bytes_of_mut(&mut header)[..4].fill(0);
+    let words: &[u32] = bytemuck::cast_slice(std::slice::from_ref(&header));
+    assert_eq!(words, &[0, 1, 0, 0, 0, 0, 0, 0]);
+}
+
+#[test]
+fn projected_allocation_includes_header_runtime_record_and_atomic_counter_overflow_bound() {
+    assert_eq!(projected_size(0), Some(80));
+    assert_eq!(projected_size(1), Some(80));
+    assert_eq!(projected_size(2), Some(128));
+    let max_edges = u32::MAX as usize / 6;
+    assert!(projected_size(max_edges).is_some());
+    assert!(projected_size(max_edges + 1).is_none());
+    assert!(projected_size(usize::MAX).is_none());
+    let data = mesh::MeshData::default();
+    let edges = edges(4);
+    let drawn = vec![(MeshKind::Plane, instances(2))];
+    let build = |limit| {
+        plan::build(
+            &drawn,
+            |_| {
+                Some(plan::Asset {
+                    data: &data,
+                    edges: &edges,
+                })
+            },
+            limit,
+            65535,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        build(384).len(),
+        2,
+        "old 48-byte-only budget misses the indirect header"
+    );
+    let exact = build(416);
+    assert_eq!(exact.len(), 1);
+    assert_eq!(projected_size(exact[0].edge_refs.len()), Some(416));
+    assert_eq!(
+        exact[0].edge_indices.len(),
+        48,
+        "all eight source edges retain capacity"
+    );
+    // The compacted ordinal addresses the corresponding canonical prefix, independent of
+    // which source edge won the atomic reservation or how many other edges were culled.
+    for (ordinal, quad) in exact[0].edge_indices.chunks_exact(6).take(3).enumerate() {
+        assert_eq!(quad, &plan::quad_indices(ordinal).unwrap());
     }
 }
 

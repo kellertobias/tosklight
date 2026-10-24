@@ -1,4 +1,4 @@
-//! Dedicated Draft ownership: full-resolution geometry/lasers and half-resolution shafts.
+//! Dedicated Draft ownership: full-resolution geometry/lasers and reduced-resolution shafts.
 //! Shared scene upload and opaque/shadow topology are retained; quality backends do not share
 //! mutable targets, uniforms or shadow-cache identities.
 #[cfg(test)]

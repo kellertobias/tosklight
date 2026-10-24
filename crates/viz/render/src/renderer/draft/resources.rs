@@ -13,14 +13,21 @@ pub(in crate::renderer) struct DraftPasses {
     upsample_layout: wgpu::BindGroupLayout,
 }
 
-pub(super) fn half_size(size: (u32, u32)) -> (u32, u32) {
-    (size.0.max(1).div_ceil(2), size.1.max(1).div_ceil(2))
+// Fixed candidate scale: geometry/depth/lasers remain at the physical output size.
+const DRAFT_BEAM_SCALE_NUM: u64 = 7;
+const DRAFT_BEAM_SCALE_DEN: u64 = 20;
+
+pub(super) fn beam_size(size: (u32, u32)) -> (u32, u32) {
+    let scaled = |dimension: u32| {
+        (u64::from(dimension.max(1)) * DRAFT_BEAM_SCALE_NUM).div_ceil(DRAFT_BEAM_SCALE_DEN) as u32
+    };
+    (scaled(size.0), scaled(size.1))
 }
 fn beam_target(device: &wgpu::Device, size: (u32, u32)) -> wgpu::TextureView {
-    let (width, height) = half_size(size);
+    let (width, height) = beam_size(size);
     device
         .create_texture(&wgpu::TextureDescriptor {
-            label: Some("Draft half-resolution beam target"),
+            label: Some("Draft reduced-resolution beam target"),
             size: wgpu::Extent3d {
                 width,
                 height,
@@ -138,7 +145,7 @@ impl DraftPasses {
     }
     pub(in crate::renderer) fn write_globals(&self, queue: &wgpu::Queue, globals: &Globals) {
         let mut beam = *globals;
-        let (width, height) = half_size(self.size);
+        let (width, height) = beam_size(self.size);
         beam.screen = [
             width as f32,
             height as f32,
@@ -202,9 +209,11 @@ fn upsample_group(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn half_beams_cover_odd_physical_sizes_without_reducing_geometry() {
-        assert_eq!(super::half_size((1920, 1080)), (960, 540));
-        assert_eq!(super::half_size((1921, 1081)), (961, 541));
-        assert_eq!(super::half_size((0, 1)), (1, 1));
+    fn reduced_beams_cover_odd_physical_sizes_without_reducing_geometry() {
+        assert_eq!(super::beam_size((1920, 1080)), (672, 378));
+        assert_eq!(super::beam_size((1921, 1081)), (673, 379));
+        assert_eq!(super::beam_size((513, 289)), (180, 102));
+        assert_eq!(super::beam_size((0, 1)), (1, 1));
+        assert_eq!(super::beam_size((u32::MAX, 1)), (1_503_238_554, 1));
     }
 }

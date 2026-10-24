@@ -1,6 +1,6 @@
 //! CPU-only checked allocation planning; chunks never discard instances to fit a GPU limit.
 use super::super::Segment;
-use super::{PROJECTION_WORKGROUP, ProjectedEdge, WireInstance, failure};
+use super::{PROJECTION_WORKGROUP, WireInstance, failure, projected_size};
 use crate::{
     instances::{MeshInstance, MeshKind},
     mesh::MeshData,
@@ -116,7 +116,8 @@ impl ChunkPlan {
                 asset.edges.len(),
                 size_of::<Reference>(),
             )
-            && add(self.edge_refs.len(), asset.edges.len(), size_of::<ProjectedEdge>())
+            && self.edge_refs.len().checked_add(asset.edges.len()).and_then(projected_size)
+                .is_some_and(|bytes| bytes <= limit)
             && self.edge_refs.len().checked_add(asset.edges.len())
                 .is_some_and(|count| count as u64 <= max_edges)
             && self

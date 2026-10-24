@@ -6,6 +6,10 @@ struct Segment { start:vec4<f32>, end:vec4<f32>, a:vec4<f32>, b:vec4<f32> };
 struct WireInstance { clip_from_local:mat4x4<f32>, local_eye:vec4<f32> };
 struct DrawRef { offset:u32, instance:u32 };
 struct ProjectedEdge { start:vec4<f32>, end:vec4<f32>, normal:vec2<f32>, pad:vec2<f32> };
+struct ProjectedBuffer {
+    index_count:atomic<u32>, instance_count:u32, first_index:u32, base_vertex:i32,
+    first_instance:u32, padding:array<u32,3>, records:array<ProjectedEdge>,
+};
 @group(0) @binding(0) var<uniform> camera:Camera;
 // Identical shared layout to the actual-triangle depth/edge rendering batches.
 @group(1) @binding(0) var<storage,read> segments:array<Segment>;
@@ -14,10 +18,10 @@ struct ProjectedEdge { start:vec4<f32>, end:vec4<f32>, normal:vec2<f32>, pad:vec
 @group(1) @binding(3) var<storage,read> indices:array<u32>;
 @group(1) @binding(4) var<storage,read> depth_vertices:array<DrawRef>;
 @group(1) @binding(5) var<storage,read> edge_refs:array<DrawRef>;
-@group(2) @binding(0) var<storage,read_write> projected_edges:array<ProjectedEdge>;
+@group(2) @binding(0) var<storage,read_write> projected_edges:ProjectedBuffer;
 
 fn project_edge(edge:Segment,i:WireInstance)->ProjectedEdge {
-    // Invalid and hidden edges become zero-area offscreen quads, retaining their stable IDs.
+    // Invalid and hidden edges stay local: they consume no output record or draw indices.
     var out:ProjectedEdge;
     out.start=vec4<f32>(2.0,2.0,2.0,1.0);out.end=out.start;
     out.normal=vec2<f32>(0.0);out.pad=vec2<f32>(0.0);
@@ -44,5 +48,8 @@ fn project_edges(@builtin(global_invocation_id) invocation:vec3<u32>) {
     let index=invocation.x;
     if index>=arrayLength(&edge_refs) { return; }
     let draw_ref=edge_refs[index];
-    projected_edges[index]=project_edge(segments[draw_ref.offset],instances[draw_ref.instance]);
+    let edge=project_edge(segments[draw_ref.offset],instances[draw_ref.instance]);
+    if dot(edge.normal,edge.normal)<0.5 { return; }
+    let compacted=atomicAdd(&projected_edges.index_count,6u)/6u;
+    projected_edges.records[compacted]=edge;
 }

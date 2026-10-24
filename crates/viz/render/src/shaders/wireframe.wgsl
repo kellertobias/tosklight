@@ -18,7 +18,11 @@ struct DrawRef { offset:u32, instance:u32 };
 @group(1) @binding(4) var<storage,read> depth_vertices:array<DrawRef>;
 @group(1) @binding(5) var<storage,read> edge_refs:array<DrawRef>;
 struct ProjectedEdge { start:vec4<f32>, end:vec4<f32>, normal:vec2<f32>, pad:vec2<f32> };
-@group(2) @binding(0) var<storage,read> projected_edges:array<ProjectedEdge>;
+struct ProjectedBuffer {
+    index_count:u32, instance_count:u32, first_index:u32, base_vertex:i32,
+    first_instance:u32, padding:array<u32,3>, records:array<ProjectedEdge>,
+};
+@group(2) @binding(0) var<storage,read> projected_edges:ProjectedBuffer;
 @vertex fn depth_vertex(@builtin(vertex_index) vertex:u32)->@builtin(position) vec4<f32> {
     // Indexed draw IDs address instance-specific virtual vertices. Shared triangle corners can
     // reuse their transformed result, while the underlying model positions remain shared.
@@ -57,7 +61,7 @@ fn expanded(a_in:vec4<f32>,b_in:vec4<f32>,ca:vec4<f32>,cb:vec4<f32>,corner:u32,v
     return out;
 }
 @vertex fn edge_vertex(@builtin(vertex_index) vertex:u32)->LineOutput {
-    let edge=projected_edges[vertex/4u];
+    let edge=projected_edges.records[vertex/4u];
     let corner=vertex%4u;
     let side=select(-1.0,1.0,corner==1u || corner==2u);
     var p=select(edge.start,edge.end,corner>=2u);
