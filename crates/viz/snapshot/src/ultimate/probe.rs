@@ -97,6 +97,7 @@ impl BlenderProbeCache {
                 "Blender not found; Ultra is available without installing Blender".into(),
             )
         })?;
+        let path = super::launcher::resolve_image_launcher(&path)?;
         let identity = Identity::read(&path)?;
         if let Some(entry) = self.entries.iter().find(|entry| {
             entry.identity == identity && entry.at.elapsed() < Duration::from_secs(30)

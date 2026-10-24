@@ -3,6 +3,7 @@
 mod background_policy;
 mod eligibility;
 mod image_manifest;
+mod launcher;
 mod optics_manifest;
 mod output;
 mod probe;
