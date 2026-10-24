@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateBaselinePhases, evaluateSteadyHiddenCompositor } from "./native-stage-baseline-phases.mjs";
+import { evaluateBaselinePhases, evaluateSteadyHiddenCompositor, evaluateSteadyStaticCompositor } from "./native-stage-baseline-phases.mjs";
 
 function fixture() {
   const names = ["static", "camera", "hidden", "revealed"];
@@ -87,4 +87,36 @@ test("real interior work is reported and insufficient or corrupted evidence rema
     assert.equal(evaluateSteadyHiddenCompositor(evidence).status, "unverified");
   }
   assert.equal(evaluateSteadyHiddenCompositor(fixture().nativeStage.phases).status, "unverified");
+});
+
+test("steady static uses native interior spans, separate identities, and actual coverage", () => {
+  const evidence = interiorEvidence();
+  evidence.staticCompositorIntervals = structuredClone(evidence.hiddenCompositorIntervals);
+  evidence.attachmentsDuringStatic = evidence.attachmentsBeforeHidden;
+  for (const row of evidence.staticCompositorIntervals.rows) {
+    if (row.startObservedEpochMicros !== null) row.startObservedEpochMicros -= 20_000_000;
+    row.endObservedEpochMicros -= 20_000_000;
+    row.counters.cleanSkips = row.counters.hiddenSkips;
+    row.counters.hiddenSkips = 0;
+  }
+  const report = evaluateSteadyStaticCompositor(evidence);
+  assert.equal(report.status, "zero-submissions-and-acquire-wall-observed");
+  assert.equal(report.zeroAcquireAdmissionsObserved, true);
+  assert.equal(report.eligibleStartEpochMicros, 100_250_000);
+  assert.ok(report.lanes.every((lane) => lane.coveredMicros === 200_000 && lane.cleanSkips === 8 && lane.hiddenSkips === 0));
+  assert.ok(report.boundary.includes("No GPU utilization"));
+  evidence.staticCompositorIntervals.rows[2].counters.submissions++;
+  assert.equal(evaluateSteadyStaticCompositor(evidence).status, "work-observed");
+  evidence.staticCompositorIntervals.overflow++;
+  assert.equal(evaluateSteadyStaticCompositor(evidence).status, "unverified");
+  assert.equal(evaluateSteadyStaticCompositor(fixture().nativeStage.phases).status, "unverified");
+});
+
+test("static identity discovery without a known positive native interval cannot imply idle", () => {
+  const evidence = fixture().nativeStage.phases;
+  evidence.attachmentsDuringStatic = evidence.attachmentsBeforeHidden;
+  evidence.staticCompositorIntervals = { invalid: 0, overflow: 0, rows: evidence.attachmentsDuringStatic.map((pane) => ({
+    ...pane, startObservedEpochMicros: null, endObservedEpochMicros: 100_800_000, counters: { submissions: 0 },
+  })) };
+  assert.equal(evaluateSteadyStaticCompositor(evidence).status, "unverified");
 });

@@ -63,7 +63,7 @@ export function evaluateBaselinePhases(complete, configuration, matchingRows) {
   });
   return { measurementStatus: failures.length ? "incomplete" : "ready-for-review", evidence, summaries, failures,
     steadyHiddenCompositor: evaluateSteadyHiddenCompositor(evidence),
-    steadyStaticCompositor: { status: "unverified", reason: "Only phase-boundary aggregate arrivals are retained for static; no native counter interval series establishes steady static compositor work" } };
+    steadyStaticCompositor: evaluateSteadyStaticCompositor(evidence) };
 }
 
 /** Exclude unknown startup spans and the first250ms after verified native hide. */
@@ -79,8 +79,24 @@ export function evaluateSteadyHiddenCompositor(evidence) {
     return unverified("Verified native hidden boundaries or owned pane identities are missing");
   if (expected.length > 2 || new Set(sorted(expected)).size !== expected.length || expected.some((pane) => !pane.paneId?.startsWith("main:") || !pane.attachmentId))
     return unverified("Owned hidden pane identities are invalid");
-  const eligibleStart = visibility.hiddenEpochMicros + 250_000;
-  const finish = visibility.revealedEpochMicros;
+  return evaluateSteadyCompositorIntervals(retained, expected, visibility.hiddenEpochMicros, visibility.revealedEpochMicros);
+}
+
+export function evaluateSteadyStaticCompositor(evidence) {
+  const phase = evidence?.rows?.find((row) => row.phase === "static" && row.status === "completed");
+  return evaluateSteadyCompositorIntervals(evidence?.staticCompositorIntervals, evidence?.attachmentsDuringStatic ?? [],
+    phase?.startedEpochMillis * 1_000, phase?.finishedEpochMillis * 1_000);
+}
+
+function evaluateSteadyCompositorIntervals(retained, expected, start, finish) {
+  const unverified = (reason) => ({ status: "unverified", reason,
+    boundary: "Native compositor counter intervals only; zero counters are not proof of zero GPU utilization" });
+  if (!retained || retained.invalid || retained.overflow || !Array.isArray(retained.rows) || retained.rows.length > 240)
+    return unverified("Bounded compositor intervals are missing, invalid or overflowed");
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(finish) || finish <= start || !expected.length ||
+      expected.length > 2 || new Set(sorted(expected)).size !== expected.length || expected.some((pane) => !pane.paneId?.startsWith("main:") || !pane.attachmentId))
+    return unverified("Phase boundaries or owned pane identities are invalid");
+  const eligibleStart = start + 250_000;
   const lanes = [];
   for (const pane of expected) {
     const rows = retained.rows.filter((row) => row.paneId === pane.paneId && row.attachmentId === pane.attachmentId &&
@@ -106,6 +122,10 @@ export function evaluateSteadyHiddenCompositor(evidence) {
     lanes.push({ ...pane, intervals: rows.length, firstObservedEpochMicros: rows[0].startObservedEpochMicros,
       lastObservedEpochMicros: rows.at(-1).endObservedEpochMicros, coveredMicros: covered,
       eligibleWindowMicros: Math.max(0, finish - eligibleStart),
+      cleanSkips: rows.every((row) => Number.isSafeInteger(row.counters.cleanSkips)) ? sum("cleanSkips") : null,
+      hiddenSkips: rows.every((row) => Number.isSafeInteger(row.counters.hiddenSkips)) ? sum("hiddenSkips") : null,
+      busySkips: rows.every((row) => Number.isSafeInteger(row.counters.busySkips)) ? sum("busySkips") : null,
+      pacedSkips: rows.every((row) => Number.isSafeInteger(row.counters.pacedSkips)) ? sum("pacedSkips") : null,
       drawAttempts: sum("drawAttempts"), submissions: sum("submissions"),
       acquireWallMicros: sum("acquireWallMicros"), occluded: sum("occluded"), timeouts: sum("timeouts"),
       errors: sum("errors"), reconfigures: sum("reconfigures"),

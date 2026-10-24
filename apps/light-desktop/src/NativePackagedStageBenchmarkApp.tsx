@@ -8,7 +8,7 @@ import {
 	benchmarkSurfaces,
 	NativeHostObservations,
 } from "./nativePackagedBenchmarkMode";
-import { newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases, type BaselinePhaseReport } from "./nativePackagedStagePhases";
+import { recordStaticCompositorBatch, newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases, type BaselinePhaseReport } from "./nativePackagedStagePhases";
 import { NativeStageReadiness } from "./nativePackagedStageReadiness";
 import {
 	NativeStageGpuObservations,
@@ -146,6 +146,7 @@ function sampleNativeBenchmark(context: NativeObservationContext) {
 
 async function consumeNativeBatch(context: NativeObservationContext, batch: StagePaneBenchmarkObservations, recordedAt = Date.now()) {
 	const { desktop, frames, latestFrameByPane, activity, heartbeats, observerOverflow, timeline, quality, readiness, stageBeganAt } = context;
+	recordStaticCompositorBatch(context.phases.current, batch, recordedAt);
 	context.gpuObservations.current.record(batch.frames, batch.compositors);
 	context.hostObservations.current.record(batch, recordedAt);
 	if (!context.modeAcknowledged.current) {

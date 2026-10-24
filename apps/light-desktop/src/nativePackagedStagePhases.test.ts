@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { hiddenCompositorIntervals, newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases } from "./nativePackagedStagePhases";
+import { recordStaticCompositorBatch, hiddenCompositorIntervals, newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases } from "./nativePackagedStagePhases";
 import type { DesktopBridge, PackagedStageBenchmarkConfig, StageCompositorObservation } from "./platform/desktop/types";
 const config = { baselinePhases: "static-camera-hidden", baselineLayout: "dual", stageEnabled: true, profile: "stage-500", durationSeconds: 40 } as PackagedStageBenchmarkConfig;
 const identities = [{ paneId: "main:a", attachmentId: "1" }, { paneId: "main:b", attachmentId: "2" }];
@@ -125,4 +125,54 @@ it("bounds interval storage and exposes invalid counter/timestamp inputs", () =>
 	bad.measurement.drawAttempts = -1;
 	expect(hiddenCompositorIntervals([{ observedEpochMicros: 2_000_010, windowVisible: false, samples: { frames: [], heartbeats: [], compositors: [bad] } }], identities).invalid).toBe(1);
 	expect(hiddenCompositorIntervals([batches[1], batches[0]], identities).invalid).toBe(1);
+});
+
+it("records existing consumed batches only during static and bounds compact evidence", () => {
+	const report = newBaselinePhaseReport();
+	report.attachmentsDuringStatic = identities;
+	report.staticCompositorIntervals = { rows: [], overflow: 0, invalid: 0, limit: 240, boundary: "test" };
+	const row = { phase: "static" as const, status: "pending" as "pending" | "completed", startedEpochMillis: 1_000, finishedEpochMillis: null };
+	report.rows.push(row);
+	const batch = (time: number) => ({ frames: [], heartbeats: [], compositors: [compositorObservation(time)] });
+	recordStaticCompositorBatch(report, batch(1_100_123), 1_101);
+	recordStaticCompositorBatch(report, batch(1_200_123), 1_201);
+	expect(report.staticCompositorIntervals.rows.map((entry) => entry.startObservedEpochMicros)).toEqual([null, 1_100_123]);
+	row.status = "completed";
+	recordStaticCompositorBatch(report, batch(1_300_123), 1_301);
+	expect(report.staticCompositorIntervals.rows).toHaveLength(2);
+	row.status = "pending";
+	for (let index = 0; index < 250; index++) recordStaticCompositorBatch(report, batch(2_000_000 + index * 100_000), 2_001 + index * 100);
+	expect(report.staticCompositorIntervals.rows).toHaveLength(240);
+	expect(report.staticCompositorIntervals.overflow).toBe(12);
+	expect(report.staticCompositorIntervals.rows[0]).not.toHaveProperty("gpuSamples");
+});
+
+it("discovers complete static identities from consumed native batches after initially empty panes", async () => {
+	let clock = 1_000_000;
+	const report = newBaselinePhaseReport();
+	const abort = new AbortController();
+	const desktop = {} as DesktopBridge;
+	const batch = (time: number, dual = true) => ({ frames: [], heartbeats: [], compositors:
+		(dual ? identities : identities.slice(0, 1)).map((pane) => ({ ...compositorObservation(time), ...pane })) });
+	await runBaselinePhases({ config, desktop, report, panes: () => [], signal: abort.signal,
+		now: () => clock, sleep: async () => {
+			expect(report.attachmentsDuringStatic).toEqual([]);
+			recordStaticCompositorBatch(report, batch(clock * 1_000, false), clock);
+			expect(report.staticCompositorIntervals?.rows).toHaveLength(0);
+			expect(report.staticIdentityDiscovery?.lockedAtObservedEpochMicros).toBeNull();
+			clock += 300;
+			recordStaticCompositorBatch(report, batch(clock * 1_000), clock);
+			expect(report.attachmentsDuringStatic).toEqual(identities);
+			expect(report.staticCompositorIntervals?.rows.every((row) => row.startObservedEpochMicros === null)).toBe(true);
+			clock += 100;
+			recordStaticCompositorBatch(report, batch(clock * 1_000), clock);
+			expect(report.staticCompositorIntervals?.rows.filter((row) => row.startObservedEpochMicros !== null)).toHaveLength(2);
+			const replaced = batch((clock + 100) * 1_000);
+			replaced.compositors[0].attachmentId = "replacement";
+			recordStaticCompositorBatch(report, replaced, clock + 100);
+			expect(report.staticCompositorIntervals?.invalid).toBe(1);
+			expect(report.attachmentsDuringStatic).toEqual(identities);
+			throw new Error("stop after bounded static discovery regression");
+		} });
+	expect(report.staticIdentityDiscovery?.pendingBatches).toBe(1);
 });

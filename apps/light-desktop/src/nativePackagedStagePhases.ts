@@ -59,17 +59,19 @@ const INTERVAL_COUNTERS = ["drawAttempts", "submissions", "occluded", "timeouts"
 const SKIP_COUNTERS = ["cleanSkips", "hiddenSkips", "busySkips", "pacedSkips"] as const;
 const counter = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
-/** Native counter deltas cover consecutive drain observations, not JavaScript arrival phases. */
-export function hiddenCompositorIntervals(batches: HiddenBatch[], panes: BaselinePaneWitness[]): HiddenCompositorIntervals {
-	const result: HiddenCompositorIntervals = { rows: [], overflow: 0, invalid: 0, limit: 240,
-		boundary: "Per-pane native counter drain intervals; the first prior boundary is unknown. No GPU utilization or total GPU time is inferred." };
+const newCompositorIntervals = (): HiddenCompositorIntervals => ({ rows: [], overflow: 0, invalid: 0, limit: 240,
+	boundary: "Per-pane native counter drain intervals; the first prior boundary is unknown. No GPU utilization or total GPU time is inferred." });
+
+/** Store compact native drain deltas, never raw GPU samples or JavaScript arrival intervals. */
+function appendCompositorIntervals(result: HiddenCompositorIntervals, batch: StagePaneBenchmarkObservations,
+	observedBound: number, panes: BaselinePaneWitness[]) {
 	const expected = new Set(panes.map((pane) => `${pane.paneId}\0${pane.attachmentId}`));
-	const previous = new Map<string, number>();
-	for (const batch of batches) for (const observation of batch.samples.compositors ?? []) {
+	const previous = new Map(result.rows.map((row) => [`${row.paneId}\0${row.attachmentId}`, row.endObservedEpochMicros]));
+	for (const observation of batch.compositors ?? []) {
 		const key = `${observation.paneId}\0${observation.attachmentId}`;
 		const end = observation.observedEpochMicros;
 		const start = previous.get(key) ?? null;
-		if (batch.windowVisible !== false || !expected.has(key) || !counter(end) || !counter(batch.observedEpochMicros) || end > batch.observedEpochMicros || (start !== null && end <= start)) {
+		if (!expected.has(key) || !counter(end) || !counter(observedBound) || end > observedBound || (start !== null && end <= start)) {
 			result.invalid++; continue;
 		}
 		previous.set(key, end);
@@ -85,7 +87,33 @@ export function hiddenCompositorIntervals(batches: HiddenBatch[], panes: Baselin
 			startObservedEpochMicros: start, endObservedEpochMicros: end, counters,
 			potentialAcquireAttemptsUpperBound: skipped === null ? null : raw.drawAttempts - skipped });
 	}
+}
+export function hiddenCompositorIntervals(batches: HiddenBatch[], panes: BaselinePaneWitness[]): HiddenCompositorIntervals {
+	const result = newCompositorIntervals();
+	for (const batch of batches) {
+		if (batch.windowVisible !== false) { result.invalid++; continue; }
+		appendCompositorIntervals(result, batch.samples, batch.observedEpochMicros, panes);
+	}
 	return result;
+}
+
+/** Called only from the existing consumed-batch path; this starts no polling or native work. */
+export function recordStaticCompositorBatch(report: BaselinePhaseReport | null, batch: StagePaneBenchmarkObservations, arrivalEpochMillis: number) {
+	if (!report?.staticCompositorIntervals || !report.rows.some((row) => row.phase === "static" && row.status === "pending")) return;
+	const discovery = report.staticIdentityDiscovery;
+	if (discovery && discovery.lockedAtObservedEpochMicros === null) {
+		const observations = batch.compositors ?? [];
+		const candidates = new Map(observations.map((row) => [row.paneId, { paneId: row.paneId, attachmentId: row.attachmentId }]));
+		if (observations.some((row) => !row.paneId.startsWith("main:") || !row.attachmentId || !counter(row.observedEpochMicros)) ||
+			new Set(observations.map((row) => `${row.paneId}\0${row.attachmentId}`)).size !== candidates.size || candidates.size > discovery.requiredPaneCount) {
+			report.staticCompositorIntervals.invalid++; return;
+		}
+		if (candidates.size !== discovery.requiredPaneCount) { discovery.pendingBatches++; return; }
+		report.attachmentsDuringStatic = [...candidates.values()];
+		discovery.lockedAtObservedEpochMicros = Math.min(...observations.map((row) => row.observedEpochMicros));
+	}
+	// Arrival milliseconds are only an upper-bound sanity check; interval boundaries remain native microseconds.
+	appendCompositorIntervals(report.staticCompositorIntervals, batch, arrivalEpochMillis * 1_000 + 999, report.attachmentsDuringStatic ?? []);
 }
 export interface BaselinePhaseReport {
 	status: "pending" | "completed" | "failed";
@@ -96,6 +124,9 @@ export interface BaselinePhaseReport {
 		hiddenVerified: boolean; revealedVerified: boolean;
 	} | null;
 	hiddenCompositorIntervals?: HiddenCompositorIntervals;
+	staticCompositorIntervals?: HiddenCompositorIntervals;
+	attachmentsDuringStatic?: BaselinePaneWitness[];
+	staticIdentityDiscovery?: { requiredPaneCount: number; pendingBatches: number; lockedAtObservedEpochMicros: number | null };
 	attachmentsBeforeHidden: BaselinePaneWitness[];
 	attachmentsAfterReveal: BaselinePaneWitness[];
 	error: string | null;
@@ -151,6 +182,12 @@ export async function runBaselinePhases({ config, desktop, report, panes, signal
 		}
 	};
 	try {
+		if (config.baselinePhases === BASELINE_PHASES) {
+			report.attachmentsDuringStatic = [];
+			report.staticIdentityDiscovery = { requiredPaneCount: config.baselineLayout === "dual" ? 2 : 1,
+				pendingBatches: 0, lockedAtObservedEpochMicros: null };
+			report.staticCompositorIntervals = newCompositorIntervals();
+		}
 		await span(config.baselinePhases === "animated-camera-hidden" ? "animated" : "static", () => sleep(BASELINE_PHASE_MILLIS, signal));
 		const cameraPanes = panes();
 		const required = config.baselineLayout === "dual" ? 2 : 1;
