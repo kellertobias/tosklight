@@ -1,5 +1,11 @@
 //! Dynamic source textures, separate from immutable fixture gobo artwork.
 
+mod frozen;
+#[cfg(test)]
+mod tests;
+
+use frozen::RetainedFrames;
+pub use frozen::{FrozenMedia, FrozenMediaSource};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::time::{Duration, Instant};
@@ -24,7 +30,7 @@ pub struct MediaAtlas {
     texture: wgpu::Texture,
     pub view: wgpu::TextureView,
     layers: BTreeMap<Uuid, u32>,
-    sequences: HashMap<Uuid, u64>,
+    retained: RetainedFrames,
     updated_at: HashMap<Uuid, Instant>,
     persistent: HashSet<Uuid>,
     average: HashMap<Uuid, [f32; 3]>,
@@ -73,7 +79,7 @@ impl MediaAtlas {
             texture,
             view,
             layers: BTreeMap::new(),
-            sequences: HashMap::new(),
+            retained: RetainedFrames::default(),
             updated_at: HashMap::new(),
             persistent: HashSet::new(),
             average: HashMap::new(),
@@ -100,15 +106,9 @@ impl MediaAtlas {
     }
 
     pub fn update(&mut self, queue: &wgpu::Queue, frame: &MediaFrame) -> Result<bool, String> {
-        if frame.width != EDGE
-            || frame.height != EDGE
-            || frame.rgba.len() != (EDGE * EDGE * 4) as usize
-        {
-            return Err(format!("media frame must be {EDGE}x{EDGE} RGBA8"));
-        }
-        if self.sequences.get(&frame.source_id) == Some(&frame.sequence) {
+        let Some(adopted) = self.retained.prepare(frame)? else {
             return Ok(false);
-        }
+        };
         let layer = if let Some(layer) = self.layers.get(&frame.source_id) {
             *layer
         } else {
@@ -155,7 +155,7 @@ impl MediaAtlas {
                 depth_or_array_layers: 1,
             },
         );
-        self.sequences.insert(frame.source_id, frame.sequence);
+        self.retained.adopt(adopted);
         self.updated_at.insert(frame.source_id, Instant::now());
         if frame.persistent {
             self.persistent.insert(frame.source_id);
@@ -164,6 +164,17 @@ impl MediaAtlas {
         }
         self.uploads += 1;
         Ok(true)
+    }
+
+    /// Freeze the actual invocation-time availability and adopted pixels without copying pixels.
+    /// Later live updates and hold expiry cannot mutate this snapshot.
+    pub fn snapshot(&self) -> FrozenMedia {
+        self.retained.snapshot(
+            Instant::now(),
+            &self.updated_at,
+            &self.persistent,
+            &self.flicker,
+        )
     }
 
     /// Stable identity of the currently presented live/fallback availability. It changes once
@@ -226,30 +237,4 @@ fn average_rgb(rgba: &[u8]) -> [f32; 3] {
 
 fn available(persistent: bool, updated: Option<Instant>, now: Instant) -> bool {
     persistent || updated.is_some_and(|updated| now.duration_since(updated) <= LAST_GOOD_HOLD)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn live_frames_hold_for_two_seconds_while_fallbacks_never_expire() {
-        let now = Instant::now();
-        assert!(available(false, Some(now - LAST_GOOD_HOLD), now));
-        assert!(!available(
-            false,
-            Some(now - LAST_GOOD_HOLD - Duration::from_millis(1)),
-            now
-        ));
-        assert!(available(true, Some(now - Duration::from_secs(60)), now));
-    }
-
-    #[test]
-    fn sampled_average_drives_projector_colour_without_per_pixel_gpu_lights() {
-        let pixels = [128, 64, 32, 255].repeat(128);
-        let average = average_rgb(&pixels);
-        assert!((average[0] - 128.0 / 255.0).abs() < 0.001);
-        assert!((average[1] - 64.0 / 255.0).abs() < 0.001);
-        assert!((average[2] - 32.0 / 255.0).abs() < 0.001);
-    }
 }
