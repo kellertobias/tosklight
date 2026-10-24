@@ -27,6 +27,7 @@ import { AppProvider, useApp } from "./state/AppContext";
 import { FixtureSheetBenchmarkDiagnostics } from "./windows/FixtureSheetBenchmarkDiagnostics";
 import { FixtureSheetWindow } from "./windows/FixtureSheetWindow";
 import { StageWindow } from "./windows/StageWindow";
+import { PackagedStageCaptureExercise, usePackagedStageCaptureExercise } from "./nativePackagedStageCapture";
 
 interface NativeFrameSample extends StagePaneBenchmarkSample {
 	lane: "normal" | "preload";
@@ -105,6 +106,7 @@ function retainNativeObservations(
 }
 
 interface NativeObservationContext {
+	captureExercise?: PackagedStageCaptureExercise | null;
 	phases: { current: BaselinePhaseReport | null };
 	phaseRun: { current: Promise<void> | null };
 	samplingPaused: { current: boolean };
@@ -175,7 +177,10 @@ async function consumeNativeBatch(context: NativeObservationContext, batch: Stag
 			recordedAt,
 			Object.values(observerOverflow.current).some((value) => value !== 0),
 		);
-	if (ready) await desktop.appendPackagedStageBenchmarkSample({ ...ready });
+	if (ready) {
+		context.captureExercise?.acceptReady(ready, context.config);
+		await desktop.appendPackagedStageBenchmarkSample({ ...ready });
+	}
 	const first = frames.current.length;
 	appendNativeFrames(
 		frames.current,
@@ -336,16 +341,17 @@ export function NativePackagedStageBenchmarkApp({
 }) {
 	validateBaselinePhases(config);
 	const desktop = useDesktopBridge();
+	const captureExercise = useMemo(() => config.captureExercise ? new PackagedStageCaptureExercise(desktop) : null, [config.captureExercise, desktop]);
 	const benchmarkDesktop = useMemo(
-		() => baselineStageBridge(desktop, config),
-		[desktop, config],
+		() => baselineStageBridge(captureExercise?.bridge ?? desktop, config),
+		[desktop, config, captureExercise],
 	);
 	return (
 		<DesktopProvider bridge={benchmarkDesktop}>
 			<ServerRuntime sessionRole="primary">
 				<AppProvider>
 					<PatchFeatureBoundary>
-						<NativeBenchmark config={config} />
+						<NativeBenchmark config={config} captureExercise={captureExercise} />
 						<ConnectionState />
 						<DeskLoadingOverlay />
 					</PatchFeatureBoundary>
@@ -366,7 +372,7 @@ function useNativeFrameObservations() {
 	return { hostObservations, frames, gpuObservations, activity, phases, phaseRun, samplingPaused };
 }
 
-function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
+function NativeBenchmark({ config, captureExercise }: { config: PackagedStageBenchmarkConfig; captureExercise: PackagedStageCaptureExercise | null }) {
 	const desktop = useDesktopBridge();
 	const stageMode = benchmarkStageEnabled(config);
 	const { dispatch } = useApp();
@@ -390,6 +396,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		config.baselineQuality ?? "draft",
 	);
 	const observation: NativeObservationContext = {
+		captureExercise,
 		phases, phaseRun, samplingPaused,
 		config,
 		hostObservations,
@@ -409,6 +416,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		stageBeganAt,
 	};
 	useBaselinePhaseExercise(observation, stageEnabled);
+	usePackagedStageCaptureExercise(captureExercise, stageEnabled, desktop, () => setStageEnabled(false));
 
 	useEffect(() => {
 		let cancelled = false;
@@ -460,7 +468,7 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 	}, [config, desktop, prepared]);
 
 	useEffect(() => {
-		if (!(stageMode ? stageEnabled : prepared)) return;
+		if (captureExercise || !(stageMode ? stageEnabled : prepared)) return;
 		const finish = window.setTimeout(() => {
 			void finishNativeBenchmark(observation, config, startedAt.current, () =>
 				setStageEnabled(false),
@@ -469,8 +477,27 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 			});
 		}, config.durationSeconds * 1_000);
 		return () => window.clearTimeout(finish);
-	}, [config, desktop, stageEnabled, stageMode, prepared]);
+	}, [config, desktop, stageEnabled, stageMode, prepared, captureExercise]);
 
+	useNativeStageLifecycle(config, stageMode, stageEnabled, stageBeganAt, dispatch, setLiveVisible, setSurfaceInset);
+
+	return (
+		<NativeBenchmarkSurfaces
+			config={config}
+			stageMode={stageMode}
+			stageEnabled={stageEnabled}
+			prepared={prepared}
+			liveVisible={liveVisible}
+			surfaceInset={surfaceInset}
+		/>
+	);
+}
+
+function useNativeStageLifecycle(
+    config: PackagedStageBenchmarkConfig, stageMode: boolean, stageEnabled: boolean,
+    stageBeganAt: { current: number | null }, dispatch: ReturnType<typeof useApp>["dispatch"],
+    setLiveVisible: (visible: boolean) => void, setSurfaceInset: (inset: boolean) => void,
+) {
 	useEffect(() => {
 		if (!stageMode || !stageEnabled) return;
 		stageBeganAt.current = Date.now();
@@ -503,16 +530,6 @@ function NativeBenchmark({ config }: { config: PackagedStageBenchmarkConfig }) {
 		};
 	}, [config, dispatch, stageEnabled, stageMode]);
 
-	return (
-		<NativeBenchmarkSurfaces
-			config={config}
-			stageMode={stageMode}
-			stageEnabled={stageEnabled}
-			prepared={prepared}
-			liveVisible={liveVisible}
-			surfaceInset={surfaceInset}
-		/>
-	);
 }
 
 function NativeBenchmarkSurfaces({

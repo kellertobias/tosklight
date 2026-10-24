@@ -1,3 +1,4 @@
+mod capture;
 mod display;
 mod layout;
 mod phases;
@@ -28,6 +29,8 @@ const EXPECTED_FIXTURE_RECORDS_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_
 pub(crate) struct PackagedStageBenchmarkConfig {
     #[serde(flatten)]
     baseline: layout::BaselineOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capture_exercise: Option<String>,
     duration_seconds: u64,
     control_duration_seconds: u64,
     profile: String,
@@ -78,6 +81,17 @@ pub(crate) async fn packaged_stage_benchmark_config(
                 .unwrap_or(30),
         )?;
     }
+    let capture_exercise = capture::configured(
+        std::env::var(capture::ENV).ok().as_deref(),
+        baseline.baseline_layout.as_deref(),
+        stage_enabled,
+        baseline_phases.as_deref(),
+        std::env::var("LIGHT_DESKTOP_TEST_BIND").ok().as_deref(),
+        std::env::var("LIGHT_STAGE_PACKAGED_BENCH_DISPLAY")
+            .ok()
+            .as_deref(),
+        std::env::var("TOSKLIGHT_VIZ_IMAGE_DIR").ok().as_deref(),
+    )?;
     display::place(&window, fixed_pixels).await?;
     window.show().map_err(|error| error.to_string())?;
     if !fixed_pixels {
@@ -86,6 +100,7 @@ pub(crate) async fn packaged_stage_benchmark_config(
     Ok(Some(PackagedStageBenchmarkConfig {
         baseline,
         baseline_phases,
+        capture_exercise,
         duration_seconds: std::env::var(DURATION_ENV)
             .ok()
             .and_then(|value| value.parse::<u64>().ok())

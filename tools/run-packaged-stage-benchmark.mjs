@@ -1,3 +1,4 @@
+import { captureRequested, evaluateCapture } from "./packaged-stage-capture.mjs";
 import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage-baseline.mjs";
 import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
 import { execFile, spawn } from "node:child_process";
@@ -64,6 +65,7 @@ const isolatedPort = optionalPort(
 	process.env.LIGHT_PACKAGED_STAGE_PORT,
 	"LIGHT_PACKAGED_STAGE_PORT",
 );
+const captureExercise = captureRequested(process.env, fixedBaseline, isolatedPort, profile);
 const serverOrigin = `http://127.0.0.1:${isolatedPort ?? 5000}`;
 const oscPort =
 	isolatedPort === null
@@ -104,11 +106,14 @@ const dataPath = path.join(
 	`packaged-tauri-${stamp}-data`,
 );
 const preparedPath = path.join(dataPath, "stage-profile-prepared");
+const captureOutput = path.join(dataPath, "capture-images");
+if (captureExercise) await mkdir(captureOutput, { recursive: true });
 await unlink(samplesPath).catch(() => undefined);
 await unlink(preparedPath).catch(() => undefined);
 if (isolatedPort === null) await stopExistingDevelopmentDesk();
 
 const benchmarkEnvironment = {
+	...(captureExercise ? { TOSKLIGHT_VIZ_IMAGE_DIR: captureOutput } : {}),
 	LIGHT_STAGE_PACKAGED_BENCH_REPORT: samplesPath,
 	LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS: String(durationSeconds),
 	LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS: String(
@@ -248,7 +253,17 @@ try {
 					networkCapture,
 				)
 			: null;
-	if (profile === "improved-beam-spike") {
+    if (captureExercise) {
+        benchmarkPhase = "capture-ui";
+        await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
+        await waitForRecord(samplesPath, (record) => record.kind === "stage-started", (controlDurationSeconds + 30) * 1_000);
+        const afterNoStage = await runtimeDiagnostics(prepared.session);
+        const noStageOutputWindow = await takeOutputWindow(prepared.session);
+        memoryPhase = "capture";
+        records = await waitForRecord(samplesPath, (record) => record.kind === "packaged-stage-capture-complete", 240_000);
+        runtime = { before, afterNoStage, after: await runtimeDiagnostics(prepared.session),
+            outputWindows: { noStage: noStageOutputWindow, capture: await takeOutputWindow(prepared.session) } };
+    } else if (profile === "improved-beam-spike") {
 		memoryPhase = "improved-beam-spike";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
 		records = await waitForComplete(samplesPath, 120_000);
@@ -354,6 +369,10 @@ if (benchmarkFailure) {
 		scene,
 		processMemory,
 	);
+	if (captureExercise) result = { ...result, kind: "packaged-stage-capture-verification", captureVerified: false, acceptanceGateEnforced: false, baselineMeasurementReady: false };
+} else if (captureExercise) {
+    result = await evaluateCapture(records.findLast((record) => record.kind === "packaged-stage-capture-complete"), captureOutput,
+        { samplesPath, profile, scene, runtime, processMemory });
 } else {
 	const terminalError = records.findLast((record) => record.kind === "error");
 	if (terminalError)
@@ -383,10 +402,10 @@ if (benchmarkFailure) {
 				);
 }
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
-await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
+if (!captureExercise) await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
-console.log(`Updated ${canonicalReportPath}`);
-if (!(fixedBaseline ? result.baselineMeasurementReady : result.acceptanceGateEnforced)) {
+if (!captureExercise) console.log(`Updated ${canonicalReportPath}`);
+if (!(captureExercise ? result.captureVerified : fixedBaseline ? result.baselineMeasurementReady : result.acceptanceGateEnforced)) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
 	process.exitCode = 1;
@@ -2008,7 +2027,12 @@ function launchPackagedApplication(application, environment) {
 					"w",
 				)
 			: "ignore";
-	return spawn(application.executable, [], {
+	// Process-local NSArgumentDomain flags avoid a macOS crash-restoration modal for a
+	// directly launched isolated bundle. Do not change the user's persistent defaults.
+	const launchArguments = process.platform === "darwin" && application.direct
+		? ["-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO"]
+		: [];
+	return spawn(application.executable, launchArguments, {
 		cwd: repositoryRoot,
 		env: { ...process.env, ...environment },
 		stdio: output === "ignore" ? "ignore" : ["ignore", output, output],

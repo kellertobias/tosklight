@@ -33,6 +33,8 @@ export interface PackagedStageBenchmarkConfig {
 	baselineQuality?: "draft" | "standard" | "high" | "ultra";
 	baselineView?: "full_3d" | "lines_3d";
 	baselinePhases?: "static-camera-hidden" | "animated-camera-hidden" | null;
+	/** Explicit isolated verification; never a performance acceptance run. */
+	captureExercise?: "live-ultra";
 	durationSeconds: number;
 	controlDurationSeconds: number;
 	profile: string;
