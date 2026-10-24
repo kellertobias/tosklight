@@ -616,3 +616,42 @@ fn fused_composite_matches_legacy_and_preserves_lasers_and_clear_air() {
         "laser path is exactly the established path"
     );
 }
+
+#[test]
+#[ignore = "requires explicitly serialized native GPU acceptance"]
+fn tighter_draft_cone_culling_preserves_receiver_pixels_and_high_index_lights() {
+    let mut renderer = Renderer::headless(513, 289).expect("requested native GPU required");
+    let (mut scene, mut values, mut view) = rig();
+    let emitter = scene.emitters[0].clone();
+    scene.emitters = vec![emitter; 300];
+    values.emitters = vec![
+        EmitterValues {
+            intensity: 0.0002,
+            colour: [1.0, 0.0, 0.0],
+            ..Default::default()
+        };
+        300
+    ];
+    values.emitters[299].intensity = 0.8;
+    values.emitters[299].colour = [0.0, 0.0, 1.0];
+    values.atmosphere.density = 0.1;
+    // Default production Draft specialization is exercised before installing either override.
+    let tight = capture(&mut renderer, &scene, &values, &view);
+    let rgb = receiver(&tight, &scene, &view, Vec3::ZERO);
+    assert!(
+        rgb[2] > rgb[0] * 3.0 && rgb[2] > 20.0,
+        "high-index blue lamp lost: {rgb:?}"
+    );
+    renderer.force_draft_cone_cull_for_test(false);
+    let original = capture(&mut renderer, &scene, &values, &view);
+    assert_composite_rounding_only(&tight, &original);
+    for position in [Vec3::new(1.0, 4.1, 1.0), Vec3::new(0.0, 2.0, 1.0)] {
+        view.camera.position = position;
+        view.camera.target = Vec3::ZERO;
+        renderer.force_draft_cone_cull_for_test(true);
+        let tight = capture(&mut renderer, &scene, &values, &view);
+        renderer.force_draft_cone_cull_for_test(false);
+        let original = capture(&mut renderer, &scene, &values, &view);
+        assert_composite_rounding_only(&tight, &original);
+    }
+}

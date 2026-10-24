@@ -94,6 +94,7 @@ fn range_taper_quadrature_matches_lens_centred_reference_with_virtual_apex_offse
 fn dedicated_draft_shaders_parse_and_validate_without_gpu() {
     let common = include_str!("../../shaders/common.wgsl");
     for (name, source) in [
+        ("cull", include_str!("../../shaders/cull.wgsl").to_owned()),
         (
             "surface",
             format!(

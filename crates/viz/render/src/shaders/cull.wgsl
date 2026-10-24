@@ -36,6 +36,8 @@ struct Light {
 @group(0) @binding(2) var<storage, read_write> tile_counts: array<atomic<u32>>;
 @group(0) @binding(3) var<storage, read_write> tile_lights: array<u32>;
 
+override DRAFT_CONE_BOUNDS: bool = false;
+
 const TILE_SIZE: u32 = 16u;
 const MAX_LIGHTS_PER_TILE: u32 = 256u;
 const WORKGROUP: u32 = 64u;
@@ -71,13 +73,35 @@ fn light_bounds(light: Light) -> ScreenBounds {
         radius = range * sin_outer;
     }
 
+    var world_min = centre - vec3<f32>(radius);
+    var world_max = centre + vec3<f32>(radius);
+    let axis_length = length(light.direction_cos_outer.xyz);
+    // Draft surface lighting rejects both distance>range and dot(ray,axis)<=cos_outer,
+    // before evaluating any optics. Thus both enclosing AABBs may be intersected safely.
+    // Other tiers retain their existing sphere bounds, including all malformed/wide cases.
+    if (DRAFT_CONE_BOUNDS && cos_outer >= 0.5 && cos_outer <= 1.0
+        && axis_length >= 0.9999 && axis_length <= 1.0001
+        && range > 0.0 && range < 1e10
+        && all(abs(light.position_range.xyz) < vec3<f32>(1e10))) {
+        let axis = light.direction_cos_outer.xyz / axis_length;
+        let effective_cos = light.direction_cos_outer.w / axis_length;
+        if (effective_cos >= 0.5 && effective_cos <= 1.0) {
+            let end = light.position_range.xyz + axis * range;
+            let radial = range * sqrt(max(1.0 - effective_cos * effective_cos, 0.0)) / effective_cos;
+            let extent = radial * sqrt(max(vec3<f32>(1.0) - axis * axis, vec3<f32>(0.0)));
+            let padding = vec3<f32>(max(range * 1e-4, 1e-4));
+            world_min = max(world_min, min(light.position_range.xyz, end - extent) - padding);
+            world_max = min(world_max, max(light.position_range.xyz, end + extent) + padding);
+        }
+    }
+
     for (var corner: u32 = 0u; corner < 8u; corner = corner + 1u) {
         let sign = vec3<f32>(
             select(-1.0, 1.0, (corner & 1u) != 0u),
             select(-1.0, 1.0, (corner & 2u) != 0u),
             select(-1.0, 1.0, (corner & 4u) != 0u),
         );
-        let world = vec4<f32>(centre + sign * radius, 1.0);
+        let world = vec4<f32>(select(world_min, world_max, sign > vec3<f32>(0.0)), 1.0);
         let clip = globals.view_projection * world;
         if (clip.w <= 0.0001) {
             // Straddles the camera plane: treat as covering the whole screen.

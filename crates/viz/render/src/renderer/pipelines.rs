@@ -130,6 +130,7 @@ impl Pipelines {
         modules: &Modules,
         multisample: wgpu::MultisampleState,
         surface_format: wgpu::TextureFormat,
+        draft_mode: bool,
     ) -> Self {
         Self {
             surface: surface_pipeline(device, pipeline_layouts, modules, multisample),
@@ -138,7 +139,7 @@ impl Pipelines {
             beam: beam_pipeline(device, pipeline_layouts, modules, multisample),
             laser: laser_pipeline(device, pipeline_layouts, modules, multisample),
             shadow: shadow_pipeline(device, pipeline_layouts, modules),
-            cull: cull_pipeline(device, pipeline_layouts, modules),
+            cull: cull_pipeline(device, pipeline_layouts, modules, draft_mode),
             extract: fullscreen_pipeline(
                 device,
                 "viz bloom extract",
@@ -423,6 +424,7 @@ fn cull_pipeline(
     device: &wgpu::Device,
     layouts: &PipelineLayouts,
     modules: &Modules,
+    draft_mode: bool,
 ) -> wgpu::ComputePipeline {
     let (cull_pipeline_layout, cull_module) = (&layouts.cull, &modules.cull);
 
@@ -431,7 +433,10 @@ fn cull_pipeline(
         layout: Some(cull_pipeline_layout),
         module: cull_module,
         entry_point: Some("cull_main"),
-        compilation_options: Default::default(),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &[("DRAFT_CONE_BOUNDS", if draft_mode { 1.0 } else { 0.0 })],
+            ..Default::default()
+        },
         cache: None,
     })
 }
@@ -536,4 +541,32 @@ mod tests {
             "each beam must converge instead of adding unbounded energy"
         );
     }
+}
+
+#[cfg(test)]
+pub(in crate::renderer) fn test_cone_cull_pipeline(
+    device: &wgpu::Device,
+    bindings: &wgpu::BindGroupLayout,
+    enabled: bool,
+) -> wgpu::ComputePipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Draft cull comparison layout"),
+        bind_group_layouts: &[Some(bindings)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Draft cull comparison shader"),
+        source: wgpu::ShaderSource::Wgsl(CULL_WGSL.into()),
+    });
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("Draft cull comparison"),
+        layout: Some(&layout),
+        module: &shader,
+        entry_point: Some("cull_main"),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &[("DRAFT_CONE_BOUNDS", if enabled { 1.0 } else { 0.0 })],
+            ..Default::default()
+        },
+        cache: None,
+    })
 }

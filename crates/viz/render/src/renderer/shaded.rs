@@ -136,6 +136,7 @@ impl ShadedRenderer {
             &modules,
             multisample,
             context.format,
+            draft_mode,
         );
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
