@@ -63,7 +63,7 @@ export function evaluateBaselinePhases(complete, configuration, matchingRows) {
   });
   return { measurementStatus: failures.length ? "incomplete" : "ready-for-review", evidence, summaries, failures,
     steadyHiddenCompositor: evaluateSteadyHiddenCompositor(evidence),
-    steadyStaticCompositor: evaluateSteadyStaticCompositor(evidence) };
+    steadyStaticCompositor: evaluateSteadyStaticCompositor(evidence, complete.nativeStage?.heartbeats ?? []) };
 }
 
 /** Exclude unknown startup spans and the first250ms after verified native hide. */
@@ -82,10 +82,32 @@ export function evaluateSteadyHiddenCompositor(evidence) {
   return evaluateSteadyCompositorIntervals(retained, expected, visibility.hiddenEpochMicros, visibility.revealedEpochMicros);
 }
 
-export function evaluateSteadyStaticCompositor(evidence) {
+export function evaluateSteadyStaticCompositor(evidence, heartbeats = []) {
   const phase = evidence?.rows?.find((row) => row.phase === "static" && row.status === "completed");
-  return evaluateSteadyCompositorIntervals(evidence?.staticCompositorIntervals, evidence?.attachmentsDuringStatic ?? [],
-    phase?.startedEpochMillis * 1_000, phase?.finishedEpochMillis * 1_000);
+  const expected = evidence?.attachmentsDuringStatic ?? [];
+  const unverified = (reason) => ({ status: "unverified", reason,
+    boundary: "Static needs a healthy unchanged-state idle witness per owned lane; missing evidence never establishes zero work" });
+  if (!phase || !expected.length || expected.length > 2 || new Set(sorted(expected)).size !== expected.length)
+    return unverified("Static phase or complete owned identities are missing");
+  const lanes = [];
+  for (const pane of expected) {
+    const witness = heartbeats.filter((beat) => beat.paneId === pane.paneId && beat.attachmentId === pane.attachmentId &&
+      beat.attached === true && beat.visible === true && beat.drawHealthy === true && beat.idleUnchanged === true &&
+      [beat.sequence, beat.sourceFrame, beat.lastPresentedSequence, beat.epochMicros, beat.receivedEpochMicros].every((value) => Number.isSafeInteger(value) && value > 0) &&
+      beat.epochMicros >= phase.startedEpochMillis * 1_000 && beat.epochMicros <= phase.finishedEpochMillis * 1_000 &&
+      beat.receivedEpochMicros >= beat.epochMicros && beat.receivedEpochMicros <= phase.finishedEpochMillis * 1_000)
+      .sort((a, b) => a.receivedEpochMicros - b.receivedEpochMicros)[0];
+    if (!witness) return unverified(`No healthy native idleUnchanged witness for ${pane.paneId}`);
+    const result = evaluateSteadyCompositorIntervals(evidence.staticCompositorIntervals, [pane],
+      witness.receivedEpochMicros, phase.finishedEpochMillis * 1_000);
+    if (!result.lanes?.length) return unverified(result.reason);
+    lanes.push({ ...result.lanes[0], idleWitness: witness, eligibleStartEpochMicros: result.eligibleStartEpochMicros });
+  }
+  return { status: lanes.every((lane) => lane.submissions === 0 && lane.acquireWallMicros === 0)
+      ? "zero-submissions-and-acquire-wall-observed" : "work-observed",
+    settlingExcludedMicros: 250_000, endEpochMicros: phase.finishedEpochMillis * 1_000, lanes,
+    zeroAcquireAdmissionsObserved: lanes.every((lane) => lane.potentialAcquireAttemptsUpperBound === 0),
+    boundary: "Per-lane first healthy unchanged-state idle heartbeat arrival plus 250ms; wholly interior native intervals and actual coverage only. No GPU utilization or total GPU-time claim." };
 }
 
 function evaluateSteadyCompositorIntervals(retained, expected, start, finish) {

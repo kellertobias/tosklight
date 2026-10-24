@@ -99,16 +99,19 @@ test("steady static uses native interior spans, separate identities, and actual 
     row.counters.cleanSkips = row.counters.hiddenSkips;
     row.counters.hiddenSkips = 0;
   }
-  const report = evaluateSteadyStaticCompositor(evidence);
+  const beats = evidence.attachmentsDuringStatic.map((pane) => ({ ...pane, attached: true, visible: true,
+    idleUnchanged: true, drawHealthy: true, sequence: 1, sourceFrame: 1, lastPresentedSequence: 1,
+    epochMicros: 100_010_000, receivedEpochMicros: 100_020_000 }));
+  const report = evaluateSteadyStaticCompositor(evidence, beats);
   assert.equal(report.status, "zero-submissions-and-acquire-wall-observed");
   assert.equal(report.zeroAcquireAdmissionsObserved, true);
-  assert.equal(report.eligibleStartEpochMicros, 100_250_000);
+  assert.equal(report.lanes[0].eligibleStartEpochMicros, 100_270_000);
   assert.ok(report.lanes.every((lane) => lane.coveredMicros === 200_000 && lane.cleanSkips === 8 && lane.hiddenSkips === 0));
   assert.ok(report.boundary.includes("No GPU utilization"));
   evidence.staticCompositorIntervals.rows[2].counters.submissions++;
-  assert.equal(evaluateSteadyStaticCompositor(evidence).status, "work-observed");
+  assert.equal(evaluateSteadyStaticCompositor(evidence, beats).status, "work-observed");
   evidence.staticCompositorIntervals.overflow++;
-  assert.equal(evaluateSteadyStaticCompositor(evidence).status, "unverified");
+  assert.equal(evaluateSteadyStaticCompositor(evidence, beats).status, "unverified");
   assert.equal(evaluateSteadyStaticCompositor(fixture().nativeStage.phases).status, "unverified");
 });
 
@@ -119,4 +122,28 @@ test("static identity discovery without a known positive native interval cannot 
     ...pane, startObservedEpochMicros: null, endObservedEpochMicros: 100_800_000, counters: { submissions: 0 },
   })) };
   assert.equal(evaluateSteadyStaticCompositor(evidence).status, "unverified");
+});
+
+test("static cold work is excluded only after each lane genuinely becomes idle plus 250ms", () => {
+  const evidence = interiorEvidence();
+  evidence.staticCompositorIntervals = evidence.hiddenCompositorIntervals;
+  evidence.attachmentsDuringStatic = evidence.attachmentsBeforeHidden;
+  evidence.rows[0].startedEpochMillis = 120_000;
+  evidence.rows[0].finishedEpochMillis = 130_000;
+  const beats = evidence.attachmentsDuringStatic.map((pane) => ({ ...pane, attached: true, visible: true,
+    idleUnchanged: true, drawHealthy: true, sequence: 2, sourceFrame: 2, lastPresentedSequence: 2,
+    epochMicros: 120_200_000, receivedEpochMicros: 120_240_000 }));
+  // Startup and early settling spans contain work. Add a known span after the real idle boundary.
+  for (const pane of evidence.attachmentsDuringStatic) {
+    const template = evidence.staticCompositorIntervals.rows.find((row) => row.paneId === pane.paneId && row.startObservedEpochMicros === 120_400_000);
+    evidence.staticCompositorIntervals.rows.push({ ...structuredClone(template), startObservedEpochMicros: 120_500_000, endObservedEpochMicros: 120_600_000 });
+  }
+  const result = evaluateSteadyStaticCompositor(evidence, beats);
+  assert.equal(result.status, "zero-submissions-and-acquire-wall-observed");
+  assert.ok(result.lanes.every((lane) => lane.eligibleStartEpochMicros === 120_490_000 && lane.coveredMicros === 100_000 && lane.idleWitness.sourceFrame === 2));
+  for (const field of ["idleUnchanged", "drawHealthy", "visible", "attached"]) {
+    const bad = structuredClone(beats); bad[1][field] = false;
+    assert.equal(evaluateSteadyStaticCompositor(evidence, bad).status, "unverified");
+  }
+  assert.equal(evaluateSteadyStaticCompositor(evidence, beats.slice(0, 1)).status, "unverified");
 });
