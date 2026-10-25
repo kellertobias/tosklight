@@ -33,6 +33,38 @@ pub const OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS: [u64; 20] = [
     9_007_199_254_740_991,
 ];
 
+/// TL-872: optional finer runtime measurements; the original histogram remains unchanged.
+pub const OUTPUT_FINE_TICK_DURATION_BUCKET_BOUNDS_MICROS: [u64; 133] = fine_tick_bounds();
+const fn fine_tick_bounds() -> [u64; 133] {
+    let mut bounds = [0; 133];
+    let mut index = 0;
+    while index < 128 {
+        bounds[index] = (index as u64 + 1) * 250;
+        index += 1;
+    }
+    bounds[128] = 48_000;
+    bounds[129] = 64_000;
+    bounds[130] = 100_000;
+    bounds[131] = 1_000_000;
+    bounds[132] = 9_007_199_254_740_991;
+    bounds
+}
+
+/// Fixed storage is cloned with health, with no allocation or schema change on the output lane.
+#[derive(Clone, Debug)]
+struct FineTickDurationCounts {
+    counts: [u64; 133],
+    overflowed: bool,
+}
+impl Default for FineTickDurationCounts {
+    fn default() -> Self {
+        Self {
+            counts: [0; 133],
+            overflowed: false,
+        }
+    }
+}
+
 /// Frame-rate thresholds an operator watches for dropped output cadence.
 ///
 /// The bounds split the rate axis into disjoint bands, so a delivered frame is counted exactly
@@ -97,6 +129,9 @@ pub struct OutputHealth {
     pub last_tick_micros: u64,
     pub maximum_tick_micros: u64,
     pub tick_duration_bucket_counts: [u64; OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS.len()],
+    /// Ephemeral measurement only: legacy serialized health has no complete fine history.
+    #[serde(skip)]
+    fine_tick_duration_counts: FineTickDurationCounts,
     pub scheduler_utilization: f32,
     /// Slowest measured frame rate over the last [`OUTPUT_RECENT_WINDOW`].
     pub recent_frame_hz_minimum: f32,
@@ -124,6 +159,38 @@ pub struct OutputHealth {
 }
 
 impl OutputHealth {
+    pub(crate) fn record_fine_tick_duration(&mut self, tick_micros: u64) {
+        let bucket = if tick_micros <= 32_000 {
+            tick_micros.saturating_sub(1) as usize / 250
+        } else {
+            128 + OUTPUT_FINE_TICK_DURATION_BUCKET_BOUNDS_MICROS[128..]
+                .partition_point(|bound| *bound < tick_micros)
+                .min(4)
+        };
+        let count = &mut self.fine_tick_duration_counts.counts[bucket];
+        if let Some(next) = count.checked_add(1) {
+            *count = next;
+        } else {
+            self.fine_tick_duration_counts.overflowed = true;
+        }
+    }
+
+    /// Absence is explicit for empty, restored legacy, overflowed, or partial histories.
+    /// This is called on a snapshot, outside the scheduler's health lock.
+    pub fn complete_fine_tick_duration_counts(&self) -> Option<(&[u64; 133], u64)> {
+        let total = |counts: &[u64]| {
+            counts
+                .iter()
+                .try_fold(0u64, |sum, count| sum.checked_add(*count))
+        };
+        if self.fine_tick_duration_counts.overflowed {
+            return None;
+        }
+        let fine = total(&self.fine_tick_duration_counts.counts)?;
+        let coarse = total(&self.tick_duration_bucket_counts)?;
+        (fine > 0 && fine == coarse).then_some((&self.fine_tick_duration_counts.counts, fine))
+    }
+
     /// Records one delivered frame.
     ///
     /// Recording stays O(1) amortized because it runs on the output thread for every frame. The
@@ -194,6 +261,10 @@ impl OutputHealth {
         };
     }
 }
+
+#[cfg(test)]
+#[path = "health_fine_histogram_tests.rs"]
+mod fine_histogram_tests;
 
 #[derive(Clone, Debug, Default)]
 struct RecentOutputWindow {

@@ -215,6 +215,7 @@ fn record_tick_duration(health: &Mutex<OutputHealth>, tick_started: Instant, int
         .partition_point(|upper_bound| *upper_bound < tick_micros);
     let bucket = bucket.min(current.tick_duration_bucket_counts.len() - 1);
     current.tick_duration_bucket_counts[bucket] += 1;
+    current.record_fine_tick_duration(tick_micros);
     current.scheduler_utilization =
         (tick_started.elapsed().as_secs_f64() / interval.as_secs_f64()) as f32;
 }

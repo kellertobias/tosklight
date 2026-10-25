@@ -579,6 +579,7 @@ fn runtime(config: &Config) -> Vec<String> {
         RuntimeRevisionCopySource::decl(config),
         RuntimeShowEntry::decl(config),
         RuntimeOutputHealth::decl(config),
+        OutputTickDurationHistogram::decl(config),
         RuntimeChangeLeadTime::decl(config),
         RuntimeChangeLeadTimeUpdateRequest::decl(config),
         RuntimeChangeLeadTimeUpdateOutcome::decl(config),

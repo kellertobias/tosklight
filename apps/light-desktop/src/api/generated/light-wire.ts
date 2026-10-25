@@ -1465,7 +1465,7 @@ export type RuntimeControlDesk = { show_compact_encoders: boolean, hardware_led_
 export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { is_base_show: boolean, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
-export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
+export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], tick_duration_fine_histogram?: OutputTickDurationHistogram, scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
 /**
  * Inclusive upper bounds, in hertz, of the frame-rate bands below.
  */
@@ -1478,6 +1478,7 @@ frame_rate_band_counts: number[],
  * TL-659: how long started Cues and Dynamics take to reach the wire.
  */
 change_lead: RuntimeChangeLeadTime, };
+export type OutputTickDurationHistogram = { schema_version: number, bounds_micros: number[], counts: number[], sample_count: number, };
 export type RuntimeChangeLeadTime = {
 /**
  * Longest lead since the desk started, the show opened, or the operator reset it; `null`
