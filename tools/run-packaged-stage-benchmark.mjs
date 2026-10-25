@@ -1,3 +1,4 @@
+import { queueStageOutputSample } from "./stage-output-sampling.mjs";
 import { captureRequested, evaluateCapture } from "./packaged-stage-capture.mjs";
 import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage-baseline.mjs";
 import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
@@ -180,25 +181,26 @@ const collectMemory = async () => {
 const memorySampler = setInterval(() => void collectMemory(), 1_000);
 // Show switches restart the output scheduler's cumulative counters, so the paired windows are
 // accumulated from one-second observations instead of subtracting their end snapshots.
+// The saved TL-852 CPU sample showed full diagnostics serializing programmer definitions.
+// Counter-only observations use the existing performance endpoint; full before/after diagnostic
+// snapshots stay below. This reduces observer overhead, not a proven Stage cost or an old failure.
 let outputAccumulator;
 let outputSampler;
 let outputSampling = Promise.resolve();
 const sampleOutputCounters = (session) => {
-	outputSampling = outputSampling
-		.then(async () => {
-			const diagnostics = await runtimeDiagnostics(session);
-			outputAccumulator.observe(diagnostics.output);
-		})
-		.catch(() => undefined);
+	outputSampling = queueStageOutputSample(
+		outputSampling, requestJson, session,
+		(output) => outputAccumulator.observe(output),
+	).catch(() => undefined);
 	return outputSampling;
 };
 // The window closes on a snapshot read in the same queue as the observations: a snapshot read
 // before an observation still in flight is older than it and would look like a counter reset.
 const takeOutputWindow = async (session) => {
-	const taken = outputSampling.then(async () => {
-		const diagnostics = await runtimeDiagnostics(session);
-		return outputAccumulator.take(diagnostics.output);
-	});
+	const taken = queueStageOutputSample(
+		outputSampling, requestJson, session,
+		(output) => outputAccumulator.take(output),
+	);
 	outputSampling = taken.catch(() => undefined);
 	return taken;
 };
