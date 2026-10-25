@@ -126,7 +126,7 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
                              "goToken": runToken, "maximumFrames": 60, "waitLimitSeconds": 20,
                              "renderLimitSeconds": 15, "drainLimitSeconds": 2, "hardLifetimeSeconds": 50,
                              "stopFile": options.stop.map { $0 as Any } ?? NSNull(),
-                             "displaySyncEnabled": layer.displaySyncEnabled])
+                             "displaySyncEnabled": layer.displaySyncEnabled, "windowVisibility": visibility()])
             guard !finished else { return }
             let ready = try exclusiveFile(options.ready)
             try ready.write(contentsOf: JSONSerialization.data(withJSONObject: [
@@ -165,6 +165,8 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.title = "Owned Stage presentation calibration"
         window.isReleasedWhenClosed = false
         window.delegate = self
+        // Only this verified internal probe floats; never activate or request key/main focus.
+        window.level = .floating
         guard let content = window.contentView else { throw ProbeError.message("Missing content view") }
         layer = CAMetalLayer()
         layer.device = device
@@ -180,8 +182,19 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         layer.contentsScale = screen.backingScaleFactor
         layer.drawableSize = content.convertToBacking(content.bounds).size
         guard contained() else { throw ProbeError.message("Hidden internal screen containment verification failed") }
-        window.orderFront(nil)
+        CATransaction.flush()
+        window.orderFrontRegardless()
+        CATransaction.flush()
         guard contained() else { throw ProbeError.message("Shown window escaped internal screen") }
+    }
+    func visibility() -> [String: Any] {
+        guard let window else { return ["created": false] }
+        return ["created": true, "visible": window.isVisible,
+                "occlusionVisible": window.occlusionState.contains(.visible),
+                "onActiveSpace": window.isOnActiveSpace, "key": window.isKeyWindow,
+                "main": window.isMainWindow, "applicationActive": NSApplication.shared.isActive,
+                "windowNumber": window.windowNumber, "windowLevel": window.level.rawValue,
+                "framePoints": [window.frame.origin.x, window.frame.origin.y, window.frame.width, window.frame.height]]
     }
     func contained() -> Bool {
         guard let screen = window?.screen,
@@ -259,7 +272,8 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 "gpuEndHostSeconds": completed.gpuEndTime, "error": completed.error.map(String.init(describing:)) ?? ""]
             DispatchQueue.main.async { self?.completed(fields) }
         }
-        record("submit", ["identity": identity, "acquireAnchor": acquire, "commitAnchor": anchor()])
+        record("submit", ["identity": identity, "acquireAnchor": acquire, "commitAnchor": anchor(),
+                          "windowVisibility": visibility()])
         guard !finished else { return }
         if let requested { command.present(drawable, atTime: requested) } else { command.present(drawable) }
         command.commit()
@@ -299,7 +313,8 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         finishing = true
         record("summary", ["reason": reason, "submitted": sequence, "callbacks": callbacks,
             "positivePresentedTimes": positivePresentations, "completions": completions,
-            "pendingUnknown": outstanding, "exitCode": code,
+            "pendingUnknown": outstanding, "exitCode": code, "windowVisibility": visibility(),
+            "pendingPresentedHostSecondsAtShutdown": pending.map { $0.presentedTime as Any } ?? NSNull(),
             "boundary": "Calibration only; no inferred trace/display equivalence or Stage FPS acceptance"])
         finished = true
         exitCode = loggingFailed ? 1 : code
@@ -309,7 +324,12 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window?.close()
         try? log.synchronize()
         try? log.close()
-        NSApplication.shared.stop(nil)
+        // NSApplication.stop can leave this command-line AppKit run loop waiting for an event.
+        // This owned CLI probe has already flushed/closed its only log and hidden its window.
+        Darwin.exit(exitCode)
+    }
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        record("occlusion-state-changed", ["windowVisibility": visibility()])
     }
     func windowDidMove(_ notification: Notification) { if !contained() { finish("window-moved-outside-internal", code: 1) } }
     func windowDidChangeScreen(_ notification: Notification) { if !contained() { finish("screen-changed", code: 1) } }
