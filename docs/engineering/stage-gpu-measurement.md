@@ -120,3 +120,55 @@ and cleaned its own children. Both app/server PIDs and loopback 5162 were verifi
 absent afterward. This is an automation-service limitation; physical capture
 acceptance remains open. Existing successful packaged/native image evidence
 must not be relabeled as physical input coverage.
+
+
+## Draft/Lines diagnostic sampling cadence (TL-875)
+
+Draft and Lines now admit a GPU timing sample at most once per second, with one
+frame-start decision shared by every pass. Rendering still follows its existing
+cadence. Outstanding readbacks, slot completion and nonblocking device polls
+continue between timing samples. Standard, High and Ultra retain their previous
+every-available-frame timing policy; Ultra's adaptive input is unchanged.
+
+In a benchmark with an absolute native report path, set
+`LIGHT_STAGE_GPU_TIMING_CADENCE=full` or `1hz` explicitly. Other values fail with
+an actionable error. Without a benchmark report the override is ignored.
+Fixed-layout runner configuration retains the **requested** override; it does
+not prove that an older binary applied it. For a paired comparison, retain native
+startup policy witnesses and actual sampling coverage, and match the declared
+policy. An absent historical field means unknown, rather than today's default.
+
+Actual helper coverage is available through the existing opt-in pass-profile
+JSONL `timing_coverage` field. Native compositor drains include `timingCoverage`;
+the frontend retains the latest cumulative snapshot per pane/attachment, bounded
+to 64 owners. Repeated drains are not added together. Coverage distinguishes
+completed readbacks from usable timestamp samples; inconsistent/regressing
+snapshots fail validation. Historical missing coverage remains unavailable.
+These are owner-lifetime timing counters, including different quality modes if
+the operator switched views. They are not displayed-frame counts or a per-mode
+rate unless the measured condition stayed fixed.
+
+## First whole-owned-GPU before/after diagnostic
+
+Receipt: `.artifacts/performance/stage/tl874-before-after-owned-gpu-diagnostic.json`.
+The frozen before build and the cbcbd612a-era after build each ran the same
+animated Stage-500 program, dual 1920×540 physical panes on the internal display,
+with requested helper 60 Hz. Each retained an owned 10-second Metal trace and
+exact app/server/two-helper hashes and PID/start identity at both endpoints.
+Both collectors succeeded; both runners retained their output comparison failures.
+This comparison predates TL-875's sampling changes.
+
+In the common relative [1,10)-second trace interval, combined owned Active
+execution union was 986.627 ms per wall second before and 684.120 after, an
+observed 30.66% reduction. Per-lane whole-second helper submission means rose
+from 34.25/34.875 to 60.0/60.125. The intervals exclude WindowServer and other
+processes and account for overlapping GPU channels/processes through union.
+Channel sums, sparse frame timings and summed process totals are different metrics.
+
+**This is not the 70% matched-rate acceptance result.** Achieved cadence differs;
+individual animated poses, thermal state and background load are not proven
+identical. One nine-second interval per build does not establish sustained
+behavior or power/energy savings. Parent CA handler IDs overlap across layers;
+no exact per-pane join was found, so the roughly 119 combined positive events/s
+cannot certify per-pane displayed FPS. Raw traces remain `gpu-trace-WfrqWt`
+(before) and `gpu-trace-uUxaUM` (after); limitations and failures are retained.

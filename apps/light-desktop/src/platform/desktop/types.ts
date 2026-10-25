@@ -145,6 +145,19 @@ export interface StagePaneBenchmarkHeartbeat {
 	visible: boolean;
 }
 
+/** Cumulative owner-lifetime timing admission; these are not displayed-frame counters. */
+export interface StageGpuTimingCoverage {
+	diagnosticCadence: "oneHz" | "full";
+	benchmarkOverride: boolean;
+	elapsedMillis: number;
+	framesConsidered: number;
+	framesAdmitted: number;
+	busySkips: number;
+	cadenceSkips: number;
+	completedReadbacks: number;
+	validSamples: number;
+}
+
 export interface StageCompositorObservation {
 	paneId: string;
 	attachmentId: string;
@@ -156,6 +169,8 @@ export interface StageCompositorObservation {
 		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuInvalidSamples: number; gpuSampleOverflow: number;
 		cpuWallMicros: number; acquireWallMicros: number;
 		gpuTimingUnavailable: string | null; actualDisplayedFrames: null;
+		/** Absent in historical native reports; never infer zero or an effective policy. */
+		timingCoverage?: StageGpuTimingCoverage | null;
 		measurementBoundary: string;
 		gpuSamples: Array<{
 			sampleId: number; submissionId: number; submittedEpochMicros: number; gpuMicros: number;

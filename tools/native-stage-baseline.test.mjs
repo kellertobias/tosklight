@@ -130,3 +130,20 @@ test("long native scope must stay declared and cover each lane throughout Stage"
   complete.nativeStage.gpuObservations.rows = rows.filter((row) => !row.followPreload || row.windowEpochSecond < 1900 || row.windowEpochSecond > 1910);
   assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
 });
+
+
+test("explicit GPU timing cadence is retained without claiming native application or default policy", () => {
+  for (const cadence of ["full", "1hz"]) {
+    const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_GPU_TIMING_CADENCE: cadence });
+    assert.equal(configuration.gpuTimingCadenceRequested, cadence);
+    const report = evaluateNativeBaseline({ nativeStage: { gpuObservations: { rows: [], compositor: { rows: [], totals: {} } } } }, { configuration });
+    assert.equal(report.configuration.gpuTimingCadenceRequested, cadence);
+    assert.equal(report.baselineMeasurementReady, false);
+    assert.equal(report.acceptanceGateEnforced, false);
+  }
+  assert.equal(Object.hasOwn(readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single" }), "gpuTimingCadenceRequested"), false);
+  for (const invalid of ["", "0", "1HZ", " full", "half"]) {
+    assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual", LIGHT_STAGE_GPU_TIMING_CADENCE: invalid }), /GPU timing cadence/);
+  }
+  assert.throws(() => readNativeBaselineConfig({ LIGHT_STAGE_GPU_TIMING_CADENCE: "full" }), /fixed layout/);
+});

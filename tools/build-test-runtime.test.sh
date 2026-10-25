@@ -77,6 +77,7 @@ printf 'PASS server submission carries explicit HTTP, OSC, data and fixture path
 
 # Start deterministically even when the test caller has benchmark controls exported.
 for name in $(compgen -A variable LIGHT_STAGE_PACKAGED_BENCH_); do unset "$name"; done
+unset LIGHT_STAGE_GPU_TIMING_CADENCE || true
 CALLS=()
 light_open_desktop_test_app
 [[ "${CALLS[*]}" == *'open -n --env LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004 --env LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000 --env LIGHT_DESKTOP_TEST_DATA_DIR='* ]]
@@ -100,6 +101,7 @@ LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW=0
 LIGHT_STAGE_PACKAGED_BENCH_QUALITY=draft
 LIGHT_STAGE_PACKAGED_BENCH_VIEW=lines3d
 LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ=60
+LIGHT_STAGE_GPU_TIMING_CADENCE=full
 LIGHT_STAGE_PACKAGED_BENCH_UNLISTED='literal $(do-not-execute)'
 CALLS=()
 light_open_desktop_test_app
@@ -108,7 +110,7 @@ has_open_arg() {
   for argument in "${OPEN_ARGS[@]}"; do [[ "$argument" == "$1" ]] && return 0; done
   return 1
 }
-[[ ${#OPEN_ARGS[@]} == 34 ]]
+[[ ${#OPEN_ARGS[@]} == 36 ]]
 has_open_arg "LIGHT_STAGE_PACKAGED_BENCH_REPORT=$LIGHT_STAGE_PACKAGED_BENCH_REPORT"
 has_open_arg LIGHT_STAGE_PACKAGED_BENCH_DISPLAY=internal
 has_open_arg LIGHT_STAGE_PACKAGED_BENCH_LAYOUT=single
@@ -122,8 +124,10 @@ has_open_arg LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW=0
 has_open_arg LIGHT_STAGE_PACKAGED_BENCH_QUALITY=draft
 has_open_arg LIGHT_STAGE_PACKAGED_BENCH_VIEW=lines3d
 has_open_arg LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ=60
+has_open_arg LIGHT_STAGE_GPU_TIMING_CADENCE=full
+LIGHT_STAGE_GPU_TIMING_CADENCE=full
 if has_open_arg "LIGHT_STAGE_PACKAGED_BENCH_UNLISTED=$LIGHT_STAGE_PACKAGED_BENCH_UNLISTED"; then exit 1; fi
-[[ "${OPEN_ARGS[33]}" == "$TARGET_DIR/debug/bundle/macos/ToskLight.app" ]]
+[[ "${OPEN_ARGS[35]}" == "$TARGET_DIR/debug/bundle/macos/ToskLight.app" ]]
 printf 'PASS isolated LaunchServices forwards only explicit allowlisted controls including empty values and report paths with spaces\n'
 
 CALLS=()

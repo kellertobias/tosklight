@@ -71,3 +71,43 @@ it("bounds attachment identities and reports overflow", () => {
 	expect(collector.report().rows).toHaveLength(64);
 	expect(collector.report().overflow).toBe(6);
 });
+
+
+function withCoverage(framesConsidered: number, attachmentId = "one") {
+	const value = observation(attachmentId);
+	value.measurement.timingCoverage = { diagnosticCadence: "oneHz", benchmarkOverride: false,
+		elapsedMillis: framesConsidered * 1000, framesConsidered, framesAdmitted: 2,
+		busySkips: 0, cadenceSkips: framesConsidered - 2, completedReadbacks: 1, validSamples: 1 };
+	return value;
+}
+
+it("retains latest cumulative timing coverage per attachment rather than summing repeated drains", () => {
+	const collector = new NativeStageCompositorObservations();
+	collector.record([withCoverage(10), withCoverage(20), withCoverage(20), withCoverage(4, "replacement")]);
+	const report = collector.report();
+	expect(report.timingCoverage).toHaveLength(2);
+	expect(report.timingCoverage[0].coverage).toMatchObject({ framesConsidered: 20, completedReadbacks: 1, validSamples: 1 });
+	expect(report.timingCoverage[1].coverage.framesConsidered).toBe(4);
+	expect(report.timingCoverageUnavailableAttachments).toBe(0);
+	expect(report.actualDisplayedFrames).toBeNull();
+	expect(report.invalid).toBe(0);
+});
+
+it("rejects regressing or inconsistent timing coverage while preserving the last valid snapshot", () => {
+	const collector = new NativeStageCompositorObservations();
+	const invalid = withCoverage(30);
+	invalid.measurement.timingCoverage!.validSamples = 3;
+	collector.record([withCoverage(20), withCoverage(10), invalid]);
+	expect(collector.report().invalid).toBe(2);
+	expect(collector.report().timingCoverage[0].coverage.framesConsidered).toBe(20);
+});
+
+it("historical missing timing coverage remains unavailable and owner retention stays bounded", () => {
+	const collector = new NativeStageCompositorObservations();
+	collector.record([observation("historical"), ...Array.from({ length: 70 }, (_, i) => withCoverage(10, String(i)))]);
+	const report = collector.report();
+	expect(report.timingCoverage).toHaveLength(63);
+	expect(report.timingCoverageUnavailableAttachments).toBe(1);
+	expect(report.overflow).toBe(7);
+	expect(report.invalid).toBe(0);
+});
