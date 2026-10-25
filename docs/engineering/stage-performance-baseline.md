@@ -273,3 +273,42 @@ establish a cause for the sustained-run output deadline regression: current prod
 adapters already use retained Pending publications, and the diagnostic captured no fresh
 observational Dynamic projections. This change does not modify that publication contract or
 output scheduling.
+
+
+## Retained macOS results — 25 October 2026
+
+These isolated internal-display runs preserve failed gates. All use animated
+Stage-500, dual Live/Preload panes, 1920×1080 total physical pixels and a 60 Hz
+helper ceiling. Other desks remained running; no builds, tests or profiling
+competed with these measurement windows. Reports and raw samples are under
+`.artifacts/performance/stage/` with the following report stems:
+
+| Profile / active duration | Report suffix | Output p99 bucket, control → Stage | Added deadline misses | Result |
+| --- | --- | --- | --- | --- |
+| Debug Draft / 1,860 s | `2026-10-25T02-03-03-304Z` | 12 → 16 ms | 12 | Fail |
+| Release Draft / 1,860 s | `2026-10-25T02-46-57-077Z` | 8 → 16 ms | 1 | Fail |
+| Release Lines / 360 s | `2026-10-25T03-23-52-457Z` | 8 → 12 ms | 0 | Fail |
+| Release Draft, macOS child priority / 45 s | `2026-10-25T03-42-50-923Z` | 8 → 12 ms | 0 | Fail |
+
+Full report names are `packaged-tauri-stage-500-<suffix>.json`; corresponding
+`.jsonl` files retain samples. Every listed control and Stage window had zero
+send errors. The unchanged p99 allowance is max(1 ms, 5% of control), so zero
+misses alone does not pass output isolation. Histogram buckets are conservative
+bounds, not exact percentile measurements.
+
+The sustained Draft runs passed complete retained-resource coverage and their
+RSS/late CPU-wall gates. Release Draft had a main-process RSS slope of
+−1,346 bytes/min and late sampled CPU-wall p95 of 5.611 ms. Release Lines had
+late CPU-wall p95 of 1.696 ms; its shorter duration does not establish the
+30-minute resource gate. Renderer CPU fields measure elapsed wall time.
+
+The first three rows use commit `0441d5800`. The short priority row retains its
+host/server from that commit and uses renderer helper `51533c6d3` in the resealed
+release bundle. The actual two embedded children ran at nice +5; desktop and
+headless stayed at 0. This verifies the optional hint, without establishing that
+CPU scheduling caused the failures or that the hint resolves them.
+
+Displayed-frame timing, matched-rate whole-Stage GPU execution per second,
+cross-platform evidence and human image acceptance remain open. Sparse helper
+GPU samples and compositor submission counts cannot substitute for those gates.
+No result here constitutes final acceptance of TL-846 or TL-852.
