@@ -8395,6 +8395,7 @@ dependencies = [
  "glam",
  "light-fixture",
  "naga",
+ "png 0.18.1",
  "pollster",
  "postcard",
  "rustc-hash 2.1.3",

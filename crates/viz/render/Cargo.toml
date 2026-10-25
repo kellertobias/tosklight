@@ -17,6 +17,7 @@ viz-scene.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]
+png.workspace = true
 naga = { version = "30", features = ["wgsl-in"] }
 uuid.workspace = true
 viz-project = { path = "../project" }

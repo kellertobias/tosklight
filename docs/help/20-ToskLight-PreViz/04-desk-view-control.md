@@ -27,7 +27,8 @@ how much the renderer spends on volumetrics, shadows and bloom, and applies imme
 without the Visualizer reconnecting or reloading the show.
 
 **Draft** keeps fixture geometry, labels and lasers at the view's physical resolution, with a
-simpler diffuse surface shader and a separate beam layer at 35% of each physical dimension. Uniform unshadowed
+simpler diffuse surface shader and a separate beam layer at 25% of each physical dimension
+(about 6.25% of the full-resolution pixel area). Uniform unshadowed
 beam segments use analytic integration; optical and shadowed segments retain bounded sampling.
 Draft retains a two-light shadow budget for opaque scenery; other lamps can light through
 opaque objects outside that budget. Drapes retain separate blocking checks, and visible opaque

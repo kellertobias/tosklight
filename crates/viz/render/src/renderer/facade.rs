@@ -127,6 +127,25 @@ impl Renderer {
     }
 
     #[cfg(test)]
+    pub(in crate::renderer) fn raw_gpu_timestamps_for_test(
+        &self,
+    ) -> Option<crate::timing::RawTimestampSnapshot> {
+        self.timer.as_ref()?.raw_snapshot_for_test()
+    }
+    #[cfg(test)]
+    pub(in crate::renderer) fn set_draft_beam_size_for_test(&mut self, size: (u32, u32)) {
+        let scene = &mut self.draft.as_mut().expect("render Draft first").scene;
+        scene.draft.as_mut().unwrap().set_beam_size_for_test(
+            &self.gpu.device,
+            &scene.targets,
+            size,
+        );
+        // A target-only test change is invisible to the ordinary full-resolution context.
+        // Advance its monotonic scope so an older async sample cannot claim this resolution.
+        self.timing_context = invalidate_asset_scope(self.timing_context, true);
+        self.stats.gpu_sample_matches_frame = false;
+    }
+    #[cfg(test)]
     pub(in crate::renderer) fn force_draft_legacy_composite_for_test(&mut self, legacy: bool) {
         self.draft
             .as_mut()

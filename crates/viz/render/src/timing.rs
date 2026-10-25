@@ -111,6 +111,16 @@ impl GpuPassTimings {
     }
 }
 
+/// Test-only evidence copied from the exact completed mapping, never a second GPU readback.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub(crate) struct RawTimestampSnapshot {
+    pub sample_id: u64,
+    pub mask: u8,
+    pub period_nanos: f32,
+    pub bytes: [u8; TIMESTAMP_BYTES as usize],
+}
+
 /// Timestamp queries for one sampled frame, and the asynchronous readback that follows.
 pub struct GpuTimer {
     device: wgpu::Device,
@@ -133,6 +143,8 @@ pub struct GpuTimer {
     valid_samples: u64,
     admission: viz_scene::gpu_timing::TimingAdmission,
     frame_admitted: bool,
+    #[cfg(test)]
+    raw_snapshot: Option<RawTimestampSnapshot>,
 }
 
 impl GpuTimer {
@@ -184,6 +196,8 @@ impl GpuTimer {
             valid_samples: 0,
             admission,
             frame_admitted: false,
+            #[cfg(test)]
+            raw_snapshot: None,
         }))
     }
 
@@ -338,6 +352,17 @@ impl GpuTimer {
             if let Ok(mapped) = slice.get_mapped_range() {
                 self.last = decode_timings(&mapped, self.readback_mask, self.period_nanos);
                 self.sample_id = self.sample_id.wrapping_add(1);
+                #[cfg(test)]
+                {
+                    self.raw_snapshot = self.last.total_micros().and_then(|_| {
+                        Some(RawTimestampSnapshot {
+                            sample_id: self.sample_id,
+                            mask: self.readback_mask,
+                            period_nanos: self.period_nanos,
+                            bytes: mapped.as_ref().try_into().ok()?,
+                        })
+                    });
+                }
                 if self.last.total_micros().is_some() {
                     self.valid_samples = self.valid_samples.saturating_add(1);
                 }
@@ -350,6 +375,11 @@ impl GpuTimer {
         }
         self.readback.unmap();
         self.readback_mask = 0;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn raw_snapshot_for_test(&self) -> Option<RawTimestampSnapshot> {
+        (!self.is_broken()).then_some(self.raw_snapshot).flatten()
     }
 
     pub fn timings(&self) -> GpuPassTimings {

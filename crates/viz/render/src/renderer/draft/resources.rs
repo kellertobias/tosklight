@@ -19,8 +19,8 @@ pub(in crate::renderer) struct DraftPasses {
 }
 
 // Fixed candidate scale: geometry/depth/lasers remain at the physical output size.
-const DRAFT_BEAM_SCALE_NUM: u64 = 7;
-const DRAFT_BEAM_SCALE_DEN: u64 = 20;
+const DRAFT_BEAM_SCALE_NUM: u64 = 1;
+const DRAFT_BEAM_SCALE_DEN: u64 = 4;
 
 pub(super) fn beam_size(size: (u32, u32)) -> (u32, u32) {
     let scaled = |dimension: u32| {
@@ -29,7 +29,9 @@ pub(super) fn beam_size(size: (u32, u32)) -> (u32, u32) {
     (scaled(size.0), scaled(size.1))
 }
 fn beam_target(device: &wgpu::Device, size: (u32, u32)) -> wgpu::TextureView {
-    let (width, height) = beam_size(size);
+    beam_target_exact(device, beam_size(size))
+}
+fn beam_target_exact(device: &wgpu::Device, (width, height): (u32, u32)) -> wgpu::TextureView {
     device
         .create_texture(&wgpu::TextureDescriptor {
             label: Some("Draft reduced-resolution beam target"),
@@ -141,6 +143,25 @@ impl DraftPasses {
             upsample_layout,
         }
     }
+    /// Pixel-comparison seam only: replace the shaft attachment, keeping physical geometry,
+    /// depth, camera and output unchanged. Never use delayed timing samples across this switch.
+    #[cfg(test)]
+    pub(in crate::renderer) fn set_beam_size_for_test(
+        &mut self,
+        device: &wgpu::Device,
+        targets: &Targets,
+        size: (u32, u32),
+    ) {
+        assert!(size.0 > 0 && size.1 > 0);
+        self.beam = beam_target_exact(device, size);
+        self.upsample_group = upsample_group(
+            device,
+            &self.upsample_layout,
+            &self.beam,
+            &targets.depth,
+            &self.settings,
+        );
+    }
     #[cfg(test)]
     pub(in crate::renderer) fn force_legacy_for_test(&mut self, legacy: bool) {
         self.force_legacy_composite = legacy;
@@ -170,7 +191,8 @@ impl DraftPasses {
     }
     pub(in crate::renderer) fn write_globals(&self, queue: &wgpu::Queue, globals: &Globals) {
         let mut beam = *globals;
-        let (width, height) = beam_size(self.size);
+        let extent = self.beam.texture().size();
+        let (width, height) = (extent.width, extent.height);
         beam.screen = [
             width as f32,
             height as f32,
@@ -238,10 +260,31 @@ fn upsample_group(
 mod tests {
     #[test]
     fn reduced_beams_cover_odd_physical_sizes_without_reducing_geometry() {
-        assert_eq!(super::beam_size((1920, 1080)), (672, 378));
-        assert_eq!(super::beam_size((1921, 1081)), (673, 379));
-        assert_eq!(super::beam_size((513, 289)), (180, 102));
+        assert_eq!(super::beam_size((1920, 1080)), (480, 270));
+        assert_eq!(super::beam_size((1921, 1081)), (481, 271));
+        assert_eq!(super::beam_size((513, 289)), (129, 73));
         assert_eq!(super::beam_size((0, 1)), (1, 1));
-        assert_eq!(super::beam_size((u32::MAX, 1)), (1_503_238_554, 1));
+        assert_eq!(super::beam_size((u32::MAX, 1)), (1_073_741_824, 1));
+    }
+    #[test]
+    fn quarter_shaft_area_is_about_half_the_old_budget_at_physical_output_sizes() {
+        for (width, height) in [(1920_u32, 1080_u32), (2560, 1440), (3840, 2160)] {
+            let (x, y) = super::beam_size((width, height));
+            let previous = |n: u32| (u64::from(n) * 7).div_ceil(20);
+            let old_area = previous(width) * previous(height);
+            let new_area = u64::from(x) * u64::from(y);
+            assert_eq!(new_area * 49, old_area * 25);
+            assert!((0.489..0.490).contains(&(1.0 - new_area as f64 / old_area as f64)));
+        }
+    }
+    #[test]
+    fn quarter_size_is_minimum_one_ceiling_and_overflow_safe() {
+        for n in [0, 1, 2, 3, 4, 5, 289, 513, u32::MAX - 1, u32::MAX] {
+            let (x, y) = super::beam_size((n, n));
+            assert_eq!(x, y);
+            assert!(x >= 1);
+            assert!(u64::from(x) * 4 >= u64::from(n));
+            assert!(u64::from(x - 1) * 4 < u64::from(n.max(1)));
+        }
     }
 }

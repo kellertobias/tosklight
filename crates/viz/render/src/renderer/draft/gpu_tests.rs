@@ -190,7 +190,7 @@ fn actual_par_odd_physical_geometry_and_backend_switches_preserve_hq() {
         (geometry.width, geometry.height, backend.scene.samples),
         (513, 289, 1)
     );
-    assert_eq!((beams.width, beams.height), (180, 102));
+    assert_eq!((beams.width, beams.height), (129, 73));
     assert_eq!(
         backend.scene.targets.bloom_a.texture(),
         backend.scene.targets.shaded.texture()
@@ -666,4 +666,10 @@ fn tighter_draft_cone_culling_preserves_receiver_pixels_and_high_index_lights() 
 mod manual_shapers;
 mod thermal_response;
 
+mod quarter_budget;
+
+mod quarter_timing;
+
 mod narrow_profile;
+
+mod quarter_intervals;
