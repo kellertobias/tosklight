@@ -38,6 +38,16 @@ struct Light {
 @group(0) @binding(3) var<storage, read_write> tile_lights: array<u32>;
 
 override DRAFT_CONE_BOUNDS: bool = false;
+// Test comparisons can retain the previous inline calculation. Production always precomputes.
+override PRECOMPUTED_BOUNDS: bool = true;
+struct StoredBounds {
+    limits: vec4<f32>,
+    visible: u32,
+    pad0: u32,
+    pad1: u32,
+    pad2: u32,
+};
+@group(1) @binding(0) var<storage, read_write> screen_bounds: array<StoredBounds>;
 
 const TILE_SIZE: u32 = 16u;
 const MAX_LIGHTS_PER_TILE: u32 = 256u;
@@ -122,6 +132,25 @@ fn light_bounds(light: Light) -> ScreenBounds {
     return result;
 }
 
+// This function invokes the unchanged conservative arithmetic once per light, rather than
+// once per light per tile. A separate compute pass publishes these records before culling.
+@compute @workgroup_size(64)
+fn bounds_main(@builtin(global_invocation_id) invocation: vec3<u32>) {
+    let index = invocation.x;
+    if (index >= u32(globals.params2.x)) { return; }
+    let bounds = light_bounds(lights[index]);
+    screen_bounds[index].limits = vec4<f32>(bounds.min, bounds.max);
+    screen_bounds[index].visible = select(0u, 1u, bounds.visible);
+}
+fn current_bounds(index: u32) -> ScreenBounds {
+    if (!PRECOMPUTED_BOUNDS) { return light_bounds(lights[index]); }
+    let stored = screen_bounds[index];
+    var bounds: ScreenBounds;
+    bounds.min = stored.limits.xy;
+    bounds.max = stored.limits.zw;
+    bounds.visible = stored.visible != 0u;
+    return bounds;
+}
 @compute @workgroup_size(64)
 fn cull_main(
     @builtin(workgroup_id) group: vec3<u32>,
@@ -138,7 +167,7 @@ fn cull_main(
     let tile_max = tile_min + vec2<f32>(f32(TILE_SIZE));
     let count = u32(globals.params2.x);
     for (var index = local; index < count; index = index + WORKGROUP) {
-        let bounds = light_bounds(lights[index]);
+        let bounds = current_bounds(index);
         if (!bounds.visible) {
             continue;
         }

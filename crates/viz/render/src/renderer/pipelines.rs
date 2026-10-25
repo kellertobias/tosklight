@@ -117,6 +117,7 @@ pub(super) struct Pipelines {
     pub laser: wgpu::RenderPipeline,
     pub shadow: wgpu::RenderPipeline,
     pub cull: wgpu::ComputePipeline,
+    pub bounds: wgpu::ComputePipeline,
     pub extract: wgpu::RenderPipeline,
     pub blur: wgpu::RenderPipeline,
     pub composite: wgpu::RenderPipeline,
@@ -139,7 +140,8 @@ impl Pipelines {
             beam: beam_pipeline(device, pipeline_layouts, modules, multisample),
             laser: laser_pipeline(device, pipeline_layouts, modules, multisample),
             shadow: shadow_pipeline(device, pipeline_layouts, modules),
-            cull: cull_pipeline(device, pipeline_layouts, modules, draft_mode),
+            cull: cull_pipeline(device, pipeline_layouts, modules, draft_mode, "cull_main"),
+            bounds: cull_pipeline(device, pipeline_layouts, modules, draft_mode, "bounds_main"),
             extract: fullscreen_pipeline(
                 device,
                 "viz bloom extract",
@@ -425,6 +427,7 @@ fn cull_pipeline(
     layouts: &PipelineLayouts,
     modules: &Modules,
     draft_mode: bool,
+    entry: &str,
 ) -> wgpu::ComputePipeline {
     let (cull_pipeline_layout, cull_module) = (&layouts.cull, &modules.cull);
 
@@ -432,7 +435,7 @@ fn cull_pipeline(
         label: Some("viz cull"),
         layout: Some(cull_pipeline_layout),
         module: cull_module,
-        entry_point: Some("cull_main"),
+        entry_point: Some(entry),
         compilation_options: wgpu::PipelineCompilationOptions {
             constants: &[("DRAFT_CONE_BOUNDS", if draft_mode { 1.0 } else { 0.0 })],
             ..Default::default()
@@ -547,11 +550,12 @@ mod tests {
 pub(in crate::renderer) fn test_cone_cull_pipeline(
     device: &wgpu::Device,
     bindings: &wgpu::BindGroupLayout,
+    bounds: &wgpu::BindGroupLayout,
     enabled: bool,
 ) -> wgpu::ComputePipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Draft cull comparison layout"),
-        bind_group_layouts: &[Some(bindings)],
+        bind_group_layouts: &[Some(bindings), Some(bounds)],
         immediate_size: 0,
     });
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -564,7 +568,10 @@ pub(in crate::renderer) fn test_cone_cull_pipeline(
         module: &shader,
         entry_point: Some("cull_main"),
         compilation_options: wgpu::PipelineCompilationOptions {
-            constants: &[("DRAFT_CONE_BOUNDS", if enabled { 1.0 } else { 0.0 })],
+            constants: &[
+                ("DRAFT_CONE_BOUNDS", if enabled { 1.0 } else { 0.0 }),
+                ("PRECOMPUTED_BOUNDS", 0.0),
+            ],
             ..Default::default()
         },
         cache: None,

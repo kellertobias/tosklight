@@ -65,6 +65,8 @@ pub(super) struct ShadedRenderer {
     pub(super) beam_pipeline: wgpu::RenderPipeline,
     pub(super) laser_pipeline: wgpu::RenderPipeline,
     pub(super) cull_pipeline: wgpu::ComputePipeline,
+    pub(super) bounds_pipeline: wgpu::ComputePipeline,
+    pub(super) screen_bounds: super::tiled::ScreenBounds,
     pub(super) extract_pipeline: wgpu::RenderPipeline,
     pub(super) blur_pipeline: wgpu::RenderPipeline,
     pub(super) composite_pipeline: wgpu::RenderPipeline,
@@ -173,6 +175,7 @@ impl ShadedRenderer {
                 context.format,
             )
         });
+        let screen_bounds = super::tiled::ScreenBounds::new(&device, &layouts.bounds);
         Self {
             draft,
             device,
@@ -229,6 +232,8 @@ impl ShadedRenderer {
             beam_pipeline: pipelines.beam,
             laser_pipeline: pipelines.laser,
             cull_pipeline: pipelines.cull,
+            bounds_pipeline: pipelines.bounds,
+            screen_bounds,
             extract_pipeline: pipelines.extract,
             blur_pipeline: pipelines.blur,
             composite_pipeline: pipelines.composite,

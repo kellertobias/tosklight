@@ -149,8 +149,12 @@ impl Renderer {
     pub(in crate::renderer) fn force_draft_cone_cull_for_test(&mut self, enabled: bool) {
         let scene = &mut self.draft.as_mut().expect("render Draft first").scene;
         let bindings = scene.cull_pipeline.get_bind_group_layout(0);
-        scene.cull_pipeline =
-            super::pipelines::test_cone_cull_pipeline(&self.gpu.device, &bindings, enabled);
+        scene.cull_pipeline = super::pipelines::test_cone_cull_pipeline(
+            &self.gpu.device,
+            &bindings,
+            &scene.cull_pipeline.get_bind_group_layout(1),
+            enabled,
+        );
     }
     pub fn crowd_amount(&self) -> f32 {
         self.crowd_amount

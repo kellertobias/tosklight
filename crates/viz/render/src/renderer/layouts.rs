@@ -14,6 +14,7 @@ use wgpu::{BufferUsages, ShaderStages};
 pub(super) struct Layouts {
     pub scene: wgpu::BindGroupLayout,
     pub cull: wgpu::BindGroupLayout,
+    pub bounds: wgpu::BindGroupLayout,
     pub depth: wgpu::BindGroupLayout,
     pub post: wgpu::BindGroupLayout,
     pub composite: wgpu::BindGroupLayout,
@@ -27,6 +28,7 @@ impl Layouts {
         Self {
             scene: scene_bind_group_layout(device, false),
             cull: scene_bind_group_layout(device, true),
+            bounds: super::tiled::layout(device),
             depth: depth_layout(device, samples),
             post: post_layout(device),
             composite: composite_layout(device),
@@ -80,7 +82,7 @@ impl PipelineLayouts {
             });
         let cull_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("viz cull layout"),
-            bind_group_layouts: &[Some(cull_layout)],
+            bind_group_layouts: &[Some(cull_layout), Some(&layouts.bounds)],
             immediate_size: 0,
         });
         let post_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

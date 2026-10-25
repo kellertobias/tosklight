@@ -506,15 +506,40 @@ impl ShadedRenderer {
 
     /// Sort the rig's lights into screen tiles, so a fragment tests the handful over it rather
     /// than every light in the show.
-    fn cull_pass(&self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
+    fn cull_pass(&mut self, encoder: &mut wgpu::CommandEncoder, timer: Option<&GpuTimer>) {
         if self.lights.length > 0 {
-            let timing = timer.and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull));
+            self.screen_bounds.ensure(&self.device, self.lights.length);
+            // Separate passes establish storage write/read ordering; one Cull timestamp spans
+            // both, so measurement cannot hide the precomputation cost.
+            let opening = timer
+                .and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull))
+                .map(|mut writes| {
+                    writes.end_of_pass_write_index = None;
+                    writes
+                });
+            {
+                let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("viz per-light screen bounds"),
+                    timestamp_writes: opening,
+                });
+                pass.set_pipeline(&self.bounds_pipeline);
+                pass.set_bind_group(0, &self.cull_bind_group, &[]);
+                pass.set_bind_group(1, &self.screen_bounds.group, &[]);
+                pass.dispatch_workgroups(self.lights.length.div_ceil(64), 1, 1);
+            }
+            let timing = timer
+                .and_then(|timer| timer.compute_writes(crate::timing::GpuPass::Cull))
+                .map(|mut writes| {
+                    writes.beginning_of_pass_write_index = None;
+                    writes
+                });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("viz light cull"),
                 timestamp_writes: timing,
             });
             pass.set_pipeline(&self.cull_pipeline);
             pass.set_bind_group(0, &self.cull_bind_group, &[]);
+            pass.set_bind_group(1, &self.screen_bounds.group, &[]);
             pass.dispatch_workgroups(self.targets.tiles_x, self.targets.tiles_y, 1);
         } else {
             encoder.clear_buffer(&self.tile_counts.buffer, 0, None);

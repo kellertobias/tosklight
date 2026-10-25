@@ -229,6 +229,7 @@ mod overlay;
 mod runtime_hash;
 mod shaded;
 mod shaded_assets;
+mod tiled;
 use context::FrameContext;
 pub use facade::Renderer;
 use overlay::OverlayRenderer;
