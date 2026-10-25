@@ -490,3 +490,21 @@ Live/Preload and 2.53/2.59 ms for Lines. Sparse timing is not whole-Stage GPU
 usage; submission counts are not on-screen FPS. Sustained displayed 60 FPS and
 70%/90% matched-rate total-GPU reductions remain unproved. These observations do
 not isolate a root cause or establish a hash-only benefit.
+
+
+### Interrupted final sustained attempt after TL-875
+
+The complete release bundle at `b0eab21b8` began a finite 300-second control /
+1,860-second Draft sequence at 09:06 UTC, followed by an independent planned
+300-second control / 360-second Lines sequence. Profiling and timing-cadence
+overrides were unset. The tool session was interrupted; later inspection found
+no coordinator/runner/owned runtime processes or private 5160 listener, and no
+completion report or exit files. The raw journal
+`packaged-tauri-stage-500-2026-10-25T09-06-10-126Z.jsonl` ends after Stage-ready.
+This is **incomplete**, not a pass or a measured product failure. The queued Lines
+condition did not run. Its source bundle and partial artifacts are retained.
+
+The actual-default-cadence 45-second diagnostic pass is documented separately
+in `stage-gpu-measurement.md`; it does not supersede the retained earlier
+sustained Draft output failure. A fresh quiet run must start after the newly
+requested optional detailed-people implementation is built and verified.

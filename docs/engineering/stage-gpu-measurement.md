@@ -172,3 +172,34 @@ behavior or power/energy savings. Parent CA handler IDs overlap across layers;
 no exact per-pane join was found, so the roughly 119 combined positive events/s
 cannot certify per-pane displayed FPS. Raw traces remain `gpu-trace-WfrqWt`
 (before) and `gpu-trace-uUxaUM` (after); limitations and failures are retained.
+
+
+### Actual default sampling coverage in the final packaged build
+
+The full release host/helper/headless bundle built from `b0eab21b8` was measured
+with `LIGHT_STAGE_GPU_TIMING_CADENCE` unset. Diagnostic report
+`packaged-tauri-stage-500-2026-10-25T09-01-50-577Z.json` and compact receipt
+`tl875-default-coverage-summary.json` retain the actual applied policy. Both
+helpers and both compositors reported `oneHz`, `benchmarkOverride=false`, and
+45 admitted, completed, valid samples over approximately 2,650 frames each.
+This confirms sample admission rather than merely retaining a requested setting.
+
+The 45-second control and 45-second Stage windows both had fine output p99
+8,001–8,250 µs, with conservative regression −249–249 µs and no comparison
+failures. Opt-in pass profiling was enabled, so this is a diagnostic pass and
+cannot replace a clean sustained acceptance run.
+
+### Public API boundary for actual per-pane presentation
+
+In the pinned wgpu 30 source, `src/api/surface_texture.rs:10–25` publicly exposes
+the texture while keeping backend presentation detail private. The Metal HAL's
+`src/metal/mod.rs:653–675` retains the acquired drawable in private fields and
+only exposes texture borrowing. `src/api/queue.rs:306–322` documents submission
+completion, while `Queue::present` at lines 377–380 exposes no presentation
+callback. A public texture handle is not the corresponding acquired drawable.
+
+Obtaining another drawable from the layer would observe a different picture.
+Exact per-pane SDK presentation callbacks require a separately planned upstream
+hook or native drawable ownership/import architecture; private-layout casts or
+method swizzling are not a measurement substitute. The calibrated single-layer
+probe and ambiguous aggregate CA events do not close this acceptance gap.
