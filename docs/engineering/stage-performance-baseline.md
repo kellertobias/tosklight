@@ -560,3 +560,57 @@ in warmup but cannot explain the8–10 ms tail. Do not infer a startup or therma
 cause from renderer CPU trends. Timestamped bounded per-minute deltas of existing
 fine histograms would diagnose cold/steady/late behavior without another HTTP
 observer, full per-tick phase logging, or weakening the whole-window gate.
+
+
+### Timestamped output windows and later CPU attribution
+
+TL-878 adds optional bounded diagnostic windows from the existing counter reads,
+without extra HTTP requests. A window closes at the actual receipt boundary after
+at least60seconds; a sampled interval crossing a nominal minute is never split.
+Client receipt clocks are not engine tick timestamps. Final partials, schema and
+clock errors, resets, failed reads and capacity overflow remain explicit. The
+maximum is256rows. None of these rows changes the original all-window gate.
+
+The labeled report `2026-10-25T11-13-45-722Z` has complete metadata coverage,
+zero errors/resets/overflow, and exact window→aggregate frame totals13227/13398.
+Its full-minute control p99 was8,001–8,250µs throughout. Stage minute groups were
+7,751–8,000;8,501–8,750;9,501–9,750;9,501–9,750;8,501–8,750µs. Thus the elevated
+p99 is present after startup in this diagnostic. The whole-window comparison
+still fails with regression1,251–1,749µs. This labeled run does not replace the
+31-minute failure or certify acceptance. Receipt:
+`.artifacts/performance/stage/tl878-output-windows/actual-diagnostic-summary.json`.
+
+A separate150-second-control/150-second-Stage all-mode diagnostic is retained as
+`2026-10-25T11-32-52-478Z`. Exact owned backend70284/listener and the same8679e7…
+SHA were verified at both endpoints. Core tick/nested/CPU/pool/wait classes reach
+both window ends with13,633total ticks, no duplicate sequences or16,384attempt
+cap. Control's log/counter boundary mismatch is retained (6,617 vs6,626ticks);
+Stage is6,721/6,721. Independent cleanup timing hit its65,536job cap at Stage
++58.104seconds, so late cleanup observations are unavailable.
+
+| Diagnostic metric | Control | Stage | Stage final30seconds |
+| --- | ---: | ---: | ---: |
+| Logged tick wall p99 | 8.105ms | 9.453ms | 9.950ms |
+| Ordered preparation wall p99 | 7.899ms | 9.211ms | 9.697ms |
+| Timer-resume offset p99 | 3.874ms | 3.886ms | 3.882ms |
+| PrepareFamilies caller CPU mean | 1.190ms | 1.338ms | 1.550ms |
+
+All CPU summaries use schema3 with valid reads and unchanged family count vectors
+and per-frame worker-job counts[52,32,32].105slow Stage ticks>=9,250µs join uniquely
+to nested/CPU/pool records;92occur in the final30seconds. On those ticks, both
+caller and covered worker CPU costs rise. Counter-read overhead is retained and
+small relative to the approximately1ms tail difference; the instrumented run is
+still diagnostic-only. Overlapping caller/worker/substage CPU must not be added,
+and wall-minus-CPU is not a parking measurement. These facts distinguish the
+observed increase from worsening timer overshoot, but cannot establish extra
+instructions, cache/frequency effects, GPU causation or wider host contention.
+Receipt `.artifacts/performance/stage/tl878-late-cpu-wake-summary.json` and parser
+`.artifacts/tmp/tl878-analyze-late-cpu-wake.py` preserve limits and raw-log linkage.
+
+Control startup ordering was independently checked: startup Picture(Draft/Lines)
+precedes Embed through both FIFO channel stages, is retained before embedding
+returns, and is applied before preparation/drawing. The temporary defaultHigh
+view cannot initialize the wrong backend in this production path. Draft also
+uses its own lazy backend; unused shared startup resources are opportunities,
+not demonstrated causes of the later tail. No speculative startup or global
+priority/timer change was made.
