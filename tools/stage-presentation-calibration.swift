@@ -177,10 +177,17 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         layer.maximumDrawableCount = 2
         layer.allowsNextDrawableTimeout = true
         content.wantsLayer = true
-        content.layer = layer
-        layer.frame = content.bounds
+        guard let backing = content.layer else { throw ProbeError.message("AppKit backing layer missing") }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        backing.addSublayer(layer) // Match raw-window-metal: preserve AppKit's view-delegated root.
+        layer.frame = backing.bounds
         layer.contentsScale = screen.backingScaleFactor
         layer.drawableSize = content.convertToBacking(content.bounds).size
+        layer.isHidden = false
+        layer.opacity = 1
+        CATransaction.commit()
+        guard attached() else { throw ProbeError.message("Metal sublayer is not attached to the AppKit root") }
         guard contained() else { throw ProbeError.message("Hidden internal screen containment verification failed") }
         CATransaction.flush()
         window.orderFrontRegardless()
@@ -194,7 +201,29 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 "onActiveSpace": window.isOnActiveSpace, "key": window.isKeyWindow,
                 "main": window.isMainWindow, "applicationActive": NSApplication.shared.isActive,
                 "windowNumber": window.windowNumber, "windowLevel": window.level.rawValue,
-                "framePoints": [window.frame.origin.x, window.frame.origin.y, window.frame.width, window.frame.height]]
+                "framePoints": [window.frame.origin.x, window.frame.origin.y, window.frame.width, window.frame.height],
+                "layerAttachment": layerDetails()]
+    }
+    func attached() -> Bool {
+        guard let content = window?.contentView, let backing = content.layer, let layer else { return false }
+        return content.window === window && backing !== layer && layer.superlayer === backing
+            && layer.frame == backing.bounds && layer.contentsScale == window.backingScaleFactor
+    }
+    func layerDetails() -> [String: Any] {
+        guard let layer else { return ["created": false] }
+        func details(_ value: CALayer) -> [String: Any] {
+            return ["class": String(describing: type(of: value)),
+                "delegateClass": value.delegate.map { String(describing: type(of: $0)) } ?? "nil",
+                "superlayerClass": value.superlayer.map { String(describing: type(of: $0)) } ?? "nil",
+                "frame": [value.frame.origin.x, value.frame.origin.y, value.frame.width, value.frame.height],
+                "bounds": [value.bounds.origin.x, value.bounds.origin.y, value.bounds.width, value.bounds.height],
+                "hidden": value.isHidden, "opacity": value.opacity, "contentsScale": value.contentsScale]
+        }
+        var chain: [[String: Any]] = []
+        var current: CALayer? = layer
+        while let value = current, chain.count < 8 { chain.append(details(value)); current = value.superlayer }
+        return ["attachedToAppKitBacking": attached(), "metal": details(layer), "chain": chain,
+            "drawableSize": [layer.drawableSize.width, layer.drawableSize.height]]
     }
     func contained() -> Bool {
         guard let screen = window?.screen,
@@ -207,6 +236,7 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func tick() {
         guard !finished else { return }
         guard contained() else { finish("internal-containment-lost", code: 1); return }
+        guard attached() else { finish("layer-attachment-lost", code: 1); return }
         if waitingStop {
             guard let stop = options.stop else { finish("missing-stop-configuration", code: 1); return }
             var status = stat()
@@ -228,7 +258,7 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             started = true
             renderingDeadline = CACurrentMediaTime() + 15
-            record("go")
+            record("go", ["windowVisibility": visibility()])
             submit()
         } else if (sequence < 60 || outstanding) && CACurrentMediaTime() >= renderingDeadline {
             finish("presentation-timeout-unknown", code: 1)
@@ -237,11 +267,14 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func submit() {
         guard !finished, !outstanding, sequence < 60, contained() else { return }
         guard CACurrentMediaTime() < renderingDeadline else { finish("presentation-timeout-unknown", code: 1); return }
+        guard attached() else { finish("layer-attachment-lost-before-acquire", code: 1); return }
+        CATransaction.flush()
         let acquire = anchor()
         guard let drawable = layer.nextDrawable(), let command = queue.makeCommandBuffer() else {
             finish("drawable-or-command-unavailable", code: 1); return
         }
         guard contained() else { finish("internal-containment-lost", code: 1); return }
+        guard attached() else { finish("layer-attachment-lost-before-submit", code: 1); return }
         outstanding = true
         pending = drawable
         let current = sequence
