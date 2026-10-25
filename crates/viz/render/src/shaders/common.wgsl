@@ -306,16 +306,20 @@ fn shaper_transmission(light: Light, position: vec2<f32>, softness: f32) -> f32 
 // This is exactly the established High/Ultra radial formula, without a quality-tier bypass.
 fn beam_radial_profile(light: Light, to_light: vec3<f32>) -> f32 {
     let axis = light.direction_cos_outer.xyz;
-    let cos_angle = dot(-to_light, axis);
+    let cos_angle = min(dot(-to_light, axis), 1.0);
     let cos_outer = light.direction_cos_outer.w;
-    if (cos_angle <= cos_outer) {
+    let span = 1.0 - cos_outer;
+    if (span <= 0.0 || cos_angle <= cos_outer) {
         return 0.0;
     }
-    let cos_inner = max(light.params.x, cos_outer + 0.0005);
-    // Sharpness is the width of this transition: a profile cuts within a fraction of a degree,
-    // a wash blends across its whole field.
-    let edge = smoothstep(cos_outer, cos_inner, cos_angle);
-    let radial = clamp((1.0 - cos_angle) / max(1.0 - cos_outer, 1e-5), 0.0, 1.0);
+    // A fixed cosine epsilon can put the inner edge beyond the physically reachable axis
+    // of a narrow cone. Bound the guard by its available span, preserving authored sharpness.
+    // Work with widths: adding a tiny guard to cos_outer can round both smoothstep endpoints
+    // to the same f32, whereas the positive span-relative width remains representable.
+    let transition = min(max(light.params.x - cos_outer, min(0.0005, span * 0.01)), span);
+    let edge_position = clamp((cos_angle - cos_outer) / transition, 0.0, 1.0);
+    let edge = edge_position * edge_position * (3.0 - 2.0 * edge_position);
+    let radial = clamp((1.0 - cos_angle) / span, 0.0, 1.0);
     // Uniformity is how the light inside that field is distributed, which is a separate question
     // from how the field ends. A good LED wash has no rim at all and is still flat across the
     // middle; a PAR is hot in the centre and has faded long before its own rim. `1` is flat, `0`

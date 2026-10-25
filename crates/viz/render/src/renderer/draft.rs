@@ -24,3 +24,6 @@ impl DraftRenderer {
         }
     }
 }
+
+#[cfg(test)]
+mod radial_profile_tests;

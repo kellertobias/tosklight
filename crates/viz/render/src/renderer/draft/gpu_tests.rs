@@ -665,3 +665,5 @@ fn tighter_draft_cone_culling_preserves_receiver_pixels_and_high_index_lights() 
 
 mod manual_shapers;
 mod thermal_response;
+
+mod narrow_profile;
