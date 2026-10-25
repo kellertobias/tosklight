@@ -26,6 +26,7 @@ pub(super) async fn watch(
     outbox: &Sender<Message>,
     orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
+    demand: &super::output_demand::OutputDemand,
 ) {
     let Some(mut socket) = open_event_stream(client, endpoint, outbox).await else {
         return;
@@ -41,15 +42,9 @@ pub(super) async fn watch(
             return;
         }
         if connection.values_from_desk_output {
-            if let Some(output) = client.output_dmx().await {
-                // Older servers retain their normalized overlay. Native lanes include the
-                // desk's complete Preload and require no second volatile poll.
-                if output.native_protocol == 0
-                    && let Some(preload) = client.preload_projection().await
-                {
-                    let _ = outbox.send(Message::Preload2(Box::new(preload)));
-                }
-                let _ = outbox.send(Message::DeskOutput(Box::new(output)));
+            let request = demand.snapshot();
+            if let Some(read) = request.read(client).await {
+                let _ = outbox.send(Message::OutputRead(read));
             }
         }
         let poll = if connection.values_from_desk_output {

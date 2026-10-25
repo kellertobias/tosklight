@@ -6,8 +6,8 @@
 //!   event WebSocket; and
 //! - the lighting network supplies every live output value as real Art-Net or sACN UDP.
 //!
-//! The API is never asked for live values, and the event connection is never used as a DMX
-//! transport.
+//! Network renderers never ask the API for live values. An embedded desk pane explicitly
+//! opts into the desk's native output snapshots; the event socket remains configuration-only.
 
 use crate::client::DeskClient;
 use crate::routes;
@@ -99,8 +99,11 @@ enum Message {
     /// Identity-based editor/CAD selection from a planning source.
     Selection(Box<crate::wire::SelectionSnapshot>),
     /// The desk's own output, for a renderer inside the desk's window.
+    OutputRead(output_demand::OutputRead),
+    #[cfg(test)]
     DeskOutput(Box<crate::wire::OutputDmxSnapshot>),
     /// The operator's preload, laid over the live picture while they are following it.
+    #[cfg(test)]
     Preload2(Box<crate::wire::PreloadProjection>),
     /// The desk's own view for this target, as read. Converting it needs the scene, which lives
     /// on the render thread, so the raw reading travels and the conversion happens there.
@@ -196,6 +199,7 @@ pub struct DeskProvider {
     /// The operator's preload, and whether they are following it.
     preload_projection: crate::wire::PreloadProjection,
     following_preload: bool,
+    output_demand: output_demand::OutputDemand,
     applied_preview_revision: Option<u64>,
     /// Universes a real source has delivered at least one packet on, ever.
     ///
@@ -212,11 +216,13 @@ impl DeskProvider {
         let worker_connection = connection.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
-        let worker = std::thread::Builder::new()
+        let mut provider = Self::with_worker(connection, epoch, inbox, commands, stop, None);
+        let demand = provider.output_demand.clone();
+        provider.worker = std::thread::Builder::new()
             .name("viz-desk".into())
-            .spawn(move || run(worker_connection, outbox, orders, worker_stop))
+            .spawn(move || run(worker_connection, outbox, orders, worker_stop, demand))
             .ok();
-        Self::with_worker(connection, epoch, inbox, commands, stop, worker)
+        provider
     }
 
     /// A provider fed by a test instead of a connection thread: the same inbox, the same
@@ -267,6 +273,7 @@ impl DeskProvider {
             desk_output: None,
             preload_projection: crate::wire::PreloadProjection::default(),
             following_preload: false,
+            output_demand: Default::default(),
             applied_preview_revision: None,
             real_universes: std::collections::BTreeSet::new(),
         }
@@ -415,7 +422,15 @@ impl DeskProvider {
 
     /// Follow the operator's preload, or show what is lit.
     pub fn follow_preload(&mut self, following: bool) {
-        self.following_preload = following;
+        if self.following_preload != following {
+            self.output_demand.set_following(following);
+            self.following_preload = following;
+            // A response from the previous mode must not seed the next picture. Keep source
+            // admission history: a display choice never makes retired output current again.
+            self.desk_output = None;
+            self.preload_projection = Default::default();
+            self.presented_desk_output = None;
+        }
     }
 
     /// Whether this renderer binds sockets and waits for real packets.
@@ -509,7 +524,17 @@ impl DeskProvider {
                         events.push(ProviderEvent::Values(Box::new(self.values.clone())));
                     }
                 }
+                Ok(Message::OutputRead(read)) => {
+                    if self.output_demand.accepts(read.request) {
+                        if let Some(preload) = read.preload {
+                            self.preload_projection = *preload;
+                        }
+                        self.queue_desk_output(*read.output);
+                    }
+                }
+                #[cfg(test)]
                 Ok(Message::DeskOutput(value)) => self.queue_desk_output(*value),
+                #[cfg(test)]
                 Ok(Message::Preload2(value)) => self.preload_projection = *value,
                 Ok(Message::View(view)) => {
                     self.pending_view = self
@@ -753,12 +778,13 @@ impl SceneProvider for DeskProvider {
     }
 }
 
-/// The connection thread: HTTP reads and the event subscription, never live values.
+/// The connection thread: scene reads, opted-in native output reads and configuration events.
 fn run(
     connection: DeskConnection,
     outbox: Sender<Message>,
     mut orders: tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: Arc<AtomicBool>,
+    demand: output_demand::OutputDemand,
 ) {
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -782,7 +808,7 @@ fn run(
             if orders.is_closed() {
                 return;
             }
-            match connect_once(&connection, &outbox, &mut orders, &stop).await {
+            match connect_once(&connection, &outbox, &mut orders, &stop, &demand).await {
                 Ok(()) => {
                     backoff = connection.retry;
                 }
@@ -815,6 +841,7 @@ async fn connect_once(
     outbox: &Sender<Message>,
     orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
+    demand: &output_demand::OutputDemand,
 ) -> Result<(), ProviderError> {
     let endpoint = format!("http://{}:{}", connection.host, connection.port);
     let _ = outbox.send(Message::Connection(ConnectionState::Resolving {
@@ -886,7 +913,7 @@ async fn connect_once(
     if let Some(selection) = client.selection().await {
         let _ = outbox.send(Message::Selection(Box::new(selection)));
     }
-    watch(&client, &endpoint, connection, outbox, orders, stop).await;
+    watch(&client, &endpoint, connection, outbox, orders, stop, demand).await;
     client.close_session().await;
     Ok(())
 }
@@ -1093,3 +1120,5 @@ mod provider_tests;
 
 #[cfg(test)]
 mod input_monitor_tests;
+
+mod output_demand;

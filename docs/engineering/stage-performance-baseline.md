@@ -259,3 +259,17 @@ cross-platform GPU capability checks remain separate release gates. A runner
 code path for a platform does not itself provide GPU or packaged-runtime
 evidence; retain distinct reports from actual supported Windows, Apple Silicon
 macOS, and Linux reference machines.
+
+
+Native Stage lane demand retains a narrow volatile-polling exception to API rules: the
+current visualization WebSocket carries resolved attribute snapshots/deltas and typed readouts,
+not complete per-instance native raw vectors, mode identities, ownership masks and Point poses.
+Until an equivalent accepted-native push contract exists, native Stage reads the existing DMX
+snapshot at its existing source cadence. Only a helper following Preload requests its extra
+lane; Live omits it. A renderer-local demand serial rejects both native and legacy overlay
+responses from earlier display modes, including a double switch back to the original mode.
+This saves unused Preload construction/serialization and legacy compatibility work. It does not
+establish a cause for the sustained-run output deadline regression: current production family
+adapters already use retained Pending publications, and the diagnostic captured no fresh
+observational Dynamic projections. This change does not modify that publication contract or
+output scheduling.
