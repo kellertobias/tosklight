@@ -4,7 +4,7 @@ import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
 import { execFile, spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { openSync } from "node:fs";
-import { mkdir, open, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -44,6 +44,7 @@ import {
 	LARGE_STAGE_FIXTURE_RECORDS,
 } from "./stage-large-scene.mjs";
 import { summarizeStageLongRunResources } from "./stage-resource-stability.mjs";
+import { startPackagedIsolatedServer, stopOwnedBenchmarkChild } from "./owned-benchmark-server.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -131,8 +132,18 @@ const benchmarkEnvironment = {
 const isolatedServer =
 	isolatedPort === null
 		? null
-		: await startIsolatedServer(application, dataPath, isolatedPort, oscPort);
-const app = launchPackagedApplication(application, benchmarkEnvironment);
+		: await startPackagedIsolatedServer(application, dataPath, isolatedPort, oscPort, repositoryRoot);
+let app;
+try {
+	app = launchPackagedApplication(application, benchmarkEnvironment);
+	if (isolatedServer) await new Promise((resolve, reject) => {
+		app.once("spawn", resolve);
+		app.once("error", reject);
+	});
+} catch (error) {
+	if (isolatedServer) await stopOwnedBenchmarkChild(isolatedServer.child);
+	throw error;
+}
 
 let records;
 let scene;
@@ -191,6 +202,7 @@ const takeOutputWindow = async (session) => {
 };
 try {
 	await requireReadiness(app, dataPath);
+	if (isolatedServer) await isolatedServer.verify();
 	await collectMemory();
 	benchmarkPhase = "scene-preparation";
 	const prepared = await prepareScene(profile);
@@ -350,6 +362,14 @@ try {
 	benchmarkFailure = reason;
 	console.error(reason instanceof Error ? reason.stack : reason);
 } finally {
+	if (isolatedServer) {
+		try {
+			isolatedServer.identity.end = await isolatedServer.verify();
+		} catch (error) {
+			isolatedServer.identity.endError = error.message;
+			benchmarkFailure ??= error;
+		}
+	}
 	clearInterval(memorySampler);
 	clearInterval(outputSampler);
 	await collectMemory();
@@ -357,7 +377,7 @@ try {
 	await networkCapture?.close();
 	await oscHardware?.close();
 	app.kill("SIGTERM");
-	if (isolatedServer) await stopIsolatedDesktop(app, isolatedServer);
+	if (isolatedServer) await stopIsolatedDesktop(app, isolatedServer.child);
 	else await stopPackagedDesktop();
 }
 
@@ -403,6 +423,7 @@ if (benchmarkFailure) {
 					processMemory,
 				);
 }
+if (isolatedServer) result.isolatedServerIdentity = isolatedServer.identity;
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
 if (!captureExercise) await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
@@ -1900,38 +1921,6 @@ async function firstPatchedDmxAddress(session, showId) {
 	throw new Error("network capture found no patched fixture");
 }
 
-async function startIsolatedServer(application, dataDirectory, port, osc) {
-	const contents = application.bundle
-		? path.join(application.bundle, "Contents")
-		: null;
-	const server = contents
-		? path.join(contents, "MacOS", "light-headless")
-		: path.join(
-				path.dirname(application.executable),
-				process.platform === "win32" ? "light-headless.exe" : "light-headless",
-			);
-	const fixtureLibrary = contents
-		? path.join(contents, "Resources", "fixture-library")
-		: path.join(repositoryRoot, "assets", "fixture-library");
-	await mkdir(dataDirectory, { recursive: true });
-	const log = await open(path.join(dataDirectory, "light-headless.log"), "w");
-	const child = spawn(
-		server,
-		[
-			"--data-dir",
-			dataDirectory,
-			"--fixture-package-dir",
-			fixtureLibrary,
-			"--bind",
-			`127.0.0.1:${port}`,
-			"--osc-bind",
-			`127.0.0.1:${osc}`,
-		],
-		{ cwd: repositoryRoot, stdio: ["ignore", log.fd, log.fd] },
-	);
-	child.once("exit", () => void log.close().catch(() => undefined));
-	return child;
-}
 
 async function stopIsolatedDesktop(launched, server) {
 	await waitForExit(launched, 5_000);

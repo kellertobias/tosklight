@@ -302,7 +302,7 @@ RSS/late CPU-wall gates. Release Draft had a main-process RSS slope of
 late CPU-wall p95 of 1.696 ms; its shorter duration does not establish the
 30-minute resource gate. Renderer CPU fields measure elapsed wall time.
 
-The first three rows use commit `0441d5800`. The short priority row retains its
+The first three bundles were built from commit `0441d5800`. The short priority row retains its
 host/server from that commit and uses renderer helper `51533c6d3` in the resealed
 release bundle. The actual two embedded children ran at nice +5; desktop and
 headless stayed at 0. This verifies the optional hint, without establishing that
@@ -312,3 +312,54 @@ Displayed-frame timing, matched-rate whole-Stage GPU execution per second,
 cross-platform evidence and human image acceptance remain open. Sparse helper
 GPU samples and compositor submission counts cannot substitute for those gates.
 No result here constitutes final acceptance of TL-846 or TL-852.
+
+
+### Offline Metal interval accounting
+
+`tools/stage-gpu-intervals.py` consumes an exported `metal-gpu-intervals` table.
+Pass every verified owned renderer/compositor PID with repeated `--owned-pid`
+arguments, together with the actual TOC duration (`--trace-duration-seconds`) or
+one explicit common window (`--window-start-ns` and `--window-end-ns`). Requested
+recording duration and export-tool wall time are not observation durations.
+
+The parser resolves export-local XML identities and column mnemonics, clips
+Active execution to that window, and unions duplicate, nested and overlapping
+intervals per GPU. `activeWallMillisPerSecond` is the non-overlapping execution
+interval metric. Channel unions are also reported, but their sum can exceed wall
+time because channels execute concurrently. Raw duration sums double-count
+nested/overlapping work. GPU names are display labels; canonical XML IDs separate
+same-named devices within that export, without asserting identity across traces.
+
+Missing selected-process execution, unknown selected states, unresolved refs,
+ambiguous columns and invalid windows fail instead of becoming zero. Caller
+proof of process ownership, lifetime, trace completeness and the exact workload
+is still required. Attaching xctrace to one PID can capture other processes;
+WindowServer and unrelated applications must remain outside the owned PID set.
+The native compositor belongs to the desktop process, not WindowServer.
+
+The retained historical static standalone trace has 162,988,873 ns of owned
+execution union over 11.000456 seconds (14.817 ms/wall-second). It has no embedded
+compositor evidence and cannot establish current Draft/Lines GPU savings.
+Neither this metric nor Core Animation Requested Time/status fields establish
+actual displayed frames. Keep display timing and human acceptance separate.
+
+
+### Isolated server ownership correction
+
+The older runner started headless and the app concurrently. Slow server startup
+could cause the app to launch its bundled fallback, racing the original child
+for the same port and truncating `light-headless.log`. The retained release
+Draft/Lines logs and the 03:57 diagnostic contain bind errors. Preserve their
+observed output failures, but backend PID/build and diagnostic-policy attribution
+were not verified. In particular, the 03:57 bucket pass cannot provide CPU or
+wake evidence: its log contains no such observations.
+
+New isolated runs preflight the port, await the original child's readiness and
+verify its unique listener PID before launching the app. They verify ownership
+and executable SHA256 again at the end, and report `isolatedServerIdentity`.
+The original child log is `owned-light-headless.log`; an app fallback cannot
+truncate it. Missing ownership tooling, a foreign listener, child exit, timeout
+or changed executable fails the run. Non-isolated workflows remain separate.
+For opt-in CPU/wake investigation, set `LIGHT_OUTPUT_PHASE_DIAGNOSTICS=all` and
+include `light_output=info,light_engine=info,light_headless_runtime=info` in
+`RUST_LOG`; the normal default filter does not enable every diagnostic target.
