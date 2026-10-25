@@ -35,6 +35,7 @@ pub enum Row {
     LaserFogTurbulence,
     LaserBrightness,
     CrowdAmount,
+    DetailedPeople,
     Persistence,
     PersistenceFalloff,
     InputUniverse,
@@ -114,6 +115,7 @@ impl Row {
             Self::LaserFogTurbulence => "Laser fog turbulence",
             Self::LaserBrightness => "Laser brightness",
             Self::CrowdAmount => "Crowd amount",
+            Self::DetailedPeople => "Detailed people",
             Self::Persistence => "Persistence of vision",
             Self::PersistenceFalloff => "Persistence falloff",
             Self::InputUniverse => "Input universe",
@@ -279,6 +281,7 @@ impl QuickSettings {
                     Row::ShowSelection,
                     Row::FloorGrid,
                     Row::CrowdAmount,
+                    Row::DetailedPeople,
                 ]
             }
             QuickSettingsTab::Snapshots => {
@@ -342,12 +345,7 @@ impl QuickSettings {
                 self.message = format!("Rendering quality: {}", preferences.quality_label());
                 QuickSettingsOutcome::AppliedLocally
             }
-            Row::Exposure => {
-                preferences.exposure =
-                    (preferences.exposure + 0.05 * delta as f32).clamp(0.05, 4.0);
-                self.message = format!("Exposure {:.2}×", preferences.exposure);
-                QuickSettingsOutcome::AppliedLocally
-            }
+            Row::Exposure => adjust_exposure(preferences, delta, &mut self.message),
             Row::Appearance => {
                 preferences.theme = preferences.theme.toggled();
                 self.message = format!("Appearance: {}", preferences.theme.label());
@@ -472,6 +470,7 @@ impl QuickSettings {
                 };
                 QuickSettingsOutcome::AppliedLocally
             }
+            Row::DetailedPeople => toggle_detailed_people(preferences, &mut self.message),
             Row::CrowdAmount => {
                 let step = 0.05 * delta as f32;
                 preferences.crowd_amount = (preferences.crowd_amount + step).clamp(0.0, 1.0);
@@ -588,7 +587,9 @@ impl QuickSettings {
             | Row::Appearance
             | Row::Ambient
             | Row::Labels => self.adjust(1, preferences),
-            Row::ShowSelection | Row::FloorGrid => self.adjust(1, preferences),
+            Row::ShowSelection | Row::FloorGrid | Row::DetailedPeople => {
+                self.adjust(1, preferences)
+            }
             _ => QuickSettingsOutcome::None,
         }
     }
@@ -682,6 +683,12 @@ impl QuickSettings {
             }
             Row::LaserBrightness => format!("{:.0}%", preferences.laser_brightness * 100.0),
             Row::CrowdAmount => format!("{:.0}%", preferences.crowd_amount * 100.0),
+            Row::DetailedPeople => if preferences.detailed_people {
+                "On"
+            } else {
+                "Off"
+            }
+            .into(),
             Row::Persistence => {
                 if preferences.persistence.decay_seconds <= 0.0 {
                     "off".into()
@@ -1103,4 +1110,33 @@ pub(super) fn visible_window(rows: usize, selected: usize, room: usize) -> (usiz
         .saturating_sub(visible / 2)
         .min(rows - visible);
     (first, visible)
+}
+
+fn toggle_detailed_people(
+    preferences: &mut Preferences,
+    message: &mut String,
+) -> QuickSettingsOutcome {
+    preferences.detailed_people = !preferences.detailed_people;
+    *message = format!(
+        "Detailed people {} — Ultra and 4K only; Draft/Lines stay lightweight",
+        if preferences.detailed_people {
+            "on"
+        } else {
+            "off"
+        }
+    );
+    QuickSettingsOutcome::AppliedLocally
+}
+
+#[cfg(test)]
+mod detailed_people_tests;
+
+fn adjust_exposure(
+    preferences: &mut Preferences,
+    delta: i32,
+    message: &mut String,
+) -> QuickSettingsOutcome {
+    preferences.exposure = (preferences.exposure + 0.05 * delta as f32).clamp(0.05, 4.0);
+    *message = format!("Exposure {:.2}×", preferences.exposure);
+    QuickSettingsOutcome::AppliedLocally
 }

@@ -13,3 +13,22 @@ Moving another fixture does not reshuffle the audience.
 Draft and Standard omit crowds. High and Ultra draw them with a performance limit. Use
 **Quick Settings > Crowd amount** to reduce the visible audience from 100% to 0% on this renderer.
 It does not rewrite the show's authored area or density.
+
+## Detailed people
+
+**Quick Settings > Features > Detailed people** adds rounded, three-dimensional bodies in Ultra.
+Control exposes the same **Detailed people** switch in Stage settings for 4K captures. It defaults
+to off, preserving the existing silhouettes. Clothing stays dark and skin and clothing respond
+to the show lights; the bodies have no artificial glow or bright contour lines.
+
+The switch remains available in Draft and 3D Lines. Those live views stay lightweight, while
+**Render 4K** freezes the requested detail and uses it for both native Ultra and Blender Ultimate.
+Changing the switch after opening the quality chooser does not change that frozen image.
+
+Crowd amount still controls population. Detail does not move or resize people, change a crowd's
+seed, or increase its live quality budget. Sitting people retain their seated height. Detailed
+full-budget 4K audiences cost more to render; reduce Crowd amount when a smaller population is
+appropriate. Plans keep their footprint rectangles, and High keeps the lightweight silhouettes.
+
+The older editable Snapshot-to-Blender export retains its simple crowd silhouettes. The
+Detailed people switch applies to native Ultra and the two **Render 4K** image engines.

@@ -118,12 +118,14 @@ fn invocation_resolves_latest_local_camera_without_changing_cached_view() {
     let mut camera = viz_render::CameraControl::default();
     camera.adopt(&resolved.camera);
     camera.zoom(0.5);
-    let latest = invocation_view(&resolved, &camera, true);
+    let latest = invocation_view(&resolved, &camera, true, resolved.detailed_people);
     assert_ne!(latest.camera.position, resolved.camera.position);
     assert_eq!(latest.mode, resolved.mode);
     assert_eq!(latest.quality, resolved.quality);
     assert_eq!(
-        invocation_view(&resolved, &camera, false).camera.position,
+        invocation_view(&resolved, &camera, false, resolved.detailed_people)
+            .camera
+            .position,
         resolved.camera.position
     );
 }
@@ -176,4 +178,21 @@ fn modal_entry_and_exit_release_held_live_camera_input() {
     app.apply_still_status(Some(rendering));
     assert!(!app.still_ui.modal());
     assert!(!app.turning && !app.walk_keys.back);
+}
+
+#[test]
+fn detailed_people_invocation_uses_current_preference_without_another_draw() {
+    for (old, current) in [(false, true), (true, false)] {
+        let resolved = ViewConfiguration {
+            quality: viz_scene::RenderQuality::Draft,
+            detailed_people: old,
+            ..Default::default()
+        };
+        let camera = viz_render::CameraControl::default();
+        let frozen_view = invocation_view(&resolved, &camera, false, current);
+        assert_eq!(frozen_view.detailed_people, current);
+        assert_eq!(resolved.detailed_people, old);
+        assert_eq!(frozen_view.quality, resolved.quality);
+        assert_eq!(frozen_view.camera, resolved.camera);
+    }
 }

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import type { StagePanePicture } from "../../platform/desktop/types";
 import { useApp } from "../../state/AppContext";
+import { DetailedPeopleSetting } from "./DetailedPeopleSetting";
 
 /**
  * The 3D Viz view's own settings.
@@ -105,20 +106,9 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 					dispatch({ type: "SET_STAGE_OPTIONS", environmentBrightness });
 				}}
 			/>
-			<MultiValueToggleField
-				label="Render quality"
-				description="How much the renderer is asked to do per frame. Ultra is the most expensive and the least forgiving of a busy machine."
-				value={state.stageVizQuality}
-				onChange={(vizQuality) => {
-					dispatch({ type: "SET_STAGE_OPTIONS", vizQuality });
-				}}
-				options={[
-					{ value: "draft", label: "Draft" },
-					{ value: "standard", label: "Standard" },
-					{ value: "high", label: "High" },
-					{ value: "ultra", label: "Ultra" },
-				]}
-			/>
+			<RenderQualitySetting quality={state.stageVizQuality} onChange={(vizQuality) => {
+				dispatch({ type: "SET_STAGE_OPTIONS", vizQuality });
+			}} />
 			{paneId && state.stageVizQuality === "ultra" && (
 				<>
 					<HorizontalFaderField
@@ -163,6 +153,7 @@ export function StageVizSettings({ paneId }: { paneId?: string } = {}) {
 					/>
 				</>
 			)}
+			<DetailedPeopleSetting />
 			<HorizontalFaderField
 				label="Exposure"
 				description="What the whole picture is scaled by before it is shown, as a camera's exposure would."
@@ -248,3 +239,15 @@ const STAGE_BACKGROUNDS = [
 	"#0a1416",
 	"#12100a",
 ] as const;
+
+function RenderQualitySetting({ quality, onChange }: {
+	quality: StagePanePicture["quality"];
+	onChange: (quality: StagePanePicture["quality"]) => void;
+}) {
+	return <MultiValueToggleField label="Render quality"
+		description="How much the renderer is asked to do per frame. Ultra is the most expensive and the least forgiving of a busy machine."
+		value={quality} onChange={onChange} options={[
+			{ value: "draft", label: "Draft" }, { value: "standard", label: "Standard" },
+			{ value: "high", label: "High" }, { value: "ultra", label: "Ultra" },
+		]} />;
+}

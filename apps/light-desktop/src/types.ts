@@ -303,6 +303,8 @@ export interface AppState {
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
 	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	/** Detailed audience bodies in Ultra and frozen 4K images; lightweight views stay unchanged. */
+	stageVizDetailedPeople: boolean;
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;
@@ -401,6 +403,8 @@ export interface WindowSettings {
 	stageVizAtmosphere: number;
 	/** How much the 3D Viz renderer is asked to do per frame. */
 	stageVizQuality: "draft" | "standard" | "high" | "ultra";
+	/** Detailed audience bodies in Ultra and frozen 4K images; lightweight views stay unchanged. */
+	stageVizDetailedPeople: boolean;
 	stageVizExposure: number;
 	stageVizLaserBrightness: number;
 	stageVizShowLabels: boolean;

@@ -70,6 +70,7 @@ export function useStagePanePicture(
 	const {
 		stageEnvironmentBrightness,
 		stageVizExposure,
+		stageVizDetailedPeople,
 		stageVizLaserBrightness,
 		stageVizShowLabels,
 		stageShowFloorGrid,
@@ -94,6 +95,7 @@ export function useStagePanePicture(
 			ambient: stageEnvironmentBrightness,
 			quality: "draft",
 			exposure: stageVizExposure,
+			detailedPeople: stageVizDetailedPeople ?? false,
 			laserBrightness: stageVizLaserBrightness,
 			lampFogCloudiness,
 			lampFogTurbulence,
@@ -121,6 +123,7 @@ export function useStagePanePicture(
 		followPreload,
 		stageEnvironmentBrightness,
 		stageVizExposure,
+		stageVizDetailedPeople,
 		stageVizLaserBrightness,
 		lampFogCloudiness,
 		lampFogTurbulence,

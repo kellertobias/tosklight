@@ -30,6 +30,8 @@ pub struct ImageManifest {
     pub time_seconds: f32,
     /// Invocation-time local preference; capture budgets never increase this requested amount.
     pub crowd_amount: f32,
+    /// Raw invocation-time preference, independent of the live view's quality.
+    pub detailed_people: bool,
     pub geometry_file: String,
     pub geometry_hash: u64,
     pub show: String,
@@ -117,6 +119,7 @@ impl ImageManifest {
             quality: viz_scene::RenderQuality::Ultra,
             camera_position: Some(camera.position),
             crowd_amount,
+            detailed_people: view.detailed_people,
             crowd_person_budget: usize::MAX,
             effect_particle_budget: usize::MAX,
             media_content: true,
@@ -169,6 +172,7 @@ impl ImageManifest {
             values_frame: values.frame,
             time_seconds,
             crowd_amount,
+            detailed_people: view.detailed_people,
             geometry_file: crate::GEOMETRY_FILE.into(),
             geometry_hash: hash(&geometry),
             show: scene.show_name.clone(),
@@ -268,3 +272,6 @@ pub(super) fn write_new(directory: &Path, name: &str, bytes: &[u8]) -> Result<()
     file.write_all(bytes)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod detailed_people_tests;

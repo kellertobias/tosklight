@@ -31,6 +31,7 @@ pub(super) fn apply(
         laser_fog_cloudiness,
         laser_fog_turbulence,
         show_labels,
+        detailed_people,
         floor_grid,
         show_beam_guides,
         background,
@@ -52,6 +53,7 @@ pub(super) fn apply(
             laser_turbulence: laser_fog_turbulence.clamp(0.0, 1.0),
         };
         state.view.show_labels = *show_labels;
+        state.view.detailed_people = *detailed_people;
         state.view.floor_grid = *floor_grid;
         state.view.show_aim_guides = *show_beam_guides;
         state.view.background = Some(background.map(|channel| channel.clamp(0.0, 1.0)));

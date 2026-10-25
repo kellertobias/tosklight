@@ -11,7 +11,7 @@ Visualizer **Quick Settings**. With that view focused, press **Cmd+Shift+R** on 
 **Ctrl+Shift+R** on Windows/Linux. The shortcut is inactive while entering text, using the Desk
 command line, or choosing in a modal dialog. Cmd/Ctrl+S keeps its existing scene-snapshot behavior.
 
-The action freezes that pane's camera, Live or Follow Preload values, crowd amount, and available
+The action freezes that pane's camera, Live or Follow Preload values, crowd amount, Detailed people preference, and available
 media pixels before checking Blender or asking for quality. Moving the rig while the choice is open does not
 change the captured moment. Both engines produce a new **3840 × 2160 PNG**; they do not enlarge
 the live pane's raster. The camera keeps its vertical field of view with 16:9 framing, so the image

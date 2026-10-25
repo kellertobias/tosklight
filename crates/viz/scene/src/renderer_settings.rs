@@ -20,6 +20,9 @@ pub struct RendererSettings {
     pub laser_fog_cloudiness: f32,
     pub laser_fog_turbulence: f32,
     pub crowd_amount: f32,
+    /// Optional Ultra/capture audience geometry; absent older settings keep silhouettes.
+    #[serde(default)]
+    pub detailed_people: bool,
     pub theme: String,
     pub background: Option<[f32; 3]>,
     pub show_labels: bool,
@@ -79,6 +82,7 @@ pub enum RendererSettingChange {
     LaserFogCloudiness(f32),
     LaserFogTurbulence(f32),
     CrowdAmount(f32),
+    DetailedPeople(bool),
     Theme(String),
     Background(Option<[f32; 3]>),
     ShowLabels(bool),
@@ -108,6 +112,7 @@ impl Default for RendererSettings {
             laser_fog_cloudiness: 0.0,
             laser_fog_turbulence: 0.0,
             crowd_amount: 1.0,
+            detailed_people: false,
             theme: "light_on_dark".into(),
             background: None,
             show_labels: true,
@@ -150,6 +155,11 @@ impl RendererSettings {
                 "laser_fog_cloudiness" => adopt_f32(value, &mut settings.laser_fog_cloudiness),
                 "laser_fog_turbulence" => adopt_f32(value, &mut settings.laser_fog_turbulence),
                 "crowd_amount" => adopt_f32(value, &mut settings.crowd_amount),
+                "detailed_people" => {
+                    if let Ok(enabled) = value.parse::<bool>() {
+                        settings.detailed_people = enabled;
+                    }
+                }
                 "theme" if matches!(value, "light_on_dark" | "dark_on_light") => {
                     settings.theme = value.into()
                 }
@@ -231,6 +241,7 @@ impl RendererSettings {
         line!("laser_fog_cloudiness", self.laser_fog_cloudiness);
         line!("laser_fog_turbulence", self.laser_fog_turbulence);
         line!("crowd_amount", self.crowd_amount);
+        line!("detailed_people", self.detailed_people);
         line!("theme", self.theme);
         match self.background {
             Some([red, green, blue]) => line!("background", format!("{red},{green},{blue}")),
@@ -280,6 +291,7 @@ impl RendererSettings {
         field!(laser_fog_cloudiness, LaserFogCloudiness);
         field!(laser_fog_turbulence, LaserFogTurbulence);
         field!(crowd_amount, CrowdAmount);
+        field!(detailed_people, DetailedPeople);
         field!(theme, Theme);
         field!(background, Background);
         field!(show_labels, ShowLabels);
@@ -320,6 +332,7 @@ impl RendererSettings {
                     self.laser_fog_turbulence = *value
                 }
                 RendererSettingChange::CrowdAmount(value) => self.crowd_amount = *value,
+                RendererSettingChange::DetailedPeople(value) => self.detailed_people = *value,
                 RendererSettingChange::Theme(value) => self.theme = value.clone(),
                 RendererSettingChange::Background(value) => self.background = *value,
                 RendererSettingChange::ShowLabels(value) => self.show_labels = *value,
@@ -356,6 +369,7 @@ impl RendererSettingChange {
             Self::LaserFogCloudiness(_) => "laserFogCloudiness",
             Self::LaserFogTurbulence(_) => "laserFogTurbulence",
             Self::CrowdAmount(_) => "crowdAmount",
+            Self::DetailedPeople(_) => "detailedPeople",
             Self::Theme(_) => "theme",
             Self::Background(_) => "background",
             Self::ShowLabels(_) => "showLabels",
@@ -467,3 +481,6 @@ quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\n
         );
     }
 }
+
+#[cfg(test)]
+mod detailed_people_tests;

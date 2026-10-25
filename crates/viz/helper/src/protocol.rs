@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Three shared image credits change the ownership contract. Reject two-slot peers before
-// exchanging any surfaces, even though the immutable greeting payload shape is unchanged.
-pub const PROTOCOL_MAJOR: u16 = 12;
+// Detailed-people picture policy changes postcard's positional payload. Reject older peers
+// before exchanging settings/surfaces; the immutable greeting payload is unchanged.
+pub const PROTOCOL_MAJOR: u16 = 13;
 /// Bounded shared ownership: retained front, host composition, and producer rendering.
 /// Copy transport independently permits only slot zero.
 pub const SHARED_FRAME_SLOTS: usize = 3;
@@ -186,6 +186,8 @@ pub enum ToHelper {
         laser_fog_turbulence: f32,
         /// Screen-space fixture numbers and patch addresses beside fixtures in every Stage view.
         show_labels: bool,
+        /// Requested Ultra/capture audience detail, retained while live quality is Draft.
+        detailed_people: bool,
         /// Lay the reference grid on the ground plane.
         floor_grid: bool,
         /// Draw dashed direction guides for unlit fixtures in the 3D diagram.
@@ -622,6 +624,7 @@ mod tests {
                 laser_fog_cloudiness: 0.0,
                 laser_fog_turbulence: 0.0,
                 show_labels: false,
+                detailed_people: true,
                 floor_grid: true,
                 show_beam_guides: false,
                 background: [0.008, 0.010, 0.016],
@@ -1038,5 +1041,18 @@ mod benchmark_heartbeat_tests {
             }
             .is_valid()
         );
+    }
+}
+
+#[cfg(test)]
+mod detailed_people_tests {
+    use super::*;
+    #[test]
+    fn old_picture_shape_is_refused_before_any_positional_payload_is_used() {
+        assert!(
+            accepts(12, 2).is_err(),
+            "major12 lacks the positional detailed-people picture field"
+        );
+        assert!(accepts(PROTOCOL_MAJOR, PROTOCOL_MINOR).is_ok());
     }
 }

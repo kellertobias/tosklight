@@ -41,6 +41,7 @@ function persistedWindowSettings(state: AppState) {
 		stageVizBackground: state.stageVizBackground,
 		stageVizQuality: state.stageVizQuality,
 		stageVizAtmosphere: state.stageVizAtmosphere,
+		stageVizDetailedPeople: state.stageVizDetailedPeople,
 		stageVizExposure: state.stageVizExposure,
 		stageVizLaserBrightness: state.stageVizLaserBrightness,
 		stageVizShowLabels: state.stageVizShowLabels,

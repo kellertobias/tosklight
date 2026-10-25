@@ -5,6 +5,7 @@ import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { Stage2dSide } from "../../types";
 import type { StageOptionsModel } from "./types";
+import { DetailedPeopleSetting } from "./DetailedPeopleSetting";
 
 /** Select the lightweight plan or wireframe view and its matching controls. */
 function StageSettings({
@@ -55,6 +56,7 @@ function StageCommonSettings({ options }: { options: StageOptionsModel }) {
 	const { state, dispatch } = useApp();
 	return (
 		<>
+			<DetailedPeopleSetting />
 			<SwitchField
 				label="Group shortcuts"
 				offLabel="Hidden"

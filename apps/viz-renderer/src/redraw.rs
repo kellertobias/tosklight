@@ -272,3 +272,27 @@ mod label_cache_tests {
         assert_eq!(overlay.quads[0].rect[0], 3.0);
     }
 }
+
+#[cfg(test)]
+mod detailed_people_tests {
+    use super::*;
+    #[test]
+    fn static_ultra_detail_toggle_redraws_once_then_returns_to_idle() {
+        let mut view = ViewConfiguration {
+            quality: viz_scene::RenderQuality::Ultra,
+            ..Default::default()
+        };
+        let values = SceneValues::default();
+        let identity =
+            |view: &ViewConfiguration| RedrawState::new(1, 0, &values, view, (640, 480), &[]);
+        let mut gate = RedrawGate::default();
+        gate.succeeded(identity(&view));
+        assert!(!gate.should_draw(&identity(&view), false));
+        view.detailed_people = true;
+        assert!(gate.should_draw(&identity(&view), false));
+        gate.succeeded(identity(&view));
+        assert!(!gate.should_draw(&identity(&view), false));
+        view.detailed_people = false;
+        assert!(gate.should_draw(&identity(&view), false));
+    }
+}

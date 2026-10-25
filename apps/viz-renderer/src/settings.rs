@@ -505,6 +505,8 @@ pub struct Preferences {
     pub fog_variation: viz_scene::FogVariation,
     /// Local audience amount; it never rewrites a Venue fixture or its deterministic seed.
     pub crowd_amount: f32,
+    /// Local Ultra/capture detail, kept raw even when live Draft/Lines omits the audience.
+    pub detailed_people: bool,
     pub theme: Theme,
     /// The room colour behind the rig.
     pub background: Option<[f32; 3]>,
@@ -548,6 +550,7 @@ impl Preferences {
             laser_brightness: options.laser_brightness.unwrap_or(1.0),
             fog_variation: viz_scene::FogVariation::default(),
             crowd_amount: options.crowd_amount.unwrap_or(1.0),
+            detailed_people: false,
             theme: options.theme.unwrap_or(Theme::LightOnDark),
             background: None,
             show_labels: true,
@@ -644,6 +647,7 @@ impl Preferences {
             self.fog_variation.laser_turbulence
         ));
         text.push_str(&format!("crowd_amount {}\n", self.crowd_amount));
+        text.push_str(&format!("detailed_people {}\n", self.detailed_people));
         text.push_str(&format!("theme {}\n", self.theme.wire()));
         match self.background {
             Some(background) => text.push_str(&format!(
@@ -698,6 +702,7 @@ impl Preferences {
             laser_fog_cloudiness: self.fog_variation.laser_cloudiness,
             laser_fog_turbulence: self.fog_variation.laser_turbulence,
             crowd_amount: self.crowd_amount,
+            detailed_people: self.detailed_people,
             theme: self.theme.wire().into(),
             background: self.background,
             show_labels: self.show_labels,
@@ -792,6 +797,11 @@ impl Preferences {
                 }
                 "laser_fog_turbulence" => {
                     adopt_unit(value, &mut self.fog_variation.laser_turbulence)
+                }
+                "detailed_people" => {
+                    if let Ok(enabled) = value.parse::<bool>() {
+                        self.detailed_people = enabled;
+                    }
                 }
                 "crowd_amount" if options.crowd_amount.is_none() => {
                     if let Ok(amount) = value.parse::<f32>() {
@@ -1155,3 +1165,6 @@ mod launch_order {
         );
     }
 }
+
+#[cfg(test)]
+mod detailed_people_tests;

@@ -17,6 +17,8 @@ pub(crate) struct Picture {
     lamp_fog_turbulence: f32,
     laser_fog_cloudiness: f32,
     laser_fog_turbulence: f32,
+    #[serde(default)]
+    detailed_people: bool,
     show_labels: bool,
     floor_grid: bool,
     show_beam_guides: bool,
@@ -51,6 +53,7 @@ impl Picture {
             lamp_fog_turbulence: self.lamp_fog_turbulence,
             laser_fog_cloudiness: self.laser_fog_cloudiness,
             laser_fog_turbulence: self.laser_fog_turbulence,
+            detailed_people: self.detailed_people,
             show_labels: self.show_labels,
             floor_grid: self.floor_grid,
             show_beam_guides: self.show_beam_guides,
@@ -98,6 +101,35 @@ mod tests {
         assert_eq!(mode, expected_mode);
         assert_eq!(quality, RenderQuality::Draft);
         assert!(follow_preload);
+    }
+
+    #[test]
+    fn optional_detail_defaults_off_but_survives_the_lightweight_live_picture() {
+        let mut payload = serde_json::json!({
+            "atmosphere": 0.0, "ambient": 0.35, "exposure": 1.0, "laserBrightness": 1.0,
+            "lampFogCloudiness": 0.0, "lampFogTurbulence": 0.0,
+            "laserFogCloudiness": 0.0, "laserFogTurbulence": 0.0,
+            "showLabels": true, "floorGrid": true, "showBeamGuides": false,
+            "background": [0.0,0.0,0.0], "mode": "lines_3d", "followPreload": false
+        });
+        for expected in [false, true] {
+            if expected {
+                payload["detailedPeople"] = serde_json::Value::Bool(true);
+            }
+            let picture: Picture = serde_json::from_value(payload.clone()).unwrap();
+            let ToHelper::Picture {
+                detailed_people,
+                quality,
+                mode,
+                ..
+            } = picture.into_helper()
+            else {
+                panic!("expected picture");
+            };
+            assert_eq!(detailed_people, expected);
+            assert_eq!(quality, RenderQuality::Draft);
+            assert_eq!(mode, StageViewMode::Lines3d);
+        }
     }
 
     #[test]

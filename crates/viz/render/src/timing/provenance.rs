@@ -6,6 +6,7 @@ pub(crate) struct TimingContext {
     pub show_id: Option<u128>,
     pub mode: viz_scene::ViewMode,
     pub quality: viz_scene::RenderQuality,
+    pub detailed_people: bool,
     pub size: (u32, u32),
     pub render_size: (u32, u32),
     pub generation: u64,
@@ -72,6 +73,7 @@ mod tests {
             show_id: Some(1),
             mode: viz_scene::ViewMode::Full3d,
             quality: viz_scene::RenderQuality::Ultra,
+            detailed_people: false,
             size: (1920, 1080),
             render_size: (1920, 1080),
             generation,
@@ -84,6 +86,10 @@ mod tests {
         let stable = context(0).following(Some(first));
         assert_eq!(stable, first);
         for changed in [
+            TimingContext {
+                detailed_people: true,
+                ..context(0)
+            },
             TimingContext {
                 mode: viz_scene::ViewMode::Lines3d,
                 ..context(0)

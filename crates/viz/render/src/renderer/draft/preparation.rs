@@ -214,6 +214,7 @@ fn appearance(key: &mut Key<impl Hasher>, style: &FrameStyle) {
     ));
     key.add(&(
         style.crowd_amount,
+        style.detailed_people && style.quality == viz_scene::RenderQuality::Ultra,
         style.crowd_person_budget,
         style.effect_particle_budget,
         style.media_content,
@@ -370,3 +371,24 @@ mod tests {
 #[cfg(test)]
 #[path = "preparation/benchmark.rs"]
 mod benchmark;
+
+#[cfg(test)]
+mod detailed_people_tests {
+    use super::*;
+    #[test]
+    fn requested_detail_changes_only_effective_ultra_preparation_identity() {
+        let scene = Scene::default();
+        let values = SceneValues::default();
+        let mut style = FrameStyle {
+            quality: viz_scene::RenderQuality::Draft,
+            ..Default::default()
+        };
+        let off = fingerprint(&scene, &values, &style);
+        style.detailed_people = true;
+        assert_eq!(off, fingerprint(&scene, &values, &style));
+        style.quality = viz_scene::RenderQuality::Ultra;
+        let detailed = fingerprint(&scene, &values, &style);
+        style.detailed_people = false;
+        assert_ne!(detailed, fingerprint(&scene, &values, &style));
+    }
+}

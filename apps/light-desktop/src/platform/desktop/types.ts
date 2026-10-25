@@ -86,6 +86,8 @@ export interface StagePanePicture {
 	lampFogTurbulence: number;
 	laserFogCloudiness: number;
 	laserFogTurbulence: number;
+	/** Frozen Ultra captures may use detailed bodies while live Control remains lightweight. */
+	detailedPeople?: boolean;
 	showLabels: boolean;
 	/** Lay the reference grid on the ground plane. */
 	floorGrid: boolean;

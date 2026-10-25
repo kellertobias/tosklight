@@ -317,3 +317,6 @@ fn validate(frozen: &FrozenStill, options: &StillOptions) -> Result<(), String> 
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod people_tests;

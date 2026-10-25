@@ -9,7 +9,9 @@ use super::{
     BLOOM_MIX, FrameStats, Globals, MAX_SHADOWS, SHADOW_DRAW_STRIDE, SHADOW_TILE_EDGE,
     SHADOW_TILES_PER_ROW, ShadedRenderer,
 };
+use crate::buffers::{DynamicBuffer, GpuMesh};
 use crate::camera::ResolvedCamera;
+use crate::instances::MeshInstance;
 use crate::instances::{FrameStyle, GpuCurtainShadow, GpuLight, MeshKind};
 use crate::renderer::runtime_hash::RuntimeHasher;
 use crate::timing::GpuTimer;
@@ -236,6 +238,7 @@ impl ShadedRenderer {
                 _ => |_| true,
             },
             crowd_amount: self.crowd_amount,
+            detailed_people: view.detailed_people,
             crowd_person_budget: if self.capture_quality {
                 usize::MAX
             } else {
@@ -400,6 +403,20 @@ impl ShadedRenderer {
         }
         self.ensure_gobo_atlas(scene);
         for (kind, instances) in &self.frame.meshes {
+            if !instances.is_empty()
+                && !self.meshes.contains_key(kind)
+                && let Some((name, mesh)) = crate::mesh::procedural(*kind)
+            {
+                self.meshes.insert(*kind, GpuMesh::new(device, name, &mesh));
+                self.mesh_instances.entry(*kind).or_insert_with(|| {
+                    DynamicBuffer::new(
+                        device,
+                        name,
+                        wgpu::BufferUsages::VERTEX,
+                        (size_of::<MeshInstance>() * 256) as u64,
+                    )
+                });
+            }
             if let Some(buffer) = self.mesh_instances.get_mut(kind) {
                 buffer.upload(device, queue, instances);
             }

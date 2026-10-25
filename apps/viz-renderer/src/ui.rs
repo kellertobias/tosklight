@@ -638,9 +638,11 @@ mod tests {
             | Row::LaserBrightness
             | Row::Persistence
             | Row::PersistenceFalloff => QuickSettingsTab::Rendering,
-            Row::Labels | Row::ShowSelection | Row::FloorGrid | Row::CrowdAmount => {
-                QuickSettingsTab::Features
-            }
+            Row::Labels
+            | Row::ShowSelection
+            | Row::FloorGrid
+            | Row::CrowdAmount
+            | Row::DetailedPeople => QuickSettingsTab::Features,
             Row::BlenderPath | Row::Snapshot(_) => QuickSettingsTab::Snapshots,
             Row::Cancel => settings.tab,
         };

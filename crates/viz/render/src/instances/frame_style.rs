@@ -46,6 +46,8 @@ pub struct FrameStyle {
     pub scenery: fn(viz_scene::SceneryKind) -> bool,
     /// Renderer-local fraction of every authored crowd to draw.
     pub crowd_amount: f32,
+    /// Requested detail, applied only at Ultra; population and placement are independent.
+    pub detailed_people: bool,
     /// Per-frame crowd budget selected from quality and the renderer's adaptive hardware ladder.
     pub crowd_person_budget: usize,
     /// Per-frame Effect-particle budget selected from quality and the same adaptive hardware
@@ -90,6 +92,7 @@ impl Default for FrameStyle {
             floor_grid: true,
             scenery: |_| true,
             crowd_amount: 1.0,
+            detailed_people: false,
             crowd_person_budget: 384,
             effect_particle_budget: 2_048,
             media_content: true,

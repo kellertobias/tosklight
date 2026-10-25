@@ -38,6 +38,9 @@ pub enum MeshKind {
     CrowdPerson,
     /// Contrasting authored contours drawn just in front of and behind the crowd silhouette.
     CrowdPersonOutline,
+    DetailedPeopleSkin(bool),
+    DetailedPeopleTop(bool),
+    DetailedPeopleBottom(bool),
     /// One part of a fixture model read from the library: `(model index, part index)`.
     ///
     /// A part is its own mesh because pan and tilt move the yoke and the head but not the base,

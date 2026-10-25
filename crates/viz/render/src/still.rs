@@ -182,6 +182,7 @@ mod tests {
         let mut view = ViewConfiguration::default();
         view.mode = ViewMode::Lines3d;
         view.quality = RenderQuality::Draft;
+        view.detailed_people = true;
         let origin = StillOrigin {
             pane_id: "preload-pane".into(),
             follow_preload: true,
@@ -198,9 +199,18 @@ mod tests {
         scene.revision += 1;
         values.frame += 1;
         view.camera.position.x += 10.0;
+        view.detailed_people = false;
         let hq = capture_view(frozen.view());
         assert_eq!(hq.mode, ViewMode::Full3d);
         assert_eq!(hq.quality, RenderQuality::Ultra);
+        assert!(
+            frozen.view().detailed_people && hq.detailed_people,
+            "raw Draft detail freezes before chooser and survives HQ upgrade"
+        );
+        assert!(
+            !view.detailed_people,
+            "later local preference changes cannot mutate the frozen job"
+        );
         assert_eq!(view.mode, ViewMode::Lines3d);
         assert_eq!(view.quality, RenderQuality::Draft);
         assert_ne!(frozen.view().camera.position, view.camera.position);

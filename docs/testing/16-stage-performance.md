@@ -30,7 +30,7 @@ Run `npm run benchmark:packaged-stage -- 300 stage-500` for the comparative gate
 
 Exercise **Render 4K** from Live and Follow Preload, and **Render 4K Image** in Architect, starting from live Draft/Lines. With Blender available, exercise both **Ultra · ToskLight** and **Ultimate · Blender** through the chooser and retain actual 3840 × 2160 PNGs from each engine. A probe, manifest export or chooser alone is not an actual render. With Blender absent/unusable, verify the native Ultra path and any actionable fallback notice. Keep each engine's result and limitations explicit.
 
-Freeze scene, resolved fixture/effect/physics values, camera/view, local crowd amount, media pixels/availability and time before probing or choosing. Change the live show/look while the chooser or worker is pending and verify that the saved result still uses that frozen invocation. Native Ultra must use the separate full-resolution, full-budget capture renderer, rather than live Draft/adaptive reductions; live settings must remain unchanged. Preserve camera pose and vertical field with the disclosed 16:9 framing adjustment, and retain orthographic views as orthographic. Show chosen engine, dimensions, framing and saved path, with working Open/Reveal actions.
+Freeze scene, resolved fixture/effect/physics values, camera/view, local crowd amount and Detailed people preference, media pixels/availability and time before probing or choosing. Change the live show/look while the chooser or worker is pending and verify that the saved result still uses that frozen invocation. Native Ultra must use the separate full-resolution, full-budget capture renderer, rather than live Draft/adaptive reductions; live settings must remain unchanged. Preserve camera pose and vertical field with the disclosed 16:9 framing adjustment, and retain orthographic views as orthographic. Show chosen engine, dimensions, framing and saved path, with working Open/Reveal actions.
 
 Verify progress, actionable failure, owned cancellation, cleanup and subsequent-job admission; never permit overlapping captures to contend across embedded panes. Native readback and Blender work must stay off the desk/render input thread. Ultimate refuses unsupported plan symbols/outlines and active laser scan transfer with an explicit Ultra alternative. Disclose procedural material finishes mapped to plain PBR, omitted grid/selection guides, native bloom differences and Cycles physical beam/source/fog/GI/AgX mapping; do not claim pixel or physical parity. Missing frozen media must be identified, with the frozen show fallback or black retained instead of fetching a later frame.
 
@@ -41,3 +41,36 @@ The opt-in packaged DOM driver proves button → chooser → owned native job �
 The supported scale is capped at 24 universes × 512. stage-500 patches 19 universes and canonical-demo 10; the 1,000-instance tiers (37 universes) are outside the cap. Set `LIGHT_PACKAGED_STAGE_DYNAMICS=1` so stage-500 carries the animated Dynamics workload that its 10 Hz cadence clause needs; without it the look is static. On a machine whose own desk already owns port 5000, set `LIGHT_PACKAGED_STAGE_PORT` to run beside it: the runner starts the bundled server on that port and stops only what it started. `LIGHT_PACKAGED_STAGE_CARGO_PROFILE=release` measures the release bundle, and `LIGHT_PACKAGED_STAGE_NETWORK_CAPTURE=1` records the desk's Art-Net and sACN output on loopback in both windows. The latest measured state is in `docs/engineering/engine-render-performance-series.md` (TL-553).
 
 The requested duration is the Stage observation window. The paired no-Stage control window is capped at 300 seconds, so an 1800-second resource run has at most a five-minute control baseline, not a second 30-minute window. Resource evidence must cover the declared Stage interval after warmup and both first/last five-minute windows independently of whether new frames were submitted. Keep per-lane identities, observation loss/retention counts and actual coverage/gaps; bounded retained prefixes or missing terminal samples cannot pass a long-run gate. Current helper CPU fields are elapsed submission wall time from a source-deduplicated retained subset, not every 60 Hz frame or executing-thread CPU. GPU pass samples are not total GPU time per second. Report cold-start observations separately; steady coverage must span Stage start +60 seconds through Stage completion for RSS and each observed pane.
+
+
+## STAGE-PERF-004 — Optional detailed people in Ultra and HQ images
+
+Use an authored Crowd Area in both standing and sitting postures with an oblique
+camera and a stage light that reveals body depth. Record the population, seed,
+camera, crowd amount and renderer build. In Ultra, toggle **Detailed people**:
+enabled must show volumetric heads, torsos and limbs with shaded skin/clothing
+surfaces; disabled must restore the existing simple silhouette representation.
+The option does not independently hide the audience: **Crowd amount** remains
+its population/hide control. Check the same stable people occupy the same places
+and keep their authored posture and human scale across toggles.
+
+Restart the isolated renderer and verify that the local option persists. Verify
+both standalone Quick Settings and embedded pane instructions without mutating
+the portable show. Old local preferences that omit the setting must load safely.
+Draft and Standard continue to omit crowds, High retains its simple figures, and
+Lines retains its lightweight technical representation regardless of this option.
+
+While still in live Draft, enable Detailed people and invoke the real 4K action.
+After the invocation is frozen, change the live option while the engine chooser
+or worker is pending. Render native **Ultra** and **Ultimate / Blender** separately
+and decode actual 3840 × 2160 images: each must use the invocation-time detailed
+choice, camera, crowd amount and deterministic population. Repeat with the
+option disabled and with Crowd amount zero. Live Draft and the later live
+preference must remain unchanged by capture completion or cancellation.
+
+Retain images from both engines and the simple/detailed comparison. Verify body
+depth from a side angle and show-light response rather than accepting a front
+silhouette screenshot as proof. Dark clothing may remain mostly in shadow, but
+lit surfaces must reveal volume without self-emission. Geometry/unit/transport
+checks support this test; physical controls and human visual acceptance remain
+separate. Run image tests outside performance measurement windows.

@@ -343,6 +343,7 @@ impl Session {
         view.exposure = preferences.exposure;
         view.laser_brightness = preferences.laser_brightness;
         view.fog_variation = preferences.fog_variation;
+        view.detailed_people = preferences.detailed_people;
         view.show_labels = preferences.show_labels;
         if let Some(floor_grid) = preferences.floor_grid {
             view.floor_grid = floor_grid;
@@ -390,6 +391,21 @@ mod tests {
     use crate::demo::DemoProvider;
     use std::time::Duration;
     use viz_scene::{EmitterInstance, EmitterKind, EmitterLayoutCells, MotionAxis};
+
+    #[test]
+    fn effective_detailed_people_remains_raw_for_capture_from_draft_lines() {
+        let mut session = session();
+        session.source_view.quality = viz_scene::RenderQuality::Draft;
+        session.source_view.mode = viz_scene::ViewMode::Lines3d;
+        let mut preferences = Preferences::from_options(&crate::settings::Options::default());
+        preferences.detailed_people = true;
+        let view = session.effective_view(&preferences);
+        assert!(view.detailed_people);
+        assert_eq!(view.quality, viz_scene::RenderQuality::Draft);
+        assert_eq!(view.mode, viz_scene::ViewMode::Lines3d);
+        preferences.detailed_people = false;
+        assert!(!session.effective_view(&preferences).detailed_people);
+    }
 
     fn session() -> Session {
         Session::new(

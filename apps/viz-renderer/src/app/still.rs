@@ -49,8 +49,10 @@ fn invocation_view(
     resolved: &ViewConfiguration,
     camera: &viz_render::CameraControl,
     local: bool,
+    detailed_people: bool,
 ) -> ViewConfiguration {
     let mut view = *resolved;
+    view.detailed_people = detailed_people;
     if local {
         view.camera = camera.camera(&view.camera, view.mode);
     }
@@ -102,7 +104,12 @@ impl Application {
                         .into(),
                 );
             }
-            let view = invocation_view(&resolved.view, &self.camera, self.camera_is_local);
+            let view = invocation_view(
+                &resolved.view,
+                &self.camera,
+                self.camera_is_local,
+                self.preferences.detailed_people,
+            );
             // Camera gestures since the last draw are authoritative, but VM/physics values are
             // the last final resolved values. Never advance their state merely to take a still.
             let renderer = self

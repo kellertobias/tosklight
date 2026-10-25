@@ -49,6 +49,7 @@ mod tests {
             lamp_fog_turbulence: 0.0,
             laser_fog_cloudiness: 0.0,
             laser_fog_turbulence: 0.0,
+            detailed_people: false,
             show_labels: true,
             floor_grid: true,
             show_beam_guides: true,

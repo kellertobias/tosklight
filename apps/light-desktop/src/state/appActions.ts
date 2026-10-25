@@ -167,6 +167,7 @@ export type Action =
 			environmentBrightness?: number;
 			vizAtmosphere?: number;
 			vizQuality?: AppState["stageVizQuality"];
+			vizDetailedPeople?: boolean;
 			vizExposure?: number;
 			vizLaserBrightness?: number;
 			vizShowLabels?: boolean;
