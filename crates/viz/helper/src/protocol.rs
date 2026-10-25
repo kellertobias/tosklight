@@ -1056,3 +1056,7 @@ mod detailed_people_tests {
         assert!(accepts(PROTOCOL_MAJOR, PROTOCOL_MINOR).is_ok());
     }
 }
+
+#[cfg(test)]
+#[path = "protocol/value_plane_compatibility.rs"]
+mod value_plane_compatibility;

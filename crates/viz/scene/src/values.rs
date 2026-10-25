@@ -414,7 +414,8 @@ impl OpticalWheelValues {
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterValues {
     /// Renderer-owned lamp output; intensity and shutter remain literal desk targets.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    // Positional formats require the explicit None discriminant; legacy JSON may omit it.
+    #[serde(default)]
     pub lamp_response: Option<crate::LampResponseState>,
     /// Dimmer after shutter and strobe gating, `0..=1`.
     pub intensity: f32,
