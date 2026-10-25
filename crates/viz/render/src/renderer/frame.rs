@@ -11,10 +11,12 @@ use super::{
 };
 use crate::camera::ResolvedCamera;
 use crate::instances::{FrameStyle, GpuCurtainShadow, GpuLight, MeshKind};
+use crate::renderer::runtime_hash::RuntimeHasher;
 use crate::timing::GpuTimer;
 use bytemuck::Zeroable;
 use glam::{Mat4, Vec3};
 use std::hash::{Hash, Hasher};
+
 use viz_scene::{Aabb, Scene, SceneValues, ViewConfiguration};
 
 /// What one frame decided before any of it was drawn.
@@ -858,7 +860,7 @@ fn shadow_candidates(
 }
 
 fn shadow_geometry_signature(scene_revision: u64, lights: &[GpuLight], chosen: &[usize]) -> u64 {
-    let mut signature = std::collections::hash_map::DefaultHasher::new();
+    let mut signature = RuntimeHasher::default();
     scene_revision.hash(&mut signature);
     for index in chosen {
         index.hash(&mut signature);
@@ -884,20 +886,20 @@ fn shadow_occluder_signature(
     for (kind, instances) in meshes.iter().filter(|(_, instances)| !instances.is_empty()) {
         let mut poses = Vec::with_capacity(instances.len());
         for instance in instances {
-            let mut pose = std::collections::hash_map::DefaultHasher::new();
+            let mut pose = RuntimeHasher::default();
             for value in instance.model.iter().flatten() {
                 value.to_bits().hash(&mut pose);
             }
             poses.push(pose.finish());
         }
         poses.sort_unstable();
-        let mut group = std::collections::hash_map::DefaultHasher::new();
+        let mut group = RuntimeHasher::default();
         kind.hash(&mut group);
         poses.hash(&mut group);
         groups.push(group.finish());
     }
     groups.sort_unstable();
-    let mut signature = std::collections::hash_map::DefaultHasher::new();
+    let mut signature = RuntimeHasher::default();
     base.hash(&mut signature);
     groups.hash(&mut signature);
     signature.finish()

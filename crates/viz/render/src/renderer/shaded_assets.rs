@@ -1,12 +1,10 @@
 //! Content identity for shaded model/projection meshes, bounded to the current scene's assets.
+use crate::renderer::runtime_hash::RuntimeHasher;
 use crate::{
     instances::MeshKind,
     mesh::{MeshData, Vertex},
 };
-use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
-    hash::Hasher,
-};
+use std::{collections::HashMap, hash::Hasher};
 use viz_scene::Scene;
 
 #[derive(Default)]
@@ -64,7 +62,10 @@ impl Asset<'_> {
     }
 
     fn fingerprint(&self) -> u64 {
-        let mut hash = DefaultHasher::new();
+        self.fingerprint_with::<RuntimeHasher>()
+    }
+    fn fingerprint_with<H: Hasher + Default>(&self) -> u64 {
+        let mut hash = H::default();
         for bytes in [
             bytemuck::cast_slice(self.positions),
             bytemuck::cast_slice(self.normals),
@@ -207,4 +208,47 @@ mod tests {
         );
         assert!(mesh_data(&scene, MeshKind::ModelPart(0, 0)).is_none());
     }
+}
+
+#[cfg(test)]
+pub(super) fn benchmark_fingerprints<H: Hasher + Default>(scene: &Scene) -> u64 {
+    let mut consumed = 0;
+    for (model_index, model) in scene.models.iter().enumerate() {
+        for part in 0..model.parts.len() {
+            if let Some(asset) = asset(scene, MeshKind::ModelPart(model_index as u32, part as u32))
+                .filter(Asset::drawable)
+            {
+                consumed ^= asset.fingerprint_with::<H>();
+            }
+        }
+    }
+    consumed
+}
+
+#[cfg(test)]
+#[test]
+fn same_slot_same_revision_replacement_rehashes_exact_geometry_with_runtime_hasher() {
+    let mut scene = Scene::default();
+    scene.models.push(viz_scene::FixtureModel {
+        parts: vec![viz_scene::ModelPart {
+            positions: vec![[0.0; 3], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            normals: vec![[0.0, 0.0, 1.0]; 3],
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        }],
+        ..Default::default()
+    });
+    let revision = scene.revision;
+    let kind = MeshKind::ModelPart(0, 0);
+    let mut cache = AssetCache::default();
+    assert_eq!(cache.reconcile(&scene).changed, vec![kind]);
+    assert!(cache.reconcile(&scene).changed.is_empty());
+    scene.models[0].parts[0].positions[1][0] = 2.0;
+    assert_eq!(scene.revision, revision);
+    assert_eq!(cache.reconcile(&scene).changed, vec![kind]);
+    assert_eq!(
+        mesh_data(&scene, kind).unwrap().vertices[1].position,
+        [2.0, 0.0, 0.0]
+    );
+    assert!(cache.reconcile(&scene).changed.is_empty());
 }

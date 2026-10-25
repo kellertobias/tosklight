@@ -1,11 +1,12 @@
 //! Draft instance preparation identity. Clocks/uniform-only changes do not rebuild CPU arrays.
 //! Raw model/projection buffers are owned by the existing content-keyed asset reconciliation.
 use crate::instances::FrameStyle;
-use std::{
-    hash::{DefaultHasher, Hasher},
-    io::Write,
-};
+use crate::renderer::runtime_hash::RuntimeHasher;
+use std::{hash::Hasher, io::Write};
 use viz_scene::{Scene, SceneValues};
+
+#[cfg(test)]
+use std::hash::DefaultHasher;
 
 #[derive(Default)]
 pub(in crate::renderer) struct Preparation {
@@ -26,8 +27,8 @@ impl Preparation {
     }
 }
 #[derive(Default)]
-struct Key(DefaultHasher);
-impl Write for Key {
+struct Key<H: Hasher = RuntimeHasher>(H);
+impl<H: Hasher> Write for Key<H> {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0.write(bytes);
         Ok(bytes.len())
@@ -36,20 +37,27 @@ impl Write for Key {
         Ok(())
     }
 }
-impl Key {
+impl<H: Hasher> Key<H> {
     fn add(&mut self, value: &impl serde::Serialize) {
         postcard::to_io(value, &mut *self).expect("Draft instance metadata is serializable");
         self.0.write_u8(0xff);
     }
 }
 fn fingerprint(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> u64 {
-    let mut key = Key::default();
+    fingerprint_with::<RuntimeHasher>(scene, values, style)
+}
+fn fingerprint_with<H: Hasher + Default>(
+    scene: &Scene,
+    values: &SceneValues,
+    style: &FrameStyle,
+) -> u64 {
+    let mut key = Key::<H>::default();
     authored(&mut key, scene);
     live(&mut key, values);
     appearance(&mut key, style);
     key.0.finish()
 }
-fn authored(key: &mut Key, scene: &Scene) {
+fn authored(key: &mut Key<impl Hasher>, scene: &Scene) {
     // Exhaustive destructuring makes newly added scene fields an explicit cache-policy decision.
     let Scene {
         physical_positions,
@@ -148,7 +156,7 @@ fn authored(key: &mut Key, scene: &Scene) {
     // Gobo pixels are sampled through the atlas, which is still updated on every frame.
     // Geometry content changes force update() through AssetCache before this key is considered.
 }
-fn live(key: &mut Key, values: &SceneValues) {
+fn live(key: &mut Key<impl Hasher>, values: &SceneValues) {
     let SceneValues {
         physical_positions,
         emitters,
@@ -176,7 +184,7 @@ fn live(key: &mut Key, values: &SceneValues) {
     // Haze density/time are shader uniforms; effect timelines and physical motion above are not.
     // The external camera has already been resolved into the actual style camera by the caller.
 }
-fn appearance(key: &mut Key, style: &FrameStyle) {
+fn appearance(key: &mut Key<impl Hasher>, style: &FrameStyle) {
     key.add(&(
         style.camera_position,
         style.quality,
@@ -358,3 +366,7 @@ mod tests {
         assert!(!cache.update(&scene, &values, &style, false));
     }
 }
+
+#[cfg(test)]
+#[path = "preparation/benchmark.rs"]
+mod benchmark;

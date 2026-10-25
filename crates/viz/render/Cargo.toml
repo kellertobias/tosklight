@@ -10,6 +10,7 @@ glam.workspace = true
 light-fixture = { path = "../../shared/fixture" }
 pollster.workspace = true
 postcard.workspace = true
+rustc-hash.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 viz-scene.workspace = true

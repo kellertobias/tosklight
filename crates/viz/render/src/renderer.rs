@@ -226,6 +226,7 @@ mod draft;
 mod facade;
 mod lines;
 mod overlay;
+mod runtime_hash;
 mod shaded;
 mod shaded_assets;
 use context::FrameContext;

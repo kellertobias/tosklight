@@ -429,3 +429,29 @@ work. Server stacks also expose substantial full-diagnostics observation work.
 These guide bounded experiments; neither establishes the cause of the earlier
 clean regression. Preserve the clean failure and use a fresh uninstrumented
 paired run after any change.
+
+### Runtime content hashing experiment (TL-873)
+
+The owned helper sample identifies content hashing inside preparation, full model
+reconciliation and shadow-pose signatures. A release CPU-only benchmark compares
+the identical production traversal with DefaultHasher and the workspace's
+FxHasher, using 500 fixtures/emitters and three real GLB models (37 parts, 16,034
+vertices). Seven alternating rounds of 256 iterations retain both sides in
+`.artifacts/tmp/tl873-hash-before-after.json`. Median preparation elapsed time is
+166.82→110.47 µs; asset fingerprint traversal is 84.44→18.88 µs. These are elapsed
+CPU-work timings, not measured thread CPU, GPU savings or FPS acceptance.
+
+The renderer now uses FxHasher only for ephemeral content fingerprints on 64-bit
+targets; 32-bit targets retain DefaultHasher's 64-bit output. Field/geometry
+traversal, current-scene ownership and same-slot/same-revision replacement checks
+remain intact. No persisted/protocol/security hashes, visual quality or pacing
+thresholds change. All 276 ordinary renderer tests and 19 explicit native GPU
+tests pass. The first broad ignored-test invocation also selected the release-only
+CPU benchmark in debug mode and correctly rejected that invocation; a GPU-only
+invocation passed all 19. Private packaged output validation remains separate.
+
+Counter-only benchmark observations now use `/api/v2/diagnostics/performance`,
+whose typed output health is identical to full diagnostics. Full before/after
+snapshots remain. This avoids repeatedly serializing programmer definitions;
+it does not erase historical failures or establish their cause. FIFO read/window
+closure, counter-reset handling and fine histograms are preserved by focused tests.

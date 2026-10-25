@@ -5,10 +5,9 @@ use crate::{
     instances::{MeshInstance, MeshKind},
     mesh::{self, MeshData, Vertex},
 };
-use std::{
-    collections::{HashMap, hash_map::DefaultHasher},
-    hash::Hasher,
-};
+use std::{collections::HashMap, hash::Hasher};
+
+use crate::renderer::runtime_hash::RuntimeHasher;
 
 pub(super) struct Geometry {
     pub data: MeshData,
@@ -94,7 +93,7 @@ pub(super) fn ensure(
 /// Hash actual content rather than mesh slot/revision alone. In-place replacement at the same
 /// index is valid for this cache too; old topology cannot survive because a revision was reused.
 fn fingerprint(scene: &viz_scene::Scene, kind: MeshKind) -> Option<u64> {
-    let mut hash = DefaultHasher::new();
+    let mut hash = RuntimeHasher::default();
     match kind {
         MeshKind::ModelPart(model, part) => {
             let part = scene.models.get(model as usize)?.parts.get(part as usize)?;
