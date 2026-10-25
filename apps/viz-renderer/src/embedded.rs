@@ -28,6 +28,8 @@ mod mechanics;
 mod pass_profile;
 mod picture;
 mod producer;
+#[cfg(test)]
+mod shared_slots_gpu_tests;
 mod still;
 mod transport;
 use crate::helper_source::{Embedding, HelperSource};
