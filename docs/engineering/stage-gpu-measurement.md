@@ -203,3 +203,17 @@ Exact per-pane SDK presentation callbacks require a separately planned upstream
 hook or native drawable ownership/import architecture; private-layout casts or
 method swizzling are not a measurement substitute. The calibrated single-layer
 probe and ambiguous aggregate CA events do not close this acceptance gap.
+
+
+### Applied default cadence in the sustained combined package
+
+The clean combined release reports stamped `10-06-15-203Z` (Draft31minutes)
+and `10-43-12-133Z` (Lines6minutes) retain actual compositor coverage for both
+panes, with `diagnosticCadence=oneHz` and `benchmarkOverride=false`. Draft admitted
+and completed1,843 valid timing samples per compositor while considering111,517
+and111,372 render frames; Lines357 per compositor while considering21,576 and
+21,575 frames. Counters validate without regressions or invalid readbacks. These
+are lifetime timing-policy witnesses rather than per-pane displayed-FPS proof.
+Helper sparse sample reuse was retained explicitly; missing opt-in profile
+coverage is not treated as a measured zero. Draft still failed the unchanged fine
+output comparison despite its resource pass; Lines passed its output comparison.

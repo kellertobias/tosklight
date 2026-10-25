@@ -508,3 +508,55 @@ The actual-default-cadence 45-second diagnostic pass is documented separately
 in `stage-gpu-measurement.md`; it does not supersede the retained earlier
 sustained Draft output failure. A fresh quiet run must start after the newly
 requested optional detailed-people implementation is built and verified.
+
+
+### Completed combined release observations after TL-875/876/877
+
+The complete macOS release bundle at `085dc8c2e` includes the one-Hz Draft/Lines
+timing sampler, optional detailed people, and the compatible explicit absent
+lamp-response serialization slot. Authoritative isolated `npm run build:open`,
+readiness, complete release packaging and strict code-signature checks passed.
+No install or primary-checkout integration occurred. The finite detached
+coordinator ran both conditions serially on the internal display with profiling
+and cadence overrides unset, no concurrent build/tests/profiler, and independent
+300-second no-Stage controls. Other user desks were preserved.
+
+| Condition | Stage duration | Control → Stage fine output p99 | Conservative regression | Output gate |
+| --- | ---: | --- | --- | --- |
+| Dual Full 3D Draft / 500 animated fixtures | 1,860.004 s | 8,001–8,250 → 9,251–9,500 µs | 1,001–1,499 µs | **Fail**: allowance 1,000 µs |
+| Dual Lines / 500 animated fixtures | 360.006 s | 7,751–8,000 → 7,501–7,750 µs | −499–−1 µs | Pass |
+
+Both conditions had zero deadline misses, send errors, late-interval witnesses,
+counter resets or observation overflows. Draft's coarse 12→12 ms bucket passes,
+but cannot override the finer failed comparison. No threshold was changed.
+Reports are `packaged-tauri-stage-500-2026-10-25T10-06-15-203Z.json` and
+`packaged-tauri-stage-500-2026-10-25T10-43-12-133Z.json`; compact exact summaries
+are `tl876-final-draft-summary.json` and `tl876-final-lines-summary.json` beside
+them. Backend PID/listener and SHA256 matched both endpoints: Draft53481,
+Lines63107, SHA256 `8679e7317e450d1a63bac907beb73e6fd77f977f3bfbd5094edf6e6a480e3391`.
+The coordinator and owned runtime exited; private5158/5160 listeners were absent.
+
+Draft passed the enforced retained-resource gate with complete RSS and both-pane
+coverage. Main-process RSS slope was −19,951 bytes/min; late sampled helper CPU
+wall p95 was 2.386 ms. Geometry/draw ownership stayed10,641/63 per pane.
+Lines had complete six-minute observations, RSS slope +47,617 bytes/min and
+late sampled CPU wall p95 1.492 ms, but its 30-minute resource gate was not
+exercised. Geometry/draw ownership stayed6,388/3 per pane.
+
+Draft recorded223,131 helper/222,889 compositor submissions; Lines43,152/43,151.
+Steady per-pane whole-second submission means were approximately60 for both;
+Draft buckets ranged57–61 and Lines59–61. These are helper submissions, not
+actual displayed pictures. Sparse unique helper GPU means were18.76/18.30 ms
+for Draft and2.87/2.53 ms for Lines. They are not whole-Stage GPU cost or a
+matched-rate reduction. Actual displayed60FPS and the proposed70%/90% GPU
+reductions remain unverified.
+
+The all-window fine histogram cannot locate the p99 tail in time. Stage contains
+856 ticks above9,250 µs (1.035% of82,720); only13 of13,228 control ticks exceed
+that bound. Per-second histograms were accumulated and discarded, and raw JSONL
+has render/heartbeat timing rather than output histograms. The only >=20 ms
+Stage log event is34.113 ms at Stage+51.004 seconds; this locates one extreme
+in warmup but cannot explain the8–10 ms tail. Do not infer a startup or thermal
+cause from renderer CPU trends. Timestamped bounded per-minute deltas of existing
+fine histograms would diagnose cold/steady/late behavior without another HTTP
+observer, full per-tick phase logging, or weakening the whole-window gate.
