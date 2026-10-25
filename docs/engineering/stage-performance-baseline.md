@@ -181,13 +181,12 @@ runner samples the `light-desktop` main-process resident set once per
 second, excludes the first Stage minute as warmup, and rejects a fitted growth
 slope above 1 MiB per minute. It compares the first and last five-minute
 post-warmup render windows, rejects growth in native instance or draw-call
-ownership, rejects degraded frames, and requires the late-window CPU frame p95
-to stay at or below 16.7 ms. The sampled RSS covers only the `light-desktop` main process; it excludes separate WebView processes and GPU/driver allocations. Native frame telemetry supplies separate renderer ownership evidence, not a complete VRAM measurement.
+ownership per pane, rejects degraded frames, and requires the late-window CPU frame p95
+to stay at or below 16.7 ms. This CPU value is elapsed submission wall time from a source-deduplicated retained subset; it does not measure every 60 Hz frame, executing-thread CPU, GPU completion or display latency. The sampled RSS covers only the `light-desktop` main process; it excludes separate WebView processes and GPU/driver allocations. Native frame telemetry supplies separate renderer ownership evidence, not a complete VRAM measurement.
 
 The long-run evaluator must use independently recorded Stage start/end times,
 not infer its window from the first/last retained render or memory sample. Require
-the full declared Stage duration, warmup and first/last five-minute lane coverage;
-report actual sampled spans and gaps. Ordinary runs of at least 1800 seconds poll every 250 ms; short, phase and capture runs use 100 ms. The declared maximum duration is 3600 seconds. Histories retain bounded prefixes (32,000 host/timeline rows, 64,000 activity rows, 24,000 heartbeats and 100,000 source-deduplicated frames). GPU submission aggregates consume every drained native batch before source deduplication. Special phase/capture runs still fail if their higher poll rate exhausts a bound. Any rejected row, overflow or observation error
+the full declared Stage duration; report cold-start observations separately, then require complete RSS and per-pane render coverage from Stage start +60 seconds to Stage completion. Compare the first and last five-minute post-warmup windows and report actual sampled spans and gaps. Ordinary runs of at least 1800 seconds poll every 250 ms; short, phase and capture runs use 100 ms. The declared maximum duration is 3600 seconds. Histories retain bounded prefixes (32,000 host/timeline rows, 64,000 activity rows, 24,000 heartbeats and 100,000 source-deduplicated frames). GPU submission aggregates consume every drained native batch before source deduplication. Special phase/capture runs still fail if their higher poll rate exhausts a bound. Any rejected row, overflow or observation error
 invalidates complete-run evidence: a retained prefix cannot become a passing
 30-minute report. A static interval may legitimately have no new submissions,
 but still requires resident/native ownership and coverage witnesses. A short or
