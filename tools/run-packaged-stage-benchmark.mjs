@@ -12,7 +12,7 @@ import { promisify } from "node:util";
 import { artifactPaths, repositoryRoot } from "./artifact-paths.mjs";
 import {
 	createOutputWindowAccumulator,
-	histogramPercentileMicros,
+	compareOutputWindows,
 	outputWindow,
 } from "./output-histogram.mjs";
 import {
@@ -3012,27 +3012,10 @@ function summarizeOutputComparison(runtime) {
 	const stage =
 		runtime.outputWindows?.stage ??
 		outputWindow(runtime.afterNoStage.output, runtime.after.output);
-	const noStageP99TickMicros = histogramPercentileMicros(noStage, 99);
-	const stageP99TickMicros = histogramPercentileMicros(stage, 99);
-	const allowedP99RegressionMicros =
-		noStageP99TickMicros === null
-			? null
-			: Math.max(1_000, noStageP99TickMicros * 0.05);
-	const p99RegressionMicros =
-		noStageP99TickMicros === null || stageP99TickMicros === null
-			? null
-			: stageP99TickMicros - noStageP99TickMicros;
 	return {
-		noStage,
-		stage,
-		noStageP99TickMicros,
-		stageP99TickMicros,
-		allowedP99RegressionMicros,
-		p99RegressionMicros,
-		boundedWindowGatePassed:
-			p99RegressionMicros !== null &&
-			allowedP99RegressionMicros !== null &&
-			p99RegressionMicros <= allowedP99RegressionMicros,
+        noStage,
+        stage,
+        ...compareOutputWindows(noStage,stage),
 		stageWindowDeadlineMisses: stage.deadline_misses,
 		stageWindowSendErrors: stage.send_errors,
 		releaseGateEnforced: true,
