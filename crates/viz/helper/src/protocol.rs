@@ -12,9 +12,12 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Shared slot ownership and completed-frame readiness change postcard payload shapes.
-// Reject stale helpers before exchanging surfaces that they could overwrite while sampled.
-pub const PROTOCOL_MAJOR: u16 = 11;
+// Three shared image credits change the ownership contract. Reject two-slot peers before
+// exchanging any surfaces, even though the immutable greeting payload shape is unchanged.
+pub const PROTOCOL_MAJOR: u16 = 12;
+/// Bounded shared ownership: retained front, host composition, and producer rendering.
+/// Copy transport independently permits only slot zero.
+pub const SHARED_FRAME_SLOTS: usize = 3;
 // Minor 1 is where the handshake started naming frame transports, so it stays at least 1.
 pub const PROTOCOL_MINOR: u16 = 2;
 
@@ -40,7 +43,7 @@ pub enum FrameTransport {
 /// One immutable rendered picture in a raster-generation slot.
 ///
 /// A release names the exact picture, never just a reusable slot. Generation and sequence start
-/// at one; two shared slots are sufficient to retain the front while rendering its replacement.
+/// at one; shared credits cover the retained front, host flight, and producer image.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct FrameId {
     pub generation: u64,
@@ -50,7 +53,7 @@ pub struct FrameId {
 
 impl FrameId {
     pub fn is_valid(self) -> bool {
-        self.generation > 0 && self.slot < 2 && self.sequence > 0
+        self.generation > 0 && usize::from(self.slot) < SHARED_FRAME_SLOTS && self.sequence > 0
     }
 }
 
@@ -1021,7 +1024,13 @@ mod benchmark_heartbeat_tests {
             }
             .is_valid()
         );
-        assert!(!FrameId { slot: 2, ..frame }.is_valid());
+        assert_eq!(SHARED_FRAME_SLOTS, 3);
+        for slot in 0..SHARED_FRAME_SLOTS as u8 {
+            let valid = FrameId { slot, ..frame };
+            assert!(valid.is_valid());
+            assert_eq!(decode::<FrameId>(&encode(&valid).unwrap()).unwrap(), valid);
+        }
+        assert!(!FrameId { slot: 3, ..frame }.is_valid());
         assert!(
             !FrameId {
                 sequence: 0,

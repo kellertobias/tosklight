@@ -1,6 +1,6 @@
 //! Bounded ownership of images crossing the process boundary. No completion here is a display event.
 use std::time::{Duration, Instant};
-use viz_helper::protocol::FrameId;
+use viz_helper::protocol::{FrameId, SHARED_FRAME_SLOTS};
 
 const FRAME_INTERVAL: Duration = Duration::from_nanos(16_666_667);
 
@@ -14,7 +14,7 @@ enum Slot {
 pub(super) struct Producer {
     generation: u64,
     sequence: u64,
-    slots: [Slot; 2],
+    slots: [Slot; SHARED_FRAME_SLOTS],
     count: usize,
     visible: bool,
     next: Instant,
@@ -26,8 +26,8 @@ impl Producer {
         Self {
             generation: 1,
             sequence: 0,
-            slots: [Slot::Free; 2],
-            count: if shared { 2 } else { 1 },
+            slots: [Slot::Free; SHARED_FRAME_SLOTS],
+            count: if shared { SHARED_FRAME_SLOTS } else { 1 },
             visible: true,
             next: now,
             flow: None,
@@ -163,7 +163,7 @@ impl Producer {
             .generation
             .checked_add(1)
             .ok_or("Stage image generation exhausted")?;
-        self.slots = [Slot::Free; 2];
+        self.slots = [Slot::Free; SHARED_FRAME_SLOTS];
         self.next = now;
         Ok(true)
     }
@@ -230,8 +230,15 @@ mod tests {
         let b = p.begin(now + Duration::from_millis(17)).unwrap();
         p.submitted(b);
         assert!(p.completed(b));
+        let c = p.begin(now + Duration::from_millis(34)).unwrap();
+        p.submitted(c);
+        assert!(p.completed(c));
         assert_ne!(a.slot, b.slot);
+        assert_ne!(a.slot, c.slot);
+        assert_ne!(b.slot, c.slot);
+        assert_eq!([a.slot, b.slot, c.slot], [0, 1, 2]);
         assert!(!p.available(now + Duration::from_secs(1)));
+        assert!(p.begin(now + Duration::from_secs(1)).is_none());
         assert!(!p.release(FrameId {
             sequence: a.sequence + 10,
             ..a
@@ -239,6 +246,52 @@ mod tests {
         assert!(p.release(a));
         assert!(!p.release(a));
         assert_eq!(p.begin(now + Duration::from_secs(1)).unwrap().slot, a.slot);
+    }
+    #[test]
+    fn copy_transport_has_exactly_one_credit_even_with_shared_capacity_three() {
+        let now = Instant::now();
+        let mut p = Producer::new(false, now);
+        assert_eq!(p.count, 1);
+        let a = p.begin(now).unwrap();
+        assert_eq!(a.slot, 0);
+        p.submitted(a);
+        assert!(!p.available(now + FRAME_INTERVAL));
+        assert!(p.completed(a));
+        assert!(!p.available(now + FRAME_INTERVAL));
+        assert!(p.begin(now + FRAME_INTERVAL).is_none());
+        assert!(!p.release(FrameId { slot: 1, ..a }));
+        assert!(!p.release(FrameId { slot: 2, ..a }));
+        assert!(p.release(a));
+        let b = p.begin(now + FRAME_INTERVAL).unwrap();
+        assert_eq!(b.slot, 0);
+    }
+    #[test]
+    fn resize_waits_for_every_rendering_credit_and_old_callbacks_cannot_free_new_images() {
+        let now = Instant::now();
+        let mut p = Producer::new(true, now);
+        let mut old = Vec::new();
+        for index in 0..SHARED_FRAME_SLOTS {
+            let frame = p.begin(now + FRAME_INTERVAL * index as u32).unwrap();
+            p.submitted(frame);
+            old.push(frame);
+        }
+        assert!(!p.resize(now + FRAME_INTERVAL * 3).unwrap());
+        for frame in &old[..2] {
+            assert!(p.completed(*frame));
+            assert!(!p.resize(now + FRAME_INTERVAL * 3).unwrap());
+        }
+        assert!(p.completed(old[2]));
+        let resized_at = now + FRAME_INTERVAL * 3;
+        assert!(p.resize(resized_at).unwrap());
+        let new = p.begin(resized_at).unwrap();
+        p.submitted(new);
+        for frame in old {
+            assert!(!p.completed(frame));
+            assert!(!p.release(frame));
+        }
+        assert_eq!(p.slots[new.slot as usize], Slot::Rendering(new));
+        assert!(p.completed(new));
+        assert!(p.release(new));
     }
     #[test]
     fn hidden_and_missed_deadlines_never_burst() {

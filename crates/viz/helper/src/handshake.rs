@@ -303,6 +303,70 @@ mod tests {
         assert!(matches!(error, HandshakeError::Unexpected(_)));
     }
 
+    #[test]
+    fn actual_greeting_boundaries_refuse_major_eleven_and_twelve_in_both_directions() {
+        assert_eq!(PROTOCOL_MAJOR, 12);
+        let mut old_desk = Vec::new();
+        write_frame(
+            &mut old_desk,
+            &encode(&ToHelper::Hello {
+                protocol_major: 11,
+                protocol_minor: 2,
+                title: "two-slot peer".into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let mut response = Vec::new();
+        let error = answer_desk(
+            &mut old_desk.as_slice(),
+            &mut response,
+            "renderer",
+            &[FrameTransport::Shared],
+        )
+        .expect_err("new helper must reject the old desk before surfaces");
+        assert!(matches!(
+            error,
+            HandshakeError::Incompatible(Incompatible::Major {
+                theirs: 11,
+                ours: 12
+            })
+        ));
+        assert!(
+            response.is_empty(),
+            "no capabilities or surfaces before compatible greeting"
+        );
+        let mut old_helper = Vec::new();
+        write_frame(
+            &mut old_helper,
+            &encode(&FromHelper::Ready {
+                protocol_major: 11,
+                protocol_minor: 2,
+                renderer: "two-slot helper".into(),
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        let mut sent = Vec::new();
+        let error = greet_helper(&mut sent, &mut old_helper.as_slice(), "new desk")
+            .expect_err("new desk must reject the old helper before Embed");
+        assert!(matches!(
+            error,
+            HandshakeError::Incompatible(Incompatible::Major {
+                theirs: 11,
+                ours: 12
+            })
+        ));
+        let bytes = read_frame(&mut sent.as_slice()).unwrap();
+        assert!(matches!(
+            decode::<ToHelper>(&bytes).unwrap(),
+            ToHelper::Hello {
+                protocol_major: 12,
+                ..
+            }
+        ));
+    }
+
     /// A helper that dies before saying anything is a closed channel, not a protocol fault, and
     /// the message should not blame the protocol for it.
     #[test]

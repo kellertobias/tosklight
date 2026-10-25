@@ -1,14 +1,16 @@
 # Embedded Stage frame lifecycle
 
-The embedded renderer and Control compositor use protocol major 11. The greeting must reject an incompatible helper before either side imports a picture. A helper beside an older desktop bundle must not be substituted independently.
+The embedded renderer and Control compositor use protocol major 12. The greeting must reject an incompatible helper before either side imports a picture. A helper beside an older desktop bundle must not be substituted independently.
 
 ## Scheduling and ownership
 
 The producer admits GPU preparation at a monotonic 60 Hz deadline. Missing a deadline skips elapsed scheduling slots; it never renders a burst to catch up. Input, provider events, simulation and GPU completion polling continue independently of render admission. An unchanged successful picture requires no new GPU submission.
 
-Every image has a `FrameId { generation, slot, sequence }`. Shared transport has two slots; copy transport has one outstanding producer credit. A reserved slot cannot be rendered into again until its exact credit is returned. Neither a different sequence nor a release from an old raster generation can free it.
+Every image has a `FrameId { generation, slot, sequence }`. Shared transport has three slots, allowing a retained front, a consumer composition and the next producer render to overlap; copy transport has one outstanding producer credit. A reserved slot cannot be rendered into again until its exact credit is returned. Neither a different sequence nor a release from an old raster generation can free it.
 
 Shared transport announces the slot's IOSurface once per generation, then announces each `FrameReady` only after the producer GPU completion callback has run. The callback retains the source backing and signals a local channel; it does not write to the pipe or call Control. Control imports the slot and retains its completed front picture. It returns that front's credit only after a replacement composition finishes sampling it. Resize generations may retire while old front/flight resources remain retained by Control.
+
+Ready sequence admission is monotonic across all slots within a raster generation. A delayed older picture returns only its own unused credit and cannot replace a newer front or pending picture. Duplicate or reused owned slots remain protocol errors. The queue stays bounded; there is no early release of the retained front.
 
 Copy transport sends pixels before readiness. Control defers GPU allocation/upload until a visible composition is admitted, and returns the copied picture's credit after its composition completes. Control then owns the retained texture. A hidden pending picture can be discarded and credited without uploading it.
 

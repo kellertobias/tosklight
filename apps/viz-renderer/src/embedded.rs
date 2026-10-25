@@ -38,7 +38,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 use viz_desk::{DeskConnection, DeskProvider};
-use viz_helper::protocol::{FrameId, FrameTransport, PaneInput};
+use viz_helper::protocol::{FrameId, FrameTransport, PaneInput, SHARED_FRAME_SLOTS};
 use viz_render::{Overlay, Renderer, ResolvedCamera};
 use viz_scene::{ProviderEvent, Scene, SceneProvider, SceneValues, ViewConfiguration};
 
@@ -251,7 +251,7 @@ struct PaneState {
     /// Physical pixel size of the pane, which the desk's layout and display scale decide.
     size: (u32, u32),
     /// The surface handed to the desk, while the transport is a shared one.
-    shared: [Option<Arc<viz_surface::SharedSurface>>; 2],
+    shared: [Option<Arc<viz_surface::SharedSurface>>; SHARED_FRAME_SLOTS],
     producer: producer::Producer,
     completions: Receiver<FrameId>,
     completed: Sender<FrameId>,

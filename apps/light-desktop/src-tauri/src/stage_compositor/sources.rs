@@ -1,8 +1,8 @@
 use super::{Source, StageCompositor, ownership::Picture};
 use std::sync::Arc;
-use viz_helper::protocol::FrameId;
 #[cfg(not(target_os = "macos"))]
 use viz_helper::protocol::SharedSurfaceHandle;
+use viz_helper::protocol::{FrameId, SHARED_FRAME_SLOTS};
 
 #[derive(Clone)]
 pub(super) enum Payload {
@@ -29,7 +29,7 @@ impl StageCompositor {
         height: u32,
     ) -> Result<(), String> {
         if generation == 0
-            || slot >= 2
+            || usize::from(slot) >= SHARED_FRAME_SLOTS
             || width == 0
             || height == 0
             || width > self.device.limits().max_texture_dimension_2d
@@ -43,7 +43,7 @@ impl StageCompositor {
         if generation > self.source_generation {
             self.slots.clear();
             self.source_generation = generation;
-            self.last_ready_sequence = [0; 2];
+            self.ready_sequence.reset(generation);
         }
         if self.slots.iter().any(|source| source.slot == slot) {
             return Err("Stage source slot already imported".to_owned());
@@ -117,7 +117,7 @@ impl StageCompositor {
         let expected = (width as usize)
             .checked_mul(height as usize)
             .and_then(|size| size.checked_mul(4));
-        if !frame.is_valid()
+        if !super::sequence::copy_identity_valid(frame)
             || width == 0
             || height == 0
             || expected != Some(rgba.len())
@@ -126,7 +126,7 @@ impl StageCompositor {
         {
             return Err("the renderer sent invalid Stage copied pixels".to_owned());
         }
-        if self.waiting_copies.len() >= 2
+        if !self.waiting_copies.is_empty()
             || self
                 .waiting_copies
                 .iter()
@@ -137,7 +137,7 @@ impl StageCompositor {
         }
         if frame.generation > self.source_generation {
             self.source_generation = frame.generation;
-            self.last_ready_sequence = [0; 2];
+            self.ready_sequence.reset(frame.generation);
             self.slots.clear();
         }
         self.waiting_copies.push(Picture {
@@ -168,9 +168,7 @@ impl StageCompositor {
             }
             return self.pictures.release(frame);
         }
-        if frame.generation != self.source_generation
-            || frame.sequence <= self.last_ready_sequence[usize::from(frame.slot)]
-        {
+        if frame.generation != self.source_generation {
             return Err("stale or duplicate Stage ready-frame sequence".to_owned());
         }
         if self.pictures.owns_slot(frame) {
@@ -193,8 +191,9 @@ impl StageCompositor {
                 data: Payload::Texture(source),
             }
         };
-        self.last_ready_sequence[usize::from(frame.slot)] = frame.sequence;
-        if !self.producer_visible() {
+        // Different shared slots may complete out of order. Return an older picture's exact
+        // credit without replacing a newer pending/front image, even if its own slot is new.
+        if !self.ready_sequence.accept(frame)? || !self.producer_visible() {
             self.pictures.release(frame)?;
             return Ok(());
         }

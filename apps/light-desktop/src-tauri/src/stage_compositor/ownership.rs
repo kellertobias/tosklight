@@ -170,6 +170,94 @@ mod tests {
     use super::*;
 
     #[test]
+    fn three_shared_backings_are_retained_until_exact_gpu_completion_or_unused_replacement() {
+        use std::sync::Arc;
+        fn owned(sequence: u64, slot: u8) -> Picture<Arc<u64>> {
+            Picture {
+                frame: FrameId {
+                    generation: 1,
+                    slot,
+                    sequence,
+                },
+                shared: true,
+                credit_released: false,
+                data: Arc::new(sequence),
+            }
+        }
+        let mut exchange = Exchange::default();
+        let first = owned(1, 0);
+        let weak_first = Arc::downgrade(&first.data);
+        exchange.replace_ready(first).unwrap();
+        exchange.submit(exchange.candidate().cloned()).unwrap();
+        exchange.complete().unwrap();
+        let second = owned(2, 1);
+        let weak_second = Arc::downgrade(&second.data);
+        exchange.replace_ready(second).unwrap();
+        exchange.submit(exchange.candidate().cloned()).unwrap();
+        let third = owned(3, 2);
+        let weak_third = Arc::downgrade(&third.data);
+        exchange.replace_ready(third).unwrap();
+        assert!(weak_first.upgrade().is_some());
+        assert!(weak_second.upgrade().is_some());
+        assert!(weak_third.upgrade().is_some());
+        assert!(exchange.drain_released().is_empty());
+        assert!(exchange.submit(exchange.candidate().cloned()).is_err());
+        for (slot, sequence) in [(0, 1), (1, 2), (2, 3)] {
+            assert!(exchange.owns_slot(FrameId {
+                generation: 1,
+                slot,
+                sequence
+            }));
+        }
+        exchange.complete().unwrap();
+        assert!(weak_first.upgrade().is_none());
+        assert_eq!(
+            exchange.drain_released(),
+            vec![FrameId {
+                generation: 1,
+                slot: 0,
+                sequence: 1
+            }]
+        );
+        // A newer ready picture can replace an unused ready image, but never the active front.
+        let fourth = owned(4, 0);
+        let weak_fourth = Arc::downgrade(&fourth.data);
+        exchange.replace_ready(fourth).unwrap();
+        assert!(weak_third.upgrade().is_none());
+        assert_eq!(
+            exchange.drain_released(),
+            vec![FrameId {
+                generation: 1,
+                slot: 2,
+                sequence: 3
+            }]
+        );
+        assert!(weak_second.upgrade().is_some());
+        exchange.submit(exchange.candidate().cloned()).unwrap();
+        assert!(weak_second.upgrade().is_some());
+        exchange.complete().unwrap();
+        assert!(weak_second.upgrade().is_none());
+        assert_eq!(
+            exchange.drain_released(),
+            vec![FrameId {
+                generation: 1,
+                slot: 1,
+                sequence: 2
+            }]
+        );
+        exchange.clear().unwrap();
+        assert!(weak_fourth.upgrade().is_none());
+        assert_eq!(
+            exchange.drain_released(),
+            vec![FrameId {
+                generation: 1,
+                slot: 0,
+                sequence: 4
+            }]
+        );
+    }
+
+    #[test]
     fn suspension_blank_preserves_shared_front_and_its_producer_credit() {
         let mut exchange = Exchange::default();
         let first = picture(1, 0, true);

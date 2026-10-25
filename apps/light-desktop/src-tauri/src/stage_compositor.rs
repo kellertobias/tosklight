@@ -19,12 +19,13 @@ use std::sync::{
 };
 use std::time::Instant;
 use viz_helper::pane::PaneRect;
-use viz_helper::protocol::FrameId;
+use viz_helper::protocol::{FrameId, SHARED_FRAME_SLOTS};
 mod measurement;
 mod ownership;
 mod render;
 mod retirement;
 mod schedule;
+mod sequence;
 mod sources;
 mod suspension;
 pub(crate) use measurement::CompositorMeasurements;
@@ -91,7 +92,7 @@ pub struct StageCompositor {
     slots: Vec<Slot>,
     waiting_copies: Vec<ownership::Picture<Payload>>,
     source_generation: u64,
-    last_ready_sequence: [u64; 2],
+    ready_sequence: sequence::ReadySequence,
     schedule: Schedule,
     clock: Instant,
     flight_done: Option<Arc<AtomicBool>>,
@@ -185,10 +186,10 @@ impl StageCompositor {
             sampler,
             uniform,
             pictures: Exchange::default(),
-            slots: Vec::with_capacity(2),
-            waiting_copies: Vec::with_capacity(2),
+            slots: Vec::with_capacity(SHARED_FRAME_SLOTS),
+            waiting_copies: Vec::with_capacity(1),
             source_generation: 0,
-            last_ready_sequence: [0; 2],
+            ready_sequence: sequence::ReadySequence::default(),
             schedule: Schedule::default(),
             clock: Instant::now(),
             flight_done: None,
@@ -254,7 +255,7 @@ impl StageCompositor {
         self.slots.clear();
         self.waiting_copies.clear();
         self.source_generation = 0;
-        self.last_ready_sequence = [0; 2];
+        self.ready_sequence = sequence::ReadySequence::default();
         self.schedule.dirty();
     }
 

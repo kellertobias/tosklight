@@ -182,7 +182,7 @@ fn write_rows(
         "event": "diagnostic_metadata", "schemaVersion": 1, "pid": std::process::id(),
         "epochAnchorMicros": epoch_micros, "monotonicZeroMicros": 0,
         "maxRows": max_rows, "maxBytes": max_bytes, "queueRows": QUEUE_ROWS,
-        "sharedSlots": 2, "copySlots": 1,
+        "sharedSlots": viz_helper::protocol::SHARED_FRAME_SLOTS, "copySlots": 1,
         "boundaries": "helper observations/enqueues; diagnostics may perturb timing; not display evidence"
     }))?;
     header.push(b'\n');
