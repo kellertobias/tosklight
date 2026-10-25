@@ -76,3 +76,47 @@ While hidden, native collection drains the same telemetry queues every 100 ms in
 Final reports retain explicit phase boundaries and whole-second helper submission/sparse-GPU summaries. The raw JSONL also records verified native visibility boundaries. These observations are report-ready baseline evidence, not proof of displayed 60 FPS, total GPU time per second, near-zero hidden GPU work, or percentage savings. The offline evaluator checks completion and resident witnesses separately from final performance acceptance; phase results remain pending until that evaluation runs. Actual hidden cost, including continued helper work, must be reported honestly.
 
 Each phase also snapshots compositor aggregate counters before and after its work, independently of helper submissions. Retained deltas include draw attempts, successful submissions, occluded/time-out outcomes, reconfiguration/errors, CPU wall time and acquire wall time. They describe arrivals at the collector: polling is nominally 100 ms, and each snapshot retains its actual observation timestamp and age so delayed boundaries are visible rather than assumed precise. Native hidden batches are ingested before the hidden phase's ending snapshot. The phase summary separately groups sparse compositor GPU samples by their captured pane/attachment/render scope and submission epoch, keeping their cost distinct from helper GPU samples. These diagnostic counter deltas cannot establish on-glass FPS or total GPU utilization.
+
+
+## Positive presentation-time calibration, 2026-10-25
+
+A bounded single-layer Swift probe now releases all strong drawable references
+after commit inside an autorelease pool. The prior retained-drawable experiments
+remain unsuccessful. The new `presentation-calibration-sLtVMu` experiment has
+60 SDK callbacks/completions and 55 positive `presentedTime` values. Its retained
+`gpu-trace-X43MFy/analysis/presentation-calibration-summary.json` and joined
+witnesses identify exactly 55 status-2 CA handler rows, drawable IDs 5–59,
+matching those positive SDK values. Five SDK zero times remain unclassified
+not-presented/skipped outcomes, with no corresponding trace rows.
+
+For this Xcode 27.1 export path, the handler field labeled `Requested Time`
+reconstructs actual host nanoseconds as `rawAtTime * denominator / numerator +
+epochMachTicks`. All 55 joined values match the SDK actual time within 0.92 ns.
+This is an empirical calibration of this export/timebase, not a portable schema
+assumption. Handler callback timestamps and the roughly 8.333 ms `delta` field
+are distinct from actual presentation time and source frame intervals.
+
+Request targets are float32-quantized at this uptime: the 28 scheduled rows can
+differ from SDK double-precision targets by about ±27.5 ms. They cannot support
+precise latency claims. Immediate requests use a sentinel. Command-buffer labels
+join each traced request to its SDK sequence and backing IOSurface.
+
+The collector retains an error: the probe exited with its strict 60-positive
+criterion unmet before final process identity verification. The raw trace is
+useful calibration evidence, not a successful collection or Stage FPS result.
+No probe IOSurface joins directly to display-swap/hardware-layer surfaces. A
+single-layer calibration also does not resolve overlapping drawable IDs across
+two Control layers. Later measurements must prove layer attribution and coverage;
+PID or nearest-time matching alone is insufficient.
+
+## Physical UI service limitation
+
+The unique-bundle-ID private clone `run-5d798f26953f` verified its private
+server, expected show, native panes and cache identity on the internal display.
+The CUA service timed out selecting that app after about 7,130 seconds, returning
+no accessibility result. No physical pointer or shortcut action was confirmed.
+The coordinator independently ended after 15 minutes, revoked its launch token
+and cleaned its own children. Both app/server PIDs and loopback 5162 were verified
+absent afterward. This is an automation-service limitation; physical capture
+acceptance remains open. Existing successful packaged/native image evidence
+must not be relabeled as physical input coverage.
