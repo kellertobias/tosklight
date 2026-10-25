@@ -19,6 +19,23 @@ const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
 	? path.resolve(process.env.LIGHT_DEMO_SHOW_OUTPUT)
 	: fileURLToPath(new URL("../assets/demo.show", import.meta.url));
 
+function frontWashSnapshot(patch: { fixtures: any[] }) {
+	const fronts = patch.fixtures.filter((fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 6);
+	expect(fronts).toHaveLength(6);
+	return fronts.map((fixture) => {
+		expect(fixture.definition.model).toBe("Dimmer Fresnel");
+		expect(fixture.installed_appearance).toMatchObject({
+			light_source: { type: "tungsten" }, color_temperature_kelvin: 3200,
+			manual_optics: { zoom_degrees: 48 },
+		});
+		const blades = fixture.installed_appearance.manual_optics.shaper_blades;
+		expect(blades).toHaveLength(4);
+		expect(blades.every((blade: number) => Number.isFinite(blade) && blade >= 0 && blade <= 1)).toBe(true);
+		return { number: fixture.fixture_number, location: fixture.location,
+			rotation: fixture.rotation, installedAppearance: fixture.installed_appearance };
+	});
+}
+
 test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo show", async ({
 	api,
 	bench,
@@ -80,6 +97,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	).toEqual(Array.from({ length: 8 }, (_, index) => [1, index + 1]));
 	expect(generatedShow.scenery).toHaveLength(58);
 	const completePatch = await api.patch();
+	const frontWash = frontWashSnapshot(completePatch);
 	expect(completePatch.fixtures).toHaveLength(
 		PLANNED_DEMO_CONTROL_FIXTURES + generatedShow.scenery.length,
 	);
@@ -467,6 +485,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			overwrite: false,
 		});
 		await api.openShow(reopened.id, { transition: "hold_current" });
+		expect(frontWashSnapshot(await api.patch())).toEqual(frontWash);
 		expect((await api.showObjects(reopened.id, "patched_fixture")).length).toBe(312);
 		expect((await api.showObject<any>(reopened.id, "playback_page", "1"))?.body.assignments).toEqual(
 			assignments,

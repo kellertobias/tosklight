@@ -21,6 +21,7 @@ fn rig() -> (Scene, SceneValues) {
     let mut scene = Scene::default();
     for index in 0..4 {
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             instance_id: Uuid::new_v4(),
             fixture_id: Uuid::new_v4(),
             name: "Mac Aura".into(),
@@ -33,6 +34,7 @@ fn rig() -> (Scene, SceneValues) {
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            installed_shaper_blades: [0.0; 4],
             drawn_as_scenery: false,
             invisible: false,
             body: FixtureBody {

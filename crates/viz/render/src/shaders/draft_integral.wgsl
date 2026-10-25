@@ -58,6 +58,36 @@ fn draft_visible_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32
         + draft_square_integral(flat_start, flat_end, origin, direction, apex)
         + draft_taper(flat_end, last, origin, direction, apex, light);
 }
+// Preserve the analytic inverse-square/range energy and estimate only its angular weighting.
+// Four Gauss points are fixed work: no shadow lookup, texture sample or additional ray march.
+// Normalising by the sampled unprofiled energy makes a constant field exact even near the
+// 5cm source clamp. General varying fields remain an explicit low-quality quadrature approximation.
+fn draft_profiled_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32>, apex: vec3<f32>, light: Light) -> f32 {
+    let range = draft_sphere(origin, direction, light.position_range.xyz, light.position_range.w);
+    let first = max(a, range.x);
+    let last = min(b, range.y);
+    if (last <= first) { return 0.0; }
+    let energy = draft_visible_integral(first, last, origin, direction, apex, light);
+    if (energy <= 0.0) { return 0.0; }
+    let nodes = array<f32, 4>(-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116);
+    let weights = array<f32, 4>(0.3478548451, 0.6521451549, 0.6521451549, 0.3478548451);
+    let centre = (first + last) * 0.5;
+    let half_width = (last - first) * 0.5;
+    var raw_weight = 0.0;
+    var profiled_weight = 0.0;
+    for (var index = 0u; index < 4u; index++) {
+        let point = origin + direction * (centre + half_width * nodes[index]);
+        let offset = apex - point;
+        let distance = length(offset);
+        let weight = weights[index] * (36.0 / max(distance * distance, 0.0025))
+            * range_envelope(length(point - light.position_range.xyz), light.position_range.w);
+        raw_weight += weight;
+        profiled_weight += weight * beam_radial_profile(light, offset / max(distance, 1e-4));
+    }
+    if (raw_weight <= 0.0) { return 0.0; }
+    return energy * (profiled_weight / raw_weight);
+}
+
 fn draft_curtain_interval(blocker: CurtainBlocker, origin: vec3<f32>, direction: vec3<f32>, near: f32, far: f32) -> vec2<f32> {
     var entry = near;
     var exit = far;
@@ -80,8 +110,9 @@ fn draft_curtain_interval(blocker: CurtainBlocker, origin: vec3<f32>, direction:
 // Returns negative only when the established bounded march is required; never drops optics,
 // atlas occlusion, or curtains that exceed the local interval capacity.
 fn draft_analytic(light: Light, origin: vec3<f32>, direction: vec3<f32>, apex: vec3<f32>, near: f32, far: f32) -> f32 {
-    if (light.shadow.x >= 0.0 || globals.params5.x > 0.001 || beam_falloff_enabled() || gobos_enabled()
-        || light.position_range.w <= 0.1) { return -1.0; }
+    if (light.shadow.x >= 0.0 || globals.params5.x > 0.001 || gobos_enabled()
+        || light.position_range.w <= 0.1
+        || light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w > 0.001) { return -1.0; }
     for (var wheel = 0u; wheel < min(u32(light.gate.z), 8u); wheel++) {
         if (light.prism_wheels[wheel].x >= 2.0) { return -1.0; }
     }
@@ -111,8 +142,8 @@ fn draft_analytic(light: Light, origin: vec3<f32>, direction: vec3<f32>, apex: v
     var integrated = 0.0;
     for (var index = 0u; index < used; index++) {
         let interval = intervals[index];
-        if (interval.x > cursor) { integrated += draft_visible_integral(cursor, interval.x, origin, direction, apex, light); }
+        if (interval.x > cursor) { integrated += draft_profiled_integral(cursor, interval.x, origin, direction, apex, light); }
         cursor = max(cursor, interval.y);
     }
-    return integrated + draft_visible_integral(cursor, last, origin, direction, apex, light);
+    return integrated + draft_profiled_integral(cursor, last, origin, direction, apex, light);
 }

@@ -11,6 +11,7 @@ use viz_scene::{
 fn rig() -> (Scene, SceneValues) {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         instance_id: Uuid::nil(),
         fixture_id: Uuid::nil(),
         name: "Mac Aura".into(),
@@ -23,6 +24,7 @@ fn rig() -> (Scene, SceneValues) {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         drawn_as_scenery: false,
         invisible: false,
         body: FixtureBody {

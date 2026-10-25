@@ -787,9 +787,14 @@ mod tests {
             assert_eq!(actual, rows, "wrong rows in {}", tab.label());
             seen.extend(actual);
         }
+        let row_count = seen.len();
         seen.sort_by_key(|row| format!("{row:?}"));
         seen.dedup();
-        assert_eq!(seen.len(), 25, "a setting was duplicated between tabs");
+        assert_eq!(
+            seen.len(),
+            row_count,
+            "a setting was duplicated between tabs"
+        );
 
         settings.selected = select(&mut settings, Row::Exposure);
         let exposure = preferences.exposure;

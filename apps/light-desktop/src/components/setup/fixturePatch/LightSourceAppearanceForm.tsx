@@ -1,3 +1,4 @@
+import { ManualOpticsFields } from "./ManualOpticsFields";
 import {
 	Button,
 	ColorPickerField,
@@ -109,6 +110,7 @@ export function LightSourceAppearanceForm({
 			{draft.gelType === "custom" && (
 				<CustomGelFields draft={draft} update={update} />
 			)}
+            <ManualOpticsFields draft={draft} update={update} />
 			{gelPickerOpen && (
 				<ModalFrame
 					id="gel-selection"

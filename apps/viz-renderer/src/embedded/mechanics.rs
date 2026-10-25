@@ -23,6 +23,7 @@ impl MechanicsClock {
             return;
         }
         self.last = now;
+        self.dirty |= values.advance_lamp_response(scene, elapsed.as_secs_f64());
         let moving = mechanics_moving(values);
         if moving || force {
             values.apply_physical_motion(elapsed.as_secs_f32().min(0.25));
@@ -66,6 +67,67 @@ mod tests {
     use super::*;
     use crate::embedded::{adopt_provider_values, producer::Producer};
     use viz_scene::PhysicalMotionTarget;
+
+    #[test]
+    fn hidden_thermal_clock_settles_without_gpu_credit_and_capture_stays_frozen() {
+        let mut scene = crate::demo::build_scene();
+        let fixture = scene.emitters[0].fixture_index as usize;
+        scene.fixtures[fixture].lamp_response = viz_scene::LampResponseProfile::TungstenNominal;
+        let mut values = SceneValues::default();
+        values.resize(scene.emitters.len());
+        values.advance_lamp_response(&scene, 0.0);
+        values.emitters[0].intensity = 1.0;
+        let now = Instant::now();
+        let mut clock = MechanicsClock::new(now);
+        let mut producer = Producer::new(true, now);
+        producer.set_visible(false, now);
+        clock.advance(&scene, &mut values, now + Duration::from_millis(10), true);
+        let frozen = viz_render::still::FrozenStill::new(
+            &scene,
+            &values,
+            &Default::default(),
+            0.01,
+            Default::default(),
+            viz_render::still::StillOrigin {
+                pane_id: "thermal-test".into(),
+                follow_preload: false,
+            },
+        )
+        .unwrap();
+        let captured = frozen.values().emitters[0].visible_intensity();
+        assert!((0.3..0.4).contains(&captured));
+        for tick in 2..=300 {
+            if tick % 10 == 0 {
+                let mut incoming = SceneValues::default();
+                incoming.resize(scene.emitters.len());
+                incoming.emitters[0].intensity = if tick < 20 { 1.0 } else { 0.0 };
+                adopt_provider_values(&mut values, incoming, 0);
+                values.advance_lamp_response(&scene, 0.0);
+            }
+            let at = now + Duration::from_millis(tick * 10);
+            clock.advance(&scene, &mut values, at, false);
+            assert!(producer.begin(at).is_none());
+        }
+        assert_eq!(values.emitters[0].visible_intensity(), 0.0);
+        assert!(
+            !values.emitters[0]
+                .lamp_response
+                .as_ref()
+                .unwrap()
+                .is_moving()
+        );
+        assert_eq!(frozen.values().emitters[0].visible_intensity(), captured);
+        assert!(
+            clock.dirty(),
+            "the settled final picture remains owed until a successful submit"
+        );
+        clock.succeeded();
+        clock.advance(&scene, &mut values, now + Duration::from_secs(4), false);
+        assert!(
+            !clock.dirty(),
+            "settled lamp clocks stop producing dirty pictures"
+        );
+    }
 
     fn incoming() -> SceneValues {
         let mut values = SceneValues::default();

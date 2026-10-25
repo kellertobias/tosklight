@@ -33,7 +33,7 @@ pub(super) fn push_laser_emitter(
         aperture_size(emitter),
         emitter.optics.source.form,
         intensity,
-        Vec3::from(value.colour) * installed_colour,
+        Vec3::from(value.resolved_source_colour()) * installed_colour,
     );
     frame.poses.push(pose);
 }
@@ -125,10 +125,10 @@ pub fn semantic_lights(scene: &Scene, values: &SceneValues) -> Vec<SemanticLight
         let cells = cell_states(emitter, value, installed_colour);
         let aperture = aperture_size(emitter);
         for (cell_index, offset) in emitter.cells.offsets.iter().enumerate() {
-            let (intensity, colour) = cells
-                .get(cell_index)
-                .copied()
-                .unwrap_or((value.visible_intensity(), Vec3::from(value.colour)));
+            let (intensity, colour) = cells.get(cell_index).copied().unwrap_or((
+                value.visible_intensity(),
+                Vec3::from(value.resolved_source_colour()),
+            ));
             if emitter.kind != EmitterKind::Beam || intensity <= 0.002 {
                 continue;
             }
@@ -188,11 +188,13 @@ pub(super) fn cell_states(
     value: &EmitterValues,
     installed_colour: Vec3,
 ) -> Vec<(f32, Vec3)> {
-    let shutter = value.shutter.clamp(0.0, 1.0);
     if value.cells.is_empty() {
         let intensity = value.retained_visible_intensity();
         return vec![
-            (intensity, Vec3::from(value.colour) * installed_colour,);
+            (
+                intensity,
+                Vec3::from(value.resolved_source_colour()) * installed_colour,
+            );
             emitter.cells.len()
         ];
     }
@@ -202,14 +204,12 @@ pub(super) fn cell_states(
         .iter()
         .enumerate()
         .map(|(index, _)| {
-            let cell = value.cells.get(index).copied().unwrap_or_default();
             // A cell keeps its own tail: a chased pixel strip and a strobing blinder are both
             // per-cell effects, and holding only the head's level would smear the whole panel to
             // the brightness of its brightest pixel.
-            let gated = (cell.intensity * shutter).clamp(0.0, 1.0);
             (
-                cell.held_intensity.max(gated).clamp(0.0, 1.0),
-                Vec3::from(cell.colour) * installed_colour,
+                value.resolved_cell_intensity(index),
+                Vec3::from(value.resolved_cell_colour(index)) * installed_colour,
             )
         })
         .collect()

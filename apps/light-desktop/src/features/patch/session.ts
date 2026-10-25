@@ -1,3 +1,4 @@
+import { manualOpticsToWire } from "../../api/manualOptics";
 import type { PatchedFixture } from "../../api/types";
 import { frontendPerformanceDiagnostics } from "../frontendWarmup/diagnostics";
 import type {
@@ -802,6 +803,7 @@ function toFixtureAppearance(
 						}
 					: { type: "open_white" },
 		shaper_angles_degrees: [...appearance.shaperAnglesDegrees],
+        ...manualOpticsToWire(appearance),
 	};
 }
 

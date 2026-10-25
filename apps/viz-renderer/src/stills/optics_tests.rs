@@ -8,6 +8,7 @@ use viz_scene::*;
 pub(super) fn rig() -> (Scene, SceneValues, ViewConfiguration) {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         position: Vec3::new(0.0, 4.0, 0.0),
         installed_colour: [1.0; 3],
         body: FixtureBody {
@@ -109,6 +110,55 @@ fn decoded(path: &std::path::Path) -> CapturedImage {
 #[test]
 #[ignore = "requires installed Blender, serialized native GPU and real 4K optical pixel proof"]
 fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
+    render_optical_case(false);
+}
+
+#[test]
+#[ignore = "requires installed Blender, serialized native GPU and real 4K installed Fresnel cut proof"]
+fn ultimate_installed_manual_soft_fresnel_matches_native_receiver_orientation() {
+    render_optical_case(true);
+}
+
+fn optical_case(manual: bool) -> (Scene, SceneValues, ViewConfiguration) {
+    let (mut scene, mut values, view) = rig();
+    if manual {
+        let emitter = &mut scene.emitters[0];
+        emitter.live_shaper_angle_roles = [false; 4];
+        emitter.shaper_roles = [false; 4];
+        emitter.live_shaper_rotation_role = false;
+        emitter.beam_angle_degrees = 48.0;
+        emitter.field_angle_degrees = 48.0;
+        emitter.optics.sharpness = 0.42;
+        emitter.optics.uniformity = 0.55;
+        scene.fixtures[0].installed_shaper_blades[0] = 0.5;
+        scene.fixtures[0].shaper_degrees = Some(30.0);
+        values.emitters[0].shaper_blades = [0.0; 4];
+        values.emitters[0].shaper_rotation_degrees = 0.0;
+        values.emitters[0].shaper_blade_angles_degrees = [0.0; 4];
+    }
+    (scene, values, view)
+}
+
+fn retain_native_manual_image(root: &std::path::Path, image: &CapturedImage) {
+    let path = root.join(format!(
+        "native-manual-soft-fresnel-{}.png",
+        uuid::Uuid::new_v4()
+    ));
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+        .unwrap();
+    let mut encoder = png::Encoder::new(file, image.width, image.height);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().unwrap();
+    writer.write_image_data(&image.rgba).unwrap();
+    writer.finish().unwrap();
+    println!("Native manual Fresnel evidence: {}", path.display());
+}
+
+fn render_optical_case(manual: bool) {
     let blender = PathBuf::from(
         std::env::var_os("LIGHT_STILL_TEST_BLENDER").expect("explicit installed Blender"),
     );
@@ -116,7 +166,7 @@ fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
         std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR").expect("canonical evidence dir"),
     );
     fs::create_dir_all(&root).unwrap();
-    let (scene, values, view) = rig();
+    let (scene, values, view) = optical_case(manual);
     let frozen = Arc::new(
         FrozenStill::new(
             &scene,
@@ -147,6 +197,13 @@ fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
         std::thread::sleep(Duration::from_millis(2));
     };
     drop(native);
+    if manual {
+        assert_eq!(
+            (native_image.width, native_image.height),
+            (STILL_WIDTH, STILL_HEIGHT)
+        );
+        retain_native_manual_image(&root, &native_image);
+    }
     let native_pair = [
         receiver(&native_image, &camera, -0.65),
         receiver(&native_image, &camera, 0.65),
@@ -162,7 +219,12 @@ fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
                 probe_timeout: Duration::from_secs(30),
                 ultimate_timeout: Duration::from_secs(300),
                 destination: Some(root.join(format!(
-                    "ultimate-asymmetric-optics-{}.png",
+                    "ultimate-{}-{}.png",
+                    if manual {
+                        "manual-soft-fresnel"
+                    } else {
+                        "asymmetric-optics"
+                    },
                     uuid::Uuid::new_v4()
                 ))),
                 ..Default::default()
@@ -207,4 +269,10 @@ fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
         "frozen native shutter orientation lost: {pair:?}"
     );
     assert_eq!(view.quality, RenderQuality::Draft);
+    if manual {
+        assert_eq!(scene.fixtures[0].installed_shaper_blades[0], 0.5);
+        assert_eq!(values.emitters[0].shaper_blades, [0.0; 4]);
+        assert!(!scene.emitters[0].live_shaper_rotation_role);
+        assert_eq!(scene.fixtures[0].shaper_degrees, Some(30.0));
+    }
 }

@@ -189,10 +189,12 @@ fn tilt_turns_the_head_about_its_trunnions_and_leaves_the_base_alone() {
 fn zooming_in_narrows_the_beam_and_brightens_it() {
     let emitter = head();
     let narrow = EmitterValues {
+        lamp_response: None,
         zoom: 0.0,
         ..EmitterValues::default()
     };
     let wide = EmitterValues {
+        lamp_response: None,
         zoom: 1.0,
         ..EmitterValues::default()
     };
@@ -214,6 +216,7 @@ fn closing_the_iris_narrows_the_beam_without_changing_its_brightness() {
     let emitter = head();
     let open = EmitterValues::default();
     let closed = EmitterValues {
+        lamp_response: None,
         iris: 0.7,
         ..EmitterValues::default()
     };
@@ -238,12 +241,14 @@ fn frost_and_a_lens_off_the_gate_both_soften_the_edge() {
     let sharp = resolve_optics(&emitter, &EmitterValues::default());
 
     let frosted = EmitterValues {
+        lamp_response: None,
         frost: 0.8,
         ..EmitterValues::default()
     };
     assert!(resolve_optics(&emitter, &frosted).feather > sharp.feather);
 
     let defocused = EmitterValues {
+        lamp_response: None,
         focus: 1.0,
         ..EmitterValues::default()
     };
@@ -265,6 +270,7 @@ use viz_scene::{EmitterLayoutCells, EmitterOptics, FixtureBody, LightSource, Mot
 
 fn fixture() -> FixtureInstance {
     FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: viz_scene::uuid::Uuid::nil(),
@@ -279,6 +285,7 @@ fn fixture() -> FixtureInstance {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody::default(),
         patched: true,
         address: None,
@@ -1935,3 +1942,6 @@ fn decorative_wash_ring_glass_does_not_multiply_optical_lights_or_shadows() {
         assert!((glam::Vec2::new(centre.x, centre.z).length() - 0.1).abs() < 0.0001);
     }
 }
+
+#[path = "tests/manual_optics_tests.rs"]
+mod manual_optics_tests;

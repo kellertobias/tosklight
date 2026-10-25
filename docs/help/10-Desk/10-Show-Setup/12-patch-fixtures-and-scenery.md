@@ -119,6 +119,8 @@ Use separate fixtures or logical heads when individual selection is required. Ve
 
 ## Multi Head Fixtures
 
+For a manually focused lantern, open **Light source > Manual optics**. Leave **Manual zoom full opening (°)** empty to inherit its profile, or enter the installed full opening. Set the four **Manual blade closure (%)** values from open (0%) to fully inserted (100%). These settings belong to this physical fixture or copy and travel with the show; they do not write DMX. A profile's live Zoom or framing controls keep their authority. Manual barn-door cuts retain their own small penumbra while the Fresnel's wider field remains soft.
+
 A multi-head fixture has independently controlled sources, such as LED pixels, wash zones, or PAR-bar lamps, patched as one product.
 
 For fixture 100, shared controls use `100.0`, and individual heads use `100.1`, `100.2`, and so on. `100 [ENT]` selects the master and all heads; `100.0 [ENT]` selects only the master.

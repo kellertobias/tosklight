@@ -6,6 +6,7 @@ use viz_scene::*;
 fn scene() -> Scene {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         position: Vec3::new(0.0, 4.0, 0.0),
         installed_colour: [1.0; 3],
         body: FixtureBody {
@@ -136,6 +137,7 @@ fn two_gobo_wheels_mask_together_and_rotate_independently() {
         ],
     ];
     let mut value = EmitterValues {
+        lamp_response: None,
         intensity: 0.5,
         colour: [1.0; 3],
         gobo_wheels: vec![OpticalWheelValues::default(); 2],
@@ -194,6 +196,7 @@ fn authored_prism_wheels_render_distinct_linear_and_radial_copies() {
         ],
     ];
     let mut value = EmitterValues {
+        lamp_response: None,
         intensity: 0.5,
         colour: [1.0; 3],
         prism_wheels: vec![OpticalWheelValues::default(); 2],
@@ -236,6 +239,7 @@ fn a_tilted_pool_lights_the_floor_beyond_its_axis_range() {
     view.camera.target = Vec3::new(0.0, 0.0, 4.0);
     let values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 1.0,
             colour: [1.0; 3],
             ..Default::default()
@@ -285,6 +289,7 @@ fn a_horizontal_light_fades_before_its_finite_range_boundary() {
     scene.scenery[0].size = Vec3::new(4.0, 4.0, 0.1);
     let values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 1.0,
             colour: [1.0; 3],
             ..Default::default()
@@ -334,6 +339,7 @@ fn a_crowded_tile_keeps_every_light_and_stays_stable_across_frames() {
     view.quality = RenderQuality::Draft;
     let mut values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 0.8,
             colour: [1.0; 3],
             ..Default::default()
@@ -354,6 +360,7 @@ fn a_crowded_tile_keeps_every_light_and_stays_stable_across_frames() {
         scene.revision += 1;
         values.emitters = vec![
             EmitterValues {
+                lamp_response: None,
                 intensity: 0.8 / count as f32,
                 colour: [1.0; 3],
                 ..Default::default()
@@ -389,6 +396,7 @@ fn haze_energy_is_continuous_when_the_camera_enters_the_widened_proxy() {
     view.quality = RenderQuality::High;
     let mut values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 0.8,
             colour: [1.0; 3],
             ..Default::default()
@@ -444,6 +452,7 @@ fn a_wide_beam_stays_visible_when_its_exit_proxy_is_beyond_the_far_plane() {
     assert_eq!(camera.far, 60.0);
     let mut values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 1.0,
             colour: [1.0; 3],
             ..Default::default()

@@ -1011,6 +1011,7 @@ mod tests {
             optics: [0.0; 4],
             shapers: [0.0; 4],
             shaper_angles: [0.0; 4],
+            shaper_params: [0.0; 4],
             gate: [-1.0, 0.0, 0.0, 0.0],
             shadow: [-1.0, 0.0, 0.0, 0.0],
             gobo_wheels: [[0.0; 4]; crate::instances::MAX_OPTICAL_WHEELS],

@@ -272,6 +272,7 @@ mod tests {
         let mut scene = Scene::default();
         let fixture_id = viz_scene::uuid::Uuid::from_u128(7);
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             drawn_as_scenery: false,
             invisible: false,
             instance_id: fixture_id,
@@ -286,6 +287,7 @@ mod tests {
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            installed_shaper_blades: [0.0; 4],
             body: FixtureBody {
                 size: glam::Vec3::splat(0.3),
                 kind: BodyKind::Lantern,

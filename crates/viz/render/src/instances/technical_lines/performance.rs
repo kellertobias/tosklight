@@ -12,6 +12,7 @@ fn actual_model_rig() -> (Scene, SceneValues, FrameStyle) {
     };
     for index in 0..500 {
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             instance_id: viz_scene::uuid::Uuid::from_u128(index + 1),
             fixture_id: viz_scene::uuid::Uuid::from_u128(index + 1),
             position: Vec3::new((index % 25) as f32, 6.0, (index / 25) as f32),
@@ -41,6 +42,7 @@ fn actual_model_rig() -> (Scene, SceneValues, FrameStyle) {
     let values = SceneValues {
         emitters: vec![
             EmitterValues {
+                lamp_response: None,
                 intensity: 0.8,
                 ..Default::default()
             };

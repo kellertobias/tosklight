@@ -181,6 +181,7 @@ pub(super) fn emitter(kind: EmitterKind) -> EmitterInstance {
 pub(super) fn scene(kinds: &[EmitterKind]) -> Scene {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         instance_id: uuid::Uuid::nil(),
         fixture_id: uuid::Uuid::nil(),
         name: "Test".into(),
@@ -191,6 +192,7 @@ pub(super) fn scene(kinds: &[EmitterKind]) -> Scene {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody::default(),
         patched: true,
         ..FixtureInstance::default()

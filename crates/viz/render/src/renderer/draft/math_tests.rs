@@ -134,3 +134,6 @@ fn dedicated_draft_shaders_parse_and_validate_without_gpu() {
         .unwrap_or_else(|error| panic!("{name}: {error:?}"));
     }
 }
+
+#[path = "soft_profile_tests.rs"]
+mod soft_profile_tests;

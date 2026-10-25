@@ -117,6 +117,7 @@ fn fixture_scene() -> Scene {
     let mut scene = Scene::default();
     scene.models.push(model);
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         model: Some(0),
         position: Vec3::ZERO,
         body: FixtureBody {
@@ -252,6 +253,7 @@ fn rear_model_edges_are_occluded_by_actual_front_triangles() {
         ..Default::default()
     });
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         model: Some(0),
         body: FixtureBody {
             kind: BodyKind::Bar,

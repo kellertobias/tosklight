@@ -97,6 +97,7 @@ mod tests {
     fn fixture_scene(model: FixtureModel) -> Scene {
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             body: viz_scene::FixtureBody {
                 size: model.extent * 2.0,
                 kind: viz_scene::BodyKind::Lantern,
@@ -144,6 +145,7 @@ mod tests {
         let scene = fixture_scene(scanner());
         let values_at = |pan, tilt| SceneValues {
             emitters: vec![EmitterValues {
+                lamp_response: None,
                 pan,
                 tilt,
                 intensity: 1.0,
@@ -218,6 +220,7 @@ mod tests {
         ] {
             let values = SceneValues {
                 emitters: vec![EmitterValues {
+                    lamp_response: None,
                     intensity: 1.0,
                     source_primaries: raw,
                     colour,
@@ -252,6 +255,7 @@ mod tests {
         for (name, pan, tilt) in [("scanner-home", 0.5, 0.5), ("scanner-steered", 0.85, 0.2)] {
             let values = SceneValues {
                 emitters: vec![EmitterValues {
+                    lamp_response: None,
                     intensity: 0.0,
                     pan,
                     tilt,

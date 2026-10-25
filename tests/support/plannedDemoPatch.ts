@@ -1,3 +1,4 @@
+import { frontWashAppearance, frontWashPlacement } from "./plannedDemoFrontWash";
 import type { FixtureProfile } from "../../apps/light-desktop/src/api/types";
 import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
@@ -278,6 +279,7 @@ export function createPlannedDemoPatchInputs(
 								port: DEMO_MEDIA_SERVER_CITP_PORT,
 							}
 						: null,
+				installed_appearance: frontWashAppearance(entry.number, placement.primary.location, placement.primary.rotation),
 				location: millimetres(placement.primary.location),
 				rotation: placement.primary.rotation,
 				multipatch,
@@ -528,6 +530,10 @@ function placementFor(
 	);
 	if (configured && entry.multipatches > 0)
 		return configuredPhysicalPlacement(configured, entry.multipatches + 1);
+	if (!configured) {
+		const front = frontWashPlacement(entry.number);
+		if (front) return { primary: front, multipatches: [] };
+	}
 	if (entry.roles.includes("All ACLs")) {
 		return aclPlacement(entry);
 	}

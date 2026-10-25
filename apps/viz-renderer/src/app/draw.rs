@@ -244,7 +244,7 @@ impl Application {
     #[allow(clippy::too_many_arguments)]
     fn render_frame(
         &mut self,
-        session: &Session,
+        session: &mut Session,
         event_loop: &ActiveEventLoop,
         now: Instant,
         delta: f32,
@@ -278,7 +278,8 @@ impl Application {
             notice,
             camera_control,
         );
-        let time_driven = motion_was_active
+        let time_driven = session.lamp_picture_dirty()
+            || motion_was_active
             || crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
         build_overlay(
             &mut self.overlay,
@@ -322,6 +323,7 @@ impl Application {
             return None;
         }
         let result = renderer.render(&session.scene, values, view, &self.overlay, time);
+        session.observe_lamp_submission(result.is_ok());
         if result.is_ok() {
             self.redraw_gate.succeeded(redraw_state);
         }

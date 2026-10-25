@@ -154,6 +154,7 @@ mod network_rule_tests {
         let point = uuid::Uuid::from_u128(5);
         let mut scene = viz_scene::Scene::default();
         scene.fixtures.push(viz_scene::FixtureInstance {
+            lamp_response: Default::default(),
             instance_id: uuid::Uuid::from_u128(6),
             fixture_id: point,
             name: "Truss point".into(),
@@ -165,6 +166,7 @@ mod network_rule_tests {
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            installed_shaper_blades: [0.0; 4],
             body: viz_scene::FixtureBody::default(),
             drawn_as_scenery: false,
             invisible: false,

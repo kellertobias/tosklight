@@ -75,6 +75,7 @@ export interface PatchInstalledFixtureAppearance {
 	luminousOutputLumens: number | null;
 	gel: PatchGelAssignment;
 	shaperAnglesDegrees: [number, number, number, number];
+	manualOptics?: { zoomDegrees: number | null; shaperBlades: [number, number, number, number] };
 }
 
 export interface PatchMultiPatch {

@@ -301,9 +301,20 @@ pub struct PatchInstalledFixtureAppearance {
     pub luminous_output_lumens: Option<f32>,
     #[serde(default)]
     pub gel: PatchGelAssignment,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_optics: Option<PatchInstalledManualOptics>,
     #[serde(default)]
     #[ts(type = "[number, number, number, number]")]
     pub shaper_angles_degrees: [f32; 4],
+}
+
+#[derive(Clone, Debug, Default, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct PatchInstalledManualOptics {
+    #[serde(default)]
+    pub zoom_degrees: Option<f32>,
+    #[serde(default)]
+    #[ts(type = "[number, number, number, number]")]
+    pub shaper_blades: [f32; 4],
 }
 
 impl Default for PatchInstalledFixtureAppearance {
@@ -313,6 +324,7 @@ impl Default for PatchInstalledFixtureAppearance {
             color_temperature_kelvin: None,
             luminous_output_lumens: None,
             gel: PatchGelAssignment::OpenWhite,
+            manual_optics: None,
             shaper_angles_degrees: [0.0; 4],
         }
     }

@@ -127,6 +127,7 @@ impl OpticsManifest {
                 frost: packed.tangent_frost[3],
                 shapers: packed.shapers,
                 angles: packed.shaper_angles,
+                shaper_params: packed.shaper_params,
                 gobos: packed.gobo_wheels,
                 prisms: packed.prism_wheels,
                 gobo_count: packed.gate[1] as usize,

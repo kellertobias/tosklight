@@ -9,6 +9,8 @@ pub(super) struct Gate {
     pub frost: f32,
     pub shapers: [f32; 4],
     pub angles: [f32; 4],
+    /// Private CPU-baking input, not serialized in ImageManifest. Zero is legacy dynamic softness.
+    pub shaper_params: [f32; 4],
     pub gobos: [[f32; 4]; 8],
     pub prisms: [[f32; 4]; 8],
     pub gobo_count: usize,
@@ -21,6 +23,7 @@ impl Gate {
             .chain(self.params)
             .chain(self.shapers)
             .chain(self.angles)
+            .chain(self.shaper_params)
             .chain(self.gobos.iter().flatten().copied())
             .chain(self.prisms.iter().flatten().copied())
             .map(f32::to_bits)
@@ -28,16 +31,28 @@ impl Gate {
             .collect()
     }
     pub fn invalid_reason(&self, artwork: &[GoboArtwork]) -> Option<String> {
-        if self
-            .key()
+        let key = self.key();
+        // Exclude only the two integer wheel counts; every float, including reserved slots,
+        // participates in finiteness checks when the native storage contract grows.
+        if key[..key.len() - 2]
             .iter()
-            .take(78)
             .any(|bits| !f32::from_bits(*bits).is_finite())
             || self.gobo_count > 8
             || self.prism_count > 8
             || !(0.0..1.0).contains(&self.cos_outer)
         {
             return Some("Frozen optical coordinates are outside the supported finite cone".into());
+        }
+        let manual = self.shaper_params[0] > 0.0;
+        let maximum_stroke = if manual { 2.0 } else { 1.0 };
+        if !(0.0..=1.0).contains(&self.shaper_params[0])
+            || self.shaper_params[1..].iter().any(|value| *value != 0.0)
+            || self
+                .shapers
+                .iter()
+                .any(|blade| !(0.0..=maximum_stroke).contains(blade))
+        {
+            return Some("Frozen shutter coordinates exceed their dynamic/manual stroke or softness contract".into());
         }
         for gobo in self
             .gobos
@@ -135,7 +150,11 @@ impl Gate {
         profile * mix(aperture, 1.0, frost)
     }
     fn shapers(&self, gate: Vec2) -> f32 {
-        let edge = (self.params[1] + self.frost).max(0.02);
+        let edge = if self.shaper_params[0] > 0.0 {
+            self.shaper_params[0]
+        } else {
+            (self.params[1] + self.frost).max(0.02)
+        };
         let coordinates = [
             rotate(gate, self.angles[0]).x,
             -rotate(gate, self.angles[1]).x,
@@ -145,7 +164,17 @@ impl Gate {
         self.shapers
             .iter()
             .zip(coordinates)
-            .map(|(blade, position)| smooth(1.0 - blade + edge, 1.0 - blade - edge, position))
+            .map(|(blade, position)| {
+                if self.shaper_params[0] > 0.0 {
+                    if *blade <= 0.0 {
+                        return 1.0;
+                    }
+                    if *blade >= 2.0 {
+                        return 0.0;
+                    }
+                }
+                smooth(1.0 - blade + edge, 1.0 - blade - edge, position)
+            })
             .product()
     }
 }

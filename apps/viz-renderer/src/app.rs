@@ -1118,6 +1118,12 @@ impl ApplicationHandler for Application {
                 }
             }
         }
+        // Capture menu commands freeze the current resolved picture first. Adopting a new
+        // provider frame before that would invalidate its guard without resolving a new draw.
+        // CPU input/lamp state still progresses while occluded; this submits no GPU work.
+        if let Some(session) = self.session.as_mut() {
+            session.pump(Instant::now());
+        }
         // Pace the frames. Presenting back to back parks the event loop inside the driver waiting
         // for a drawable for almost the whole refresh interval, and a mouse the operator is
         // dragging then has nowhere to be delivered: the picture falls seconds behind the hand.

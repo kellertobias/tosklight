@@ -158,6 +158,7 @@ mod tests {
         let nil = viz_scene::uuid::Uuid::nil();
         let mut scene = Scene::default();
         scene.fixtures.push(viz_scene::FixtureInstance {
+            lamp_response: Default::default(),
             drawn_as_scenery: false,
             invisible: false,
             instance_id: nil,
@@ -172,6 +173,7 @@ mod tests {
             shaper_degrees: None,
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            installed_shaper_blades: [0.0; 4],
             body: viz_scene::FixtureBody {
                 size: viz_scene::glam::Vec3::new(0.3, 0.5, 0.3),
                 kind: viz_scene::BodyKind::MovingHead,

@@ -133,6 +133,10 @@ export interface InstalledFixtureAppearance {
 	luminous_output_lumens: number | null;
 	gel: GelAssignment;
 	shaper_angles_degrees: [number, number, number, number];
+	manual_optics?: {
+		zoom_degrees: number | null;
+		shaper_blades: [number, number, number, number];
+	} | null;
 }
 
 export interface SplitPatch {

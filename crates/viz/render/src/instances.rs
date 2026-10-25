@@ -141,10 +141,14 @@ pub struct GpuLight {
     pub tangent_frost: [f32; 4],
     /// `x` gobo slot, `y` gobo rotation in radians, `z` prism facets, `w` prism rotation.
     pub optics: [f32; 4],
-    /// Framing-shutter blade insertions, `0` open, in the beam's own frame after its rotation.
+    /// Blade insertions in the rotated beam gate: live DMX retains `0..=1` (centre at 1),
+    /// while full-stroke installed manual doors use `0..=2` (opposite field edge at 2).
     pub shapers: [f32; 4],
     /// Framing-shutter blade angles in radians, one per explicitly supported canonical role.
     pub shaper_angles: [f32; 4],
+    /// x: installed manual cut softness in normalised gate units; 0 preserves dynamic
+    /// feather+frost. yzw are reserved and must remain zero. Independent of radial softness.
+    pub shaper_params: [f32; 4],
     /// `x` the artwork layer this slot projects, or `-1` for a slot with none — which is every
     /// slot of a profile that declares no wheel, and is what selects the drawn patterns instead.
     /// `yz` spare; `w` packed curtain-blocker header offset, or -1 for none.
@@ -909,7 +913,7 @@ fn push_emitters(
             let (cell_intensity, cell_colour) = cells
                 .get(cell_index)
                 .copied()
-                .unwrap_or((intensity, Vec3::from(value.colour)));
+                .unwrap_or((intensity, Vec3::from(value.resolved_source_colour())));
             let origin = pose.origin + pose.orientation * *offset;
             /*
              * The lit face is a surface, so it belongs to the views that draw surfaces. An outline
@@ -1038,7 +1042,7 @@ fn push_laser_view(
                 pose.origin,
                 pose,
                 intensity,
-                Vec3::from(value.colour) * installed_colour,
+                Vec3::from(value.resolved_source_colour()) * installed_colour,
             );
         } else if style.aim_guides {
             push_aim_guide(frame, pose.origin, pose, style.faint_ink);
@@ -1063,25 +1067,7 @@ fn push_gpu_light(
     let wheels = optical_wheels::pack(emitter, value, pose.half_angle);
     // The beam's own right axis: every pattern the head projects turns with the head.
     let tangent = (pose.orientation * Vec3::X).normalize_or(Vec3::X);
-    // Where the blades sit is either the installed module pose or the desk's live pose.
-    // A live canonical role owns that physical component completely; the two values are
-    // never added into a competing second authority.
-    let shaper_turn = if emitter.live_shaper_rotation_role {
-        value.shaper_rotation_degrees.to_radians()
-    } else if emitter.shaper_roles.iter().any(|supported| *supported) {
-        fixture.shaper_degrees.unwrap_or(0.0).to_radians()
-    } else {
-        0.0
-    };
-    let shaper_angles = std::array::from_fn(|index| {
-        if emitter.live_shaper_angle_roles[index] {
-            value.shaper_blade_angles_degrees[index].to_radians()
-        } else if emitter.shaper_roles[index] {
-            fixture.installed_shaper_angles_degrees[index].to_radians()
-        } else {
-            0.0
-        }
-    });
+    let shapers = manual_optics::resolve(fixture, emitter, value);
     frame.lights.push(GpuLight {
         position_range: origin
             .extend(beam_reach(origin, pose.direction, pose.half_angle).max(2.0))
@@ -1096,7 +1082,7 @@ fn push_gpu_light(
             optics.uniformity,
             apex_offset,
         ],
-        tangent_frost: rotate_about(tangent, pose.direction, shaper_turn)
+        tangent_frost: rotate_about(tangent, pose.direction, shapers.turn)
             .extend(value.frost.clamp(0.0, 1.0))
             .to_array(),
         optics: [
@@ -1105,8 +1091,9 @@ fn push_gpu_light(
             wheels.prisms[0][0],
             wheels.prisms[0][1],
         ],
-        shapers: value.shaper_blades,
-        shaper_angles,
+        shapers: shapers.blades,
+        shaper_angles: shapers.angles,
+        shaper_params: shapers.params,
         gate: [
             wheels.gobos[0][2],
             wheels.gobo_count as f32,
@@ -1122,6 +1109,7 @@ fn push_gpu_light(
 }
 
 mod emitter_geometry;
+mod manual_optics;
 mod media;
 pub use emitter_geometry::{SemanticLight, semantic_lights};
 use emitter_geometry::{aperture_size, cell_states, push_beam, push_laser_emitter};

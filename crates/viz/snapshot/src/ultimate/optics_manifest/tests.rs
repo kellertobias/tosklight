@@ -10,6 +10,7 @@ fn open_gate() -> Gate {
         frost: 0.0,
         shapers: [0.0; 4],
         angles: [0.0; 4],
+        shaper_params: [0.0; 4],
         gobos: [[0.0, 0.0, -1.0, 0.0]; 8],
         prisms: [[0.0; 4]; 8],
         gobo_count: 1,
@@ -62,6 +63,7 @@ fn rig() -> (Scene, SceneValues) {
         .models
         .push(viz_scene::read_glb(&std::fs::read(path).unwrap()).unwrap());
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         name: "Real model cells".into(),
         model: Some(0),
         position: Vec3::new(1.0, 5.0, 2.0),
@@ -170,3 +172,6 @@ fn cancelled_optical_asset_job_does_not_open_or_create_output_files() {
         Err(UltimateError::Cancelled)
     );
 }
+
+#[path = "shaper_tests.rs"]
+mod shaper_tests;

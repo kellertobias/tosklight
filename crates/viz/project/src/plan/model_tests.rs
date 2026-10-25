@@ -1318,3 +1318,59 @@ fn suedbahnhof_plan_profiles_compile_into_controllable_architect_emitters() {
     assert!(binding.prism.is_some() && binding.prism_rotation.is_some());
     assert!(binding.colour.wheel.is_some());
 }
+
+#[test]
+fn each_manual_fresnel_installation_keeps_its_lens_and_four_blade_settings() {
+    let mut fixture = patched("fresnel", ProfileOptics::default());
+    fixture.instances[0].installed_appearance.manual_optics =
+        Some(light_fixture::InstalledManualOptics {
+            zoom_degrees: Some(48.0),
+            shaper_blades: [0.12, 0.3, 0.24, 0.11],
+        });
+    let mut copy = fixture.instances[0].clone();
+    copy.instance_id = Uuid::new_v4();
+    copy.installed_appearance.manual_optics = Some(light_fixture::InstalledManualOptics {
+        zoom_degrees: Some(35.0),
+        shaper_blades: [0.2, 0.1, 0.4, 0.3],
+    });
+    fixture.instances.push(copy);
+    let plan = compile(&[fixture]);
+    assert_eq!(
+        plan.scene.fixtures[0].installed_shaper_blades,
+        [0.12, 0.3, 0.24, 0.11]
+    );
+    assert_eq!(
+        plan.scene.fixtures[1].installed_shaper_blades,
+        [0.2, 0.1, 0.4, 0.3]
+    );
+    assert_eq!(plan.scene.emitters[0].field_angle_degrees, 48.0);
+    assert_eq!(plan.scene.emitters[1].field_angle_degrees, 35.0);
+    assert_eq!(plan.scene.emitters[0].beam_angle_degrees, 48.0);
+}
+
+#[test]
+fn installed_manual_lens_never_overrides_a_live_zoom_channel() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../assets/fixture-library/robe--robin-dls-profile.toskfixture");
+    let profile =
+        Arc::new(light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap());
+    let mut fixture = patched("profile", ProfileOptics::default());
+    fixture.mode_id = profile.modes[0].id;
+    fixture.profile = profile;
+    let reference = compile(&[fixture.clone()]);
+    fixture.instances[0].installed_appearance.manual_optics =
+        Some(light_fixture::InstalledManualOptics {
+            zoom_degrees: Some(48.0),
+            shaper_blades: [0.1; 4],
+        });
+    let manual = compile(&[fixture]);
+    assert!(manual.bindings[0].zoom.is_some());
+    assert_eq!(
+        manual.scene.emitters[0].beam_angle_degrees,
+        reference.scene.emitters[0].beam_angle_degrees
+    );
+    assert_eq!(
+        manual.scene.emitters[0].field_angle_degrees,
+        reference.scene.emitters[0].field_angle_degrees
+    );
+}

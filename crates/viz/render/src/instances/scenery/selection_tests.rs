@@ -10,6 +10,7 @@ const OTHER: u128 = 8;
 fn venue_object(scene: &mut Scene, id: u128, x: f32) {
     let instance_id = Uuid::from_u128(id + 100);
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         fixture_id: Uuid::from_u128(id),
         instance_id,
         drawn_as_scenery: true,

@@ -43,6 +43,10 @@ Standalone Draft and 3D Lines use a 60 Hz ceiling for steady animation, includin
 Immediate input or reveal redraws can occur sooner; static pictures stop GPU submissions.
 Standard, High and Ultra lighting views retain display-driven pacing.
 
+Fresnel fields have soft edges; PAR and ACL fields retain a brighter centre with a soft falloff. Draft and Standard retain these basic field shapes and physical barn-door cuts. Draft's unshadowed, unshaped shafts keep a fixed four-point angular estimate alongside analytic distance integration.
+
+Explicit tungsten and halogen sources use a nominal lamp response: fast heating, fast initial dimming and slower cooling near low levels. Choose the installed **Light source** in Show Patch when the profile does not identify it. LED and unknown sources remain immediate. This changes the visualized lamp only; DMX values and Cue fades keep their own timing. Observer persistence remains separate. The response is an estimated preview, not measured calibration for every lamp or dimmer.
+
 **Reset physics scenery** is a separate authoritative show-control action. It restores every
 released physics body on the selected renderer target to its authored pose. Re-selecting a view,
 losing DMX, or reconnecting is not a reset.

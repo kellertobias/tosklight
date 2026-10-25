@@ -4091,3 +4091,5 @@ fn invalid_optical_wheel_metadata_is_rejected() {
     profile.prisms[0].spread_degrees = f32::NAN;
     assert!(write_fixture_package(&profile).is_err());
 }
+
+mod acl_optics;

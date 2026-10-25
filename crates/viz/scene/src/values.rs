@@ -79,6 +79,7 @@ impl SceneValues {
     /// targets. Replacing all three every time a 10 Hz DMX snapshot arrives makes a moving head
     /// repeatedly jump back to its provider-side home position.
     pub fn retain_visual_motion_runtime_from(&mut self, previous: &Self) {
+        self.retain_lamp_response_from(previous);
         self.retain_calibrated_motion_from(previous);
         fn retain_kinematics(next: &mut PhysicalMotionState, previous: &PhysicalMotionState) {
             next.position_degrees = previous.position_degrees;
@@ -152,8 +153,14 @@ impl SceneValues {
         for emitter in &mut self.emitters {
             let current = emitter.visible_intensity();
             emitter.held_intensity = preference.hold(emitter.held_intensity, current, elapsed);
-            for cell in &mut emitter.cells {
-                cell.held_intensity = preference.hold(cell.held_intensity, cell.intensity, elapsed);
+            for (index, cell) in emitter.cells.iter_mut().enumerate() {
+                let source = emitter
+                    .lamp_response
+                    .as_ref()
+                    .and_then(|state| state.cell_output(index))
+                    .unwrap_or(cell.intensity);
+                let current = (source * emitter.shutter).clamp(0.0, 1.0);
+                cell.held_intensity = preference.hold(cell.held_intensity, current, elapsed);
             }
         }
     }
@@ -200,12 +207,17 @@ impl SceneValues {
             .iter()
             .any(|p| p.axes.iter().any(|a| a.motion.is_moving()))
             || self.emitters.iter().any(|emitter| {
-                (persistence.is_active()
-                    && (emitter.held_intensity > emitter.visible_intensity() + f32::EPSILON
-                        || emitter
-                            .cells
-                            .iter()
-                            .any(|cell| cell.held_intensity > cell.intensity + f32::EPSILON)))
+                emitter
+                    .lamp_response
+                    .as_ref()
+                    .is_some_and(|state| state.can_change_picture(emitter))
+                    || (persistence.is_active()
+                        && (emitter.retained_visible_intensity()
+                            > emitter.visible_intensity() + f32::EPSILON
+                            || emitter.cells.iter().enumerate().any(|(index, _)| {
+                                emitter.resolved_cell_intensity(index)
+                                    > emitter.visible_cell_intensity(index) + f32::EPSILON
+                            })))
                     || emitter
                         .gobo_wheels
                         .iter()
@@ -401,6 +413,9 @@ impl OpticalWheelValues {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct EmitterValues {
+    /// Renderer-owned lamp output; intensity and shutter remain literal desk targets.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lamp_response: Option<crate::LampResponseState>,
     /// Dimmer after shutter and strobe gating, `0..=1`.
     pub intensity: f32,
     /// Linear RGB, `0..=1` per component.
@@ -486,6 +501,7 @@ pub struct EmitterValues {
 impl Default for EmitterValues {
     fn default() -> Self {
         Self {
+            lamp_response: None,
             intensity: 0.0,
             colour: [1.0, 1.0, 1.0],
             source_primaries: [0.0; 3],
@@ -743,13 +759,19 @@ impl EmitterValues {
     fn has_visible_output(&self) -> bool {
         // An authoritative zero visible prediction must not draw an opaque black beam. Native
         // dimmer and UV drive remain independent, including unknown UV spill and measured zero.
-        self.physical_color.is_none() || self.colour.iter().any(|c| *c > 0.0)
+        (self.physical_color.is_none() && self.lamp_response.is_none())
+            || self.resolved_source_colour().iter().any(|c| *c > 0.0)
     }
 
     /// Effective visible intensity including the shutter gate and known visible emission.
     pub fn visible_intensity(&self) -> f32 {
         if self.has_visible_output() {
-            (self.intensity * self.shutter).clamp(0.0, 1.0)
+            (self
+                .lamp_response
+                .as_ref()
+                .map_or(self.intensity, crate::LampResponseState::output)
+                * self.shutter)
+                .clamp(0.0, 1.0)
         } else {
             0.0
         }
@@ -763,6 +785,45 @@ impl EmitterValues {
         } else {
             0.0
         }
+    }
+
+    /// Per-cell physical source response, followed by its optical shutter and observer tail.
+    pub fn resolved_cell_intensity(&self, index: usize) -> f32 {
+        let Some(cell) = self.cells.get(index) else {
+            return 0.0;
+        };
+        if self.lamp_response.is_some() && !cell.colour.iter().any(|channel| *channel > 0.0) {
+            return 0.0;
+        }
+        cell.held_intensity
+            .max(self.visible_cell_intensity(index))
+            .clamp(0.0, 1.0)
+    }
+
+    pub fn visible_cell_intensity(&self, index: usize) -> f32 {
+        let Some(cell) = self.cells.get(index) else {
+            return 0.0;
+        };
+        if self.lamp_response.is_some() && !cell.colour.iter().any(|channel| *channel > 0.0) {
+            return 0.0;
+        }
+        let source = self
+            .lamp_response
+            .as_ref()
+            .and_then(|state| state.cell_output(index))
+            .unwrap_or(cell.intensity);
+        (source * self.shutter).clamp(0.0, 1.0)
+    }
+
+    pub fn resolved_source_colour(&self) -> [f32; 3] {
+        self.colour
+    }
+
+    pub fn resolved_cell_colour(&self, index: usize) -> [f32; 3] {
+        let Some(cell) = self.cells.get(index) else {
+            return [0.0; 3];
+        };
+        cell.colour
     }
 }
 

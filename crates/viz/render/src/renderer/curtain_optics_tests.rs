@@ -37,6 +37,7 @@ fn rig(front_light: bool, turn: f32) -> (Scene, SceneValues, ViewConfiguration, 
         };
         let (x, y, z) = Quat::from_rotation_arc(Vec3::NEG_Y, direction).to_euler(EulerRot::XYZ);
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             position: source,
             installed_colour: [1.0; 3],
             body: FixtureBody {
@@ -70,6 +71,7 @@ fn rig(front_light: bool, turn: f32) -> (Scene, SceneValues, ViewConfiguration, 
             live_shaper_rotation_role: false,
         });
         values.emitters.push(EmitterValues {
+            lamp_response: None,
             intensity: if index == 11 { 0.5 } else { 1.0 },
             colour: [1.0; 3],
             ..Default::default()

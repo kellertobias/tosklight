@@ -3,6 +3,8 @@
 mod cancel_tests;
 #[cfg(test)]
 mod fog_tests;
+#[cfg(test)]
+mod front_wash_tests;
 mod native;
 #[cfg(test)]
 mod native_tests;

@@ -16,6 +16,8 @@ The package includes the complete profile revision, modes, and assets. Importing
 
 Choose the profile matching the physical lantern: a PAR, Fresnel, and profile spot can have the same dimmer channels but different models. For manufacturer fixtures, check every mode against the fixture's own menu and DMX chart.
 
+The shipped Generic ACL keeps a narrow concentrated core with a soft fading field. Its edge is a nominal preview, not measured photometry; shows keep their embedded revision until explicitly updated.
+
 ### Generated Venue objects
 
 Trusses, curtains, decks, stairs, and other generated Venue objects use the size set for each placed object. Edit the available **Footprint width**, **Footprint height**, and **Footprint depth** in Show Patch or Architect; unavailable dimensions show a dash. **Colour** changes its material and **Default colour** restores it. **Scale** resizes supported objects, including imported models.

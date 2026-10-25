@@ -25,6 +25,7 @@ struct Light {
     optics: vec4<f32>,
     shapers: vec4<f32>,
     shaper_angles: vec4<f32>,
+    shaper_params: vec4<f32>,    // manual edge >0; zero inherits dynamic feather+frost; yzw reserved
     gate: vec4<f32>,
     shadow: vec4<f32>,
     gobo_wheels: array<vec4<f32>, 8>,

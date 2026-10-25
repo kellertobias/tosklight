@@ -6,6 +6,7 @@ use viz_scene::*;
 fn rig() -> (Scene, SceneValues, ViewConfiguration) {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         position: Vec3::new(0.0, 4.0, 0.0),
         installed_colour: [1.0; 3],
         body: FixtureBody {
@@ -49,6 +50,7 @@ fn rig() -> (Scene, SceneValues, ViewConfiguration) {
     scene.recompute_bounds();
     let mut values = SceneValues {
         emitters: vec![EmitterValues {
+            lamp_response: None,
             intensity: 0.8,
             colour: [1.0; 3],
             ..Default::default()
@@ -204,6 +206,7 @@ fn add_shadow_budget_decoys(scene: &mut Scene, values: &mut SceneValues) {
     let emitter = scene.emitters[0].clone();
     for index in 0..2 {
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             position: Vec3::new(-20.0 + index as f32, 20.0, -20.0),
             installed_colour: [1.0; 3],
             body: FixtureBody {
@@ -217,6 +220,7 @@ fn add_shadow_budget_decoys(scene: &mut Scene, values: &mut SceneValues) {
         decoy.local_orientation_degrees = Vec3::new(180.0, 0.0, 0.0);
         scene.emitters.push(decoy);
         values.emitters.push(EmitterValues {
+            lamp_response: None,
             intensity: 1.0,
             colour: [1.0; 3],
             ..Default::default()
@@ -342,6 +346,7 @@ fn crowded_tiles_and_high_index_colour_sentinel_keep_all_light_energy() {
         scene.emitters = vec![emitter.clone(); count];
         values.emitters = vec![
             EmitterValues {
+                lamp_response: None,
                 intensity: 0.8 / count as f32,
                 colour: [1.0; 3],
                 ..Default::default()
@@ -506,6 +511,7 @@ fn add_visible_laser(scene: &mut Scene, values: &mut SceneValues) {
     });
     scene.emitters.push(emitter);
     values.emitters.push(EmitterValues {
+        lamp_response: None,
         intensity: 1.0,
         colour: [0.0, 1.0, 0.0],
         ..Default::default()
@@ -626,6 +632,7 @@ fn tighter_draft_cone_culling_preserves_receiver_pixels_and_high_index_lights() 
     scene.emitters = vec![emitter; 300];
     values.emitters = vec![
         EmitterValues {
+            lamp_response: None,
             intensity: 0.0002,
             colour: [1.0, 0.0, 0.0],
             ..Default::default()
@@ -655,3 +662,6 @@ fn tighter_draft_cone_culling_preserves_receiver_pixels_and_high_index_lights() 
         assert_composite_rounding_only(&tight, &original);
     }
 }
+
+mod manual_shapers;
+mod thermal_response;

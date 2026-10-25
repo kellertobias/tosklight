@@ -130,6 +130,7 @@ mod tests {
         let second = uuid::Uuid::new_v4();
         for fixture_id in [first, second] {
             scene.fixtures.push(FixtureInstance {
+                lamp_response: Default::default(),
                 instance_id: uuid::Uuid::new_v4(),
                 fixture_id,
                 name: String::new(),
@@ -142,6 +143,7 @@ mod tests {
                 shaper_degrees: None,
                 installed_colour: [1.0; 3],
                 installed_shaper_angles_degrees: [0.0; 4],
+                installed_shaper_blades: [0.0; 4],
                 drawn_as_scenery: false,
                 invisible: false,
                 body: FixtureBody {

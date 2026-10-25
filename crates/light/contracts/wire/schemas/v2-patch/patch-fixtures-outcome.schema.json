@@ -764,6 +764,16 @@
           "format": "float",
           "default": null
         },
+        "manual_optics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PatchInstalledManualOptics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "shaper_angles_degrees": {
           "type": "array",
           "default": [
@@ -890,6 +900,38 @@
             "label"
           ]
         }
+      ]
+    },
+    "PatchInstalledManualOptics": {
+      "type": "object",
+      "properties": {
+        "shaper_blades": {
+          "type": "array",
+          "default": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "items": {
+            "type": "number",
+            "format": "float"
+          },
+          "maxItems": 4,
+          "minItems": 4
+        },
+        "zoom_degrees": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "format": "float",
+          "default": null
+        }
+      },
+      "required": [
+        "zoom_degrees",
+        "shaper_blades"
       ]
     },
     "PatchInternalFixtureBindings": {

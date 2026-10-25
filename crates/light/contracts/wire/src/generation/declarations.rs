@@ -876,6 +876,7 @@ fn patch(config: &Config) -> Vec<String> {
         PatchInstalledLightSource::decl(config),
         PatchGelDefinitionSnapshot::decl(config),
         PatchGelAssignment::decl(config),
+        PatchInstalledManualOptics::decl(config),
         PatchInstalledFixtureAppearance::decl(config),
         PatchCalibrationQuality::decl(config),
         PatchPositionCalibration::decl(config),

@@ -1,3 +1,4 @@
+import { manualOpticsToWire } from "./manualOptics";
 import type {
 	PatchDirectControlEndpoint,
 	PatchFixturePolicyAction,
@@ -502,6 +503,7 @@ function toWireInstalledAppearance(
 						}
 					: { type: "open_white" },
 		shaper_angles_degrees: [...resolved.shaperAnglesDegrees],
+        ...manualOpticsToWire(resolved),
 	};
 }
 

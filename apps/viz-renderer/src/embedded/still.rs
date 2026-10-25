@@ -23,6 +23,9 @@ pub(super) fn service(state: &mut PaneState, source: &mut HelperSource, epoch: I
                     return;
                 }
                 let time = epoch.elapsed().as_secs_f32();
+                state
+                    .mechanics
+                    .advance(&state.scene, &mut state.values, Instant::now(), true);
                 let result = FrozenStill::new_with_crowd_amount(
                     &state.scene,
                     &state.values,

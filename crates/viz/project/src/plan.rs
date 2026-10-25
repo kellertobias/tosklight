@@ -1094,6 +1094,8 @@ pub(crate) mod bindings;
 mod compile_instances;
 mod geometry_pose;
 mod head_geometry;
+mod lamp_response;
+mod manual_optics;
 mod model_cells;
 mod placeholder_mount;
 mod reference_bindings;

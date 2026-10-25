@@ -26,6 +26,7 @@ fn rig() -> (Scene, SceneValues, FrameStyle) {
     });
     for index in 0..2 {
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             fixture_id: viz_scene::uuid::Uuid::from_u128(index as u128 + 1),
             instance_id: viz_scene::uuid::Uuid::from_u128(index as u128 + 10),
             model: Some(0),
@@ -52,6 +53,7 @@ fn rig() -> (Scene, SceneValues, FrameStyle) {
     let values = SceneValues {
         emitters: vec![
             EmitterValues {
+                lamp_response: None,
                 intensity: 1.0,
                 colour: [1.0; 3],
                 ..Default::default()

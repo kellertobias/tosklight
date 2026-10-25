@@ -18,6 +18,7 @@ fn fresnel_scene(bracket: f32, yaw: f32) -> (Scene, viz_scene::FixtureModel, f32
     let scale = model.scale_to(size);
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         position: Vec3::new(1.0, 6.0, -2.0),
         rotation_degrees: Vec3::new(0.0, yaw, 0.0),
         bracket_degrees: bracket,

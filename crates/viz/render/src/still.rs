@@ -305,6 +305,7 @@ mod gpu_tests {
         let mut scene = Scene::default();
         scene.models.push(model);
         scene.fixtures.push(viz_scene::FixtureInstance {
+            lamp_response: Default::default(),
             model: Some(0),
             body: viz_scene::FixtureBody {
                 kind: viz_scene::BodyKind::Lantern,

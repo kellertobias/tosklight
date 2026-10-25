@@ -112,6 +112,17 @@ pub struct InstalledAppearanceDto {
     pub gel: GelAssignmentDto,
     #[serde(default)]
     pub shaper_angles_degrees: [f32; 4],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_optics: Option<ManualOpticsDto>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualOpticsDto {
+    #[serde(default)]
+    pub zoom_degrees: Option<f32>,
+    #[serde(default)]
+    pub shaper_blades: [f32; 4],
 }
 
 impl Default for InstalledAppearanceDto {
@@ -122,6 +133,7 @@ impl Default for InstalledAppearanceDto {
             luminous_output_lumens: None,
             gel: GelAssignmentDto::OpenWhite,
             shaper_angles_degrees: [0.0; 4],
+            manual_optics: None,
         }
     }
 }
@@ -856,6 +868,10 @@ impl From<&InstalledFixtureAppearance> for InstalledAppearanceDto {
                 },
             },
             shaper_angles_degrees: value.shaper_angles_degrees,
+            manual_optics: value.manual_optics.as_ref().map(|optics| ManualOpticsDto {
+                zoom_degrees: optics.zoom_degrees,
+                shaper_blades: optics.shaper_blades,
+            }),
         }
     }
 }
@@ -902,6 +918,12 @@ impl From<InstalledAppearanceDto> for InstalledFixtureAppearance {
                 },
             },
             shaper_angles_degrees: value.shaper_angles_degrees,
+            manual_optics: value
+                .manual_optics
+                .map(|optics| light_fixture::InstalledManualOptics {
+                    zoom_degrees: optics.zoom_degrees,
+                    shaper_blades: optics.shaper_blades,
+                }),
         }
     }
 }

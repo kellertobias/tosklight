@@ -8,6 +8,7 @@ use viz_scene::*;
 fn frozen_fixture() -> Arc<FrozenStill> {
     let mut scene = Scene::default();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         position: Vec3::new(0.0, 4.0, 0.0),
         installed_colour: [1.0; 3],
         body: FixtureBody {

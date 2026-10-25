@@ -192,6 +192,7 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState, epoch: Instant) -> b
         }
         match event {
             ProviderEvent::Snapshot { scene, view } => {
+                state.values.reset_lamp_response();
                 state.scene = *scene;
                 if let Some(view) = view {
                     state.adopt_desk_view(view);
@@ -203,11 +204,16 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState, epoch: Instant) -> b
                 state.frame_rig_if_unaimed();
             }
             ProviderEvent::Values(values) => {
+                let now = Instant::now();
+                state
+                    .mechanics
+                    .advance(&state.scene, &mut state.values, now, true);
                 adopt_provider_values(
                     &mut state.values,
                     *values,
                     state.scene.physics_scenery.len(),
                 );
+                state.values.advance_lamp_response(&state.scene, 0.0);
                 state.cpu.advance(
                     &state.scene,
                     &mut state.values,
