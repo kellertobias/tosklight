@@ -29,10 +29,14 @@ export function histogramPercentileMicros(
 
 export interface OutputWindowAccumulator {
 	observe(snapshot: RuntimeOutputHealth, observedAt?: number): void;
-	take(snapshot: RuntimeOutputHealth): OutputWindow & {
+	/** Diagnostic request failure only; aggregate counter deltas and gate remain unchanged. */
+	observationFailed(): void;
+	take(snapshot: RuntimeOutputHealth, observedAt?: number): OutputWindow & {
+		diagnostic_windows?: OutputDiagnosticWindows;
 		counter_resets: number;
 		late_intervals: Array<{
-			observedAt: string;
+			observedAt: string | null;
+			clockAvailability?: "unavailable";
 			deadline_misses: number;
 			send_errors: number;
 			counter_reset: boolean;
@@ -42,7 +46,43 @@ export interface OutputWindowAccumulator {
 
 export function createOutputWindowAccumulator(
 	start: RuntimeOutputHealth,
+	options?: { diagnosticWindows?: boolean; observedAt?: number; maximumDiagnosticWindows?: number },
 ): OutputWindowAccumulator;
+
+export interface OutputDiagnosticWindows {
+	schemaVersion: 1;
+	diagnosticOnly: true;
+	targetWindowMillis: 60000;
+	maximumWindows: number;
+	overflowWindows: number;
+	firstOverflowEpochMillis: number | null;
+	coverageComplete: boolean;
+	clock: string;
+	partition: string;
+	windows: Array<{
+		startedAtEpochMillis: number | null;
+		endedAtEpochMillis: number | null;
+		durationMillis: number | null;
+		finalPartial: boolean;
+		sampleIntervals: number;
+		observationCount: number;
+		counterResets: number;
+		samplingErrors: number;
+		invalidClockIntervals: number;
+		coarseGeometryDriftIntervals: number;
+		maximumObservationGapMillis: number;
+		gapsAboveFiveSeconds: number;
+		coverage: { status: "complete" | "unavailable"; reasons: string[] };
+		framesSent: number;
+		packetsSent: number;
+		deadlineMisses: number;
+		sendErrors: number;
+		fineHistogramCoverage: OutputWindow["fine_histogram_coverage"];
+		fineHistogram?: FineOutputHistogram;
+		coarseBoundsMicros: number[];
+		coarseCounts: number[];
+	}>;
+}
 
 export interface FineOutputHistogram {
     schema_version: 1;

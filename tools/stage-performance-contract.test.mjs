@@ -56,7 +56,7 @@ test("native gates measure first source presentations and windows across show sw
 		/const firstPresentations = firstSourcePresentations\(/u,
 	);
 	assert.match(runner, /visibleChanged:\s*presentedSources\.has\(frame\)/u);
-	assert.match(runner, /createOutputWindowAccumulator\(before\.output\)/u);
+	assert.match(runner, /createOutputWindowAccumulator\(before\.output(?:\)|,)/u);
 	assert.match(runner, /runtime\.outputWindows\?\.stage \?\?/u);
 });
 

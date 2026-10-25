@@ -46,7 +46,10 @@ export function histogramPercentileMicros(window, percentile) {
  * the counters often enough and adding the per-interval differences keeps every tick except the
  * few between the last observation before a reset and the reset itself.
  */
-export function createOutputWindowAccumulator(start) {
+export function createOutputWindowAccumulator(start, options = {}) {
+	const diagnostic = options.diagnosticWindows
+		? createDiagnosticWindows(start, options.observedAt, options.maximumDiagnosticWindows ?? 256)
+		: null;
 	let previous = start;
 	let total = emptyWindow(start);
 	let resets = 0;
@@ -61,28 +64,139 @@ export function createOutputWindowAccumulator(start) {
 		// Where the window's misses happened, so they can be set against its lifecycle events.
 		if (interval.deadline_misses > 0 || interval.send_errors > 0)
 			lateIntervals.push({
-				observedAt: new Date(observedAt).toISOString(),
+				observedAt: validObservationClock(observedAt) ? new Date(observedAt).toISOString() : null,
+				...(!validObservationClock(observedAt) ? { clockAvailability: "unavailable" } : {}),
 				deadline_misses: interval.deadline_misses,
 				send_errors: interval.send_errors,
 				counter_reset: reset,
 			});
 		total = addWindows(total, interval);
+		diagnostic?.observe(interval, reset, observedAt);
 		previous = current;
 	};
 	return {
 		observe,
-		take(current) {
-			observe(current);
+		observationFailed() { diagnostic?.observationFailed(); },
+		take(current, observedAt = Date.now()) {
+			observe(current, observedAt);
 			const window = {
 				...total,
 				counter_resets: resets,
 				late_intervals: lateIntervals,
+				...(diagnostic ? { diagnostic_windows: diagnostic.take(current, observedAt) } : {}),
 			};
 			total = emptyWindow(current);
 			resets = 0;
 			lateIntervals = [];
 			return window;
 		},
+	};
+}
+
+/** Diagnostics only: assign whole sampled deltas to receipt-bounded windows, never apportion
+ * a delta across a nominal minute. Cumulative maxima are deliberately omitted from each row.
+ * Neither these rows nor their coverage status participates in the aggregate acceptance gate. */
+function createDiagnosticWindows(snapshot, observedAt, maximumWindows) {
+	if (!Number.isSafeInteger(maximumWindows) || maximumWindows < 1 || maximumWindows > 256)
+		throw new RangeError("Output diagnostic window capacity must be between 1 and 256");
+	let rows = [], overflow = 0, firstOverflow = null;
+	let row = diagnosticRow(snapshot, observedAt);
+	let previousAt = validObservationClock(observedAt) ? observedAt : null;
+	const close = (finalPartial) => {
+		const saved = finishDiagnosticRow(row, finalPartial);
+		if (rows.length < maximumWindows) rows.push(saved);
+		else {
+			overflow++;
+			firstOverflow ??= saved.startedAtEpochMillis;
+		}
+	};
+	return {
+		observationFailed() { row.samplingErrors++; },
+		observe(interval, reset, at) {
+			if (!sameCoarseGeometry(row.output, interval)) row.coarseGeometryDriftIntervals++;
+			row.output = addWindows(row.output, interval);
+			row.sampleIntervals++;
+			row.counterResets += Number(reset);
+			if (!validObservationClock(at) || previousAt === null || at < previousAt) {
+				row.invalidClockIntervals++;
+			} else {
+				const gap = at - previousAt;
+				row.maximumObservationGapMillis = Math.max(row.maximumObservationGapMillis, gap);
+				if (gap > 5_000) row.gapsAboveFiveSeconds++;
+			}
+			row.endedAtEpochMillis = validObservationClock(at) ? at : null;
+			previousAt = validObservationClock(at) ? at : null;
+			if (row.startedAtEpochMillis !== null && row.endedAtEpochMillis !== null
+				&& row.endedAtEpochMillis - row.startedAtEpochMillis >= 60_000) {
+				close(false);
+				row = diagnosticRow(interval, at);
+			}
+		},
+		take(current, at) {
+			if (row.sampleIntervals > 0 || row.samplingErrors > 0) close(true);
+			const report = {
+				schemaVersion: 1, diagnosticOnly: true, targetWindowMillis: 60_000,
+				maximumWindows, overflowWindows: overflow, firstOverflowEpochMillis: firstOverflow,
+				coverageComplete: overflow === 0 && rows.every((item) => item.coverage.status === "complete"),
+				clock: "Client wall-clock receipt after each counter snapshot; not engine tick timestamps or exact HTTP snapshot time.",
+				partition: "Whole observed counter intervals; crossing a minute closes at the actual receipt, with no interpolation. Final partial retained. Reset intervals may lose pre-reset ticks.",
+				windows: rows,
+			};
+			rows = []; overflow = 0; firstOverflow = null;
+			row = diagnosticRow(current, at);
+			previousAt = validObservationClock(at) ? at : null;
+			return report;
+		},
+	};
+}
+function validObservationClock(at) {
+	return Number.isSafeInteger(at) && at >= 0 && at <= 8_640_000_000_000_000;
+}
+function sameCoarseGeometry(first, next) {
+	const bounds = next.tick_duration_bucket_bounds_micros;
+	const previous = first.tick_duration_bucket_bounds_micros;
+	return Array.isArray(bounds) && Array.isArray(previous) && bounds.length > 0
+		&& Array.isArray(next.tick_duration_bucket_counts)
+		&& bounds.length === next.tick_duration_bucket_counts.length
+		&& bounds.length === previous.length
+		&& bounds.every((bound, index) => Number.isSafeInteger(bound) && bound > 0
+			&& (index === 0 || bound > bounds[index - 1]) && bound === previous[index]);
+}
+function diagnosticRow(snapshot, at) {
+	return {
+		startedAtEpochMillis: validObservationClock(at) ? at : null,
+		endedAtEpochMillis: validObservationClock(at) ? at : null,
+		sampleIntervals: 0, counterResets: 0, samplingErrors: 0,
+		invalidClockIntervals: validObservationClock(at) ? 0 : 1,
+		coarseGeometryDriftIntervals: sameCoarseGeometry(snapshot, snapshot) ? 0 : 1,
+		maximumObservationGapMillis: 0, gapsAboveFiveSeconds: 0,
+		output: emptyWindow(snapshot),
+	};
+}
+function finishDiagnosticRow(row, finalPartial) {
+	const reasons = [];
+	if (row.invalidClockIntervals) reasons.push("missing, invalid or reversed client observation clock");
+	if (row.coarseGeometryDriftIntervals) reasons.push("coarse histogram geometry changed or is invalid during this diagnostic window");
+	if (row.counterResets) reasons.push("counter reset: ticks before reset after the previous observation are unavailable");
+	if (row.samplingErrors) reasons.push("counter snapshot request failed");
+	if (row.gapsAboveFiveSeconds) reasons.push("observation gap exceeded five seconds; temporal attribution is coarse");
+	const fine = fineState(row.output);
+	if (fine.status !== "complete") reasons.push(...fine.reasons);
+	else if (fine.histogram.sample_count === 0) reasons.push("no output ticks observed in this diagnostic window");
+	const { output, ...metadata } = row;
+	return {
+		...metadata, finalPartial,
+		observationCount: metadata.sampleIntervals + 1,
+		durationMillis: metadata.startedAtEpochMillis === null || metadata.endedAtEpochMillis === null
+			|| metadata.endedAtEpochMillis < metadata.startedAtEpochMillis
+			? null : metadata.endedAtEpochMillis - metadata.startedAtEpochMillis,
+		coverage: { status: reasons.length ? "unavailable" : "complete", reasons: [...new Set(reasons)] },
+		framesSent: output.frames_sent, packetsSent: output.packets_sent,
+		deadlineMisses: output.deadline_misses, sendErrors: output.send_errors,
+		fineHistogramCoverage: output.fine_histogram_coverage,
+		...(output.tick_duration_fine_histogram ? { fineHistogram: output.tick_duration_fine_histogram } : {}),
+		coarseBoundsMicros: output.tick_duration_bucket_bounds_micros,
+		coarseCounts: output.tick_duration_bucket_counts,
 	};
 }
 

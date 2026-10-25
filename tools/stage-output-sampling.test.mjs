@@ -76,3 +76,28 @@ test("a failed read rejects while caller recovery preserves later observations",
 	const result = await queueStageOutputSample(failed.catch(() => undefined), async () => ({ output: later }), "session", (health) => health);
 	assert.equal(result, later);
 });
+
+test("diagnostic close stays FIFO and partitions at receipt, not scheduled HTTP start", async () => {
+	const accumulator = createOutputWindowAccumulator(output(0), { diagnosticWindows: true, observedAt: 0 });
+	let unblock;
+	const gate = new Promise((resolve) => { unblock = resolve; });
+	let clock = 59_000;
+	const pending = queueStageOutputSample(Promise.resolve(), async () => {
+		await gate;
+		clock = 61_000;
+		return { output: output(10) };
+	}, "session", (health) => accumulator.observe(health, clock));
+	let closeRead = false;
+	const closed = queueStageOutputSample(pending, async () => {
+		closeRead = true;
+		clock = 62_000;
+		return { output: output(12) };
+	}, "session", (health) => accumulator.take(health, clock));
+	await Promise.resolve();
+	assert.equal(closeRead, false);
+	unblock();
+	const result = await closed;
+	assert.equal(result.frames_sent, 12);
+	assert.deepEqual(result.diagnostic_windows.windows.map((row) => [row.startedAtEpochMillis, row.endedAtEpochMillis, row.framesSent]),
+		[[0, 61_000, 10], [61_000, 62_000, 2]]);
+});

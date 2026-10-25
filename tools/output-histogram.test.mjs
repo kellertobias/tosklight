@@ -228,3 +228,161 @@ test("fine precision may resolve a coarse bucket crossing without rewriting hist
     assert.equal(comparison.boundedWindowGatePassed,true);
     assert.equal(comparison.p99ComparisonSource,"fine_histogram_v1");
 });
+
+test("diagnostic minutes preserve aggregate counts and gate, including the final partial", () => {
+	const start = measured(8250, 0);
+	const plain = createOutputWindowAccumulator(start);
+	const timed = createOutputWindowAccumulator(start, { diagnosticWindows: true, observedAt: 0 });
+	for (let second = 1; second < 125; second++) {
+		const sample = measured(8250, second * 40);
+		plain.observe(sample, second * 1000);
+		timed.observe(sample, second * 1000);
+	}
+	const expected = plain.take(measured(8250, 5000), 125_000);
+	const { diagnostic_windows: detail, ...actual } = timed.take(measured(8250, 5000), 125_000);
+	assert.deepEqual(actual, expected);
+	assert.deepEqual(compareOutputWindows(measured(8000), actual), compareOutputWindows(measured(8000), expected));
+	assert.equal(detail.coverageComplete, true);
+	assert.deepEqual(detail.windows.map((row) => [row.startedAtEpochMillis, row.endedAtEpochMillis, row.finalPartial]),
+		[[0, 60_000, false], [60_000, 120_000, false], [120_000, 125_000, true]]);
+	assert.deepEqual(detail.windows.map((row) => row.observationCount), [61, 61, 6]);
+	const sums = Array(fineBounds.length).fill(0);
+	for (const row of detail.windows) row.fineHistogram.counts.forEach((count, index) => { sums[index] += count; });
+	assert.deepEqual(sums, expected.tick_duration_fine_histogram.counts);
+	assert.equal(detail.windows.reduce((sum, row) => sum + row.framesSent, 0), expected.frames_sent);
+	assert.equal(detail.windows[2].durationMillis, 5000);
+	const next = timed.take(measured(8250, 5040), 126_000).diagnostic_windows;
+	assert.equal(next.windows[0].startedAtEpochMillis, 125_000);
+	assert.equal(next.windows[0].framesSent, 40);
+});
+
+test("an irregular crossing stays whole at its actual observation boundary", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 0), { diagnosticWindows: true, observedAt: 0 });
+	accumulator.observe(measured(8250, 10), 59_000);
+	accumulator.observe(measured(8250, 90), 65_000);
+	const { diagnostic_windows: detail } = accumulator.take(measured(8250, 100), 66_000);
+	assert.deepEqual(detail.windows.map((row) => [row.startedAtEpochMillis, row.endedAtEpochMillis, row.framesSent]),
+		[[0, 65_000, 90], [65_000, 66_000, 10]]);
+	assert.equal(detail.windows[0].maximumObservationGapMillis, 59_000);
+	assert.equal(detail.windows[0].gapsAboveFiveSeconds, 2);
+	assert.equal(detail.coverageComplete, false);
+	assert.match(detail.partition, /no interpolation/);
+});
+
+test("reset and failed sample preserve available counts and explicitly lose diagnostic coverage", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 10), { diagnosticWindows: true, observedAt: 1000 });
+	accumulator.observe(measured(8250, 20), 2000);
+	accumulator.observationFailed();
+	accumulator.observe(measured(8250, 5), 4000);
+	const result = accumulator.take({ ...measured(8250, 15), deadline_misses: 1, send_errors: 2 }, 5000);
+	assert.equal(result.frames_sent, 25);
+	assert.equal(result.counter_resets, 1);
+	const row = result.diagnostic_windows.windows[0];
+	assert.equal(row.fineHistogram.sample_count, 25);
+	assert.equal(row.counterResets, 1);
+	assert.equal(row.samplingErrors, 1);
+	assert.equal(row.deadlineMisses, 1);
+	assert.equal(row.sendErrors, 2);
+	assert.equal(row.coverage.status, "unavailable");
+	assert.match(row.coverage.reasons.join(" "), /before reset/);
+	assert.equal(result.diagnostic_windows.coverageComplete, false);
+});
+
+test("missing clocks and missing fine schema stay unavailable rather than inventing zeros", () => {
+	const accumulator = createOutputWindowAccumulator(output([0, 0, 0, 0]), { diagnosticWindows: true });
+	accumulator.observe(output([0, 10, 0, 0]), Number.NaN);
+	const row = accumulator.take(output([0, 20, 0, 0]), 1000).diagnostic_windows.windows[0];
+	assert.equal(row.startedAtEpochMillis, null);
+	assert.equal(row.fineHistogram, undefined);
+	assert.equal(row.durationMillis, null);
+	assert.equal(row.framesSent, 20);
+	assert.equal(row.coverage.status, "unavailable");
+	assert.ok(row.invalidClockIntervals > 0);
+	assert.match(row.coverage.reasons.join(" "), /clock/);
+	assert.match(row.coverage.reasons.join(" "), /fine histogram/);
+});
+
+test("diagnostic capacity bounds rows with explicit overflow without changing the aggregate", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 0), {
+		diagnosticWindows: true, observedAt: 0, maximumDiagnosticWindows: 2,
+	});
+	for (let minute = 1; minute <= 3; minute++) accumulator.observe(measured(8250, minute * 100), minute * 60_000);
+	const result = accumulator.take(measured(8250, 400), 240_000);
+	assert.equal(result.frames_sent, 400);
+	assert.equal(result.tick_duration_fine_histogram.sample_count, 400);
+	assert.equal(result.diagnostic_windows.windows.length, 2);
+	assert.equal(result.diagnostic_windows.overflowWindows, 2);
+	assert.equal(result.diagnostic_windows.firstOverflowEpochMillis, 120_000);
+	assert.equal(result.diagnostic_windows.coverageComplete, false);
+	assert.throws(() => createOutputWindowAccumulator(measured(8250), { diagnosticWindows: true, maximumDiagnosticWindows: 257 }), /capacity/);
+});
+
+test("reversed clocks cannot be reported as complete diagnostic timing", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 0), { diagnosticWindows: true, observedAt: 10_000 });
+	accumulator.observe(measured(8250, 10), 9000);
+	const result = accumulator.take(measured(8250, 20), 11_000);
+	assert.equal(result.frames_sent, 20);
+	assert.equal(result.diagnostic_windows.windows[0].invalidClockIntervals, 1);
+	assert.equal(result.diagnostic_windows.coverageComplete, false);
+});
+
+test("malformed fine schema remains an invalid diagnostic witness without fabricated counts", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 0), { diagnosticWindows: true, observedAt: 0 });
+	const malformed = measured(8250, 20);
+	malformed.tick_duration_fine_histogram.schema_version = 2;
+	const result = accumulator.take(malformed, 1000);
+	const row = result.diagnostic_windows.windows[0];
+	assert.equal(row.fineHistogram, undefined);
+	assert.equal(row.fineHistogramCoverage.status, "invalid");
+	assert.equal(row.coverage.status, "unavailable");
+	assert.match(row.coverage.reasons.join(" "), /version/);
+	assert.equal(result.fine_histogram_coverage.status, "invalid");
+});
+
+test("an empty diagnostic window does not masquerade as measured timing", () => {
+	const snapshot = measured(8250, 0);
+	const accumulator = createOutputWindowAccumulator(snapshot, { diagnosticWindows: true, observedAt: 1000 });
+	const result = accumulator.take(snapshot, 2000);
+	assert.equal(result.diagnostic_windows.coverageComplete, false);
+	assert.match(result.diagnostic_windows.windows[0].coverage.reasons.join(" "), /no output ticks/);
+	assert.equal(result.frames_sent, 0);
+});
+
+test("coarse bound or count-length drift invalidates diagnostics even with valid fine counts", () => {
+	for (const change of [
+		(sample) => { sample.tick_duration_bucket_bounds_micros[0] = 251; },
+		(sample) => {
+			sample.tick_duration_bucket_bounds_micros = [250, 2000];
+			sample.tick_duration_bucket_counts = [0, 20];
+		},
+	]) {
+		const initial = measured(8250, 10);
+		const timed = createOutputWindowAccumulator(initial, { diagnosticWindows: true, observedAt: 0 });
+		const legacy = createOutputWindowAccumulator(initial);
+		const changed = measured(8250, 20);
+		change(changed);
+		const { diagnostic_windows: detail, ...actual } = timed.take(changed, 1000);
+		assert.deepEqual(actual, legacy.take(changed, 1000), "legacy aggregation stays unchanged");
+		assert.equal(detail.windows[0].fineHistogramCoverage.status, "complete");
+		assert.equal(detail.windows[0].coarseGeometryDriftIntervals, 1);
+		assert.equal(detail.windows[0].coverage.status, "unavailable");
+		assert.equal(detail.coverageComplete, false);
+		assert.match(detail.windows[0].coverage.reasons.join(" "), /coarse histogram geometry/);
+	}
+});
+
+test("invalid clock with misses and errors retains counters and an unavailable time witness", () => {
+	const accumulator = createOutputWindowAccumulator(measured(8250, 0), { diagnosticWindows: true, observedAt: 0 });
+	const missed = { ...measured(8250, 10), deadline_misses: 1, send_errors: 2 };
+	assert.doesNotThrow(() => accumulator.observe(missed, Number.NaN));
+	const result = accumulator.take({ ...measured(8250, 20), deadline_misses: 1, send_errors: 2 }, 1000);
+	assert.equal(result.frames_sent, 20);
+	assert.equal(result.deadline_misses, 1);
+	assert.equal(result.send_errors, 2);
+	assert.deepEqual(result.late_intervals, [{ observedAt: null, clockAvailability: "unavailable",
+		deadline_misses: 1, send_errors: 2, counter_reset: false }]);
+	assert.equal(result.diagnostic_windows.coverageComplete, false);
+	assert.equal(result.diagnostic_windows.windows[0].invalidClockIntervals, 2);
+	assert.equal(result.diagnostic_windows.windows[0].deadlineMisses, 1);
+	assert.equal(result.diagnostic_windows.windows[0].sendErrors, 2);
+});

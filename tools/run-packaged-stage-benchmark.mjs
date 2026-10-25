@@ -191,7 +191,7 @@ const sampleOutputCounters = (session) => {
 	outputSampling = queueStageOutputSample(
 		outputSampling, requestJson, session,
 		(output) => outputAccumulator.observe(output),
-	).catch(() => undefined);
+	).catch(() => { outputAccumulator.observationFailed(); });
 	return outputSampling;
 };
 // The window closes on a snapshot read in the same queue as the observations: a snapshot read
@@ -251,7 +251,10 @@ try {
 	}
 	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
-	outputAccumulator = createOutputWindowAccumulator(before.output);
+	outputAccumulator = createOutputWindowAccumulator(before.output, {
+		diagnosticWindows: true,
+		observedAt: Date.now(),
+	});
 	outputSampler = setInterval(
 		() => void sampleOutputCounters(prepared.session),
 		1_000,
