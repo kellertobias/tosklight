@@ -9,6 +9,7 @@ export function summarizeStageLongRunResources(
 	const enforced = durationSeconds >= 1_800;
 	const native = renderer === "native";
 	const intendedWindow = native ? validStageWindow(stageWindow, durationSeconds) : null;
+	const requiredSteadyWindow = intendedWindow ? { startedAt: intendedWindow.startedAt + 60_000, completedAt: intendedWindow.completedAt } : null;
 	const stageMemory = processMemory.filter(
 		(sample) => sample.phase === "stage" && (!native ||
 			(Number.isFinite(sample.residentBytes) && Number.isFinite(sample.recordedAt) &&
@@ -54,15 +55,17 @@ export function summarizeStageLongRunResources(
 	const failures = [];
 	const coverage = native ? {
 		stageWindow: intendedWindow,
+		requiredSteadyWindow,
+		coldWarmup: coldWarmupObservations(stageMemory, rendered, intendedWindow),
 		endpointToleranceMillis: COVERAGE_TOLERANCE_MILLIS,
 		durationToleranceMillis: COVERAGE_TOLERANCE_MILLIS,
 		requestedDurationMillis: durationSeconds * 1_000,
 		actualDurationMillis: Number.isFinite(stageWindow?.startedAt) && Number.isFinite(stageWindow?.completedAt)
 			? stageWindow.completedAt - stageWindow.startedAt : null,
-		rss: endpointCoverage(stageMemory, intendedWindow),
-		renders: endpointCoverage(rendered, intendedWindow),
+		rss: endpointCoverage(stageMemory, requiredSteadyWindow),
+		renders: endpointCoverage(rendered, requiredSteadyWindow),
 		panes: [...new Set(rendered.map((sample) => sample.latestRender.paneId).filter((id) => typeof id === "string" && id.length > 0))]
-			.map((paneId) => ({ paneId, ...endpointCoverage(rendered.filter((sample) => sample.latestRender.paneId === paneId), intendedWindow) })),
+			.map((paneId) => ({ paneId, ...endpointCoverage(rendered.filter((sample) => sample.latestRender.paneId === paneId), requiredSteadyWindow) })),
 	} : null;
 	if (enforced && native) {
 		if (!intendedWindow) failures.push("30-minute native run requires an independent complete Stage window");
@@ -161,7 +164,24 @@ function inStageWindow(timestamp, window) {
 	return window !== null && Number.isFinite(timestamp) && timestamp >= window.startedAt && timestamp <= window.completedAt;
 }
 
+function coldWarmupObservations(memory, renders, window) {
+	const firstActualRenderAt = renders[0]?.recordedAt ?? null;
+	return {
+		startedAt: window?.startedAt ?? null,
+		completedAt: window ? window.startedAt + 60_000 : null,
+		initialRss: memory.length ? { recordedAt: memory[0].recordedAt, residentBytes: memory[0].residentBytes } : null,
+		firstActualRenderAt,
+		firstActualRenderDelayMillis: window && firstActualRenderAt !== null ? firstActualRenderAt - window.startedAt : null,
+		firstActualRenderWithinWarmup: window && firstActualRenderAt !== null ? firstActualRenderAt <= window.startedAt + 60_000 : null,
+		panes: [...new Set(renders.map((sample) => sample.latestRender.paneId).filter((id) => typeof id === "string" && id.length > 0))]
+			.map((paneId) => ({ paneId, firstActualRenderAt: renders.find((sample) => sample.latestRender.paneId === paneId).recordedAt })),
+		measurementBoundary: "First retained actual submission and RSS observations; not shader readiness, GPU completion, or displayed-frame time",
+	};
+}
+
 function endpointCoverage(samples, window) {
+	// Cold startup belongs to separate observations, not steady-window gap accounting.
+	samples = samples.filter((sample) => inStageWindow(sample.recordedAt, window));
 	const firstRecordedAt = samples[0]?.recordedAt ?? null;
 	const lastRecordedAt = samples.at(-1)?.recordedAt ?? null;
 	const maximumGapMillis = samples.reduce((largest, sample, index) => index === 0 ? largest

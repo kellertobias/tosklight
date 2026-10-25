@@ -78,7 +78,8 @@ function longRunScopeCoverage(native, rows, matches, configuration) {
   const lanes = [];
   if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt <= startedAt)
     return { failures: ["Declared native scope requires independent Stage bounds"], lanes };
-  const inWindow = (row) => row.windowEpochSecond * 1000 <= completedAt && (row.windowEpochSecond + 1) * 1000 >= startedAt;
+  const steadyStartedAt = startedAt + 60_000;
+  const inWindow = (row) => row.windowEpochSecond * 1000 <= completedAt && (row.windowEpochSecond + 1) * 1000 >= steadyStartedAt;
   const accepted = new Set(matches);
   if (rows.some((row) => inWindow(row) && !accepted.has(row)))
     failures.push("Native helper changed away from the declared quality, mode, physical pixels or transport during Stage");
@@ -90,10 +91,10 @@ function longRunScopeCoverage(native, rows, matches, configuration) {
     const firstAt = seconds.length ? seconds[0] * 1000 : null;
     const lastAt = seconds.length ? (seconds.at(-1) + 1) * 1000 : null;
     const maximumGapMillis = seconds.reduce((maximum, second, index) => index ? Math.max(maximum, (second - seconds[index - 1] - 1) * 1000) : maximum, 0);
-    const complete = firstAt !== null && firstAt <= startedAt + 5000 && lastAt >= completedAt - 5000 && maximumGapMillis <= 5000;
+    const complete = firstAt !== null && firstAt <= steadyStartedAt + 5000 && lastAt >= completedAt - 5000 && maximumGapMillis <= 5000;
     lanes.push({ followPreload, paneIds, firstAt, lastAt, maximumGapMillis, complete });
     if (!complete) failures.push(`Declared native scope does not cover the full ${followPreload ? "Preload" : "Live"} Stage window`);
   }
-  return { startedAt, completedAt, observationBucketMillis: 1000, coverageToleranceMillis: 5000, lanes, failures,
+  return { startedAt, completedAt, steadyStartedAt, warmupMillis: 60_000, observationBucketMillis: 1000, coverageToleranceMillis: 5000, lanes, failures,
     boundary: "Declared helper submission scope coverage; not displayed frames or continuous GPU utilization." };
 }

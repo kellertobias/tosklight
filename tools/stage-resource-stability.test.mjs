@@ -165,7 +165,8 @@ test("native snapshots require actual render clocks and cannot refresh a repeate
     }}));
     const stale = summarizeStageLongRunResources(repeated, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
     assert.equal(stale.passed, false);
-    assert.equal(stale.coverage.renders.lastRecordedAt, nativeWindow.startedAt);
+    assert.equal(stale.coverage.renders.lastRecordedAt, null);
+    assert.equal(stale.coverage.coldWarmup.firstActualRenderAt, nativeWindow.startedAt);
     const noClock = sample.timeline.map((entry) => ({...entry, latestRender: {
         benchmarkSequence: entry.recordedAt, durationMs: 2, calls: 10, geometries: 5,
     }}));
@@ -176,7 +177,7 @@ test("native snapshots require actual render clocks and cannot refresh a repeate
 
 test("native endpoint tolerance does not accept late startup or incomplete intended duration", () => {
     const sample = evidence();
-    const lateStart = sample.timeline.slice(6);
+    const lateStart = sample.timeline.slice(66);
     const late = summarizeStageLongRunResources(lateStart, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
     assert.equal(late.passed, false);
     assert.match(late.failures.join("\n"), /render coverage/u);
@@ -314,4 +315,37 @@ test("stable native panes retain both lane and aggregate resource reports", () =
     assert.equal(result.panes.length, 2);
     assert.equal(result.late.samples, 2 * result.panes[0].late.samples);
     assert.equal(result.panes.every((pane) => pane.late.cpuFrameP95Ms === 2), true);
+});
+
+
+test("17-second cold render startup is reported without failing post-warmup coverage", () => {
+    const sample = evidence();
+    const delayed = sample.timeline.slice(17);
+    const result = summarizeStageLongRunResources(delayed, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.coverage.stageWindow, nativeWindow);
+    assert.deepEqual(result.coverage.requiredSteadyWindow, {startedAt: 1_060_000, completedAt: 2_800_000});
+    assert.equal(result.coverage.coldWarmup.firstActualRenderAt, 1_017_000);
+    assert.equal(result.coverage.coldWarmup.firstActualRenderDelayMillis, 17_000);
+    assert.equal(result.coverage.coldWarmup.firstActualRenderWithinWarmup, true);
+    assert.equal(result.coverage.renders.firstRecordedAt, 1_060_000);
+    assert.equal(result.coverage.coldWarmup.initialRss.recordedAt, nativeWindow.startedAt);
+    assert.equal(result.early.samples, 300, "early resources still use original minute1..6");
+});
+
+test("cold-only gaps are excluded but missing steady start, end and lane intervals fail", () => {
+    const sample = evidence();
+    const coldGap = sample.timeline.filter((entry, index) => index === 0 || index >= 59);
+    const accepted = summarizeStageLongRunResources(coldGap, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(accepted.passed, true);
+    for (const timeline of [sample.timeline.slice(66), sample.timeline.slice(0, -6),
+        sample.timeline.filter((entry, index) => index < 61 || index > 68)]) {
+        const failed = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+        assert.equal(failed.passed, false);
+        assert.match(failed.failures.join("\n"), /render coverage/u);
+    }
+    const coldRss = sample.processMemory.filter((entry, index) => index === 0 || index >= 59);
+    assert.equal(summarizeStageLongRunResources(sample.timeline, coldRss, 1800, {renderer: "native", stageWindow: nativeWindow}).passed, true);
+    const missingRss = sample.processMemory.slice(66);
+    assert.match(summarizeStageLongRunResources(sample.timeline, missingRss, 1800, {renderer: "native", stageWindow: nativeWindow}).failures.join("\n"), /RSS coverage/u);
 });

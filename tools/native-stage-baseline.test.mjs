@@ -113,6 +113,10 @@ test("long native scope must stay declared and cover each lane throughout Stage"
     gpuObservations: { rows, counts: {}, compositor: { rows: ["live", "preload"].map((pane) => ({ samples: 1, scope: [pane, "one", 1, { sourceSize: [1920, 540] }] })), totals: {} } } } };
   const metadata = { configuration, durationSeconds: 1860 };
   assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, true);
+  const coldRows = rows.filter((row) => row.windowEpochSecond >= 1017);
+  complete.nativeStage.gpuObservations.rows = coldRows;
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, true);
+  complete.nativeStage.gpuObservations.rows = rows;
   const final = rows.at(-1);
   for (const [field, value] of [["quality", "ultra"], ["mode", "full_3d"], ["height", 1080]]) {
     const original = final[field]; final[field] = value;
