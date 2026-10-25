@@ -79,7 +79,7 @@ test("packaged acceptance measures the native helper rather than a removed WebGL
 });
 
 test("Control packaged acceptance verifies actual Draft wireframe frames", () => {
-	assert.match(nativeShell, /vizQuality: "draft"/u);
+	assert.match(nativeShell, /vizQuality: config\.baselineQuality \?\? "draft"/u);
 	assert.doesNotMatch(
 		nativeShell,
 		/const qualities = \["draft", "standard", "high", "ultra"\]/u,
