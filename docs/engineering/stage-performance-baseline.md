@@ -406,3 +406,26 @@ The first trace contains a matching CA request/IOSurface and no handler event.
 Later runs verify visibility and layer attachment but still report actual time
 zero. These are unsuccessful calibration experiments, not Stage FPS evidence.
 The tool exits on its bounded failure and does not leave a monitor running.
+
+### Owned CPU stack diagnostic
+
+`2026-10-25T04-48-16-676Z` is explicitly a sampled diagnostic. The runner's
+`LIGHT_STAGE_BENCH_DIAGNOSTIC_LABEL` marks the report `diagnosticOnly`, disables
+acceptance flags and prevents canonical-report replacement. Observed failures
+and the original exit decision remain intact. Empty labels preserve the normal
+workflow; labels over 128 trimmed characters fail before launching anything.
+
+Three-second `/usr/bin/sample` captures target only verified helper PID 4857
+and headless PID 4588, with executable/parent/UID/start-time identity retained
+before and after. The report verifies backend/listener ownership and SHA256 at
+both endpoints. Raw stacks and identity files are under `.artifacts/tmp`, indexed
+by `.artifacts/performance/stage/tl852-owned-cpu-stack-diagnostic.json`.
+Waiting stacks and wall-sample counts are not CPU-utilization measurements.
+The run retains two Stage deadline misses and a 3,751–4,249 µs fine-p99 regression;
+profiling perturbs the target, so these observations are not clean acceptance.
+
+Renderer stacks expose repeated runtime content hashing and scene-value decode
+work. Server stacks also expose substantial full-diagnostics observation work.
+These guide bounded experiments; neither establishes the cause of the earlier
+clean regression. Preserve the clean failure and use a fresh uninstrumented
+paired run after any change.
