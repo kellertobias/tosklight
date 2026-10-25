@@ -39,17 +39,15 @@ fn draft_taper(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32>, apex: ve
     var integral = 0.0;
     for (var index = 0u; index < 4u; index++) {
         let point = origin + direction * (centre + half_width * nodes[index]);
-        let distance = max(length(point - apex), 0.05);
-        integral += weights[index] * (36.0 / (distance * distance))
-            * range_envelope(length(point - light.position_range.xyz), light.position_range.w);
+        let offset = point - apex;
+        let lens_offset = point - light.position_range.xyz;
+        integral += weights[index] * (36.0 / max(dot(offset, offset), 0.0025))
+            * draft_range_envelope_squared(dot(lens_offset, lens_offset), light.position_range.w);
     }
     return integral * half_width;
 }
-fn draft_visible_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32>, apex: vec3<f32>, light: Light) -> f32 {
-    let range = draft_sphere(origin, direction, light.position_range.xyz, light.position_range.w);
-    let first = max(a, range.x);
-    let last = min(b, range.y);
-    if (last <= first) { return 0.0; }
+// The caller already clips this interval against the lens-centred outer range sphere.
+fn draft_visible_integral(first: f32, last: f32, origin: vec3<f32>, direction: vec3<f32>, apex: vec3<f32>, light: Light) -> f32 {
     let flat = draft_sphere(origin, direction, light.position_range.xyz, light.position_range.w * 0.8);
     let flat_start = max(first, flat.x);
     let flat_end = min(last, flat.y);
@@ -57,6 +55,14 @@ fn draft_visible_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32
     return draft_taper(first, flat_start, origin, direction, apex, light)
         + draft_square_integral(flat_start, flat_end, origin, direction, apex)
         + draft_taper(flat_end, last, origin, direction, apex, light);
+}
+// Squared bounds avoid a square root in the constant and zero parts of the same envelope.
+// The transition still uses distance: smoothstep of squared distance would change the taper.
+fn draft_range_envelope_squared(squared: f32, reach: f32) -> f32 {
+    let flat = reach * 0.8;
+    if (squared <= flat * flat) { return 1.0; }
+    if (squared >= reach * reach) { return 0.0; }
+    return range_envelope(sqrt(squared), reach);
 }
 // Preserve the analytic inverse-square/range energy and estimate only its angular weighting.
 // Four Gauss points are fixed work: no shadow lookup, texture sample or additional ray march.
@@ -78,11 +84,13 @@ fn draft_profiled_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f3
     for (var index = 0u; index < 4u; index++) {
         let point = origin + direction * (centre + half_width * nodes[index]);
         let offset = apex - point;
-        let distance = length(offset);
-        let weight = weights[index] * (36.0 / max(distance * distance, 0.0025))
-            * range_envelope(length(point - light.position_range.xyz), light.position_range.w);
+        let squared = dot(offset, offset);
+        let lens_offset = point - light.position_range.xyz;
+        let weight = weights[index] * (36.0 / max(squared, 0.0025))
+            * draft_range_envelope_squared(dot(lens_offset, lens_offset), light.position_range.w);
         raw_weight += weight;
-        profiled_weight += weight * beam_radial_profile(light, offset / max(distance, 1e-4));
+        // Keep the angular 0.1mm clamp separate from the energy's 5cm source clamp.
+        profiled_weight += weight * beam_radial_profile(light, offset * inverseSqrt(max(squared, 1e-8)));
     }
     if (raw_weight <= 0.0) { return 0.0; }
     return energy * (profiled_weight / raw_weight);

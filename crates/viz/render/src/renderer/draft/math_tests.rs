@@ -137,3 +137,6 @@ fn dedicated_draft_shaders_parse_and_validate_without_gpu() {
 
 #[path = "soft_profile_tests.rs"]
 mod soft_profile_tests;
+
+#[path = "integral_optimization_tests.rs"]
+mod integral_optimization_tests;
