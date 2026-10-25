@@ -651,3 +651,38 @@ simulation, not a physically reproduced Tauri race. CPU evidence is retained in
 owner/ordering subset, TypeScript,4native Picture tests,5writer FIFO tests and
 1native camera-owner test pass. Source-size, Rust format and diff checks pass.
 Physical button/shortcut and native interactive-camera acceptance remain separate.
+
+
+### Owned backend Running CPU profile diagnostic
+
+At705de92cb, the labeled300-second-control/300-second-Draft report
+`2026-10-25T13-34-34-675Z` still fails output isolation: p99 bounds8,001–8,250µs
+versus9,501–9,750µs, conservative regression1,251–1,749µs, zero deadline misses
+and send errors. This diagnostic includes two requested3-second Time Profiler
+recordings and cannot replace quiet acceptance. The exact owned backend86258,
+its c5e05b… SHA and UUIDD3D6D340-5582-3AD2-9E53-6B9645F4F0F3 were verified before
+and after both recordings and the overall workload. All owned processes and
+5158/5160listeners were independently verified absent afterward. No security
+settings, global scheduler policy or protected desk runtimes changed.
+
+The new exports resolve every XML reference and identify PID86258 and Running
+thread state in every row, with1ms sample weights. Control has3,726rows, including
+three empty stacks excluded from attribution; Stage has4,538resolved rows.
+Attributed covered weight is3.723s/4.538s, trace wall duration3.854s/3.670s and
+sample span3.591s/3.391s. These are unequal short statistical windows; covered
+sample weight does not establish complete process CPU. Function-level symbols
+and raw addresses are retained, without invented source-line/inline coverage.
+Exclusive leaf and inclusive-unique-frame rankings stay separate; inclusive
+rows overlap and must not be summed.
+
+Memmove leaf share rises6.688%→8.131% and controller-preparation leaf share
+1.585%→2.182%. Copy ancestry mostly resolves to shared sampling/preparation and
+retained-position paths present in both recordings. No dominant new Stage
+subscription/serialization function is established. `swtch_pri` remains a large
+leaf19.903%→17.056%; its Running-tagged samples near yield/wait entry are not
+blocked wall time or proof of computation. Two sequential short profiles cannot
+distinguish changed instructions, cache/frequency effects, operation counts or
+GPU causality. Receipt `.artifacts/performance/stage/tl879-running-stack-comparison.json`
+and parser `.artifacts/tmp/tl879-compare-running-stacks.py` retain per-sample joins,
+raw symbols, exact identity, core/thread coverage and exclusions. No further
+unchanged sustained test or speculative output-engine mutation followed.
