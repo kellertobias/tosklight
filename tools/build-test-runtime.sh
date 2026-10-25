@@ -113,8 +113,20 @@ light_open_desktop_test_app() {
     echo "error: refusing isolated GUI launch without verified own headless service" >&2
     return 1
   }
-  open -n --env "LIGHT_DESKTOP_TEST_BIND=$LIGHT_DESKTOP_TEST_BIND" \
-    --env "LIGHT_DESKTOP_TEST_OSC_BIND=$LIGHT_DESKTOP_TEST_OSC_BIND" \
-    --env "LIGHT_DESKTOP_TEST_DATA_DIR=$DATA_DIR" "$app"
+  local name
+  local args=(-n --env "LIGHT_DESKTOP_TEST_BIND=$LIGHT_DESKTOP_TEST_BIND"
+    --env "LIGHT_DESKTOP_TEST_OSC_BIND=$LIGHT_DESKTOP_TEST_OSC_BIND"
+    --env "LIGHT_DESKTOP_TEST_DATA_DIR=$DATA_DIR")
+  # LaunchServices does not inherit this shell's benchmark environment. Forward only the
+  # explicitly present controls needed by this isolated launch, preserving each argument.
+  for name in LIGHT_STAGE_PACKAGED_BENCH_REPORT LIGHT_STAGE_PACKAGED_BENCH_DISPLAY \
+    LIGHT_STAGE_PACKAGED_BENCH_LAYOUT LIGHT_STAGE_PACKAGED_BENCH_PREPARED \
+    LIGHT_STAGE_PACKAGED_BENCH_PROFILE LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS \
+    LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS LIGHT_STAGE_PACKAGED_BENCH_STAGE \
+    LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW \
+    LIGHT_STAGE_PACKAGED_BENCH_QUALITY LIGHT_STAGE_PACKAGED_BENCH_VIEW LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ; do
+    if [[ "${!name+x}" == x ]]; then args+=(--env "$name=${!name}"); fi
+  done
+  open "${args[@]}" "$app"
   echo "Isolated ToskLight opened at http://$LIGHT_DESKTOP_TEST_BIND; OSC $LIGHT_DESKTOP_TEST_OSC_BIND. Server log: $DATA_DIR/light-headless.log"
 }
