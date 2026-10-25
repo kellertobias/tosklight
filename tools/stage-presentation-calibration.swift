@@ -86,7 +86,9 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var waitingStop = false
     let lifetimeDeadline = CACurrentMediaTime() + 50
     var outstanding = false
-    var pending: CAMetalDrawable?
+    // Apple recommends prompt drawable release after commit; this corrects lifetime only,
+    // without claiming why prior probes lacked callbacks. See https://developer.apple.com/documentation/quartzcore/cametallayer
+    weak var pending: CAMetalDrawable?
     var exitCode: Int32 = 0
     var waitingDeadline = CACurrentMediaTime() + 20
     var renderingDeadline = Double.infinity
@@ -269,47 +271,49 @@ final class Probe: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard CACurrentMediaTime() < renderingDeadline else { finish("presentation-timeout-unknown", code: 1); return }
         guard attached() else { finish("layer-attachment-lost-before-acquire", code: 1); return }
         CATransaction.flush()
-        let acquire = anchor()
-        guard let drawable = layer.nextDrawable(), let command = queue.makeCommandBuffer() else {
-            finish("drawable-or-command-unavailable", code: 1); return
+        autoreleasepool {
+            let acquire = anchor()
+            guard let drawable = layer.nextDrawable(), let command = queue.makeCommandBuffer() else {
+                finish("drawable-or-command-unavailable", code: 1); return
+            }
+            guard contained() else { finish("internal-containment-lost", code: 1); return }
+            guard attached() else { finish("layer-attachment-lost-before-submit", code: 1); return }
+            outstanding = true
+            pending = drawable
+            let current = sequence
+            sequence += 1
+            let label = "stage-presentation-calibration-\(runToken)-\(current)"
+            command.label = label
+            let render = MTLRenderPassDescriptor()
+            render.colorAttachments[0].texture = drawable.texture
+            render.colorAttachments[0].loadAction = .clear
+            render.colorAttachments[0].storeAction = .store
+            render.colorAttachments[0].clearColor = current % 2 == 0 ? MTLClearColorMake(0.08, 0.16, 0.24, 1) : MTLClearColorMake(0.24, 0.12, 0.08, 1)
+            guard let encoder = command.makeRenderCommandEncoder(descriptor: render) else { finish("encoder-unavailable", code: 1); return }
+            encoder.endEncoding()
+            let delays = [0.0371, 0.0537, 0.0713]
+            let requested: Double? = current % 2 == 0 ? nil : CACurrentMediaTime() + delays[(current / 2) % delays.count]
+            let identity: [String: Any] = ["sequence": current, "drawableId": drawable.drawableID,
+                "commandLabel": label, "requestedHostSeconds": requested.map { $0 as Any } ?? NSNull(),
+                "surfaceId": drawable.texture.iosurface.map { IOSurfaceGetID($0) as Any } ?? NSNull()]
+            drawable.addPresentedHandler { [weak self] shown in
+                let time = shown.presentedTime
+                let callback = anchor()
+                DispatchQueue.main.async { self?.presented(identity, time: time, callback: callback) }
+            }
+            command.addCompletedHandler { [weak self] completed in
+                let fields: [String: Any] = ["identity": identity, "completionAnchor": anchor(),
+                    "commandStatus": completed.status.rawValue, "commandSucceeded": completed.status == .completed && completed.error == nil,
+                    "gpuStartHostSeconds": completed.gpuStartTime,
+                    "gpuEndHostSeconds": completed.gpuEndTime, "error": completed.error.map(String.init(describing:)) ?? ""]
+                DispatchQueue.main.async { self?.completed(fields) }
+            }
+            record("submit", ["identity": identity, "acquireAnchor": acquire, "commitAnchor": anchor(),
+                              "windowVisibility": visibility()])
+            guard !finished else { return }
+            if let requested { command.present(drawable, atTime: requested) } else { command.present(drawable) }
+            command.commit()
         }
-        guard contained() else { finish("internal-containment-lost", code: 1); return }
-        guard attached() else { finish("layer-attachment-lost-before-submit", code: 1); return }
-        outstanding = true
-        pending = drawable
-        let current = sequence
-        sequence += 1
-        let label = "stage-presentation-calibration-\(runToken)-\(current)"
-        command.label = label
-        let render = MTLRenderPassDescriptor()
-        render.colorAttachments[0].texture = drawable.texture
-        render.colorAttachments[0].loadAction = .clear
-        render.colorAttachments[0].storeAction = .store
-        render.colorAttachments[0].clearColor = current % 2 == 0 ? MTLClearColorMake(0.08, 0.16, 0.24, 1) : MTLClearColorMake(0.24, 0.12, 0.08, 1)
-        guard let encoder = command.makeRenderCommandEncoder(descriptor: render) else { finish("encoder-unavailable", code: 1); return }
-        encoder.endEncoding()
-        let delays = [0.0371, 0.0537, 0.0713]
-        let requested: Double? = current % 2 == 0 ? nil : CACurrentMediaTime() + delays[(current / 2) % delays.count]
-        let identity: [String: Any] = ["sequence": current, "drawableId": drawable.drawableID,
-            "commandLabel": label, "requestedHostSeconds": requested.map { $0 as Any } ?? NSNull(),
-            "surfaceId": drawable.texture.iosurface.map { IOSurfaceGetID($0) as Any } ?? NSNull()]
-        drawable.addPresentedHandler { [weak self] shown in
-            let time = shown.presentedTime
-            let callback = anchor()
-            DispatchQueue.main.async { self?.presented(identity, time: time, callback: callback) }
-        }
-        command.addCompletedHandler { [weak self] completed in
-            let fields: [String: Any] = ["identity": identity, "completionAnchor": anchor(),
-                "commandStatus": completed.status.rawValue, "commandSucceeded": completed.status == .completed && completed.error == nil,
-                "gpuStartHostSeconds": completed.gpuStartTime,
-                "gpuEndHostSeconds": completed.gpuEndTime, "error": completed.error.map(String.init(describing:)) ?? ""]
-            DispatchQueue.main.async { self?.completed(fields) }
-        }
-        record("submit", ["identity": identity, "acquireAnchor": acquire, "commitAnchor": anchor(),
-                          "windowVisibility": visibility()])
-        guard !finished else { return }
-        if let requested { command.present(drawable, atTime: requested) } else { command.present(drawable) }
-        command.commit()
     }
     func presented(_ identity: [String: Any], time: Double, callback: [String: Any]) {
         guard !finished else { return }

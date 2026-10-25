@@ -455,3 +455,38 @@ whose typed output health is identical to full diagnostics. Full before/after
 snapshots remain. This avoids repeatedly serializing programmer definitions;
 it does not erase historical failures or establish their cause. FIFO read/window
 closure, counter-reset handling and fine histograms are preserved by focused tests.
+
+
+### Final clean release observations after TL-873
+
+The 2026-10-25 final release bundle combines the runtime-hash change and the
+counter-only observer. Both conditions ran serially on the internal display,
+with no concurrent build, tests, CPU worker or profiler. Each used animated
+Stage-500, dual 1920×540 physical panes, Draft quality and a requested 60 Hz
+helper ceiling. The paired no-Stage control lasted 300 seconds. Original backend
+PID/listener and SHA256 were verified at both endpoints. Raw reports and compact
+summaries remain under canonical artifacts.
+
+| Condition | Stage duration | Control → Stage output p99 | Regression | Output gate |
+| --- | ---: | --- | --- | --- |
+| Full 3D Draft | 1,860 s | 7,751–8,000 → 10,501–10,750 µs | 2,501–2,999 µs | **Fail**: allowance 1,000 µs |
+| Lines | 360 s | 7,751–8,000 → 8,001–8,250 µs | 1–499 µs | Pass |
+
+Reports are `packaged-tauri-stage-500-2026-10-25T05-06-19-539Z.json` and
+`packaged-tauri-stage-500-2026-10-25T05-43-17-980Z.json`. Both windows in both
+conditions recorded zero deadline misses, send errors and late intervals.
+Draft still fails the p99 comparison; a short prior pass does not supersede it.
+No scheduler policy or acceptance threshold was changed.
+
+Draft passed the enforced 30-minute retained-resource gate with complete RSS
+and both-lane coverage: RSS slope −15,012 bytes/min and late sampled CPU wall
+p95 2.805 ms. Lines has complete six-minute observations, RSS slope +34,243
+bytes/min and late CPU wall p95 1.581 ms, but its 30-minute resource gate was
+not enforced. Its early/late resource windows overlap.
+
+Draft recorded 223,115 helper and 222,859 compositor submissions; Lines recorded
+43,152 and 43,151. Sparse helper GPU means were 16.35/15.44 ms for Draft
+Live/Preload and 2.53/2.59 ms for Lines. Sparse timing is not whole-Stage GPU
+usage; submission counts are not on-screen FPS. Sustained displayed 60 FPS and
+70%/90% matched-rate total-GPU reductions remain unproved. These observations do
+not isolate a root cause or establish a hash-only benefit.
