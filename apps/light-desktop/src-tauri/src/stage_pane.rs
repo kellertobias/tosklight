@@ -113,6 +113,19 @@ impl StagePanes {
         Ok(())
     }
 
+    /// Explicit addresses stay pinned to their owning window even if the global live owner changes.
+    /// An absent ID retains the legacy application's live-3D camera address.
+    fn addressed_pane(
+        &self,
+        window_label: &str,
+        pane_id: Option<&str>,
+    ) -> Result<Option<Arc<StagePane>>, String> {
+        match pane_id {
+            Some(id) => self.pane(&format!("{window_label}:{id}")),
+            None => self.live_3d_pane(),
+        }
+    }
+
     fn pane(&self, key: &str) -> Result<Option<Arc<StagePane>>, String> {
         Ok(self
             .panes
@@ -758,12 +771,7 @@ pub(crate) fn stage_pane_input(
     x: f32,
     y: f32,
 ) -> Result<(), String> {
-    let pane = if let Some(pane_id) = pane_id {
-        panes.pane(&format!("{}:{pane_id}", window.label()))?
-    } else {
-        panes.live_3d_pane()?
-    };
-    let Some(pane) = pane else {
+    let Some(pane) = panes.addressed_pane(window.label(), pane_id.as_deref())? else {
         return Ok(());
     };
     let input = match gesture.as_str() {
@@ -851,7 +859,9 @@ pub(crate) fn stage_pane_camera(
 /// Put the camera at numbers, for a control surface that addresses it that way.
 #[tauri::command]
 pub(crate) fn place_stage_pane_camera(
+    window: tauri::WebviewWindow,
     panes: tauri::State<'_, StagePanes>,
+    pane_id: Option<String>,
     x: Option<f32>,
     y: Option<f32>,
     z: Option<f32>,
@@ -859,7 +869,7 @@ pub(crate) fn place_stage_pane_camera(
     tilt: Option<f32>,
     distance: Option<f32>,
 ) -> Result<(), String> {
-    let Some(pane) = panes.live_3d_pane()? else {
+    let Some(pane) = panes.addressed_pane(window.label(), pane_id.as_deref())? else {
         return Ok(());
     };
     pane.place_camera(x, y, z, pan, tilt, distance)
@@ -933,6 +943,56 @@ mod tests {
         pane.tick().expect("drawing nothing");
         assert_eq!(pane.description().expect("description"), None);
         assert_eq!(pane.trouble().expect("trouble"), None);
+    }
+
+    #[test]
+    fn explicit_camera_address_cannot_retarget_to_another_live_owner_or_window() {
+        let panes = StagePanes::default();
+        let owned = Arc::new(StagePane::default());
+        let other = Arc::new(StagePane::default());
+        {
+            let mut registry = panes.panes.lock().unwrap();
+            registry.insert(
+                "main:stage".into(),
+                RegisteredPane {
+                    pane: owned.clone(),
+                    live_3d: false,
+                },
+            );
+            registry.insert(
+                "other:stage".into(),
+                RegisteredPane {
+                    pane: other.clone(),
+                    live_3d: true,
+                },
+            );
+        }
+        assert!(Arc::ptr_eq(
+            &panes
+                .addressed_pane("main", Some("stage"))
+                .unwrap()
+                .unwrap(),
+            &owned
+        ));
+        assert!(Arc::ptr_eq(
+            &panes
+                .addressed_pane("other", Some("stage"))
+                .unwrap()
+                .unwrap(),
+            &other
+        ));
+        assert!(Arc::ptr_eq(
+            &panes.addressed_pane("main", None).unwrap().unwrap(),
+            &other
+        ));
+        panes.panes.lock().unwrap().remove("main:stage");
+        assert!(
+            panes
+                .addressed_pane("main", Some("stage"))
+                .unwrap()
+                .is_none(),
+            "retired explicit target cannot fall back to another pane"
+        );
     }
 
     #[test]

@@ -1,3 +1,4 @@
+import { capturePicture } from "./windows/stageWindow/stageCaptureTestFixture";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
@@ -12,7 +13,7 @@ import { StageCaptureControls } from "./windows/stageWindow/StageCaptureControls
 import { useStageCapture } from "./windows/stageWindow/useStageCapture";
 
 function Controls() {
-    const capture = useStageCapture("live-pane", true);
+    const capture = useStageCapture("live-pane", true, capturePicture());
     return <div data-visualization-lane="live"><div data-stage-renderer="native">
         <StageCaptureControls capture={capture} paneId="live-pane" />
     </div></div>;

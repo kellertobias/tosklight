@@ -205,7 +205,7 @@ export interface StageStillEvent {
 }
 
 export interface DesktopBridge {
-	startStagePaneCapture?(paneId: string, requestId: string): Promise<void>;
+	startStagePaneCapture?(paneId: string, requestId: string, picture: StagePanePicture): Promise<void>;
 	openStagePaneCapture?(paneId: string, reveal: boolean): Promise<void>;
 	chooseStagePaneCapture?(paneId: string, jobId: string, engine: StageStillEngine): Promise<void>;
 	cancelStagePaneCapture?(paneId: string, jobId: string): Promise<void>;

@@ -1,3 +1,4 @@
+import { StagePaneCommandQueue } from "./stagePaneCommandQueue";
 import type {
 	ConsoleScreenWindow,
 	DesktopBridge,
@@ -7,6 +8,9 @@ import type {
 	StagePaneBenchmarkObservations,
 	StageStillEvent,
 } from "./types";
+
+const stagePaneCommands = new StagePaneCommandQueue();
+let liveStagePaneId: string | null = null;
 
 const coreApi = () => import("@tauri-apps/api/core");
 const eventApi = () => import("@tauri-apps/api/event");
@@ -140,18 +144,26 @@ export const tauriDesktopBridge: DesktopBridge = {
 	closeConsoleScreen: (screenId) =>
 		invoke("close_console_screen", { screenId }),
 	openVisualizer: () => invoke("open_visualizer"),
-	setStagePaneSelection: (paneId, fixtures) =>
-		invoke("set_stage_pane_selection", { paneId, fixtures }),
+	setStagePaneSelection: (paneId, fixtures) => {
+		const snapshot = [...fixtures];
+		return stagePaneCommands.run(paneId, () => invoke("set_stage_pane_selection", { paneId, fixtures: snapshot }));
+	},
 	stagePaneAvailable: async () => {
 		const api = await coreApi();
 		return api.invoke<boolean>("stage_pane_available");
 	},
 	openStagePane: (paneId, live3d, geometry) =>
-		invoke("open_stage_pane", { paneId, live3d, geometry }),
+		stagePaneCommands.run(paneId, async () => {
+			await invoke("open_stage_pane", { paneId, live3d, geometry });
+			if (live3d) liveStagePaneId = paneId;
+		}),
 	setStagePane: (paneId, geometry) =>
 		invoke("set_stage_pane", { paneId, geometry }),
 	openStagePaneCapture: (paneId, reveal) => invoke("open_stage_pane_capture", { paneId, reveal }),
-	startStagePaneCapture: (paneId, requestId) => invoke("start_stage_pane_capture", { paneId, requestId }),
+	startStagePaneCapture: (paneId, requestId, picture) => {
+		const snapshot = structuredClone(picture);
+		return stagePaneCommands.run(paneId, () => invoke("start_stage_pane_capture", { paneId, requestId, picture: snapshot }));
+	},
 	chooseStagePaneCapture: (paneId, jobId, engine) => invoke("choose_stage_pane_capture", { paneId, jobId, engine }),
 	cancelStagePaneCapture: (paneId, jobId) => invoke("cancel_stage_pane_capture", { paneId, jobId }),
 	onStageStill: async (handler) => {
@@ -160,18 +172,31 @@ export const tauriDesktopBridge: DesktopBridge = {
 	},
 	setStagePaneVisibility: (paneId, visible) =>
 		invoke("set_stage_pane_visibility", { paneId, visible }),
-	closeStagePane: (paneId) => invoke("close_stage_pane", { paneId }),
-	sendStagePaneInput: (gesture, x, y, paneId) =>
-		invoke("stage_pane_input", { paneId, gesture, x, y }),
-	setStagePanePicture: (paneId, picture) =>
-		invoke("set_stage_pane_picture", { paneId, picture }),
+	closeStagePane: (paneId) => stagePaneCommands.close(paneId, async () => {
+		await invoke("close_stage_pane", { paneId });
+		if (liveStagePaneId === paneId) liveStagePaneId = null;
+	}),
+	sendStagePaneInput: (gesture, x, y, paneId) => {
+		const owner = paneId ?? liveStagePaneId;
+		const operation = () => invoke("stage_pane_input", { paneId: owner ?? undefined, gesture, x, y });
+		return owner ? stagePaneCommands.run(owner, operation) : operation();
+	},
+	setStagePanePicture: (paneId, picture) => {
+		const snapshot = structuredClone(picture);
+		return stagePaneCommands.picture(paneId, () => invoke("set_stage_pane_picture", { paneId, picture: snapshot }));
+	},
 	stagePaneCamera: async () => {
 		const api = await coreApi();
 		return api.invoke<[number, number, number, number, number, number] | null>(
 			"stage_pane_camera",
 		);
 	},
-	placeStagePaneCamera: (place) => invoke("place_stage_pane_camera", place),
+	placeStagePaneCamera: (place) => {
+		const snapshot = structuredClone(place);
+		const owner = liveStagePaneId;
+		const operation = () => invoke("place_stage_pane_camera", { ...snapshot, paneId: owner ?? undefined });
+		return owner ? stagePaneCommands.run(owner, operation) : operation();
+	},
 	takeStagePanePicks: async (paneId) => {
 		const api = await coreApi();
 		return api.invoke<Array<[string | null, boolean]>>(

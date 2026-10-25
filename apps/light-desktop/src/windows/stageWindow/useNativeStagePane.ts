@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import type { StagePaneGesture } from "../../platform/desktop/types";
 import { NativeStageAttachment } from "./nativeStageAttachment";
@@ -29,6 +29,8 @@ export interface NativeStagePane {
 	trouble: string | null;
 	/** What is drawing, for the diagnostics an operator reads. */
 	renderer: string | null;
+	/** Surface bounded command failures in the same pane status as native failures. */
+	reportError?: (error: unknown) => void;
 	/** Forward a gesture the pane element captured. */
 	send: (gesture: StagePaneGesture, x: number, y: number) => void;
 }
@@ -47,6 +49,7 @@ export function useNativeStagePane(
 	const [element, setElement] = useState<HTMLElement | null>(null);
 	const [active, setActive] = useState(false);
 	const [trouble, setTrouble] = useState<string | null>(null);
+	const reportError = useCallback((error: unknown) => setTrouble(String(error)), []);
 	const [renderer, setRenderer] = useState<string | null>(null);
 	const [restart, setRestart] = useState(0);
 	const [retryDelay, setRetryDelay] = useState<number | null>(null);
@@ -174,9 +177,10 @@ export function useNativeStagePane(
 		active,
 		trouble,
 		renderer,
+		reportError,
 		send: (gesture, x, y) => {
 			if (!active || !enabledRef.current) return;
-			void desktopBridge.sendStagePaneInput(gesture, x, y, paneId);
+			void Promise.resolve(desktopBridge.sendStagePaneInput(gesture, x, y, paneId)).catch(reportError);
 		},
 	};
 }

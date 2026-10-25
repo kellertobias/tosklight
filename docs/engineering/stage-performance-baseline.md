@@ -614,3 +614,40 @@ view cannot initialize the wrong backend in this production path. Draft also
 uses its own lazy backend; unused shared startup resources are opportunities,
 not demonstrated causes of the later tail. No speculative startup or global
 priority/timer change was made.
+
+
+### Draft quarter candidate and invocation capture ordering (TL-879 / TL-881)
+
+The sealed5bc989d89 candidate completed a quiet300-second control plus300-second
+Stage comparison on the internal display with500animated fixtures and two
+1920×540panes. Report `2026-10-25T12-36-23-382Z` retains output p99 bounds
+8,001–8,250µs versus9,251–9,500µs: conservative regression1,001–1,499µs still
+fails the unchanged1,000µs limit. Both windows have zero deadline misses and send
+errors. Resource failures are empty, but the30-minute gate is not enforced here.
+The quarter shaft image/cost improvement does not establish output isolation,
+whole-GPU utilization reduction or displayed60FPS. No unchanged sustained run
+was repeated. Receipt `tl879-quarter/short-quiet-summary.json` retains identities.
+
+Capture now carries an immutable current Picture snapshot in its native start
+command, taken synchronously before awaiting any bridge operation. Native start
+uses the ordinary picture normalization and queues Picture then CaptureStart
+under the same pane lock. A short-command FIFO per pane orders earlier updates,
+input and selection before capture, and later updates afterward. Only adjacent
+not-yet-started complete Picture updates may coalesce; capture/input barriers
+prevent replacement across the invocation. Ordinary commands are bounded at128,
+with one reserved latest Picture and one idempotent lifecycle close. Long image
+jobs are not serialized through this acknowledgement queue. Numeric camera
+placement carries the queued owner's pane ID into a window-owned native lookup;
+retired explicit addresses never fall back to another live pane. Legacy absent
+addresses retain the existing global live-camera behavior. This frontend queue
+is local to one webview; it is not global cross-window traffic serialization.
+
+Deferred-delivery regression tests cover both preference directions, starting
+before the passive Picture effect, prior/later camera and selection, later live
+changes, queue pressure and close/reopen. Conditional baseline reproduction fails
+two deferred-delivery cases and the fix passes both; this is a deterministic
+simulation, not a physically reproduced Tauri race. CPU evidence is retained in
+`.artifacts/tmp/tl881/verification.json`:69focused frontend tests, final18-test
+owner/ordering subset, TypeScript,4native Picture tests,5writer FIFO tests and
+1native camera-owner test pass. Source-size, Rust format and diff checks pass.
+Physical button/shortcut and native interactive-camera acceptance remain separate.

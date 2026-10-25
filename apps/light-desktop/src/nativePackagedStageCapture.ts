@@ -22,11 +22,11 @@ export class PackagedStageCaptureExercise {
 
     constructor(private readonly desktop: DesktopBridge, private readonly timeoutMs = 180_000) {
         this.bridge = { ...desktop,
-            startStagePaneCapture: async (paneId, requestId) => {
+            startStagePaneCapture: async (paneId, requestId, picture) => {
                 if (this.ready?.lanes[0].frame.paneId !== `main:${paneId}`) throw new Error("Capture DOM pane does not own the ready Live frame");
                 if (this.request) throw new Error("Capture exercise attempted more than one start");
                 this.request = { paneId, requestId };
-                try { await desktop.startStagePaneCapture!(paneId, requestId); }
+                try { await desktop.startStagePaneCapture!(paneId, requestId, picture); }
                 catch (error) { this.request = null; this.fault = String(error); throw error; }
             },
             chooseStagePaneCapture: async (paneId, jobId, engine) => {

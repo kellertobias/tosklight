@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import { useApp } from "../../state/AppContext";
 import type { Stage2dSide, StageView } from "../../types";
+import type { StagePanePicture } from "../../platform/desktop/types";
 import type { NativeStagePane } from "./useNativeStagePane";
 
 /**
@@ -88,37 +89,32 @@ export function useStagePanePicture(
 	const laserFogTurbulence = paneSettings?.laserFogTurbulence ?? 0;
 	const showBeamGuides = forcedShowBeamGuides ?? stageShowBeamGuides;
 
-	useEffect(() => {
-		if (!active) return;
-		void bridge.setStagePanePicture(pane.id, {
-			atmosphere: 0,
-			ambient: stageEnvironmentBrightness,
-			quality: "draft",
-			exposure: stageVizExposure,
-			detailedPeople: stageVizDetailedPeople ?? false,
-			laserBrightness: stageVizLaserBrightness,
-			lampFogCloudiness,
-			lampFogTurbulence,
-			laserFogCloudiness,
-			laserFogTurbulence,
-			showLabels: stageVizShowLabels,
-			floorGrid: stageShowFloorGrid,
-			showBeamGuides,
-			background: backgroundColour(stageVizBackground),
-			mode: [
-				"top_down",
-				"left_to_right",
-				"right_to_left",
-				"front_to_back",
-				"back_to_front",
-			].includes(mode)
-				? mode
-				: "lines_3d",
-			followPreload,
-		});
-	}, [
-		active,
-		bridge,
+	const picture = useMemo<StagePanePicture>(() => ({
+		atmosphere: 0,
+		ambient: stageEnvironmentBrightness,
+		quality: "draft",
+		exposure: stageVizExposure,
+		detailedPeople: stageVizDetailedPeople ?? false,
+		laserBrightness: stageVizLaserBrightness,
+		lampFogCloudiness,
+		lampFogTurbulence,
+		laserFogCloudiness,
+		laserFogTurbulence,
+		showLabels: stageVizShowLabels,
+		floorGrid: stageShowFloorGrid,
+		showBeamGuides,
+		background: backgroundColour(stageVizBackground),
+		mode: [
+			"top_down",
+			"left_to_right",
+			"right_to_left",
+			"front_to_back",
+			"back_to_front",
+		].includes(mode)
+			? mode
+			: "lines_3d",
+		followPreload,
+	}), [
 		mode,
 		followPreload,
 		stageEnvironmentBrightness,
@@ -133,6 +129,9 @@ export function useStagePanePicture(
 		stageShowFloorGrid,
 		showBeamGuides,
 		stageVizBackground,
-		pane.id,
 	]);
+	useEffect(() => {
+		if (active) void Promise.resolve(bridge.setStagePanePicture(pane.id, picture)).catch((error) => pane.reportError?.(error));
+	}, [active, bridge, pane.id, picture, pane.reportError]);
+	return picture;
 }

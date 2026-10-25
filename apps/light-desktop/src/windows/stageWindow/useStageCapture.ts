@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
-import type { StageStillEngine, StageStillStatus, StageStillPhase } from "../../platform/desktop/types";
+import type { StageStillEngine, StageStillStatus, StageStillPhase, StagePanePicture } from "../../platform/desktop/types";
 
 export const terminalStillPhase = (phase: StageStillPhase) => phase === "cancelled" || (typeof phase === "object" && ("saved" in phase || "failed" in phase));
 type Request = { paneId: string; requestId: string; jobId: string | null; terminal: boolean };
 
 /** One frozen request per pane, driven only by pushed native observations. */
-export function useStageCapture(paneId: string, enabled: boolean) {
+export function useStageCapture(paneId: string, enabled: boolean, picture: StagePanePicture) {
 	const desktop = useDesktopBridge();
 	const [status, setStatus] = useState<StageStillStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -46,10 +46,12 @@ export function useStageCapture(paneId: string, enabled: boolean) {
 
 	const start = async () => {
 		if (!enabled || !available || !subscribed || (request.current && !request.current.terminal)) return;
+		// Own the invocation look now, before any bridge operation or state changes can await.
+		const invocationPicture = structuredClone(picture);
 		const current: Request = { paneId, requestId: crypto.randomUUID(), jobId: null, terminal: false };
 		request.current = current; command.current = false;
 		setStatus(null); setError(null); setBusy(true); setCommandPending(false);
-		try { await desktop.startStagePaneCapture?.(paneId, current.requestId); }
+		try { await desktop.startStagePaneCapture?.(paneId, current.requestId, invocationPicture); }
 		catch (reason) {
 			if (mounted.current && request.current === current && !current.terminal) {
 				current.terminal = true; setBusy(false); setError(String(reason));

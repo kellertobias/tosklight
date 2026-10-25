@@ -59,7 +59,12 @@ impl StagePane {
         self.capture.lock().map_err(|_| "capture state")?.sink = Some((window, pane_id));
         Ok(())
     }
-    fn capture_start(&self, request_id: String, pane_id: String) -> Result<(), String> {
+    fn capture_start(
+        &self,
+        request_id: String,
+        pane_id: String,
+        picture: super::Picture,
+    ) -> Result<(), String> {
         if request_id.is_empty()
             || request_id.len() > 128
             || pane_id.is_empty()
@@ -81,8 +86,12 @@ impl StagePane {
         if capture.pending() {
             return Err("This Stage already has an image job; finish or cancel it first".into());
         }
+        let instruction = picture.normalized()?;
         capture.request = Some(request_id.clone());
         capture.latest = None;
+        // Same pane lock as ordinary Picture/input/close. Existing helper FIFO sees the
+        // invocation look before its capture barrier; an unchanged mode never reframes camera.
+        running.send(&instruction);
         running.send(&ToHelper::CaptureStart {
             request_id,
             pane_id,
@@ -183,9 +192,10 @@ pub(crate) fn start_stage_pane_capture(
     panes: tauri::State<'_, StagePanes>,
     pane_id: String,
     request_id: String,
+    picture: super::Picture,
 ) -> Result<(), String> {
     let pane = owned(&panes, &window, &pane_id)?;
-    panes.with_capture_start(|| pane.capture_start(request_id, pane_id))
+    panes.with_capture_start(|| pane.capture_start(request_id, pane_id, picture))
 }
 #[tauri::command]
 pub(crate) fn choose_stage_pane_capture(

@@ -1,3 +1,4 @@
+import { capturePicture } from "./stageCaptureTestFixture";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
@@ -17,7 +18,7 @@ const bridge: DesktopBridge = { ...browserDesktopBridge, available: true,
 	onStageStill: async (listener) => { listeners.add(listener); return () => { listeners.delete(listener); stop(); }; },
 };
 function Harness({ id = "live", preload = false, enabled = true }: { id?: string; preload?: boolean; enabled?: boolean }) {
-	const capture = useStageCapture(id, enabled);
+	const capture = useStageCapture(id, enabled, capturePicture({ followPreload: preload }));
 	return <section data-testid={id}><NativeStageSurface pane={{ id, active: enabled, ref: () => {}, trouble: null, renderer: "test", send: vi.fn() }} onCapture={() => { void capture.start(); }} />
 		<StageCaptureControls capture={capture} paneId={id} followPreload={preload} /></section>;
 }

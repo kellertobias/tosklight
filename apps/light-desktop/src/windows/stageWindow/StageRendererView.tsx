@@ -40,7 +40,6 @@ export function StageRendererView({
 	interactive?: boolean;
 }) {
 	const pane = useNativeStagePane(active, options.view !== "2d");
-	const capture = useStageCapture(pane.id, active && interactive && pane.active);
 	/*
 	 * The renderer resolves what is under the pointer; this decides what that means. Selection is
 	 * the desk's, and a renderer holding its own idea of it would be a second answer to the one
@@ -51,13 +50,14 @@ export function StageRendererView({
 	// And the answer goes back, so the renderer can draw what the desk decided was selected.
 	useStagePaneSelection(pane, selection, options.showSelection);
 	// The picture settings cross when the renderer starts, not only when one is moved.
-	useStagePanePicture(
+	const picture = useStagePanePicture(
 		pane,
 		stageViewMode(options.view, options.side2d),
 		options.followPreload,
 		options.paneId,
 		options.showBeamGuides,
 	);
+	const capture = useStageCapture(pane.id, active && interactive && pane.active, picture);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"
