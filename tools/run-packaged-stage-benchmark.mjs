@@ -45,8 +45,10 @@ import {
 } from "./stage-large-scene.mjs";
 import { summarizeStageLongRunResources } from "./stage-resource-stability.mjs";
 import { startPackagedIsolatedServer, stopOwnedBenchmarkChild } from "./owned-benchmark-server.mjs";
+import { prepareStageDiagnosticReport, readStageDiagnosticLabel } from "./packaged-stage-diagnostic.mjs";
 
 const execFileAsync = promisify(execFile);
+const diagnosticLabel = readStageDiagnosticLabel();
 
 const durationSeconds = positiveInteger(
 	process.argv[2] ?? "30",
@@ -424,11 +426,15 @@ if (benchmarkFailure) {
 				);
 }
 if (isolatedServer) result.isolatedServerIdentity = isolatedServer.identity;
+const reportDisposition = prepareStageDiagnosticReport(result, {
+	label: diagnosticLabel, captureExercise, fixedBaseline, benchmarkFailure: Boolean(benchmarkFailure),
+});
+result = reportDisposition.report;
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
-if (!captureExercise) await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
+if (reportDisposition.writeCanonical) await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
-if (!captureExercise) console.log(`Updated ${canonicalReportPath}`);
-if (!(captureExercise ? result.captureVerified : fixedBaseline ? result.baselineMeasurementReady : result.acceptanceGateEnforced)) {
+if (reportDisposition.writeCanonical) console.log(`Updated ${canonicalReportPath}`);
+if (!reportDisposition.exitSuccessful) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
 	process.exitCode = 1;
