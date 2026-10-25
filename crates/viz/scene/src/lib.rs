@@ -31,6 +31,7 @@ mod view;
 
 pub use atmosphere::{Atmosphere, AtmospherePreference, DEFAULT_DENSITY};
 pub use bracket::{bracket_turned, is_mounting_hardware};
+pub use diagnostics::timing as gpu_timing;
 pub use diagnostics::{
     ConnectionState, FallbackReason, InputHealth, InputMappingStatus, ProviderDiagnostics,
     SourceProtocol, UniverseGrade, UniverseHealth,

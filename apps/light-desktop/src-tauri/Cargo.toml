@@ -10,6 +10,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 viz-helper = { path = "../../../crates/viz/helper" }
+viz-scene = { path = "../../../crates/viz/scene" }
 viz-surface = { path = "../../../crates/viz/surface" }
 wgpu.workspace = true
 pollster.workspace = true

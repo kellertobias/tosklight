@@ -484,6 +484,9 @@ impl Running {
     /// A renderer that has died is not an error to send to: the desk carries on either way, and
     /// the next thing it sends will find a channel again or report that it did not.
     fn send(&mut self, message: &ToHelper) {
+        if let ToHelper::Picture { mode, quality, .. } = message {
+            self.compositor.set_timing_view(*mode, *quality);
+        }
         if self.channel_error.is_some() {
             return;
         }

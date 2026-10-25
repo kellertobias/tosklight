@@ -166,7 +166,9 @@ impl StageCompositor {
 
         let (pipeline, layout, sampler, uniform) = render::create_resources(&device, format);
 
-        let measurement = benchmark.then(|| Measurement::new(&device, &queue, timestamps));
+        let measurement = benchmark
+            .then(|| Measurement::new(&device, &queue, timestamps))
+            .transpose()?;
         let mut compositor = Self {
             surface,
             device,
@@ -401,6 +403,24 @@ impl StageCompositor {
         Ok(self.retirement.complete())
     }
 
+    /// The actual native Picture instruction, after all operator/benchmark resolution.
+    pub(crate) fn set_timing_view(
+        &mut self,
+        mode: viz_helper::protocol::StageViewMode,
+        quality: viz_helper::protocol::RenderQuality,
+    ) {
+        if let Some(timer) = self
+            .measurement
+            .as_mut()
+            .and_then(|value| value.timer.as_mut())
+        {
+            timer.set_diagnostic(
+                mode == viz_helper::protocol::StageViewMode::Lines3d
+                    || quality == viz_helper::protocol::RenderQuality::Draft,
+            );
+        }
+    }
+
     fn poll_completions(&mut self) {
         if let Err(error) = self.device.poll(wgpu::PollType::Poll) {
             self.source_error = Some(error.to_string());
@@ -572,6 +592,13 @@ impl StageCompositor {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
+        if let Some(timer) = self
+            .measurement
+            .as_mut()
+            .and_then(|value| value.timer.as_mut())
+        {
+            timer.begin_frame();
+        }
         let encoder = self.encode_frame(&view, viewport, source.as_deref());
         let scope = CompositorScope {
             generation: self.generation,

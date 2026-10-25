@@ -130,12 +130,20 @@ pub struct GpuTimer {
     readback_mask: u8,
     last: GpuPassTimings,
     sample_id: u64,
+    valid_samples: u64,
+    admission: viz_scene::gpu_timing::TimingAdmission,
+    frame_admitted: bool,
 }
 
 impl GpuTimer {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, supported: bool) -> Option<Self> {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        supported: bool,
+    ) -> Result<Option<Self>, String> {
+        let admission = viz_scene::gpu_timing::TimingAdmission::from_environment("helper")?;
         if !supported {
-            return None;
+            return Ok(None);
         }
         let queries = device.create_query_set(&wgpu::QuerySetDescriptor {
             label: Some("viz pass timestamps"),
@@ -157,7 +165,7 @@ impl GpuTimer {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        Some(Self {
+        Ok(Some(Self {
             device: device.clone(),
             queue: queue.clone(),
             frame_done: Arc::new(AtomicBool::new(false)),
@@ -173,7 +181,32 @@ impl GpuTimer {
             readback_mask: 0,
             last: GpuPassTimings::default(),
             sample_id: 0,
-        })
+            valid_samples: 0,
+            admission,
+            frame_admitted: false,
+        }))
+    }
+
+    pub(crate) fn begin_frame(
+        &mut self,
+        mode: viz_scene::ViewMode,
+        quality: viz_scene::RenderQuality,
+    ) {
+        self.active_mask.set(0);
+        let diagnostic =
+            mode == viz_scene::ViewMode::Lines3d || quality == viz_scene::RenderQuality::Draft;
+        self.frame_admitted = self
+            .admission
+            .begin_frame(diagnostic, self.ownership.in_flight() || self.is_broken());
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_cadence(&mut self, cadence: viz_scene::gpu_timing::TimingCadence) {
+        self.admission = viz_scene::gpu_timing::TimingAdmission::new(cadence, true);
+    }
+
+    pub fn coverage(&self) -> viz_scene::gpu_timing::TimingCoverage {
+        self.admission.coverage(self.sample_id, self.valid_samples)
     }
 
     pub fn render_writes(&self, pass: GpuPass) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
@@ -194,7 +227,7 @@ impl GpuTimer {
         beginning: bool,
         end: bool,
     ) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        if self.ownership.in_flight() || self.is_broken() {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -208,7 +241,7 @@ impl GpuTimer {
     }
 
     pub fn compute_writes(&self, pass: GpuPass) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        if self.ownership.in_flight() || self.is_broken() {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -224,7 +257,7 @@ impl GpuTimer {
     /// Capture ownership now; resolve only after the render submission has completed.
     /// Metal can otherwise expose a previous frame's end counter alongside the current start.
     pub(crate) fn resolve(&mut self, _encoder: &mut wgpu::CommandEncoder, context: TimingContext) {
-        if self.ownership.in_flight() || self.is_broken() {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return;
         }
         let mask = self.active_mask.replace(0);
@@ -305,6 +338,9 @@ impl GpuTimer {
             if let Ok(mapped) = slice.get_mapped_range() {
                 self.last = decode_timings(&mapped, self.readback_mask, self.period_nanos);
                 self.sample_id = self.sample_id.wrapping_add(1);
+                if self.last.total_micros().is_some() {
+                    self.valid_samples = self.valid_samples.saturating_add(1);
+                }
                 self.ownership.completed();
             } else {
                 self.ownership.failed();

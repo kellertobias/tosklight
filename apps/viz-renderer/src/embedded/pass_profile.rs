@@ -39,6 +39,7 @@ struct Row<'a> {
     scene_revision: u64,
     gpu_sample_id: u64,
     gpu_provenance_valid: bool,
+    timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
     pass_labels: [&'static str; 8],
     pass_micros: [Option<u64>; 8],
 }
@@ -82,6 +83,7 @@ impl PassProfile {
         size: (u32, u32),
         scene_revision: u64,
         follow_preload: bool,
+        timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
     ) {
         if self.file.is_none() || !eligible(stats, self.last_sample) {
             return;
@@ -98,6 +100,7 @@ impl PassProfile {
             scene_revision,
             gpu_sample_id: sample,
             gpu_provenance_valid: true,
+            timing_coverage,
             pass_labels: LABELS,
             pass_micros: stats.gpu_passes.as_array(),
         };

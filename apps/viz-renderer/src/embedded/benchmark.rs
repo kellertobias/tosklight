@@ -70,9 +70,10 @@ impl BenchmarkDrawWitness {
         size: (u32, u32),
         revision: u64,
         follow_preload: bool,
+        timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
     ) {
         if let Some(profile) = self.pass_profile.as_mut() {
-            profile.observe(stats, view, size, revision, follow_preload);
+            profile.observe(stats, view, size, revision, follow_preload, timing_coverage);
         }
     }
 

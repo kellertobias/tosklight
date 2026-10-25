@@ -33,7 +33,19 @@ fn sample(id: u64) -> FrameStats {
     }
 }
 fn observe(profile: &mut PassProfile, stats: &FrameStats) {
-    profile.observe(stats, &ViewConfiguration::default(), (1920, 540), 7, true);
+    let mut admission = viz_scene::gpu_timing::TimingAdmission::new(
+        viz_scene::gpu_timing::TimingCadence::OneHz,
+        false,
+    );
+    admission.begin_frame(true, false);
+    profile.observe(
+        stats,
+        &ViewConfiguration::default(),
+        (1920, 540),
+        7,
+        true,
+        Some(admission.coverage(3, 2)),
+    );
 }
 
 #[test]
@@ -56,6 +68,10 @@ fn provenance_and_monotonic_sample_identity_gate_actual_jsonl_rows() {
         .collect();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0]["gpu_sample_id"], 7);
+    assert_eq!(rows[0]["timing_coverage"]["diagnosticCadence"], "oneHz");
+    assert_eq!(rows[0]["timing_coverage"]["framesAdmitted"], 1);
+    assert_eq!(rows[0]["timing_coverage"]["completedReadbacks"], 3);
+    assert_eq!(rows[0]["timing_coverage"]["validSamples"], 2);
     assert_eq!(rows[0]["gpu_provenance_valid"], true);
     assert_eq!(rows[0]["pixels"], 1920 * 540);
     assert_eq!(rows[0]["pass_labels"][2], "opaque");

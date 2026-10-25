@@ -36,7 +36,7 @@ impl Renderer {
     }
 
     pub fn headless(width: u32, height: u32) -> Result<Self, String> {
-        Ok(Self::build(Gpu::headless(width, height)?, None))
+        Self::build(Gpu::headless(width, height)?, None)
     }
 
     /// A separate full-budget still renderer; it never adopts live adaptive reductions.
@@ -72,13 +72,13 @@ impl Renderer {
         target: &dyn PresentationSurface,
         icon: Option<&[u8]>,
     ) -> Result<Self, String> {
-        Ok(Self::build(Gpu::new(target)?, icon))
+        Self::build(Gpu::new(target)?, icon)
     }
 
-    fn build(gpu: Gpu, icon: Option<&[u8]>) -> Self {
-        let timer = GpuTimer::new(&gpu.device, &gpu.queue, gpu.timestamps);
+    fn build(gpu: Gpu, icon: Option<&[u8]>) -> Result<Self, String> {
+        let timer = GpuTimer::new(&gpu.device, &gpu.queue, gpu.timestamps)?;
         let overlay = OverlayRenderer::new(&gpu.device, &gpu.queue, gpu.format, icon);
-        Self {
+        Ok(Self {
             active_samples: 1,
             gpu,
             shaded: None,
@@ -97,7 +97,7 @@ impl Renderer {
             active_draft: false,
             capture_quality: false,
             pending_frame_interval: None,
-        }
+        })
     }
 
     pub fn adapter_name(&self) -> &str {
@@ -203,6 +203,21 @@ impl Renderer {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn set_gpu_timing_test_cadence(
+        &mut self,
+        cadence: viz_scene::gpu_timing::TimingCadence,
+    ) {
+        if let Some(timer) = self.timer.as_mut() {
+            timer.set_test_cadence(cadence);
+        }
+    }
+
+    /// Timing-only admission and actual completed readback coverage; no presentation claim.
+    pub fn gpu_timing_coverage(&self) -> Option<viz_scene::gpu_timing::TimingCoverage> {
+        self.timer.as_ref().map(GpuTimer::coverage)
+    }
+
     pub fn render_into(
         &mut self,
         target: &wgpu::TextureView,
@@ -233,6 +248,7 @@ impl Renderer {
         let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         if let Some(timer) = self.timer.as_mut() {
             timer.collect();
+            timer.begin_frame(view.mode, view.quality);
         }
         let (frame, output, acquire_micros) = self.acquire_output()?;
         let context = FrameContext {

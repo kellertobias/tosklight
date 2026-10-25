@@ -719,6 +719,7 @@ impl PaneState {
                 self.size,
                 self.scene.revision,
                 self.following_preload,
+                self.renderer.gpu_timing_coverage(),
             );
             if let Some(candidate) = benchmark_candidate {
                 benchmark.last_success = Some(candidate);

@@ -67,6 +67,7 @@ pub(crate) struct CompositorMeasurements {
     pub gpu_samples: Vec<CompositorGpuSample>,
     pub gpu_timing_unavailable: Option<&'static str>,
     pub actual_displayed_frames: Option<u64>,
+    pub timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
     pub measurement_boundary: &'static str,
 }
 
@@ -77,16 +78,21 @@ pub(super) struct Measurement {
 }
 
 impl Measurement {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, supported: bool) -> Self {
-        Self {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        supported: bool,
+    ) -> Result<Self, String> {
+        let admission = viz_scene::gpu_timing::TimingAdmission::from_environment("compositor")?;
+        Ok(Self {
             stats: CompositorMeasurements {
                 gpu_timing_unavailable: (!supported).then_some("TIMESTAMP_QUERY unsupported"),
                 measurement_boundary: "CPU is elapsed wall time. GPU samples cover only the compositor render pass; submissions and GPU completions are not actual displayed frames. Sparse samples do not estimate total GPU time per second.",
                 ..Default::default()
             },
-            timer: supported.then(|| GpuTiming::new(device, queue)),
+            timer: supported.then(|| GpuTiming::new(device, queue, admission)),
             submission_id: 0,
-        }
+        })
     }
 
     pub fn collect(&mut self, device: &wgpu::Device) {
@@ -112,6 +118,11 @@ impl Measurement {
     }
 
     pub fn drain(&mut self) -> CompositorMeasurements {
+        self.stats.timing_coverage = self.timer.as_ref().map(|timer| {
+            timer
+                .admission
+                .coverage(timer.completed_samples, timer.valid_samples)
+        });
         let empty = CompositorMeasurements {
             gpu_timing_unavailable: self.stats.gpu_timing_unavailable,
             measurement_boundary: self.stats.measurement_boundary,
@@ -134,6 +145,11 @@ pub(super) struct GpuTiming {
     phase: ReadbackPhase,
     pending: Option<CompositorGpuSample>,
     next_sample_id: u64,
+    completed_samples: u64,
+    valid_samples: u64,
+    admission: viz_scene::gpu_timing::TimingAdmission,
+    diagnostic: bool,
+    frame_admitted: bool,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -145,7 +161,11 @@ enum ReadbackPhase {
 }
 
 impl GpuTiming {
-    fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        admission: viz_scene::gpu_timing::TimingAdmission,
+    ) -> Self {
         Self {
             device: device.clone(),
             queue: queue.clone(),
@@ -172,21 +192,37 @@ impl GpuTiming {
             phase: ReadbackPhase::Idle,
             pending: None,
             next_sample_id: 0,
+            completed_samples: 0,
+            valid_samples: 0,
+            admission,
+            diagnostic: true,
+            frame_admitted: false,
         }
     }
 
+    pub fn set_diagnostic(&mut self, diagnostic: bool) {
+        self.diagnostic = diagnostic;
+    }
+
+    pub fn begin_frame(&mut self) {
+        self.frame_admitted = self.admission.begin_frame(
+            self.diagnostic,
+            self.pending.is_some() || self.cancelled.load(Ordering::Acquire),
+        );
+    }
+
     pub fn writes(&self) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        (self.pending.is_none() && !self.cancelled.load(Ordering::Acquire)).then_some(
-            wgpu::RenderPassTimestampWrites {
+        (self.frame_admitted && self.pending.is_none() && !self.cancelled.load(Ordering::Acquire))
+            .then_some(wgpu::RenderPassTimestampWrites {
                 query_set: &self.queries,
                 beginning_of_pass_write_index: Some(0),
                 end_of_pass_write_index: Some(1),
-            },
-        )
+            })
     }
 
     pub fn resolve(&mut self, submission_id: u64, scope: CompositorScope) -> bool {
-        if self.pending.is_some() || self.cancelled.load(Ordering::Acquire) {
+        if !self.frame_admitted || self.pending.is_some() || self.cancelled.load(Ordering::Acquire)
+        {
             return false;
         }
         // Reserve this query pair and its immutable identity only. Metal timestamp counters
@@ -269,10 +305,12 @@ impl GpuTiming {
                 self.readback.unmap();
                 let mut sample = self.pending.take().ok_or(())?;
                 self.phase = ReadbackPhase::Idle;
+                self.completed_samples = self.completed_samples.saturating_add(1);
                 let Some(micros) = decoded else {
                     *invalid = invalid.saturating_add(1);
                     return Ok(None);
                 };
+                self.valid_samples = self.valid_samples.saturating_add(1);
                 sample.gpu_micros = micros;
                 Ok(Some(sample))
             }

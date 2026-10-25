@@ -1,6 +1,8 @@
 //! Visible connection, input, and fallback state. Every failure names its boundary so the
 //! operator never sees a silent indefinite spinner.
 
+pub mod timing;
+
 use std::fmt;
 
 /// Where the current connection stands. Every variant is presentable text.
