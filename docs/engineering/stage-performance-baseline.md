@@ -363,3 +363,46 @@ or changed executable fails the run. Non-isolated workflows remain separate.
 For opt-in CPU/wake investigation, set `LIGHT_OUTPUT_PHASE_DIAGNOSTICS=all` and
 include `light_output=info,light_engine=info,light_headless_runtime=info` in
 `RUST_LOG`; the normal default filter does not enable every diagnostic target.
+
+
+### Fine timing and owned comparison
+
+TL-872 preserves the original 20-bin histogram and adds an optional versioned
+histogram with fixed runtime storage: 250 µs inclusive bins through 32 ms and
+explicit wider tails. Older health JSON remains readable; missing, partial or
+overflowed fine data is not invented. Wire generation follows the normal typed
+contract workflow. Recording adds one bounded counter update under the existing
+lock, with no per-tick allocation; a health snapshot copies about 1 KiB more.
+
+The collector validates geometry, version and count conservation across resets
+and both windows. It retains the old coarse comparison. Fine p99 is an interval,
+so regression is bounded by Stage lower minus control upper through Stage upper
+minus control lower. The unchanged allowance is max(1 ms, 5% of control). A pass
+requires the regression upper bound to fit the smallest possible allowance;
+a proven excess fails, and overlap remains indeterminate and cannot pass.
+
+The clean owned 45 s Draft report `2026-10-25T04-35-46-060Z` proves a real failure:
+control p99 is 7,501–7,750 µs, Stage p99 is 8,751–9,000 µs, and regression is
+1,001–1,499 µs against the 1,000 µs allowance. Both had zero missed deadlines and
+send errors. Coarse 8→12 ms remains visible. Backend/listener PID 3439 and its
+SHA256 are verified unchanged at both endpoints in `isolatedServerIdentity`.
+This result is not dismissed as a coarse-bucket artifact.
+
+The earlier owned instrumented report `2026-10-25T04-09-02-052Z` has valid CPU
+and wait observations: exact tick-wall p99 8.137→8.691 ms and timer-resume p99
+3.846→3.793 ms. Some extra caller CPU accompanies increased wall time, but worker
+CPU decreases. These observations do not establish process-total CPU growth,
+saturation, parking or preemption as the cause. Instrumented short runs remain
+separate from clean acceptance.
+
+### Presentation calibration remains unavailable
+
+The bounded Swift probe preserves requested time, callback arrival and SDK
+`presentedTime` as separate fields. It validates internal-display containment,
+layer attachment and process ownership; it never synthesizes a display sample.
+Three retained attempts under `presentation-calibration-*` each completed one
+GPU command but received no actual presentation callback before the timeout.
+The first trace contains a matching CA request/IOSurface and no handler event.
+Later runs verify visibility and layer attachment but still report actual time
+zero. These are unsuccessful calibration experiments, not Stage FPS evidence.
+The tool exits on its bounded failure and does not leave a monitor running.
