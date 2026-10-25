@@ -1122,3 +1122,5 @@ mod provider_tests;
 mod input_monitor_tests;
 
 mod output_demand;
+
+mod source_pacing;

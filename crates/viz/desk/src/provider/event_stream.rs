@@ -1,5 +1,6 @@
 //! The configuration event stream a desk connection follows once its scene is up.
 
+use super::source_pacing::SourcePacing;
 use super::{
     Command, ConnectionState, DeskConnection, Message, ProviderDiagnostics, read_scene, read_view,
     replaces_the_show, scene_affecting, view_affecting,
@@ -8,7 +9,14 @@ use crate::client::DeskClient;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::time::Duration;
+use std::{
+    future::Future,
+    pin::Pin,
+    time::{Duration, Instant},
+};
+
+type SourceRead<'a> =
+    Pin<Box<dyn Future<Output = (Instant, Option<super::output_demand::OutputRead>)> + Send + 'a>>;
 
 type EventSocket =
     tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
@@ -37,24 +45,31 @@ pub(super) async fn watch(
         let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
     }
 
+    let mut pacing = SourcePacing::new(Instant::now());
+    let mut source_read: Option<SourceRead<'_>> = None;
     loop {
         if stop.load(Ordering::Relaxed) {
             return;
         }
-        if connection.values_from_desk_output {
-            let request = demand.snapshot();
-            if let Some(read) = request.read(client).await {
-                let _ = outbox.send(Message::OutputRead(read));
-            }
-        }
-        let poll = if connection.values_from_desk_output {
-            // Stage's source contract is 10 Hz. Rendering remains independent and can interpolate
-            // physical motion between these authoritative desk-output snapshots.
-            100
-        } else {
-            500
-        };
         let next = tokio::select! {
+            completed = async { source_read.as_mut().expect("guarded active source read").await }, if source_read.is_some() => {
+                let (started, read) = completed;
+                pacing.completed(started);
+                source_read = None;
+                if let Some(read) = read { let _ = outbox.send(Message::OutputRead(read)); }
+                continue;
+            }
+            _ = tokio::time::sleep_until(tokio::time::Instant::from_std(pacing.deadline())),
+                if connection.values_from_desk_output && source_read.is_none() => {
+                source_read = Some(Box::pin(async {
+                    // This instant is captured on the future's FIRST poll, not its creation:
+                    // configuration work may run before the HTTP future is first serviced.
+                    let started = Instant::now();
+                    let request = demand.snapshot();
+                    (started, request.read(client).await)
+                }));
+                continue;
+            }
             command = orders.recv() => {
                 match command {
                     None => return,
@@ -71,7 +86,8 @@ pub(super) async fn watch(
                 }
             }
             message = socket.next() => message,
-            _ = tokio::time::sleep(Duration::from_millis(poll)) => continue,
+            // Preserve non-embedded idle behavior and observe shutdown during slow HTTP.
+            _ = tokio::time::sleep(Duration::from_millis(500)) => continue,
         };
         let Some(Ok(message)) = next else {
             let _ = outbox.send(Message::Connection(ConnectionState::Stale {
@@ -86,59 +102,72 @@ pub(super) async fn watch(
         let Some(frame) = crate::wire::EventFrame::parse(&text) else {
             continue;
         };
-        if frame.kind == "renderer_settings_changed" {
-            if let Some(settings) = frame.renderer_settings {
-                let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
-            } else if let Some(settings) = client.renderer_settings().await {
-                let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
-            }
-            continue;
-        }
-        // A different show is a different scene: its values, mappings and identity all change
-        // together, so it is staged as a whole rather than merged into what is displayed.
-        if replaces_the_show(&frame.kind) {
-            let _ = outbox.send(Message::Resync(format!("{} changed the scene", frame.kind)));
+        if !apply_configuration_event(frame, client, endpoint, connection, outbox).await {
             return;
         }
-        // A preview change is one small re-read, not a scene resynchronisation: the rig has not
-        // moved, only what it is being lit with.
-        if frame.kind == "preview_values_changed" {
-            if let Some(preview) = client.preview_values().await {
-                let _ = outbox.send(Message::Preview(Box::new(preview)));
-            }
-            continue;
+    }
+}
+
+async fn apply_configuration_event(
+    frame: crate::wire::EventFrame,
+    client: &DeskClient,
+    endpoint: &str,
+    connection: &DeskConnection,
+    outbox: &Sender<Message>,
+) -> bool {
+    if frame.kind == "renderer_settings_changed" {
+        if let Some(settings) = frame.renderer_settings {
+            let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
+        } else if let Some(settings) = client.renderer_settings().await {
+            let _ = outbox.send(Message::RendererSettings(Box::new(settings)));
         }
-        if frame.kind == "visualizer_selection_changed" {
-            if let Some(selection) = client.selection().await {
-                let _ = outbox.send(Message::Selection(Box::new(selection)));
-            }
-            continue;
+        return true;
+    }
+    // A different show is a different scene: its values, mappings and identity all change
+    // together, so it is staged as a whole rather than merged into what is displayed.
+    if replaces_the_show(&frame.kind) {
+        let _ = outbox.send(Message::Resync(format!("{} changed the scene", frame.kind)));
+        return false;
+    }
+    // A preview change is one small re-read, not a scene resynchronisation: the rig has not
+    // moved, only what it is being lit with.
+    if frame.kind == "preview_values_changed" {
+        if let Some(preview) = client.preview_values().await {
+            let _ = outbox.send(Message::Preview(Box::new(preview)));
         }
-        // The desk moving a camera is not a change of rig: nothing is re-read but the view.
-        if view_affecting(&frame.kind) {
-            if let Some(view) = read_view(client, connection).await {
-                let _ = outbox.send(Message::View(Box::new(view)));
-            }
-            continue;
+        return true;
+    }
+    if frame.kind == "visualizer_selection_changed" {
+        if let Some(selection) = client.selection().await {
+            let _ = outbox.send(Message::Selection(Box::new(selection)));
         }
-        if !scene_affecting(&frame.kind) {
-            continue;
+        return true;
+    }
+    // The desk moving a camera is not a change of rig: nothing is re-read but the view.
+    if view_affecting(&frame.kind) {
+        if let Some(view) = read_view(client, connection).await {
+            let _ = outbox.send(Message::View(Box::new(view)));
         }
-        match read_scene(client, endpoint, connection).await {
-            Ok((plan, mappings, diagnostics)) => {
-                let _ = outbox.send(Message::delta(plan, mappings, diagnostics));
-            }
-            Err(error) => {
-                // The re-read is the only thing that failed; the displayed scene is still the
-                // last good one, so this asks for the full path rather than pretending.
-                let _ = outbox.send(Message::Resync(format!(
-                    "{} changed the scene, and re-reading it failed: {}",
-                    frame.kind, error.detail
-                )));
-                return;
-            }
+        return true;
+    }
+    if !scene_affecting(&frame.kind) {
+        return true;
+    }
+    match read_scene(client, endpoint, connection).await {
+        Ok((plan, mappings, diagnostics)) => {
+            let _ = outbox.send(Message::delta(plan, mappings, diagnostics));
+        }
+        Err(error) => {
+            // The re-read is the only thing that failed; the displayed scene is still the
+            // last good one, so this asks for the full path rather than pretending.
+            let _ = outbox.send(Message::Resync(format!(
+                "{} changed the scene, and re-reading it failed: {}",
+                frame.kind, error.detail
+            )));
+            return false;
         }
     }
+    true
 }
 
 /// Open the desk's event stream and subscribe to the projections the renderer follows.
@@ -199,3 +228,6 @@ async fn open_event_stream(
     }
     Some(socket)
 }
+
+#[cfg(test)]
+mod tests;
