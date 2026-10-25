@@ -48,6 +48,14 @@ export function evaluateNativeBaseline(complete, metadata) {
     if (observations?.counts?.[counter] > 0) failures.push(`Helper observation ${counter}`);
   const compositor = observations?.compositor;
   if (compositor?.overflow || compositor?.invalid || compositor?.totals?.gpuSampleOverflow || compositor?.totals?.gpuReadbackErrors || compositor?.totals?.errors) failures.push("Compositor observation loss or error");
+  for (const [counter, count] of Object.entries(complete.nativeStage?.observerOverflow ?? {}))
+    if (count > 0) failures.push(`Native retained observation ${counter} overflow`);
+  if (complete.nativeStage?.hostObservationOverflow > 0 || complete.nativeStage?.collectorIntegrity?.passed === false)
+    failures.push("Native collector retention integrity failed");
+  failures.push(...(metadata.resources?.longRun?.failures ?? []));
+  const output = metadata.outputComparison;
+  if (output && (!output.boundedWindowGatePassed || output.stageWindowDeadlineMisses > 0 || output.stageWindowSendErrors > 0))
+    failures.push("Stage output scheduler comparison failed");
   const phases = configuration.phases ? evaluateBaselinePhases(complete, configuration, matches) : null;
   if (phases) failures.push(...phases.failures);
   return { schemaVersion: 1, kind: "native-stage-before-optimization-measurement", ...metadata,
@@ -55,7 +63,7 @@ export function evaluateNativeBaseline(complete, metadata) {
     baselineMeasurementReady: failures.length === 0,
     acceptanceGateEnforced: false,
     displayed60Fps: { status: "unverified", reason: "Requires correlated platform display trace; submissions are not displayed frames" },
-    gpuReduction: { status: "unverified", reason: "Before-state only; sparse timing samples are not total GPU time per second" },
+    gpuReduction: { status: "unverified", reason: "Sparse timing samples are not total GPU time per second or a matched-rate reduction" },
     measurementBoundaries: complete.nativeStage?.measurementBoundaries ?? null,
     gpuObservations: observations ?? null, ...(phases ? { phases } : {}) };
 }

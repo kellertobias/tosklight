@@ -7,6 +7,9 @@ import {
 	benchmarkStageEnabled,
 	benchmarkSurfaces,
 	NativeHostObservations,
+	nativeBenchmarkObservationPolicy,
+	nativeBenchmarkRetentionLimits,
+	retainNativeHistory,
 } from "./nativePackagedBenchmarkMode";
 import { recordStaticCompositorBatch, newBaselinePhaseReport, runBaselinePhases, validateBaselinePhases, type BaselinePhaseReport } from "./nativePackagedStagePhases";
 import { NativeStageReadiness } from "./nativePackagedStageReadiness";
@@ -40,6 +43,7 @@ function appendNativeFrames(
 	target: NativeFrameSample[],
 	samples: StagePaneBenchmarkSample[],
 	latestByPane: Map<string, NativeFrameSample>,
+	overflow: { frames: number },
 ) {
 	for (const frame of samples) {
 		const converted: NativeFrameSample = {
@@ -71,13 +75,10 @@ function appendNativeFrames(
 		) {
 			continue;
 		}
-		target.push(converted);
+		if (!retainNativeHistory(target, converted, nativeBenchmarkRetentionLimits.frames)) overflow.frames += 1;
 		latestByPane.set(frame.paneId, converted);
 	}
 }
-
-const MAX_ACTIVITY_OBSERVATIONS = 20_000;
-const MAX_HEARTBEAT_OBSERVATIONS = 10_000;
 
 function retainNativeObservations(
 	batch: StagePaneBenchmarkObservations,
@@ -93,15 +94,12 @@ function retainNativeObservations(
 		latest.set(`${frame.paneId}\0${frame.attachmentId}`, frame);
 	}
 	for (const frame of latest.values()) {
-		if (activity.length < MAX_ACTIVITY_OBSERVATIONS) activity.push(frame);
-		else overflow.activity += 1;
+		if (!retainNativeHistory(activity, frame, nativeBenchmarkRetentionLimits.activity)) overflow.activity += 1;
 	}
 	// Keep every heartbeat in arrival order so foreign/reordered generations cannot be
 	// hidden by deduplication. An overflow preserves a bounded prefix and fails validation.
 	for (const heartbeat of batch.heartbeats) {
-		if (heartbeats.length < MAX_HEARTBEAT_OBSERVATIONS)
-			heartbeats.push(heartbeat);
-		else overflow.heartbeats += 1;
+		if (!retainNativeHistory(heartbeats, heartbeat, nativeBenchmarkRetentionLimits.heartbeats)) overflow.heartbeats += 1;
 	}
 }
 
@@ -120,7 +118,7 @@ interface NativeObservationContext {
 	activity: { current: StagePaneBenchmarkSample[] };
 	heartbeats: { current: StagePaneBenchmarkHeartbeat[] };
 	observerOverflow: {
-		current: { activity: number; heartbeats: number; errors: number };
+		current: { activity: number; heartbeats: number; errors: number; frames: number; timeline: number };
 	};
 	timeline: { current: Array<Record<string, unknown>> };
 	quality: { current: StagePaneBenchmarkSample["quality"] };
@@ -186,6 +184,7 @@ async function consumeNativeBatch(context: NativeObservationContext, batch: Stag
 		frames.current,
 		batch.frames,
 		latestFrameByPane.current,
+		observerOverflow.current,
 	);
 	const renderSamples = frames.current.slice(first).map((frame) => ({
 		benchmarkSequence: `${frame.paneId}:${frame.sequence}`,
@@ -198,14 +197,14 @@ async function consumeNativeBatch(context: NativeObservationContext, batch: Stag
 		geometries: frame.instances,
 		textures: 0,
 	}));
-	timeline.current.push({
+	if (!retainNativeHistory(timeline.current, {
 		recordedAt: recordedAt,
 		quality: quality.current,
 		renders: frames.current.length,
 		newRenders: renderSamples,
 		latestRender: renderSamples.at(-1) ?? null,
 		mainDocumentFocused: document.hasFocus(),
-	});
+	}, nativeBenchmarkRetentionLimits.timeline)) observerOverflow.current.timeline += 1;
 }
 
 function useBaselinePhaseExercise(context: NativeObservationContext, enabled: boolean) {
@@ -284,7 +283,8 @@ async function finishNativeBenchmark(
 			observerOverflow.current,
 		);
 	const samples = batch?.frames ?? [];
-	appendNativeFrames(frames.current, samples, latestFrameByPane.current);
+	appendNativeFrames(frames.current, samples, latestFrameByPane.current, observerOverflow.current);
+	const stageCompletedEpochMillis = Date.now();
 	await desktop.appendPackagedStageBenchmarkSample({
 		schemaVersion: 2,
 		kind: "complete",
@@ -293,9 +293,18 @@ async function finishNativeBenchmark(
 		config,
 		stageEnabled: config.stageEnabled,
 		startedAt,
-		recordedAt: new Date().toISOString(),
+		recordedAt: new Date(stageCompletedEpochMillis).toISOString(),
 		activeUiSurfaces: benchmarkSurfaces(config),
 		nativeStage: {
+			stageStartedEpochMillis: context.stageBeganAt.current,
+			stageCompletedEpochMillis,
+			requestedStageDurationMillis: config.durationSeconds * 1_000,
+			observationPolicy: nativeBenchmarkObservationPolicy(config),
+			hostObservationOverflow: context.hostObservations.current.overflow,
+			collectorIntegrity: {
+				passed: context.hostObservations.current.overflow === 0 && Object.values(observerOverflow.current).every((count) => count === 0),
+				reason: "Every rejected retained row or observation error invalidates collector evidence; bounded prefixes are never complete-run evidence after overflow.",
+			},
 			phases: context.phases.current,
 			measurementBoundaries: nativeStageMeasurementBoundaries,
 			gpuObservations: context.gpuObservations.current.report(),
@@ -339,6 +348,7 @@ export function NativePackagedStageBenchmarkApp({
 }: {
 	config: PackagedStageBenchmarkConfig;
 }) {
+	nativeBenchmarkObservationPolicy(config);
 	validateBaselinePhases(config);
 	const desktop = useDesktopBridge();
 	const captureExercise = useMemo(() => config.captureExercise ? new PackagedStageCaptureExercise(desktop) : null, [config.captureExercise, desktop]);
@@ -384,7 +394,7 @@ function NativeBenchmark({ config, captureExercise }: { config: PackagedStageBen
 		useNativeFrameObservations();
 	const modeAcknowledged = useRef(false);
 	const heartbeats = useRef<StagePaneBenchmarkHeartbeat[]>([]);
-	const observerOverflow = useRef({ activity: 0, heartbeats: 0, errors: 0 });
+	const observerOverflow = useRef({ activity: 0, heartbeats: 0, errors: 0, frames: 0, timeline: 0 });
 	const sampleInFlight = useRef<Promise<void> | null>(null);
 	const finishing = useRef(false);
 	const readiness = useRef(new NativeStageReadiness());
@@ -458,7 +468,7 @@ function NativeBenchmark({ config, captureExercise }: { config: PackagedStageBen
 		sampleNativeBenchmark(observation);
 		const sample = window.setInterval(
 			() => sampleNativeBenchmark(observation),
-			stageMode ? 100 : 1_000,
+			stageMode ? nativeBenchmarkObservationPolicy(config).pollingIntervalMillis : 1_000,
 		);
 
 		return () => {

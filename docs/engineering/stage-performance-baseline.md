@@ -5,6 +5,22 @@ the Default Stage and a deterministic large scene. It combines the existing
 frontend Stage diagnostics with the authenticated runtime output and
 visualization diagnostics.
 
+## Current native acceptance boundary (TL-852)
+
+The authoritative scenarios are `docs/testing/16-stage-performance.md`. Preserve the legacy 10 Hz source cadence, 120 ms source-to-reported-native-frame p95 and 200 ms hard delivery/gap ceilings. The protocol's `FramePresented` is a helper submission witness, not an on-glass presentation event. A passing delivery collector does not prove displayed 60 FPS.
+
+TL-852 proposes a separate five-minute active display gate: at least 59 actually displayed distinct Stage FPS, missed 60 Hz opportunities at or below 1%, interval p95 at or below 18.5 ms and p99 at or below 33.4 ms. Declare drawable identity, presentation timebase and opportunity denominator. On the internal 120 Hz panel, the intentional Stage target is 60 Hz; alternate unused monitor refreshes are not misses. These display targets remain unproven without correlated platform presentation evidence.
+
+Proposed GPU reductions are at least 70% for Draft and 90% for Lines against the recorded before build at matched actual 60 Hz, using whole-Stage GPU time per second. Include both helper lanes and Control compositing, account for other load and overlapping scopes, and retain comparable camera/scene/look/transport/physical pixels. Sparse timestamp sums and a submission cap cannot establish these percentages. Keep missing, short or unmatched evidence explicitly unverified. See `docs/engineering/stage-gpu-measurement.md` for instrument scope and trace limits.
+
+The fixed matrix measures one 1920 × 1080 physical drawable or two 1920 × 540 Live/Follow Preload drawables: the same total pixel area. Record actual DPR, refresh, native GPU/backend, bundle/build identity and helper/compositor ownership. Private benchmark overrides can measure Full3d Draft as well as Lines; they do not change ordinary Control policy. The internal display is selected and containment verified before showing a benchmark window. Isolated HTTP/OSC ports and data/output directories preserve the operator's active desk and persistent settings.
+
+Static, moving-camera, resident-hidden and revealed phases are distinct evidence. After a healthy static/hidden settling boundary, require zero recurring helper submissions and compositor acquire/submission admissions over verified interior native intervals with per-pane coverage. Missing telemetry, gaps and unknown boundary spans are not zero work. Keep helpers resident and CPU/input state current; on reveal show the latest state within the existing 200 ms ceiling without replaying old frames. Admission counters alone cannot prove whole-Stage zero GPU time. Neither idle savings nor a successful short phase substitutes for the active 500-instance display/GPU targets.
+
+## Historical browser collector
+
+The following browser workflow and its detailed historical workloads are diagnostic evidence. They do not establish current packaged/native capacity or TL-852 acceptance. The 1,000-instance profile below spans 37 universes and exceeds the current 24-universe supported output cap; it is not a supported-capacity claim.
+
 Run the focused collector with:
 
 ```sh
@@ -83,8 +99,7 @@ npm run benchmark:packaged-stage -- 300 large-stage
 npm run benchmark:packaged-stage -- 1 improved-beam-spike
 ```
 
-The runner stops the already-open development desk and service, launches the
-exact debug Tauri application with an isolated fresh benchmark data directory,
+Without an isolated-port override, the runner stops the already-open development desk and service. For reference-host review use `LIGHT_PACKAGED_STAGE_PORT=5160` plus an unused `LIGHT_PACKAGED_STAGE_OSC_PORT`: this starts the bundled server beside the user desk and stops only owned processes. The isolated path launches the packaged executable directly; macOS restoration overrides are process-local arguments, not persistent user defaults. Both paths use a fresh benchmark data directory,
 authenticates through the production session and Patch routes, and prepares the
 requested profile before either measured Stage surface mounts. On macOS it
 launches the `.app` through LaunchServices; on Windows and Linux it launches
@@ -96,13 +111,13 @@ Dynamic instances. The runner releases the benchmark-only preparation barrier on
 after the profile is ready, then records a consolidated report under
 `.artifacts/performance/stage/`.
 
-The benchmark surface keeps independent Live and Follow Preload views open,
-cycles every render quality, exercises 2D/3D native surfaces, resizes their
-shared drawable, tears down and recreates the live renderer helper, and drives
+The historical lifecycle exercise kept independent Live and Follow Preload views open,
+cycled render qualities, exercised 2D/3D surfaces, resized the
+shared drawable, tore down and recreated the live renderer helper, and drove
 alternating Live and Preload values through the
-production command and Preload lifecycle capabilities. Before either Stage
-surface mounts, it drives the same changes for an equal-duration no-Stage
-output baseline. The runner takes authenticated production diagnostics
+production command and Preload lifecycle capabilities. Current lifecycle profiles preserve the Control Draft/wireframe admission rules; explicit fixed-layout matrix runs instead select one mode/quality and suppress lifecycle resize, show-switch and suspend exercises. Before either Stage
+surface mounts, the runner drives a bounded no-Stage
+output baseline capped at 300 seconds. The runner takes authenticated production diagnostics
 snapshots before the baseline, at the Stage boundary, and after the Stage
 window. It subtracts the fixed scheduler-duration histogram buckets, enforces
 the 1 ms-or-5-percent p99 rule, and rejects Stage-window deadline misses or send
@@ -124,11 +139,11 @@ size, and lifecycle transition per lane, so a long run cannot grow an
 unbounded frontend history. The report is marked
 `measurementSurface: packaged-tauri-native-stage` and enforces the 120 ms p95 and
 200 ms hard changing-frame ceilings, the 200 ms presentation-gap ceiling, both
-lane samples, all four qualities, and native renderer restart/resize ownership. It
+lane samples, Control-admitted view/quality, and native renderer restart/resize ownership for lifecycle runs. Explicit fixed-layout conditions record their selected mode/quality separately. It
 also records the requested profile and verified fixture/instance counts,
 native drawable dimensions, instance and draw-call counts, degraded frames,
-and measured CPU acquisition and GPU submission time from the production
-renderer helper. Process resident memory is sampled separately by the runner.
+and elapsed renderer/acquire wall time plus scoped sparse GPU pass timings from the production
+renderer helper. These are neither executing-thread CPU nor displayed-frame timings. Process resident memory is sampled separately by the runner.
 
 The `improved-beam-spike` profile is a synchronous packaged WebGL capability
 experiment rather than a latency-duration run. It prepares the same 500-instance
@@ -153,10 +168,11 @@ It does not complete the full Phase 0 gate without the canonical production
 Default Stage and large-scene packaged runs. Windows and Linux packaged reports
 remain separate release gates.
 
-The duration argument applies independently to the no-Stage and Stage windows,
-so `300` produces a five-minute baseline followed by a five-minute measured
-Stage window. Use 300 seconds for the canonical comparative latency/output runs
-and 1800 seconds for the retained-resource run. Keep the JSON reports with the
+The duration argument specifies the Stage window; the no-Stage control window
+is `min(duration, 300)` seconds. Thus `300` requests five minutes each, while
+`1800` requests a five-minute control baseline and a 30-minute Stage window.
+Use 300 seconds for canonical comparative latency/output runs and 1800 seconds
+for the retained-resource run. Keep the JSON reports with the
 completion evidence; a shorter development run does not replace either release
 gate.
 
@@ -166,16 +182,50 @@ second, excludes the first Stage minute as warmup, and rejects a fitted growth
 slope above 1 MiB per minute. It compares the first and last five-minute
 post-warmup render windows, rejects growth in native instance or draw-call
 ownership, rejects degraded frames, and requires the late-window CPU frame p95
-to stay at or below 16.7 ms. Main-process resident memory does not claim
-complete Metal driver allocation ownership; native frame telemetry is the
-authoritative renderer evidence.
+to stay at or below 16.7 ms. The sampled RSS covers only the `light-desktop` main process; it excludes separate WebView processes and GPU/driver allocations. Native frame telemetry supplies separate renderer ownership evidence, not a complete VRAM measurement.
+
+The long-run evaluator must use independently recorded Stage start/end times,
+not infer its window from the first/last retained render or memory sample. Require
+the full declared Stage duration, warmup and first/last five-minute lane coverage;
+report actual sampled spans and gaps. Ordinary runs of at least 1800 seconds poll every 250 ms; short, phase and capture runs use 100 ms. The declared maximum duration is 3600 seconds. Histories retain bounded prefixes (32,000 host/timeline rows, 64,000 activity rows, 24,000 heartbeats and 100,000 source-deduplicated frames). GPU submission aggregates consume every drained native batch before source deduplication. Special phase/capture runs still fail if their higher poll rate exhausts a bound. Any rejected row, overflow or observation error
+invalidates complete-run evidence: a retained prefix cannot become a passing
+30-minute report. A static interval may legitimately have no new submissions,
+but still requires resident/native ownership and coverage witnesses. A short or
+truncated run, missing boundary clock, missing lane, or missing final observation
+must remain failed/incomplete rather than pass on a few early samples.
 
 The macOS user session must remain unlocked with ToskLight visible. The runner
 reports a stalled native presentation stream as a failed cadence/presentation
 gate rather than treating control timers or data delivery as packaged
 performance evidence.
 
-## Evidence boundary
+## Separate frozen 4K verification (TL-851)
+
+Run each engine through an actual 3840 × 2160 render from frozen invocation-time
+scene/values/media/camera/time and local preferences, starting with live Draft or
+Lines. Native Ultra uses an isolated full-budget capture renderer and upgrades
+3D outline/simple views to the full lighting path without changing live settings.
+Keep orthographic views orthographic and disclose the 16:9 side-framing change.
+With usable Blender, the operator chooses native Ultra or Blender/Cycles Ultimate;
+without usable Blender, native Ultra remains available. Verify saved engine,
+dimensions/framing/path, visible progress/failure, owned cancellation/cleanup and
+subsequent-job admission. Keep the native and Ultimate PNGs and their job identities.
+
+Ultimate's supported-feature guard and chooser disclosure are part of the result:
+plan symbols/outlines and active laser scan transfer require Ultra; procedural
+finishes, absent grid/selection guides, native bloom and physical beam/source/fog/
+GI/AgX differences are explicit limitations. Freeze missing-media fallback and
+availability too; a later server image cannot replace invocation-time pixels.
+Do not claim full native/Cycles or physical parity.
+
+The explicit isolated `live-ultra` packaged exercise drives actual DOM controls,
+waits for accepted native Live readiness, chooses Ultra and retains Saved UI plus
+a decoded, CRC-checked job-associated PNG. Its private dual/internal-display run
+and output directory are separate from performance acceptance. It records output
+counters during capture, but does not prove physical pointer/shortcut behavior,
+visual acceptance or the 60 FPS/GPU targets; the 4K worker may compete for GPU time.
+
+## Historical browser evidence boundary
 
 This collector runs the production frontend in Chromium under Playwright. It
 does **not** control or measure the packaged Tauri WebView. Every JSON report

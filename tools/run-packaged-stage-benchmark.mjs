@@ -2497,6 +2497,13 @@ function evaluate(
 	};
 }
 
+function nativeStageMeasurementWindow(complete) {
+	return {
+		startedAt: complete.nativeStage?.stageStartedEpochMillis,
+		completedAt: complete.nativeStage?.stageCompletedEpochMillis,
+	};
+}
+
 function evaluateNativeStage(
 	complete,
 	duration,
@@ -2508,6 +2515,16 @@ function evaluateNativeStage(
 ) {
 	if (fixedBaseline) return evaluateNativeBaseline(complete, {
 		configuration: fixedBaseline, profile, scene, runtime, durationSeconds: duration,
+		outputComparison: summarizeOutputComparison(runtime),
+		resources: {
+			processMemory: {
+				measurement: `${process.platform} light-desktop main-process resident set; excludes separate WebView and driver allocations`,
+				samples: processMemory,
+			},
+			longRun: summarizeStageLongRunResources(complete.timeline ?? [], processMemory, duration, {
+				renderer: "native", stageWindow: nativeStageMeasurementWindow(complete),
+			}),
+		},
 		samplesFile, applicationIdentity: packagedApplicationIdentity(application), host: hostHardware(),
 	});
 	const frames = Array.isArray(complete.nativeStage?.frames)
@@ -2632,7 +2649,7 @@ function evaluateNativeStage(
 		timeline,
 		processMemory,
 		duration,
-		{ renderer: "native" },
+		{ renderer: "native", stageWindow: nativeStageMeasurementWindow(complete) },
 	);
 	for (const failure of longRun.failures) failures.push(failure);
 	const cpuSamples = frames

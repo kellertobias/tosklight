@@ -70,3 +70,34 @@ test("explicit transport requires matching helper and compositor evidence", () =
   delete helper.transport;
   assert.equal(evaluateNativeBaseline(complete, { configuration }).baselineMeasurementReady, false);
 });
+
+
+test("fixed native reports retain resource evidence and reject truncated collectors or output regressions", () => {
+  const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "single" });
+  const complete = { nativeStage: { gpuObservations: { rows: [{ paneId: "live", followPreload: false, gpuSampleCount: 1, width: 1920, height: 1080, mode: "lines_3d", quality: "draft" }], counts: {}, compositor: { rows: [{ samples: 1, scope: ["live", "one", 1, { sourceSize: [1920, 1080] }] }], totals: {} } } } };
+  const resources = { processMemory: { measurement: "main-process RSS", samples: [{ recordedAt: 1, residentBytes: 100 }] }, longRun: { enforced: true, failures: [] } };
+  const outputComparison = { boundedWindowGatePassed: true, stageWindowDeadlineMisses: 0, stageWindowSendErrors: 0 };
+  const metadata = { configuration, resources, outputComparison };
+  assert.equal(evaluateNativeBaseline(complete, metadata).resources, resources);
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, true);
+  for (const field of ["timeline", "frames"]) {
+    complete.nativeStage.observerOverflow = { [field]: 1 };
+    assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
+  }
+  delete complete.nativeStage.observerOverflow;
+  complete.nativeStage.hostObservationOverflow = 1;
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
+  delete complete.nativeStage.hostObservationOverflow;
+  complete.nativeStage.collectorIntegrity = { passed: false };
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
+  delete complete.nativeStage.collectorIntegrity;
+  resources.longRun.failures = ["RSS coverage missing"];
+  assert.ok(evaluateNativeBaseline(complete, metadata).failures.includes("RSS coverage missing"));
+  resources.longRun.failures = [];
+  for (const output of [
+    { ...outputComparison, boundedWindowGatePassed: false },
+    { ...outputComparison, stageWindowDeadlineMisses: 1 },
+    { ...outputComparison, stageWindowSendErrors: 1 },
+  ]) assert.equal(evaluateNativeBaseline(complete, { ...metadata, outputComparison: output }).baselineMeasurementReady, false);
+  assert.equal(evaluateNativeBaseline(complete, metadata).acceptanceGateEnforced, false);
+});
