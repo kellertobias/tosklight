@@ -50,6 +50,7 @@ export function summarizeStageLongRunResources(
 				);
 	const earlyResources = renderWindowResources(early);
 	const lateResources = renderWindowResources(late);
+	const panes = native ? nativePaneResources(rendered, early, late) : [];
 	const failures = [];
 	const coverage = native ? {
 		stageWindow: intendedWindow,
@@ -71,6 +72,7 @@ export function summarizeStageLongRunResources(
 			failures.push("30-minute native Stage render pane identity is unavailable");
 		for (const pane of coverage.panes)
 			if (!pane.complete) failures.push(`30-minute native Stage render coverage is incomplete for pane ${pane.paneId}`);
+		for (const pane of panes) failures.push(...nativePaneFailures(pane));
 	}
 	if (enforced && memoryAfterWarmup.length < 60)
 		failures.push(
@@ -111,7 +113,11 @@ export function summarizeStageLongRunResources(
 		maximumMemorySlopeBytesPerMinute: 1_048_576,
 		slopeBytesPerMinute,
 		memorySamplesAfterWarmup: memoryAfterWarmup.length,
-		...(native ? { coverage } : {}),
+		...(native ? {
+			coverage,
+			panes,
+			cpuFrameMeasurement: "Source-deduplicated retained helper submission wall time: a sampled subset, not every 60 Hz frame, GPU completion, or displayed-frame latency",
+		} : {}),
 		early: earlyResources,
 		late: lateResources,
 		failures,
@@ -121,6 +127,28 @@ export function summarizeStageLongRunResources(
 				? "Native helper frame telemetry; aggregate p95 is reported in resources.gpuFrameP95Ms"
 				: "Unavailable in the current Three.js/WebKit diagnostics path",
 	};
+}
+
+function nativePaneResources(rendered, early, late) {
+	return [...new Set(rendered.map((sample) => sample.latestRender.paneId)
+		.filter((id) => typeof id === "string" && id.length > 0))].map((paneId) => ({
+		paneId,
+		early: renderWindowResources(early.filter((sample) => sample.latestRender.paneId === paneId)),
+		late: renderWindowResources(late.filter((sample) => sample.latestRender.paneId === paneId)),
+	}));
+}
+
+function nativePaneFailures(pane) {
+	const failures = [];
+	if (pane.early.samples === 0 || pane.late.samples === 0)
+		failures.push(`30-minute native pane ${pane.paneId} has no comparable early and late render windows`);
+	if (pane.late.maxGeometries > pane.early.maxGeometries || pane.late.maxDrawCalls > pane.early.maxDrawCalls)
+		failures.push(`30-minute native instance or draw-call ownership grew after warmup for pane ${pane.paneId}`);
+	if (!Number.isFinite(pane.late.cpuFrameP95Ms))
+		failures.push(`30-minute native late-window CPU submission p95 is unavailable for pane ${pane.paneId}`);
+	else if (pane.late.cpuFrameP95Ms > 16.7)
+		failures.push(`30-minute native late-window CPU submission p95 exceeded 16.7 ms for pane ${pane.paneId}`);
+	return failures;
 }
 
 function validStageWindow(window, durationSeconds) {
@@ -165,19 +193,15 @@ function expandRenderSamples(timeline, native) {
 
 function renderWindowResources(samples) {
 	const renders = samples.map((sample) => sample.latestRender);
+	const cpuSamples = renders.map((render) => render.durationMs).filter(Number.isFinite).sort((left, right) => left - right);
 	return {
 		samples: renders.length,
 		maxGeometries: maximumField(renders, "geometries"),
 		maxTextures: maximumField(renders, "textures"),
 		maxDrawCalls: maximumField(renders, "calls"),
 		maxTransparentDrawCalls: maximumField(renders, "transparentDrawCalls"),
-		cpuFrameP95Ms: percentile(
-			renders
-				.map((render) => render.durationMs)
-				.filter(Number.isFinite)
-				.sort((left, right) => left - right),
-			95,
-		),
+		cpuSampleCount: cpuSamples.length,
+		cpuFrameP95Ms: percentile(cpuSamples, 95),
 	};
 }
 

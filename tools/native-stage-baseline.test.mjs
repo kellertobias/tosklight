@@ -101,3 +101,28 @@ test("fixed native reports retain resource evidence and reject truncated collect
   ]) assert.equal(evaluateNativeBaseline(complete, { ...metadata, outputComparison: output }).baselineMeasurementReady, false);
   assert.equal(evaluateNativeBaseline(complete, metadata).acceptanceGateEnforced, false);
 });
+
+
+test("long native scope must stay declared and cover each lane throughout Stage", () => {
+  const configuration = readNativeBaselineConfig({ LIGHT_STAGE_PACKAGED_BENCH_LAYOUT: "dual" });
+  const rows = [];
+  for (const followPreload of [false, true]) for (let second = 1000; second <= 2860; second++)
+    rows.push({ paneId: followPreload ? "preload" : "live", attachmentId: followPreload ? "2" : "1", followPreload,
+      gpuSampleCount: 1, helperSubmissionCount: 60, width: 1920, height: 540, mode: "lines_3d", quality: "draft", transport: "shared", windowEpochSecond: second });
+  const complete = { nativeStage: { stageStartedEpochMillis: 1_000_000, stageCompletedEpochMillis: 2_860_000,
+    gpuObservations: { rows, counts: {}, compositor: { rows: ["live", "preload"].map((pane) => ({ samples: 1, scope: [pane, "one", 1, { sourceSize: [1920, 540] }] })), totals: {} } } } };
+  const metadata = { configuration, durationSeconds: 1860 };
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, true);
+  const final = rows.at(-1);
+  for (const [field, value] of [["quality", "ultra"], ["mode", "full_3d"], ["height", 1080]]) {
+    const original = final[field]; final[field] = value;
+    const bad = evaluateNativeBaseline(complete, metadata);
+    assert.equal(bad.baselineMeasurementReady, false);
+    assert.match(bad.failures.join("\n"), /changed away/u);
+    final[field] = original;
+  }
+  complete.nativeStage.gpuObservations.rows = rows.filter((row) => !row.followPreload || row.windowEpochSecond < 1900);
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
+  complete.nativeStage.gpuObservations.rows = rows.filter((row) => !row.followPreload || row.windowEpochSecond < 1900 || row.windowEpochSecond > 1910);
+  assert.equal(evaluateNativeBaseline(complete, metadata).baselineMeasurementReady, false);
+});

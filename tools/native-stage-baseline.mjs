@@ -56,6 +56,9 @@ export function evaluateNativeBaseline(complete, metadata) {
   const output = metadata.outputComparison;
   if (output && (!output.boundedWindowGatePassed || output.stageWindowDeadlineMisses > 0 || output.stageWindowSendErrors > 0))
     failures.push("Stage output scheduler comparison failed");
+  const declaredScopeCoverage = metadata.durationSeconds >= 1800
+    ? longRunScopeCoverage(complete.nativeStage, rows, matches, configuration) : null;
+  if (declaredScopeCoverage) failures.push(...declaredScopeCoverage.failures);
   const phases = configuration.phases ? evaluateBaselinePhases(complete, configuration, matches) : null;
   if (phases) failures.push(...phases.failures);
   return { schemaVersion: 1, kind: "native-stage-before-optimization-measurement", ...metadata,
@@ -65,5 +68,32 @@ export function evaluateNativeBaseline(complete, metadata) {
     displayed60Fps: { status: "unverified", reason: "Requires correlated platform display trace; submissions are not displayed frames" },
     gpuReduction: { status: "unverified", reason: "Sparse timing samples are not total GPU time per second or a matched-rate reduction" },
     measurementBoundaries: complete.nativeStage?.measurementBoundaries ?? null,
-    gpuObservations: observations ?? null, ...(phases ? { phases } : {}) };
+    gpuObservations: observations ?? null, ...(declaredScopeCoverage ? { declaredScopeCoverage } : {}), ...(phases ? { phases } : {}) };
+}
+
+function longRunScopeCoverage(native, rows, matches, configuration) {
+  const startedAt = native?.stageStartedEpochMillis;
+  const completedAt = native?.stageCompletedEpochMillis;
+  const failures = [];
+  const lanes = [];
+  if (!Number.isFinite(startedAt) || !Number.isFinite(completedAt) || completedAt <= startedAt)
+    return { failures: ["Declared native scope requires independent Stage bounds"], lanes };
+  const inWindow = (row) => row.windowEpochSecond * 1000 <= completedAt && (row.windowEpochSecond + 1) * 1000 >= startedAt;
+  const accepted = new Set(matches);
+  if (rows.some((row) => inWindow(row) && !accepted.has(row)))
+    failures.push("Native helper changed away from the declared quality, mode, physical pixels or transport during Stage");
+  for (const followPreload of configuration.layout === "dual" ? [false, true] : [false]) {
+    const laneRows = matches.filter((row) => inWindow(row) && row.followPreload === followPreload && row.helperSubmissionCount > 0);
+    const paneIds = [...new Set(laneRows.map((row) => row.paneId))];
+    if (paneIds.length !== 1) failures.push(`Declared scope has missing or changing ${followPreload ? "Preload" : "Live"} pane identity`);
+    const seconds = [...new Set(laneRows.map((row) => row.windowEpochSecond))].sort((a, b) => a - b);
+    const firstAt = seconds.length ? seconds[0] * 1000 : null;
+    const lastAt = seconds.length ? (seconds.at(-1) + 1) * 1000 : null;
+    const maximumGapMillis = seconds.reduce((maximum, second, index) => index ? Math.max(maximum, (second - seconds[index - 1] - 1) * 1000) : maximum, 0);
+    const complete = firstAt !== null && firstAt <= startedAt + 5000 && lastAt >= completedAt - 5000 && maximumGapMillis <= 5000;
+    lanes.push({ followPreload, paneIds, firstAt, lastAt, maximumGapMillis, complete });
+    if (!complete) failures.push(`Declared native scope does not cover the full ${followPreload ? "Preload" : "Live"} Stage window`);
+  }
+  return { startedAt, completedAt, observationBucketMillis: 1000, coverageToleranceMillis: 5000, lanes, failures,
+    boundary: "Declared helper submission scope coverage; not displayed frames or continuous GPU utilization." };
 }

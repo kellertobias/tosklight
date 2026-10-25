@@ -254,3 +254,64 @@ test("native RSS and each lane reject internal gaps above the declared tolerance
     assert.equal(lane.coverage.panes.find((pane) => pane.paneId === "preload").maximumGapMillis, 9_000);
     assert.match(lane.failures.join("\n"), /render coverage is incomplete for pane preload/u);
 });
+
+
+function dualResourceEvidence({preloadGrowth = false, preloadCpu = 2, sparsePreload = false} = {}) {
+    const sample = evidence();
+    sample.timeline = sample.timeline.map((entry, index) => ({...entry, newRenders: [
+        ...Array.from({length: sparsePreload ? 20 : 1}, (_, repeat) => ({
+            ...entry.latestRender, paneId: "live", benchmarkSequence: `live:${index}:${repeat}`,
+            geometries: 1000, calls: 1000,
+        })),
+        ...(!sparsePreload || index % 5 === 0 ? [{
+            ...entry.latestRender, paneId: "preload", benchmarkSequence: `preload:${index}`,
+            geometries: preloadGrowth && index >= 1500 ? 600 : 500,
+            calls: preloadGrowth && index >= 1500 ? 600 : 500,
+            durationMs: index >= 1500 ? preloadCpu : 2,
+        }] : []),
+    ]}));
+    return sample;
+}
+
+test("per-pane ownership growth cannot hide below another pane's stable pooled maximum", () => {
+    const sample = dualResourceEvidence({preloadGrowth: true});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.early.maxGeometries, 1000);
+    assert.equal(result.late.maxGeometries, 1000);
+    assert.equal(result.early.maxDrawCalls, 1000);
+    assert.equal(result.late.maxDrawCalls, 1000);
+    assert.equal(result.passed, false);
+    const preload = result.panes.find((pane) => pane.paneId === "preload");
+    assert.equal(preload.early.maxGeometries, 500);
+    assert.equal(preload.late.maxGeometries, 600);
+    assert.match(result.failures.join("\n"), /ownership grew.*pane preload/u);
+});
+
+test("each pane needs finite late CPU evidence even when another pane supplies a pooled p95", () => {
+    const sample = dualResourceEvidence({preloadCpu: null});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.late.cpuFrameP95Ms, 2);
+    assert.equal(result.passed, false);
+    assert.match(result.failures.join("\n"), /CPU submission p95 is unavailable for pane preload/u);
+    assert.equal(result.panes.find((pane) => pane.paneId === "preload").late.cpuSampleCount, 0);
+});
+
+test("a sparse lane's slow CPU p95 cannot hide inside a faster lane's larger sample population", () => {
+    const sample = dualResourceEvidence({preloadCpu: 20, sparsePreload: true});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.coverage.panes.every((pane) => pane.complete), true);
+    assert.equal(result.late.cpuFrameP95Ms, 2);
+    assert.equal(result.passed, false);
+    assert.equal(result.panes.find((pane) => pane.paneId === "preload").late.cpuFrameP95Ms, 20);
+    assert.match(result.failures.join("\n"), /CPU submission p95 exceeded 16.7 ms for pane preload/u);
+    assert.match(result.cpuFrameMeasurement, /Source-deduplicated.*wall time.*not every 60 Hz/u);
+});
+
+test("stable native panes retain both lane and aggregate resource reports", () => {
+    const sample = dualResourceEvidence();
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, true);
+    assert.equal(result.panes.length, 2);
+    assert.equal(result.late.samples, 2 * result.panes[0].late.samples);
+    assert.equal(result.panes.every((pane) => pane.late.cpuFrameP95Ms === 2), true);
+});
