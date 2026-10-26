@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
+import { marketingWebImages, responsiveScreenshot } from "./marketing-web-images.mjs";
 import {
 	normalizePublicPerformanceStatus,
 	renderPerformancePage,
@@ -135,39 +136,16 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) 
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-// Reserve each screenshot's real aspect ratio before lazy loading completes. Otherwise
-// scrolling to a later section can move the link under the pointer while images arrive.
-const screenshotDimensions = new Map();
-function screenshotSize(file) {
-  if (screenshotDimensions.has(file)) return screenshotDimensions.get(file);
-  const bytes = readFileSync(resolve(SCREENSHOTS, file));
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature) ||
-      bytes.readUInt32BE(8) !== 13 || bytes.toString("ascii", 12, 16) !== "IHDR") {
-    throw new Error(`Invalid PNG header for marketing screenshot ${file}`);
-  }
-  const width = bytes.readUInt32BE(16);
-  const height = bytes.readUInt32BE(20);
-  if (!width || !height || width > 0x7fffffff || height > 0x7fffffff) {
-    throw new Error(`Invalid PNG dimensions for marketing screenshot ${file}`);
-  }
-  const dimensions = { width, height };
-  screenshotDimensions.set(file, dimensions);
-  return dimensions;
-}
-
-mkdirSync(resolve(siteRoot, "screenshots"), { recursive: true });
+// Generate bounded web derivatives from the reviewed captures.
+const webImages = await marketingWebImages(GALLERY, SCREENSHOTS, resolve(siteRoot, "screenshots"));
 const renderFigure = ({ file, title, caption, wide }) => {
   // Native inputs are restored and reviewed by the capture job. Pages must consume its artifact,
   // never replace it with an older tracked still from this checkout.
-  const source = resolve(SCREENSHOTS, file);
-  const name = file.replace(/\//g, "-");
-  const { width, height } = screenshotSize(file);
-  copyFileSync(source, resolve(siteRoot, "screenshots", name));
+  const webImage = webImages.get(file);
   return (
     `<figure class="shot${wide ? " shot-wide" : ""}">` +
     `<button class="shot-image" type="button" aria-label="Enlarge ${escapeHtml(title)}">` +
-			`<img src="screenshots/${escapeHtml(name)}" width="${width}" height="${height}" alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
+			`<img ${responsiveScreenshot(webImage)} alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
     `<figcaption><strong>${escapeHtml(title)}</strong> ${escapeHtml(caption)}</figcaption>` +
     `</figure>`
   );
@@ -365,10 +343,10 @@ for (const product of productPages) {
 		const files = Array.isArray(sectionImages) ? sectionImages : sectionImages ? [sectionImages] : [];
 		const figures = files.map((file) => {
 			const entry = galleryByFile.get(file);
-			const image = file.replace(/\//g, "-");
+			const image = webImages.get(file).file;
 			const url = `../screenshots/${escapeHtml(image)}`;
-			const { width, height } = screenshotSize(file);
-			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
+			const webImage = webImages.get(file);
+			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img ${responsiveScreenshot(webImage, "../screenshots/")} alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
 		});
 		const leadingImage = product.path === "architect" && label === "Visualization" && files.length > 1;
 		const galleryColumns = label === "Hardware" ? 1 : leadingImage ? 2 : files.length;
@@ -462,10 +440,10 @@ for (const [placeholder, replacement] of [
   page = page.replaceAll(placeholder, replacement);
 }
 // The hero is authored directly in the landing-page template rather than renderFigure.
-page = page.replace(/<img\b(?=[^>]*\bsrc="screenshots\/([^"]+)")[^>]*>/gu, (image, file) => {
-  if (/\bwidth=/u.test(image) && /\bheight=/u.test(image)) return image;
-  const { width, height } = screenshotSize(file);
-  return image.replace("<img", `<img width="${width}" height="${height}"`);
+page = page.replace(/<img\b(?=[^>]*\bsrc="screenshots\/([^" ]+\.png)")[^>]*>/gu, (image, file) => {
+  const webImage = webImages.get(file);
+  if (!webImage) throw new Error(`Unknown hero screenshot ${file}`);
+  return image.replace(/src="[^"]+"/u, responsiveScreenshot(webImage));
 });
 writeFileSync(target, page);
 const assetCount =
