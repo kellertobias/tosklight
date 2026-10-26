@@ -614,7 +614,11 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const architectSections = [...architectPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
         assert.deepEqual(architectSections.slice(0, 3), ["Visualization", "Interchange", "CAD"]);
         const firstArchitectImage = [...architectPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
-        assert.equal(firstArchitectImage, "../screenshots/architect-renderer-warm-ultra.png");
+        assert.equal(firstArchitectImage, "../screenshots/architect-media-stage-main.png");
+        const visualizationSection = architectPage.split('<p class="eyebrow">Visualization</p>')[1]?.split('</article>')[0];
+        assert.match(visualizationSection, /architect-renderer-white-ultra\.png/u, "preserve the original white venue capture");
+        assert.match(visualizationSection, /architect-renderer-warm-ultra\.png/u, "preserve the original warm venue capture");
+        assert.match(visualizationSection, /--gallery-columns:2/u, "extra venue views sit below the large main image");
         assert.match(architectPage, /Simulate your venue and rig\./u);
         assert.match(architectPage, /Build the rig\. Export the PDF plan\./u);
         const interchangeSection = architectPage.split('<p class="eyebrow">Interchange</p>')[1]?.split('</article>')[0];
@@ -666,10 +670,10 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.match(landingPage, /screenshots\/application-overview\.png/u);
 		assert.match(landingPage, /screenshots\/tracked-programming\.png/u);
 		assert.match(landingPage, /screenshots\/media-server-playback\.png/u);
-		assert.match(landingPage, /screenshots\/architect-renderer-ultra\.png/u);
-        assert.equal([...landingPage.matchAll(/src="screenshots\/architect-renderer-ultra\.png"/gu)].length, 1, "green laser render is reserved for the top hero");
+		assert.match(landingPage, /screenshots\/architect-media-stage-main\.png/u);
+        assert.equal([...landingPage.matchAll(/src="screenshots\/architect-media-stage-main\.png"/gu)].length, 1, "new media venue render is the top hero; original white view stays in the product gallery");
         assert.match(landingPage, /screenshots\/architect-renderer-white-ultra\.png/u);
-        assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-(?:white-)?ultra\.png/u);
+        assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-ultra\.png/u, "use the new main view and keep the distinct original white/warm views");
 
 		assert.match(landingPage, /screenshots\/architect-cad\.png/u);
 		assert.doesNotMatch(landingPage, /screenshots\/media-server-dashboard\.png/u);

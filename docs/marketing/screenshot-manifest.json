@@ -23,8 +23,8 @@
 		},
 		{
 			"file": "control-groups.png",
-			"title": "Groups",
-			"caption": "Keep the fixture selections you use throughout the show close at hand.",
+			"title": "Groups and presets",
+			"caption": "Groups and Color, Position and Beam presets keep cues connected to reusable show objects.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/control-groups.png"
 		},
@@ -413,8 +413,8 @@
 		},
 		{
 			"file": "media-server-text.png",
-			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"title": "A countdown to doors opening",
+			"caption": "Configure a real countdown target, display format and behavior after zero beside its running Pixel preview.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/media-server-text.png"
 		},
@@ -517,6 +517,27 @@
 			"sourceFile": "docs/marketing/assets/stills/control-position-reference.png",
 			"title": "Shared position references",
 			"caption": "ToskLight Control’s Patch sheet for the same portable Show: stage washes share 3D point 950 as their position reference.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-main.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-main.png",
+			"title": "The original venue, with live video",
+			"caption": "The original Showcase DJ rig with live Pixel video on three LED panels between rear RGB Sunstrips and an audience at realistic scale.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-front.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-front.png",
+			"title": "Video across the back of the stage",
+			"caption": "A front view of the same venue, with three independently mapped sections of the live media output.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-side.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-side.png",
+			"title": "The same show from another angle",
+			"caption": "The original lighting rig, stage and DJ position stay in place as video surfaces and an audience are added.",
 			"theme": "dark"
 		}
 	]

@@ -52,7 +52,7 @@ const HOMEPAGE_SHOT_COPY = {
 const DETAIL_GALLERIES = {
 	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
-	architect: ["architect-renderer-warm-ultra.png", "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null],
+	architect: [["architect-media-stage-main.png", "architect-renderer-white-ultra.png", "architect-renderer-warm-ultra.png", "architect-media-stage-front.png", "architect-media-stage-side.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));
@@ -367,9 +367,11 @@ for (const product of productPages) {
 			const url = `../screenshots/${escapeHtml(image)}`;
 			const { width, height } = screenshotSize(file);
 			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
-		}).join("");
-		const galleryColumns = label === "Hardware" ? 1 : files.length;
-		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" style="--gallery-columns:${galleryColumns}" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
+		});
+		const leadingImage = product.path === "architect" && label === "Visualization" && files.length > 1;
+		const galleryColumns = label === "Hardware" ? 1 : leadingImage ? 2 : files.length;
+		const gallery = (items) => `<div class="product-detail-section-gallery" style="--gallery-columns:${galleryColumns}" aria-label="${escapeHtml(label)} screenshots">${items.join("")}</div>`;
+		const figure = leadingImage ? figures[0] + gallery(figures.slice(1)) : files.length > 1 ? gallery(figures) : figures.join("");
 		return `<article><div class="product-detail-copy"><p class="eyebrow">${escapeHtml(label)}</p><h2>${escapeHtml(title)}</h2></div><div class="product-detail-text"><p>${escapeHtml(first)}</p><p>${escapeHtml(second)}</p></div>${figure}</article>`;
 	}).join("")}</section>`;
 	const coming = product.coming ? `<section class="product-detail-coming shell"><p class="eyebrow">What is coming</p><h2>Still moving forward.</h2><div>${product.coming.map(([title, status]) => `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(status)}</p></article>`).join("")}</div></section>` : "";
