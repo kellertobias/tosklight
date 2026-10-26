@@ -2,6 +2,20 @@
 	"version": 1,
 	"entries": [
 		{
+			"file": "control-homepage-hero.png",
+			"title": "Control live workspace",
+			"caption": "Operate eight virtual playbacks below Groups and presets, with the Fixture Sheet alongside.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/control-homepage-hero.png"
+		},
+		{
+			"file": "application-overview-icons.png",
+			"title": "Application overview",
+			"caption": "The approved Busking workspace with proper fixture group icons, reusable presets, playbacks and programmer.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/application-overview-icons.png"
+		},
+		{
 			"file": "control-desk.png",
 			"title": "The desk",
 			"caption": "Everything an operator touches, on one surface.",
@@ -480,15 +494,15 @@
 		{
 			"file": "architect-renderer-white-ultra.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-renderer-white-ultra.png",
-			"title": "The rig in white",
-			"caption": "A distinct native Ultra render of the Showcase rig with white stage lighting.",
+			"title": "Ultra · white lighting study",
+			"caption": "A detailed Ultra preview for inspecting white stage lighting and fixture coverage.",
 			"theme": "dark"
 		},
 		{
 			"file": "architect-renderer-warm-ultra.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-renderer-warm-ultra.png",
-			"title": "Ultra Rendering Quality",
-			"caption": "Adjust the rendering quality to suit your computer’s graphics performance.",
+			"title": "Ultra · warm lighting study",
+			"caption": "A detailed Ultra preview for inspecting warm stage lighting and the atmosphere of the venue.",
 			"theme": "dark"
 		},
 		{
@@ -520,24 +534,73 @@
 			"theme": "dark"
 		},
 		{
+			"file": "architect-media-output-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-output-config.png",
+			"title": "Pixel output for Architect's LED panels",
+			"caption": "Pixel's LED Triptych output at 1536 × 512, advertised source 514, feeds three contiguous mapped LED panels in Architect.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-wireframe-native.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-wireframe-native.png",
+			"title": "Wireframe · live checks",
+			"caption": "Quickly check fixture positions and beam directions during a live show, with very little rendering work.",
+			"theme": "dark"
+		},
+		{
 			"file": "architect-media-stage-main.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-main.png",
-			"title": "The original venue, with live video",
-			"caption": "The original Showcase DJ rig with live Pixel video on three LED panels between rear RGB Sunstrips and an audience at realistic scale.",
+			"title": "Ultra · detailed preview",
+			"caption": "Inspect the full lighting look, video walls and detailed 3D people when your computer has the graphics power. Use Ultra for high-quality customer images with the regular renderer.",
 			"theme": "dark"
 		},
 		{
 			"file": "architect-media-stage-front.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-front.png",
-			"title": "Video across the back of the stage",
-			"caption": "A front view of the same venue, with three independently mapped sections of the live media output.",
+			"title": "Mapped video · front view",
+			"caption": "Three LED panels display contiguous sections of the media-server output behind the stage.",
 			"theme": "dark"
 		},
 		{
 			"file": "architect-media-stage-side.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-side.png",
-			"title": "The same show from another angle",
-			"caption": "The original lighting rig, stage and DJ position stay in place as video surfaces and an audience are added.",
+			"title": "Mapped video · audience view",
+			"caption": "Lighting, video surfaces and a stage-facing audience in the same venue.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-surface-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-surface-config.png",
+			"title": "Map video to the LED walls",
+			"caption": "Architect maps the Stage LED Panels source to three physical LED panels; the first panel uses the left third of the source.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-crop-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-crop-config.png",
+			"title": "Crop the source across LED panels",
+			"caption": "The actual Architect surface editor exposes normalized source crops, two-metre panel dimensions and occupied LED cells.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-ultimate-4k.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-ultimate-4k.png",
+			"title": "Ultimate · 4K customer export",
+			"caption": "A full-venue 3840 × 2160 image rendered by Blender from frozen scene state, with mapped video and detailed people. Export from Architect without changing the live preview quality. Laser scans are switched off for this Blender example.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-draft.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-draft.png",
+			"title": "Draft · lightweight lighting preview",
+			"caption": "See the lights during live operation on a more capable machine, or pre-program on a machine with limited graphics power.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-standard.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-standard.png",
+			"title": "Standard · everyday pre-programming",
+			"caption": "Balance lighting detail and rendering speed while building cues and checking the show before arriving on site.",
 			"theme": "dark"
 		}
 	]

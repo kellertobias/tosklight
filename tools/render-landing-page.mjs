@@ -34,25 +34,25 @@ if (marketingManifest.version !== 1 || !Array.isArray(marketingManifest.entries)
 const GALLERY = marketingManifest.entries;
 
 const PRODUCT_GALLERIES = {
-	control: ["application-overview.png", "tracked-programming.png", "dynamics.png"],
-	architect: ["architect-renderer-white-ultra.png", "architect-cad.png", "architect-patch.png"],
+	control: ["application-overview-icons.png", "tracked-programming.png", "dynamics.png"],
+	architect: ["architect-ultimate-4k.png", "architect-cad.png", "architect-patch.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-library.png", "media-server-playback.png"],
 };
 // Homepage cards explain product capabilities; detail figures retain their capture-specific captions.
 const HOMEPAGE_SHOT_COPY = {
-	"application-overview.png": { title: "Dynamic Screen Layouts", caption: "Arrange your workspace around the way you program and run the show." },
+	"application-overview-icons.png": { title: "Dynamic Screen Layouts", caption: "Arrange your workspace around the way you program and run the show." },
 	"dynamics.png": { title: "Desk-style Effect Engine", caption: "Shape functions and keyframes, distribute effects across the rig, and keep them on the beat." },
 	"pixel-eight-layer-composite.png": { title: "Up to Eight Layers", caption: "Combine video, transparent images, visualizers, and text into one live output." },
 	"media-server-library.png": { title: "Library Management Built In", caption: "Prepare and organize the visual assets you need for the show." },
 	"media-server-playback.png": { title: "Control via DMX or in the Browser", caption: "Run Pixel from a lighting desk over Art-Net or sACN, or operate its live controls in your browser." },
-	"architect-renderer-white-ultra.png": { title: "Live 3D Visualizer", caption: "Preview the rig with real fixture models, beams, gobos, and haze." },
+	"architect-ultimate-4k.png": { title: "Live 3D Visualizer", caption: "Preview your show live, then create a full-venue Ultimate 4K image with Blender for your customer." },
 	"architect-cad.png": { title: "Generate Your Venue Plans", caption: "Build the venue and rig, then export measured PDF plans for the crew." },
 	"architect-patch.png": { title: "Patch Your Fixtures", caption: "Prepare fixture types, modes, universes, and addresses in the same Show." },
 };
 const DETAIL_GALLERIES = {
-	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
+	control: ["application-overview-icons.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
-	architect: [["architect-media-stage-main.png", "architect-renderer-white-ultra.png", "architect-renderer-warm-ultra.png", "architect-media-stage-front.png", "architect-media-stage-side.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null],
+	architect: [["architect-ultimate-4k.png", "architect-wireframe-native.png", "architect-renderer-draft.png", "architect-renderer-standard.png", "architect-media-stage-main.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null, ["architect-media-surface-config.png", "architect-media-crop-config.png", "architect-media-output-config.png"]],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));
@@ -342,6 +342,7 @@ const productPages = [
 			["Moving scenes", "Make the scene move with the fixture.", "Store fixture and scene positions relative to a shared 3D point. When that point is controlled through PSN or DMX, its connected elements follow the movement while retaining their relative placement.", "Position references travel in the same portable Show between Control and Architect. The Control Patch sheet shown here exposes those references for the rig that Architect visualizes."],
 			["Lasers", "Simulate the path, not just the beam.", "Architect can simulate lasers from a scan path produced by a JavaScript function supplied by the user. The function receives DMX input and returns the path that the renderer draws.", "That gives the designer control over the laser's shape, brightness, scan speed, and position, and leaves room to build a laser effect that matches the specific production."],
 			["Early prototypes", "See the right trigger, with more to come.", "Architect includes early prototypes for physical elements such as falling curtains and pyro elements such as flame jets and sparklers. They are intentionally rudimentary today.", "They are useful for confirming that the intended DMX channel was triggered, not yet for final visual realism. These elements may become more detailed as the application grows."],
+			["Media integration", "Bring live video into the venue.", "Pixel's LED Triptych output at 1536 × 512 supplies advertised source 514 to three contiguous mapped LED panels in Architect.", "Configure the source, physical LED panels and normalized crops in Architect. Each panel displays its mapped third of the live video alongside the lighting rig; Pixel supplies the output shown in the final configuration screenshot."],
 		],
 		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Mostly complete, with further improvements in progress."], ["Crowd simulation", "Being improved."]],
 	},

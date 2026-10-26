@@ -570,7 +570,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         }
         const controlPage = readFileSync(resolve(directory, "control/index.html"), "utf8");
         const firstControlImage = [...controlPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
-        assert.equal(firstControlImage, "../screenshots/application-overview.png", "Control detail must open with the actual complete application view");
+        assert.equal(firstControlImage, "../screenshots/application-overview-icons.png", "Control detail must open with the actual complete application view");
         assert.match(controlPage, /screenshots\/dynamics\.png/u);
         const dynamicsSection = controlPage.split('<p class="eyebrow">Dynamics</p>')[1]?.split('</article>')[0];
         assert.ok(dynamicsSection, "Control detail page needs its Dynamics section");
@@ -614,11 +614,36 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const architectSections = [...architectPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
         assert.deepEqual(architectSections.slice(0, 3), ["Visualization", "Interchange", "CAD"]);
         const firstArchitectImage = [...architectPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
-        assert.equal(firstArchitectImage, "../screenshots/architect-media-stage-main.png");
+        assert.equal(firstArchitectImage, "../screenshots/architect-ultimate-4k.png");
         const visualizationSection = architectPage.split('<p class="eyebrow">Visualization</p>')[1]?.split('</article>')[0];
-        assert.match(visualizationSection, /architect-renderer-white-ultra\.png/u, "preserve the original white venue capture");
-        assert.match(visualizationSection, /architect-renderer-warm-ultra\.png/u, "preserve the original warm venue capture");
-        assert.match(visualizationSection, /--gallery-columns:2/u, "extra venue views sit below the large main image");
+        assert.ok(visualizationSection, "Architect needs its render-quality comparison");
+        const visualizationImages = [...visualizationSection.matchAll(/<img src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
+        assert.deepEqual(visualizationImages, [
+            "../screenshots/architect-ultimate-4k.png",
+            "../screenshots/architect-wireframe-native.png",
+            "../screenshots/architect-renderer-draft.png",
+            "../screenshots/architect-renderer-standard.png",
+            "../screenshots/architect-media-stage-main.png",
+        ]);
+        const comparisonStart = visualizationSection.indexOf('<div class="product-detail-section-gallery"');
+        assert.ok(comparisonStart > 0, "keep the customer export large above the quality comparison");
+        assert.match(visualizationSection.slice(0, comparisonStart), /architect-ultimate-4k\.png/u);
+        assert.equal(visualizationSection.slice(0, comparisonStart).match(/<figure class="shot">/gu)?.length, 1);
+        assert.equal(visualizationSection.slice(comparisonStart).match(/<figure class="shot">/gu)?.length, 4);
+        assert.match(visualizationSection, /--gallery-columns:2/u, "four preview qualities form a two-column comparison below the export");
+        for (const [title, purpose] of [
+            ["Ultimate · 4K customer export", /full-venue 3840 × 2160 image rendered by Blender/u],
+            ["Wireframe · live checks", /fixture positions and beam directions during a live show/u],
+            ["Draft · lightweight lighting preview", /live operation on a more capable machine, or pre-program on a machine with limited graphics power/u],
+            ["Standard · everyday pre-programming", /Balance lighting detail and rendering speed/u],
+            ["Ultra · detailed preview", /computer has the graphics power/u],
+        ]) {
+            assert.ok(visualizationSection.includes(`<strong>${title}</strong>`), `${title} needs a quality label`);
+            assert.match(visualizationSection, purpose);
+        }
+        assert.match(visualizationSection, /Ultra for high-quality customer images with the regular renderer/u);
+        assert.match(visualizationSection, /without changing the live preview quality/u);
+        assert.doesNotMatch(visualizationSection, /original venue|rig in white|architect-renderer-(?:white|warm)-ultra\.png/iu);
         assert.match(architectPage, /Simulate your venue and rig\./u);
         assert.match(architectPage, /Build the rig\. Export the PDF plan\./u);
         const interchangeSection = architectPage.split('<p class="eyebrow">Interchange</p>')[1]?.split('</article>')[0];
@@ -627,6 +652,15 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(interchangeSection, /screenshots\/architect-show-transfer\.png/u);
         assert.doesNotMatch(interchangeSection, /architect-renderer-/u);
 
+        const mediaIntegrationSection = architectPage.split('<p class="eyebrow">Media integration</p>')[1]?.split('</article>')[0];
+        assert.ok(mediaIntegrationSection, "Architect needs its actual Pixel integration configuration view");
+        assert.match(mediaIntegrationSection, /screenshots\/architect-media-output-config\.png/u);
+        assert.match(mediaIntegrationSection, /screenshots\/architect-media-surface-config\.png/u);
+        assert.match(mediaIntegrationSection, /screenshots\/architect-media-crop-config\.png/u);
+        assert.match(mediaIntegrationSection, /Configure the source, physical LED panels and normalized crops in Architect/u);
+        assert.match(mediaIntegrationSection, /1536 × 512/u);
+        assert.match(mediaIntegrationSection, /source 514/u);
+        assert.match(mediaIntegrationSection, /three contiguous mapped LED panels/u);
         assert.match(architectPage, /screenshots\/architect-patch\.png/u);
         assert.doesNotMatch(architectPage, /screenshots\/architect-elevation\.png/u);
         const lasersSection = architectPage.split('<p class="eyebrow">Lasers</p>')[1]?.split('</article>')[0];
@@ -649,8 +683,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(architectPage, /Crowd simulation<\/strong><p>Being improved/u);
         assert.match(controlPage, /Plugin support<\/strong><p>In planning/u);
         assert.match(controlPage, /Position \/ PSN support<\/strong><p>Public beta/u);
-        assert.match(architectPage, /Ultra Rendering Quality/u);
-        assert.match(architectPage, /Adjust the rendering quality to suit your computer’s graphics performance/u);
+        assert.match(architectPage, /Ultra · detailed preview/u);
+        assert.match(architectPage, /computer has the graphics power/u);
         assert.doesNotMatch(architectPage, /A warm look for the venue|venue and DJ rig/u);
 		const landingPage = readFileSync(target, "utf8");
         const homeCardTitles = [...landingPage.matchAll(/<figcaption><strong>([^<]+)<\/strong>/gu)].map(match => match[1]);
@@ -667,13 +701,18 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.deepEqual([...landingPage.matchAll(/<li><span>0[1-4]<\/span><strong>([^<]+)<\/strong>/gu)].map(match => match[1]), ["Plan", "Program", "Visualize", "Perform"]);
 		assert.match(landingPage, /Open source live media server/u);
 		assert.match(landingPage, /Open source visualizer and show CAD/u);
-		assert.match(landingPage, /screenshots\/application-overview\.png/u);
+		assert.match(landingPage, /screenshots\/application-overview-icons\.png/u);
+		assert.match(landingPage, /class="hero-frame hero-frame-control"><img\b[^>]*src="screenshots\/control-homepage-hero\.png"/u);
 		assert.match(landingPage, /screenshots\/tracked-programming\.png/u);
 		assert.match(landingPage, /screenshots\/media-server-playback\.png/u);
 		assert.match(landingPage, /screenshots\/architect-media-stage-main\.png/u);
-        assert.equal([...landingPage.matchAll(/src="screenshots\/architect-media-stage-main\.png"/gu)].length, 1, "new media venue render is the top hero; original white view stays in the product gallery");
-        assert.match(landingPage, /screenshots\/architect-renderer-white-ultra\.png/u);
-        assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-ultra\.png/u, "use the new main view and keep the distinct original white/warm views");
+        assert.equal([...landingPage.matchAll(/src="screenshots\/architect-media-stage-main\.png"/gu)].length, 1, "the native Ultra venue render remains the large top hero");
+        const liveVisualizerCard = [...landingPage.matchAll(/<figure class="shot">[\s\S]*?<\/figure>/gu)].map(match => match[0]).find(figure => figure.includes("<strong>Live 3D Visualizer</strong>"));
+        assert.ok(liveVisualizerCard, "Architect needs the Live 3D Visualizer homepage card");
+        assert.match(liveVisualizerCard, /src="screenshots\/architect-ultimate-4k\.png"/u);
+        assert.match(liveVisualizerCard, /full-venue Ultimate 4K image with Blender for your customer/u);
+        assert.doesNotMatch(liveVisualizerCard, /architect-renderer-white-ultra\.png/u);
+        assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-ultra\.png/u, "show the explicit render-quality comparison");
 
 		assert.match(landingPage, /screenshots\/architect-cad\.png/u);
 		assert.doesNotMatch(landingPage, /screenshots\/media-server-dashboard\.png/u);
