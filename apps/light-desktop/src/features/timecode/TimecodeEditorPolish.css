@@ -46,9 +46,9 @@
 .timecode-timeline-editor .timecode-cue-name.ui-button[aria-pressed="true"] { font-weight: 600; }
 .timecode-cue-block-trigger { font-variant-numeric: tabular-nums; }
 
-/* Markers remain visible over every lane; only their bottom flags accept dragging. */
+/* Markers remain visible over every lane; only their ruler flags accept dragging. */
 .ui-button.timecode-timeline-marker { z-index: 11; pointer-events: none; cursor: default; }
-.timecode-timeline-marker-label { pointer-events: auto; cursor: ew-resize; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; bottom: 0; }
+.timecode-timeline-editor .timecode-timeline-marker-label { pointer-events: auto; cursor: ew-resize; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; bottom: 0; }
 /* Dim the inactive content, keeping its lane names readable for navigation. */
 .cue-focus .timecode-speed-section,
 .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) { opacity: 1; }
@@ -59,14 +59,87 @@
 .cue-focus .timecode-speed-section .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
 .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) .timecode-lane-select { color: #b8c5d5; }
 
-.ui-button.timecode-timeline-marker { display: block; overflow: visible; }
-.timecode-timeline-marker-label {
+.ui-button.timecode-timeline-marker { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; overflow: visible; }
+.timecode-timeline-editor .timecode-timeline-marker-label {
 	position: sticky;
-	top: calc(var(--timecode-visible-height, 20rem) - 44px);
+	top: 32px;
 	bottom: auto;
 }
 
 .cue-focus .timecode-speed-section.section-expanded .lane-speed_group .timecode-editor-lane-label { background: #171e29; color: #b8c5d5; }
 .cue-focus .timecode-speed-section .timecode-section-toggle { color: #b8c5d5; }
 
-.cue-expanded .timecode-clip-handle { padding-left: 16px; }
+.cue-expanded .timecode-clip-handle { padding-left: 8px; }
+
+/* Anchor Add and navigation to the title instead of a shrinking right-aligned toolbar. */
+.timecode-editor > .ui-window-header .ui-window-header-spacer { display: none; }
+.timecode-editor > .ui-window-header .ui-window-info { flex: 0 0 86px; max-width: 86px; }
+.timecode-editor > .ui-window-header .ui-window-action-groups { flex: 1; }
+.timecode-editor > .ui-window-header .ui-title-chrome-terminals { margin-left: auto; }
+/* Two bars flank the Cue boundary inside a single rounded rectangle. */
+.timecode-cue-point.cue-divider-grip > span {
+	width: 20px; height: 24px; left: 12px; top: 10px;
+	border: 1px solid #bea46b; border-radius: 4px;
+	background: #242c36; box-shadow: 0 1px 2px #0008;
+}
+.timecode-cue-point.cue-divider-grip > span::before,
+.timecode-cue-point.cue-divider-grip > span::after {
+	content: ""; position: absolute; width: 2px; height: 14px; top: 4px;
+	border-radius: 1px; background: #e2c98c;
+}
+.timecode-cue-point.cue-divider-grip > span::before { left: 4px; right: auto; }
+.timecode-cue-point.cue-divider-grip > span::after { right: 4px; left: auto; }
+.timecode-cue-point.cue-divider-grip:hover > span,
+.timecode-cue-point.cue-divider-grip:focus-visible > span { border-color: #ffdf94; background: #39424e; }
+.timecode-cue-point.cue-end-grip > span { left: 34px; }
+.timecode-cue-point.timecode-clip-end-grab.expanded::after { height: 88px; }
+
+/* Edge grips are the same rounded rectangle, clipped exactly at the clip boundary. */
+.timecode-cue-point.cue-start-grip,
+.timecode-cue-point.cue-end-grip { overflow: hidden; }
+.timecode-cue-point.cue-start-grip > span { left: -10px; }
+/* Marker flags live in their own ruler band, above the lanes. */
+.timecode-timeline-editor { --timecode-ruler-height: 76px; }
+.timecode-timeline-editor .timecode-timeline-heading,
+.timecode-timeline-editor .timecode-ruler { height: var(--timecode-ruler-height); }
+.timecode-timeline-editor .timecode-ruler > span { top: 8px; bottom: auto; }
+.timecode-timeline-editor .main-audio { top: var(--timecode-ruler-height); }
+.timecode-timeline-marker-line { opacity: .5; }
+.timecode-timeline-editor .timecode-timeline-marker-label {
+	height: 44px; gap: 6px; padding-inline: 6px;
+	border-radius: 4px; background: #18212dee; font-weight: 600;
+}
+.timecode-marker-grab {
+	width: 10px; height: 18px; flex: none;
+	background: radial-gradient(circle, currentColor 1px, transparent 1.5px) 0 0 / 5px 5px;
+}
+.ui-button.timecode-editor-playhead { z-index: 30; }
+.cue-expanded .timecode-clip-handle { padding-right: 58px !important; }
+
+.cue-expanded .timecode-cue-block-title { padding-inline: 14px; }
+
+/* Keep transport and Settings together at the right edge; Add remains anchored at the left. */
+.timecode-editor > .ui-window-header .ui-title-chrome-groups { flex: 1; }
+.timecode-editor > .ui-window-header .ui-title-chrome-group:has(.timecode-position-action) { margin-left: auto; }
+/* The time label sticks to the ruler while the red line spans the scrolled lanes. */
+.ui-button.timecode-editor-playhead { display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; overflow: visible; }
+.timecode-timeline-editor .timecode-editor-playhead > span { position: sticky; top: 0; flex: none; }
+.timecode-lane-select > strong { display: flex; align-items: center; gap: 6px; }
+.timecode-lane-edit-hint { flex: none; opacity: .85; }
+.timecode-clip-behaviors { position: absolute; inset: 3px 6px auto; height: 16px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; z-index: 8; font-size: .62rem; line-height: 14px; }
+.timecode-clip-behaviors > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 3px; border-radius: 3px; background: #15202ded; color: #c9d4df; }
+.timecode-cue-clip-status.unable { top: 22px; }
+.cue-expanded .timecode-clip-handle { padding-left: 92px; padding-right: 104px !important; }
+.lane-cue_list:not(.cue-expanded) .timecode-cue-block.ui-button { padding-top: 16px; }
+
+/* Time anchors retain their positioning transform while pressed. */
+.timecode-timeline-editor .timecode-timeline-item.item-speed:active,
+.timecode-timeline-editor .timecode-timeline-item.item-volume:active { transform: translate(-50%, -50%); }
+.timecode-timeline-editor .timecode-timeline-marker:active,
+.timecode-timeline-editor .timecode-editor-playhead:active,
+.timecode-timeline-editor .timecode-cue-envelope-hit:active,
+.timecode-timeline-editor .timecode-cue-name:active { transform: none; }
+
+.timecode-editor > .ui-window-header .ui-title-chrome-group:has(.timecode-position-action),
+.timecode-editor > .ui-window-header .ui-title-chrome-group:has(.timecode-transport-action),
+.timecode-editor > .ui-window-header .ui-title-chrome-terminals { flex: none; }

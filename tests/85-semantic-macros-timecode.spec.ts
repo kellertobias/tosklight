@@ -310,6 +310,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await expect.poll(async () => (await runtime()).frame).toBeGreaterThan(10);
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
 		const settings = page.getByRole("dialog", { name: "Timecode Settings" });
+		await settings.getByLabel("Show selection sidebar", { exact: true }).check();
 		await settings.getByLabel("Name", { exact: true }).fill("Live edit keeps playing");
 		await expect(page.getByText("Saved", { exact: true })).toBeVisible();
 		expect((await runtime()).state).toBe("playing");
@@ -470,7 +471,7 @@ test.describe("docs/testing/15-macros-and-timecode.md", () => {
 		await expect(editor.locator(".timecode-ruler-final-tick")).toBeInViewport();
 		await assertRulerLabelsDoNotOverlap(editor, definition.duration_frame);
 		await page.locator(".timecode-window.timecode-editor").screenshot({ path: testInfo.outputPath("timecode-ruler-right-edge-detail.png") });
-		await page.getByRole("button", { name: "Fit timeline", exact: true }).click();
+		await fitTimelineOverview(page);
 
 
 		await page.getByRole("button", { name: "Settings", exact: true }).click();
@@ -576,9 +577,14 @@ test("TIMECODE-001 @ui › audio volume points and waveform share exact axes at 
 	await expect(audio.locator(".timecode-waveform path")).toHaveAttribute("d", /.+/);
 	const speedGroups = editor.getByRole("button", { name: "Speed Groups", exact: true });
 	if (await speedGroups.getAttribute("aria-expanded") === "false") await speedGroups.click();
-	await page.getByRole("button", { name: "Fit timeline", exact: true }).click();
+	await fitTimelineOverview(page);
 	await assertAudioAxes(editor, frames, definition.duration_frame);
-	await audio.locator(".item-volume").nth(1).click();
+	await expect(editor.locator(".timecode-editor-inspector")).toHaveCount(0);
+ await page.getByRole("button", { name: "Settings", exact: true }).click();
+ const settings = page.getByRole("dialog", { name: "Timecode Settings" });
+ await settings.getByLabel("Show selection sidebar", { exact: true }).check();
+ await settings.getByRole("button", { name: /Close/ }).click();
+ await audio.locator(".item-volume").nth(1).click();
 	await expect(editor.locator(".timecode-editor-inspector")).toBeVisible();
 	await assertAudioAxes(editor, frames, definition.duration_frame);
 	const overview = editor.getByRole("scrollbar", { name: "Timeline overview" });
@@ -593,7 +599,30 @@ test("TIMECODE-001 @ui › audio volume points and waveform share exact axes at 
 	const bounds = (await viewport.boundingBox())!;
 	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + 50);
 	await page.mouse.wheel(100_000, 0);
-	await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+	// Native end-of-scroll is authoritative: scrollWidth can include reserved
+	// scrollbar gutter or endpoint paint beyond the actual timeline canvas.
+	await expect.poll(async () => {
+		const left = await viewport.evaluate((node) => node.scrollLeft);
+		await page.waitForTimeout(100);
+		return viewport.evaluate((node, previous) => {
+			const canvas = node.querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+			const right = node.getBoundingClientRect().left + node.clientLeft + node.clientWidth;
+			return { settled: node.scrollLeft === previous, endingVisible: canvas.getBoundingClientRect().right <= right + 1 };
+		}, left);
+	}).toEqual({ settled: true, endingVisible: true });
+	const reachedEnd = await viewport.evaluate((node) => node.scrollLeft);
+	// A second physical wheel must not move even one pixel farther. This proves
+	// the native end, without assuming the gutter is scrollable time-axis space.
+	await page.mouse.wheel(100_000, 0);
+	await page.waitForTimeout(100);
+	await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBe(reachedEnd);
+	console.log("Timecode native right edge", await viewport.evaluate((node) => ({
+		scrollLeft: node.scrollLeft, scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+		offsetWidth: (node as HTMLElement).offsetWidth, clientLeft: node.clientLeft,
+		scrollbarGutter: getComputedStyle(node).scrollbarGutter,
+		canvasWidth: node.querySelector<HTMLElement>(".timecode-timeline-canvas")!.getBoundingClientRect().width,
+	})));
+ await expect.poll(() => viewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
 	await assertAudioAxes(editor, frames, definition.duration_frame);
 	const before = await viewport.evaluate((node) => node.scrollLeft);
 	await editor.getByRole("button", { name: "Close selection settings", exact: true }).click();
@@ -714,4 +743,17 @@ async function assertRulerLabelsDoNotOverlap(editor: import("@playwright/test").
 	const origin = (await ruler.boundingBox())!.x;
 	const scale = Number(await editor.locator(".timecode-timeline-canvas").getAttribute("data-pixels-per-frame"));
 	expect(Math.abs(endpoint!.x + endpoint!.width - origin - duration * scale)).toBeLessThanOrEqual(1);
+}
+
+/** Fit via the operator overview handles; the title deliberately has no Fit button. */
+async function fitTimelineOverview(page: Page) {
+ const overview = page.getByRole("scrollbar", { name: "Timeline overview" });
+ const box = (await overview.boundingBox())!;
+ for (const [side, x] of [["start", box.x + 1], ["end", box.x + box.width - 1]] as const) {
+  const handle = (await overview.getByRole("separator", { name: `Resize timeline overview from ${side}` }).boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(x, handle.y + handle.height / 2, { steps: 8 });
+  await page.mouse.up();
+ }
 }

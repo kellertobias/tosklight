@@ -21,8 +21,11 @@ describe("Timecode Settings", () => {
 		const importAudio = vi.fn(async () => undefined);
 		const importCsv = vi.fn(async () => undefined);
 		const setMarkersLocked = vi.fn();
+		const setInspectorVisible = vi.fn();
 		render(
 			<TimecodeSettings
+				inspectorVisible={false}
+				setInspectorVisible={setInspectorVisible}
 				draft={draft}
 				setDraft={setDraft}
 				duration={draft.duration_frame ?? 0}
@@ -38,7 +41,11 @@ describe("Timecode Settings", () => {
 			/>,
 		);
 
-		const tab = (name: string) => screen.getByRole("tab", { name });
+		expect(screen.getByLabelText("Show selection sidebar")).not.toBeChecked();
+        fireEvent.click(screen.getByLabelText("Show selection sidebar"));
+        expect(setInspectorVisible).toHaveBeenCalledWith(true);
+        expect(setDraft).not.toHaveBeenCalled();
+        const tab = (name: string) => screen.getByRole("tab", { name });
 		// Generic opens first and carries what the Timecode is.
 		expect(screen.queryByLabelText("Number")).toBeNull();
 		expect(screen.queryByLabelText("Frames")).toBeNull();

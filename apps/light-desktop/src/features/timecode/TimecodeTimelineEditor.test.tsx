@@ -6,17 +6,27 @@ import {
 	screen,
 	within,
 } from "@testing-library/react";
-import { act, createRef, useState } from "react";
+import { act, createRef, forwardRef, useState, type ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CueList } from "../../api/types";
 import type { TimecodeDefinition } from "../../api/types/timecode";
 import {
 	TIMECODE_LANE_HEADER_WIDTH,
-	TimecodeTimelineEditor,
+	TimecodeTimelineEditor as UnconfiguredTimelineEditor,
 	type TimecodeTimelineEditorHandle,
 	timelineFrameX,
 } from "./TimecodeTimelineEditor";
 import { useTimecodeEncoderDeck } from "./timecodeEncoderBridge";
+
+import { TimelineInspectorPreferenceContext } from "./useTimecodeSidebarPreference";
+
+// These property-editor tests explicitly opt into the optional sidebar.
+const TimecodeTimelineEditor = forwardRef<TimecodeTimelineEditorHandle, ComponentProps<typeof UnconfiguredTimelineEditor>>((props, ref) => {
+ const [visible, setVisible] = useState(true);
+ return <TimelineInspectorPreferenceContext.Provider value={{ visible, setVisible }}>
+  <UnconfiguredTimelineEditor {...props} ref={ref} />
+ </TimelineInspectorPreferenceContext.Provider>;
+});
 
 function TimecodeEncoderProbe() {
 	const deck = useTimecodeEncoderDeck();
@@ -191,11 +201,26 @@ describe("TimecodeTimelineEditor", () => {
 		expect(screen.getByTitle(/Audio · 42%/)).toBeTruthy();
 	});
 
-	it("preserves scale and left frame through inspector resize and explicitly refits", () => {
-		let viewportWidth = 720;
+	it("initializes Fit from the mounted viewport rather than the fallback render width", () => {
+		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains("timecode-timeline-scroll") ? 1000 : 0;
+		});
+		try {
+			render(<TimecodeTimelineEditor definition={definition} frame={0} fps={44} cueLists={[]} audioPlayers={[]}
+				onScrub={vi.fn()} onCommit={vi.fn()} onPreview={vi.fn()} onBeginGesture={vi.fn()} onEndGesture={vi.fn()} />);
+			const canvas = screen.getByLabelText("Timecode timeline viewport").querySelector<HTMLElement>(".timecode-timeline-canvas")!;
+			expect(Number(canvas.dataset.pixelsPerFrame) * definition.duration_frame!).toBeCloseTo(840);
+		} finally { vi.restoreAllMocks(); }
+	});
+
+	it.each([0, 15])("preserves scale and left frame through inspector resize with a %ipx gutter and explicitly refits", (gutter) => {
+		let viewportWidth = 720 - gutter;
 		let notify: (() => void) | undefined;
 		vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockImplementation(function (this: HTMLElement) {
 			return this.classList.contains("timecode-timeline-scroll") ? viewportWidth : this.classList.contains("timecode-editor-body") ? 720 : 0;
+		});
+		vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(function (this: HTMLElement) {
+			return this.classList.contains("timecode-timeline-scroll") ? viewportWidth + gutter : 0;
 		});
 		vi.stubGlobal("ResizeObserver", class {
 			constructor(callback: () => void) { notify = callback; }
@@ -214,7 +239,7 @@ describe("TimecodeTimelineEditor", () => {
 			fireEvent.scroll(viewport);
 			fireEvent.click(screen.getByRole("button", { name: /Audio.*audio volume/i }));
 			expect(screen.getByLabelText("Selection settings")).toBeInTheDocument();
-			viewportWidth = 400;
+			viewportWidth = 400 - gutter;
 			act(() => notify?.());
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
 			expect(viewport.scrollLeft).toBe(400);
@@ -225,16 +250,16 @@ describe("TimecodeTimelineEditor", () => {
 			expect(canvas.style.width).toBe(naturalWidth);
 			fireEvent.click(screen.getByRole("button", { name: "Close selection settings" }));
 			// Extent is reserved before ResizeObserver can notify an expanded viewport.
-			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + 720);
-			viewportWidth = 720;
+			expect(Number.parseFloat(canvas.style.width)).toBe(850 + 720 - gutter);
+			viewportWidth = 720 - gutter;
 			act(() => notify?.());
 			expect(Number(canvas.dataset.pixelsPerFrame)).toBe(scale);
 			expect(viewport.scrollLeft).toBe(850);
 			expect(Number.parseFloat(canvas.style.width)).toBeGreaterThanOrEqual(850 + viewportWidth);
 			act(() => ref.current?.fit());
-			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo(560 / 440);
+			expect(Number(canvas.dataset.pixelsPerFrame)).toBeCloseTo((560 - gutter) / 440);
 			expect(viewport.scrollLeft).toBe(0);
-			expect(canvas.style.width).toBe("720px");
+			expect(canvas.style.width).toBe(`${720 - gutter}px`);
 		} finally { vi.restoreAllMocks(); vi.unstubAllGlobals(); }
 	});
 
@@ -872,8 +897,8 @@ describe("TimecodeTimelineEditor", () => {
 			.querySelector<HTMLElement>(".timecode-timeline-canvas");
 		const pixelsPerFrame = Number(canvas?.dataset.pixelsPerFrame);
 		const marker = screen.getByTitle("Verse · 00:00:02.00");
-		fireEvent.pointerDown(marker, { pointerId: 3, clientX: 300 });
-		expect(marker).toHaveClass("selected");
+		fireEvent.pointerDown(marker.querySelector(".timecode-timeline-marker-label")!, { pointerId: 3, clientX: 300 });
+		expect(marker).not.toHaveClass("selected");
 		expect(marker.style.getPropertyValue("--timecode-marker-color")).toBe(
 			"#33aa77",
 		);
@@ -883,6 +908,7 @@ describe("TimecodeTimelineEditor", () => {
 		});
 		fireEvent.pointerUp(window, { pointerId: 3 });
 		const moved = screen.getByTitle("Verse · 00:00:00.00");
+		expect(moved).toHaveClass("selected");
 		expect(moved).toHaveStyle({ left: `${TIMECODE_LANE_HEADER_WIDTH}px` });
 		expect(moved).not.toHaveStyle({ transform: "translateX(-22px)" });
 	});
@@ -1014,15 +1040,15 @@ describe("TimecodeTimelineEditor", () => {
 		const handle = clip.querySelector<HTMLElement>(".timecode-clip-handle");
 		expect(handle).toBeTruthy();
 		fireEvent.pointerDown(clip, { pointerId: 9, clientX: 72 });
-		fireEvent.pointerMove(window, { clientX: 128 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 9, clientX: 128 });
+		fireEvent.pointerUp(window, { pointerId: 9 });
 		expect(latest.current.lanes[0].content).toMatchObject({
 			kind: "cue_list",
 			clips: [expect.objectContaining({ start_frame: 44, end_frame: 132 })],
 		});
 		fireEvent.pointerDown(handle as HTMLElement, { pointerId: 1, clientX: 72 });
-		fireEvent.pointerMove(window, { clientX: 128 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 1, clientX: 128 });
+		fireEvent.pointerUp(window, { pointerId: 1 });
 		let cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
@@ -1031,18 +1057,20 @@ describe("TimecodeTimelineEditor", () => {
 		const start = clip.querySelector<HTMLElement>(".timecode-clip-edge.start");
 		expect(start).toBeTruthy();
 		fireEvent.pointerDown(start as HTMLElement, { pointerId: 2, clientX: 144 });
-		fireEvent.pointerMove(window, { clientX: 172 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 2, clientX: 172 });
+		fireEvent.pointerUp(window, { pointerId: 2 });
 		cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
 			clips: [expect.objectContaining({ start_frame: 110 })],
 		});
-		const end = clip.querySelector<HTMLElement>(".timecode-clip-edge.end");
+		// Completing the start gesture selects the Cue and replaces its clip body.
+        // A real pointer hits the current connected boundary, not the detached old node.
+        const end = editor.getByTitle(/Opening · 00:/).querySelector<HTMLElement>(".timecode-clip-edge.end");
 		expect(end).toBeTruthy();
 		fireEvent.pointerDown(end as HTMLElement, { pointerId: 3, clientX: 324 });
-		fireEvent.pointerMove(window, { clientX: 352 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 3, clientX: 352 });
+		fireEvent.pointerUp(window, { pointerId: 3 });
 		cueLane = latest.current.lanes[0].content;
 		expect(cueLane).toMatchObject({
 			kind: "cue_list",
@@ -1096,8 +1124,8 @@ describe("TimecodeTimelineEditor", () => {
 			clientX: 80,
 			clientY: 100,
 		});
-		fireEvent.pointerMove(window, { clientX: 112, clientY: 115.2 });
-		fireEvent.pointerUp(window);
+		fireEvent.pointerMove(window, { pointerId: 1, clientX: 112, clientY: 115.2 });
+		fireEvent.pointerUp(window, { pointerId: 1 });
 		expect(view.getByTitle(/Main audio volume · 80%/)).toBeTruthy();
 		act(() => ref.current?.deleteSelection());
 		expect(view.queryByTitle(/Main audio volume · 80%/)).toBeNull();
@@ -1186,7 +1214,7 @@ describe("TimecodeTimelineEditor", () => {
 		expect(view.getByRole("button", { name: "Edit Cue 2 Second" })).toBeTruthy();
 		expect(view.queryByRole("slider", { name: "Cue 1 In delay" })).toBeNull();
 		fireEvent.click(view.getByRole("button", { name: "Edit Cue 1 First" }));
-		expect(view.getByRole("slider", { name: "Cue 1 Trigger" })).toBeTruthy();
+		expect(view.getByRole("slider", { name: "Move clip start" })).toBeTruthy();
 		expect(view.getByRole("slider", { name: "Cue 1 In delay" })).toBeTruthy();
 		expect(view.getByRole("slider", { name: "Cue 1 Out fade" })).toBeTruthy();
 		expect(view.getByRole("button", { name: "Close cue editor" })).toBeTruthy();

@@ -1,3 +1,4 @@
+import { Button } from "@tosklight/ui";
 import { useOverviewDrag } from "./useOverviewDrag";
 import { type CSSProperties, type RefObject } from "react";
 import type { TimecodeDefinition } from "../../api/types/timecode";
@@ -10,27 +11,29 @@ import {
 export function TimelineOverview({
 	definition,
 	items,
-	duration,
+	pixelsPerFrame,
 	scrollLeft,
 	viewportWidth,
 	totalWidth,
+	scrollableWidth,
 	scrollRef,
 	viewportId,
-	minimumVisibleFraction,
+	maximumPixelsPerFrame,
 	onScrollLeftChange,
 	onVisibleRangeChange,
 }: {
 	definition: TimecodeDefinition;
 	items: readonly TimelineItem[];
-	duration: number;
+	pixelsPerFrame: number;
 	scrollLeft: number;
 	viewportWidth: number;
 	totalWidth: number;
+	scrollableWidth: number;
 	scrollRef: RefObject<HTMLDivElement | null>;
 	viewportId: string;
-	minimumVisibleFraction: number;
+	maximumPixelsPerFrame: number;
 	onScrollLeftChange(scrollLeft: number): void;
-	onVisibleRangeChange(startFraction: number, endFraction: number): void;
+	onVisibleRangeChange(startFraction: number, endFraction: number, displayedFrames: number): void;
 }) {
 	const {
 		maximumScroll,
@@ -43,16 +46,21 @@ export function TimelineOverview({
 	} = useOverviewDrag({
 		scrollRef,
 		totalWidth,
+		scrollableWidth,
+		displayedFrames: totalWidth / pixelsPerFrame,
 		viewportWidth,
 		scrollLeft,
-		minimumVisibleFraction,
+		minimumVisibleFraction: Math.min(1, viewportWidth / ((totalWidth / pixelsPerFrame) * maximumPixelsPerFrame)),
 		onScrollLeftChange,
 		onVisibleRangeChange,
 	});
-	const { lanes, laneHeight, laneGap } = overviewLanes(definition);
+	// Project the shared frame axis into retained overview context. Keeping this
+	// context stable during a drag never adds blank native scroll reach.
+	const framePercent = (frame: number) => (frame * pixelsPerFrame / totalWidth) * 100;
 	return (
 		<div
 			className="timecode-timeline-overview"
+			data-displayed-frames={totalWidth / pixelsPerFrame}
 			role="scrollbar"
 			aria-label="Timeline overview"
 			aria-controls={viewportId}
@@ -86,44 +94,14 @@ export function TimelineOverview({
 					);
 			}}
 		>
-			<div
-				className="timecode-timeline-overview-lanes"
-				style={
-					{
-						"--timecode-overview-lane-height": `${laneHeight}px`,
-						"--timecode-overview-lane-gap": `${laneGap}px`,
-					} as CSSProperties
-				}
-				data-lane-height={laneHeight}
-				aria-hidden="true"
-			>
-				{lanes.map((lane) => (
-					<span
-						key={lane.id}
-						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
-					>
-						{items
-							.filter((item) => item.laneId === lane.id)
-							.map((item) => (
-								<i
-									key={item.selection.itemId}
-									style={{
-										left: `${(item.frame / duration) * 100}%`,
-										width: item.endFrame
-											? `${Math.max(0.25, ((item.endFrame - item.frame) / duration) * 100)}%`
-											: undefined,
-									}}
-								/>
-							))}
-					</span>
-				))}
-			</div>
+			<OverviewLanes definition={definition} items={items} framePercent={framePercent} />
 			{definition.markers.map((marker) => (
 				<i
 					key={marker.id}
 					className="timecode-timeline-overview-marker"
+					data-marker-id={marker.id}
 					style={{
-						left: `${(marker.frame / duration) * 100}%`,
+						left: `${framePercent(marker.frame)}%`,
 						background: markerColorOption(marker.color).value,
 					}}
 					aria-hidden="true"
@@ -133,6 +111,10 @@ export function TimelineOverview({
 				className="timecode-timeline-overview-visible"
 				style={{ left: `${visibleLeft}%`, width: `${visibleWidth}%` }}
 			>
+				<Button size="compact" className="timecode-timeline-overview-move" data-overview-pan
+					aria-label="Move visible timeline range" title="Drag to move the visible time range; arrow keys pan">
+					<span aria-hidden="true"><svg viewBox="0 0 18 8"><circle cx="4" cy="2" r="1"/><circle cx="9" cy="2" r="1"/><circle cx="14" cy="2" r="1"/><circle cx="4" cy="6" r="1"/><circle cx="9" cy="6" r="1"/><circle cx="14" cy="6" r="1"/></svg></span>
+				</Button>
 				<i
 					className="timecode-timeline-overview-handle handle-start"
 					data-overview-edge="start"
@@ -149,6 +131,50 @@ export function TimelineOverview({
 				/>
 			</span>
 		</div>
+	);
+}
+
+function OverviewLanes({ definition, items, framePercent }: {
+	definition: TimecodeDefinition;
+	items: readonly TimelineItem[];
+	framePercent(frame: number): number;
+}) {
+	const { lanes, laneHeight, laneGap } = overviewLanes(definition);
+	return (
+			<div
+				className="timecode-timeline-overview-lanes"
+				style={
+					{
+						"--timecode-overview-lane-height": `${laneHeight}px`,
+						"--timecode-overview-lane-gap": `${laneGap}px`,
+					} as CSSProperties
+				}
+				data-lane-height={laneHeight}
+				aria-hidden="true"
+			>
+				{lanes.map((lane) => (
+					<span
+						key={lane.id}
+						className={`timecode-timeline-overview-lane overview-lane-${lane.kind}`}
+						data-overview-lane-id={lane.id}
+					>
+						{items
+							.filter((item) => item.laneId === lane.id)
+							.map((item) => (
+								<i
+									key={item.selection.itemId}
+									data-item-id={item.selection.itemId}
+									style={{
+										left: `${framePercent(item.frame)}%`,
+										width: item.endFrame
+											? `${framePercent(item.endFrame - item.frame)}%`
+											: undefined,
+									}}
+								/>
+							))}
+					</span>
+				))}
+			</div>
 	);
 }
 

@@ -140,7 +140,7 @@ export function timelineScroller(
 /** A pending overview-window resize, held while the operator is still dragging it. */
 export interface OverviewResize {
 	zoom: number;
-	startFraction: number;
+	startFrame: number;
 	revision: number;
 }
 

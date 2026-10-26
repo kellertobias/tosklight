@@ -94,7 +94,7 @@ export function LaneLabel({
 					if (!consumeLaneDragClick(lane.id)) onSelectLane(lane.id);
 				}}
 			>
-				<strong>{lane.name}</strong>
+				<strong>{lane.name}{lane.content.kind === "speed_group" && <svg className="timecode-lane-edit-hint" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15Z" strokeLinejoin="round" /></svg>}</strong>
 				{/* The audio lane's subtitle is the track it is showing, which is what an operator
 				    needs to identify it; every other lane says what kind it is. */}
 				{lane.content.kind === "audio_volume" && audioFileName ? (

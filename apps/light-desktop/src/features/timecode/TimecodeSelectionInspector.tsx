@@ -33,6 +33,7 @@ interface SelectionInspectorProps {
 export function SelectionSidebar(
 	props: Parameters<typeof SelectionProperties>[0] & {
 		beforeClose(): void;
+		onClose?(): void;
 		inspectorRef: Ref<HTMLDivElement>;
 	},
 ) {
@@ -51,7 +52,7 @@ export function SelectionSidebar(
 				<Button
 					size="compact"
 					aria-label="Close selection settings"
-					onClick={() => select(null)}
+					onClick={props.onClose}
 				>
 					Close
 				</Button>

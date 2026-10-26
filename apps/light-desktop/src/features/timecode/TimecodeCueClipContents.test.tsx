@@ -221,7 +221,7 @@ it("previews placed manual triggers and dependent automatic Cues without saving 
 			/>
 		</div>,
 	);
-	const trigger = screen.getByRole("slider", { name: "Cue 2 Trigger" });
+	const trigger = screen.getByRole("slider", { name: "Move Cue 2 trigger" });
 	fireEvent.pointerDown(trigger, { pointerId: 1, clientX: 100 });
 	fireEvent.pointerMove(trigger, { pointerId: 1, clientX: 188 });
 	expect(trigger).toHaveAttribute("aria-valuenow", "264");
@@ -241,4 +241,70 @@ it("previews placed manual triggers and dependent automatic Cues without saving 
 	fireEvent.pointerMove(trigger, { pointerId: 2, clientX: 188 });
 	fireEvent.pointerUp(trigger, { pointerId: 2, clientX: 188 });
 	expect(onPlaceCueStart).toHaveBeenCalledExactlyOnceWith("clip", "two", 264);
+});
+
+it("moves the first Cue through the clip start half-grip and exact Trigger field without a floating diamond", () => {
+	const host = document.createElement("div");
+	document.body.append(host);
+	const move = vi.fn();
+	render(
+		<CueListClipContents
+			cueList={{ id: list.id, name: list.name, cues: list.cues, body: list }}
+			clip={clip}
+			pixelsPerFrame={2}
+			timingDefaults={{ sequenceFadeMillis: 1000, releaseFadeMillis: 500 }}
+			selectedCueId="one"
+			expanded
+			inspectorHost={host}
+			onMoveClip={move}
+		/>,
+	);
+	expect(
+		screen.queryByRole("slider", { name: "Move Cue 1 trigger" }),
+	).toBeNull();
+	expect(screen.queryByRole("slider", { name: "Cue 1 Trigger" })).toBeNull();
+	expect(
+		screen.getByRole("slider", { name: "Move clip start" }),
+	).toBeInTheDocument();
+	const input = screen.getByLabelText("Trigger");
+	fireEvent.change(input, { target: { value: "00:00:01.00" } });
+	fireEvent.blur(input);
+	expect(move).toHaveBeenCalledExactlyOnceWith("clip", 44);
+	host.remove();
+});
+
+it("keeps wholeclip start movement available when only inherited In exceeds a short clip", () => {
+	const move = vi.fn();
+	render(
+		<div data-pixels-per-frame="2"><CueListClipContents
+			cueList={{ id: list.id, name: list.name, cues: list.cues, body: list }}
+			clip={{ ...clip, end_frame: 10 }}
+			pixelsPerFrame={2}
+			timingDefaults={{ sequenceFadeMillis: 1000, releaseFadeMillis: 500 }}
+			selectedCueId="one"
+			expanded
+			onMoveClip={move}
+		/></div>,
+	);
+	const start = screen.getByRole("slider", { name: "Move clip start" });
+	expect(start).not.toHaveAttribute("aria-disabled", "true");
+	fireEvent.pointerDown(start, { pointerId: 4, clientX: 0 });
+	fireEvent.pointerUp(start, { pointerId: 4, clientX: 44 });
+	expect(move).toHaveBeenCalledExactlyOnceWith("clip", 22);
+});
+
+it("does not author inherited or explicit Cue timing on a stationary or vertical-only touch", () => {
+	const save = vi.fn().mockResolvedValue(list);
+	render(<CueListClipContents cueList={{ id: list.id, name: list.name, cues: list.cues, body: list }} clip={clip} pixelsPerFrame={2}
+		timingDefaults={{ sequenceFadeMillis: 1000, releaseFadeMillis: 500 }} selectedCueId="one" expanded onSaveCueList={save} />);
+	for (const name of ["In delay", "In fade", "Out delay", "Out fade"]) {
+		const point = screen.getByRole("slider", { name: `Cue 1 ${name}` });
+		const frame = point.getAttribute("aria-valuenow");
+		fireEvent.pointerDown(point, { pointerId: 9, clientX: 20, clientY: 20 });
+		fireEvent.pointerMove(window, { pointerId: 9, clientX: 20, clientY: 80 });
+		fireEvent.pointerUp(window, { pointerId: 9, clientX: 20, clientY: 80 });
+		expect(point).toHaveAttribute("aria-valuenow", frame);
+	}
+	expect(save).not.toHaveBeenCalled();
+	expect(list.cues[0].fade_millis).toBe(0);
 });

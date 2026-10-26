@@ -50,6 +50,13 @@
 			"sourceFile": "docs/marketing/assets/stills/control-cues.png"
 		},
 		{
+			"file": "control-timecode.png",
+			"title": "Timecode · In development",
+			"caption": "Cue triggers, fade points, audio, and Speed Groups on one timeline. Still in development — use with caution and test your show before relying on it live.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/control-timecode.png"
+		},
+		{
 			"file": "control-preload-go.png",
 			"title": "Preload and GO",
 			"caption": "Set up a change while the current look remains live.",

@@ -1,3 +1,4 @@
+import { ClipBehaviorLabels } from "./TimecodeClipBehaviorLabels";
 import { ClipEndHandle } from "./TimecodeClipEndHandle";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
@@ -75,6 +76,7 @@ export function CueListClipBody({
 }) {
 	return (
 		<>
+			<ClipBehaviorLabels clip={clip} />
 			<span
 				className="timecode-clip-handle"
 				title="Drag to move the Cuelist clip"
@@ -83,8 +85,7 @@ export function CueListClipBody({
 					startDrag(event, item.selection, item.frame, undefined, startVolume);
 				}}
 			>
-				<b>{cueList?.name ?? item.label}</b>
-				{cueList?.number !== undefined && <small>{cueList.number}</small>}
+				<b>{cueList?.number !== undefined ? `Cuelist ${cueList.number} · ` : ""}{cueList?.name ?? item.label}</b>
 			</span>
 			{expanded && onSetClipFade && (
 				<ClipFadeHandles

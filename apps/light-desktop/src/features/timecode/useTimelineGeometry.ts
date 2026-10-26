@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { TIMECODE_LANE_HEADER_WIDTH } from "./timecodeEditorShared";
+import { timelineTrailingGutter } from "./timelineTrailingGutter";
 export const TARGET_MAX_PIXELS_PER_FRAME = 17.5;
 const FALLBACK_VIEWPORT_WIDTH = 720;
 function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
@@ -8,7 +9,6 @@ function useTimelineViewportWidth(scrollRef: RefObject<HTMLDivElement | null>) {
 		const element = scrollRef.current;
 		if (!element) return;
 		const measure = () => {
-			element.style.setProperty("--timecode-visible-height", `${element.clientHeight}px`);
 			setViewportWidth(
 				element.clientWidth > 0 ? element.clientWidth : FALLBACK_VIEWPORT_WIDTH,
 			);
@@ -51,6 +51,7 @@ export function useTimelineGeometry({
 }) {
 	const [zoom, setZoomValue] = useState(1);
 	const [trailingExtent, setTrailingExtent] = useState(0);
+	const [overviewFrames, setOverviewFrames] = useState(0);
 	const restoreLeft = useRef<number | null>(null);
 	const [fitReference, setFitReference] = useState<{
 		id: string;
@@ -74,15 +75,18 @@ export function useTimelineGeometry({
 	useLayoutEffect(() => {
 		if (fitReference?.id === definitionId || !scrollRef.current?.clientWidth)
 			return;
-		setFitReference({ id: definitionId, scale: measuredFit });
+		const initialWidth = scrollRef.current.clientWidth - TIMECODE_LANE_HEADER_WIDTH;
+		setFitReference({ id: definitionId, scale: timelineZoomGeometry(duration, initialWidth).fitPixelsPerFrame });
+		setOverviewFrames(0);
 	}, [definitionId, fitReference, measuredFit]);
 	const prepareInspectorClose = () => {
 		const viewport = scrollRef.current;
 		if (!viewport) return;
 		const body = viewport.closest<HTMLElement>(".timecode-editor-body");
+		const reservedScrollbarWidth = Math.max(0, viewport.offsetWidth - viewport.clientWidth);
 		const expandedWidth = Math.max(
 			viewport.clientWidth,
-			body?.clientWidth ?? viewport.clientWidth,
+			(body?.clientWidth ?? viewport.clientWidth) - reservedScrollbarWidth,
 		);
 		const left = viewport.scrollLeft;
 		// Reserve before React removes the inspector. Waiting for ResizeObserver is too
@@ -100,6 +104,7 @@ export function useTimelineGeometry({
 	});
 	const fitTimeline = () => {
 		setTrailingExtent(0);
+		setOverviewFrames(0);
 		restoreLeft.current = null;
 		setFitReference({ id: definitionId, scale: measuredFit });
 		setZoomValue(1);
@@ -107,7 +112,11 @@ export function useTimelineGeometry({
 	};
 	const setZoom = (value: number) => {
 		if (value <= 1) fitTimeline();
-		else setZoomValue(Math.min(maximumZoom, value));
+		else {
+			setOverviewFrames(displayedOverviewFrames);
+			setTrailingExtent(0);
+			setZoomValue(Math.min(maximumZoom, value));
+		}
 	};
 	const pixelsPerFrame = Math.min(
 		TARGET_MAX_PIXELS_PER_FRAME,
@@ -120,6 +129,20 @@ export function useTimelineGeometry({
 		duration * pixelsPerFrame,
 		trailingExtent,
 	);
+	// Overview context may include blank time, but never enlarges native scroll reach.
+	const displayedOverviewFrames = Math.max(duration, overviewFrames, width / pixelsPerFrame);
+	useLayoutEffect(() => {
+		const viewport = scrollRef.current;
+		if (!viewport) return;
+		const style = getComputedStyle(viewport);
+		const borders = (Number.parseFloat(style.borderLeftWidth) || 0) +
+			(Number.parseFloat(style.borderRightWidth) || 0);
+		const gutter = timelineTrailingGutter(
+			width + TIMECODE_LANE_HEADER_WIDTH, viewport.clientWidth,
+			viewport.offsetWidth, borders,
+		);
+		viewport.style.setProperty("--timecode-trailing-scroll-gutter", `${gutter}px`);
+	}, [scrollRef, width, viewportWidth]);
 	return {
 		viewportWidth,
 		timelineViewportWidth,
@@ -127,8 +150,14 @@ export function useTimelineGeometry({
 		fitPixelsPerFrame,
 		pixelsPerFrame,
 		width,
+		overviewWidth: displayedOverviewFrames * pixelsPerFrame,
+		preserveOverviewExtent: setOverviewFrames,
 		zoom,
 		setZoom,
+		setOverviewZoom: (value: number) => {
+			setTrailingExtent(0);
+			setZoomValue(Math.max(1, Math.min(maximumZoom, value)));
+		},
 		fitTimeline,
 		prepareInspectorClose,
 	};

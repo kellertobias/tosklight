@@ -1,3 +1,5 @@
+import { useTimelineInspectorPreference } from "./useTimecodeSidebarPreference";
+import { useTimelineInspectorVisibility } from "./useTimelineInspectorVisibility";
 import { volumeKeyframeValues } from "./audioLaneGeometry";
 import { useTimecodeEditorHandle } from "./useTimecodeEditorHandle";
 import { cueStatusForItem } from "./cueLaneClipStatus";
@@ -174,6 +176,7 @@ function TimelineCanvas(props: {
 	onSelectLane(laneId: string): void;
 	onScroll(scrollLeft: number): void;
 	selectedLaneId: string | null;
+	expandedSpeedLaneId: string | null;
 	viewportId: string;
 	cueLists: readonly TimecodeCueListOption[];
 	timingDefaults: CueClipTimingDefaults;
@@ -356,7 +359,7 @@ function EditorLane(
 	);
 	return (
 		<div
-			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.selectedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
+			className={`timecode-editor-lane lane-${lane.content.kind} ${props.definition.audio && lane.content.kind === "audio_volume" ? "main-audio" : ""} ${props.selectedLaneId === lane.id ? "selected" : ""} ${props.expandedSpeedLaneId === lane.id && lane.content.kind === "speed_group" ? "lane-expanded" : ""} ${props.selectedLaneId === lane.id && props.selectedCueId ? "cue-expanded" : ""}`}
 			data-lane-id={lane.id}
 			onPointerDown={lanePointerSelection(props.onSelectLane, lane.id)}
 		>
@@ -387,8 +390,7 @@ function EditorLane(
 				consumeLaneDragClick={props.consumeLaneDragClick}
 				onSelectLane={props.onSelectLane}
 				expanded={
-					props.selectedLaneId === lane.id &&
-					(Boolean(props.selectedCueId) || lane.content.kind === "speed_group")
+					(props.selectedLaneId === lane.id && Boolean(props.selectedCueId)) || props.expandedSpeedLaneId === lane.id
 				}
 				onCloseCue={props.onCloseCue}
 			/>
@@ -601,7 +603,7 @@ function TimelineItemButton({
 			{marker ? (
 				<>
 					<span className="timecode-timeline-marker-line" aria-hidden="true" />
-					<span className="timecode-timeline-marker-label">{item.label}</span>
+					<span className="timecode-timeline-marker-label"><span className="timecode-marker-grab" aria-hidden="true" />{item.label}</span>
 				</>
 			) : isCueListClip ? null : (
 				(item.valueLabel ?? item.label)
@@ -758,8 +760,11 @@ export const TimecodeTimelineEditor = forwardRef<
 		fitPixelsPerFrame,
 		pixelsPerFrame,
 		width,
+		overviewWidth,
+		preserveOverviewExtent,
 		zoom,
 		setZoom,
+		setOverviewZoom,
 		fitTimeline,
 		prepareInspectorClose,
 	} = useTimelineGeometry({
@@ -768,10 +773,12 @@ export const TimecodeTimelineEditor = forwardRef<
 		definitionId: definition.id,
 		scrollTimelineTo,
 	});
+	const inspectorPreference = useTimelineInspectorPreference();
+	const inspector = useTimelineInspectorVisibility(inspectorPreference.visible, inspectorPreference.setVisible, prepareInspectorClose);
 	const items = useMemo(() => timelineItems(definition), [definition]);
 	const activeLaneId =
 		selection && "laneId" in selection ? selection.laneId : selectedLaneId;
-	const { collapsedSections, onToggleSection, onSelectLane, onCloseCue } =
+	const { collapsedSections, onToggleSection, onSelectLane, onCloseCue, expandedSpeedLaneId } =
 		useTimelineSections({
 			definition,
 			activeLaneId,
@@ -851,6 +858,7 @@ export const TimecodeTimelineEditor = forwardRef<
 	useOverviewScroll({
 		scrollRef,
 		width,
+		pixelsPerFrame,
 		viewportWidth,
 		overviewResize,
 		setScrollLeft,
@@ -858,11 +866,12 @@ export const TimecodeTimelineEditor = forwardRef<
 	});
 	const resizeOverviewWindow = overviewResizer({
 		timelineViewportWidth,
-		duration,
+		preserveOverviewExtent,
 		maximumZoom,
 		fitPixelsPerFrame,
 		setOverviewResize,
-		setZoom,
+		setZoom: setOverviewZoom,
+		fitTimeline,
 	});
 
 	useEffect(() => {
@@ -955,17 +964,14 @@ export const TimecodeTimelineEditor = forwardRef<
 						<TimelineOverview
 							definition={definition}
 							items={items}
-							duration={duration}
+							pixelsPerFrame={pixelsPerFrame}
 							scrollLeft={scrollLeft}
 							viewportWidth={timelineViewportWidth}
-							totalWidth={width}
+							totalWidth={overviewWidth}
+							scrollableWidth={width}
 							scrollRef={scrollRef}
 							viewportId={viewportId}
-							minimumVisibleFraction={Math.min(
-								1,
-								timelineViewportWidth /
-									(duration * TARGET_MAX_PIXELS_PER_FRAME),
-							)}
+							maximumPixelsPerFrame={TARGET_MAX_PIXELS_PER_FRAME}
 							onScrollLeftChange={setScrollLeft}
 							onVisibleRangeChange={resizeOverviewWindow}
 						/>
@@ -1005,6 +1011,7 @@ export const TimecodeTimelineEditor = forwardRef<
 								viewportId,
 								onSelectLane,
 								selectedLaneId: activeLaneId,
+								expandedSpeedLaneId,
 								cueLists,
 								timingDefaults,
 								onSaveCueList,
@@ -1014,13 +1021,14 @@ export const TimecodeTimelineEditor = forwardRef<
 							}}
 						/>
 					</div>
-					<SelectionSidebar
+					{inspector.visible && <SelectionSidebar
 						{...{ definition, selection, cueLists, fps, items, onCommit, frame, onScrub }}
 						onSelect={setSelection}
 						beforeClose={prepareInspectorClose}
 						cueTimingActive={cueTimingActive}
 						inspectorRef={setCueInspectorHost}
-					/>
+						onClose={inspector.close}
+					/>}
 				</div>
 			</CueClipBoundaryProvider>
 			<TimelineLaneChoosers
@@ -1056,6 +1064,7 @@ function unusedSpeedGroups(definition: TimecodeDefinition) {
 function useOverviewScroll({
 	scrollRef,
 	width,
+	pixelsPerFrame,
 	viewportWidth,
 	overviewResize,
 	setScrollLeft,
@@ -1063,6 +1072,7 @@ function useOverviewScroll({
 }: {
 	scrollRef: RefObject<HTMLDivElement | null>;
 	width: number;
+	pixelsPerFrame: number;
 	viewportWidth: number;
 	overviewResize: OverviewResize | null;
 	setScrollLeft(value: number): void;
@@ -1078,7 +1088,7 @@ function useOverviewScroll({
 		if (overviewResize) {
 			const next = Math.max(
 				0,
-				Math.min(maximumScroll, overviewResize.startFraction * width),
+				Math.min(maximumScroll, overviewResize.startFrame * pixelsPerFrame),
 			);
 			viewport.scrollLeft = next;
 			setScrollLeft(next);
@@ -1090,6 +1100,7 @@ function useOverviewScroll({
 		setScrollLeft(viewport.scrollLeft);
 	}, [
 		overviewResize,
+		pixelsPerFrame,
 		width + TIMECODE_LANE_HEADER_WIDTH,
 		viewportWidth,
 		width,
