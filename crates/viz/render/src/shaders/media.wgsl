@@ -28,10 +28,14 @@ fn media_vertex(input: MediaInput, @builtin(instance_index) instance: u32) -> Me
     let world = model * vec4<f32>(input.position, 1.0);
     var output: MediaOutput;
     output.clip = globals.view_projection * world;
-    output.uv = input.crop.xy + input.uv * input.crop.zw;
+    // unit_plane's first UV row becomes the physical bottom after the panel's +90deg X
+    // rotation. Images use a top-left origin. Flip locally before crop so LED rows keep
+    // their authored source regions rather than exchanging the whole image's top/bottom.
+    let panel_uv = vec2<f32>(input.uv.x, 1.0 - input.uv.y);
+    output.uv = input.crop.xy + panel_uv * input.crop.zw;
     output.material = input.material;
     output.world = world.xyz;
-    output.panel_uv = input.uv;
+    output.panel_uv = panel_uv;
     output.normal = normalize((model * vec4<f32>(input.normal, 0.0)).xyz);
     return output;
 }

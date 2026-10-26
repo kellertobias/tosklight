@@ -287,3 +287,5 @@ fn media_shader_validates_and_captures_when_a_gpu_is_available() {
         .expect("media pipeline capture");
     assert_eq!((image.width, image.height), (96, 64));
 }
+
+mod media_orientation;

@@ -99,5 +99,26 @@ class ProjectorRangeTests(unittest.TestCase):
             self.assertEqual(data.node_tree.nodes, [])
 
 
+class PanelOrientationTests(unittest.TestCase):
+    def test_physical_top_left_gets_source_top_left_and_blender_v_up(self):
+        maps = load_backend().panel_uv_maps((0.1, 0.05, 0.8, 0.7))
+        # Actual unit_plane vertex order: bottom-left/right, top-right/left after rotation.
+        self.assertEqual(maps["FrozenPanelUV"], [(0, 1), (1, 1), (1, 0), (0, 0)])
+        expected = [(0.1, 0.75), (0.9, 0.75), (0.9, 0.05), (0.1, 0.05)]
+        for native, texture, target in zip(maps["FrozenNativeUV"], maps["FrozenTextureUV"], expected):
+            self.assertAlmostEqual(native[0], target[0])
+            self.assertAlmostEqual(native[1], target[1])
+            self.assertAlmostEqual(texture[0], target[0])
+            self.assertAlmostEqual(texture[1], 1.0 - target[1])
+
+    def test_led_rows_keep_their_own_crop_instead_of_flipping_across_source(self):
+        backend = load_backend()
+        upper = backend.panel_uv_maps((0.1, 0.05, 0.4, 0.35))["FrozenNativeUV"]
+        lower = backend.panel_uv_maps((0.1, 0.4, 0.4, 0.35))["FrozenNativeUV"]
+        self.assertAlmostEqual(upper[3][1], 0.05)
+        self.assertAlmostEqual(upper[0][1], lower[3][1])
+        self.assertAlmostEqual(lower[0][1], 0.75)
+
+
 if __name__ == "__main__":
     unittest.main()

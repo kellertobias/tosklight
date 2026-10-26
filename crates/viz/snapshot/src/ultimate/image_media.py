@@ -111,6 +111,18 @@ def panel_material(panel, folder, images):
     return material
 
 
+
+def panel_uv_maps(crop):
+    # unit_plane UV(0,0) is physically bottom-left after the panel's +90deg X rotation.
+    # Match native local V correction BEFORE crop; Blender texture coordinates then use V-up.
+    left, top, width, height = crop
+    panel_uv = [(0, 1), (1, 1), (1, 0), (0, 0)]
+    native_uv = [(left + u * width, top + v * height) for u, v in panel_uv]
+    return {"FrozenNativeUV": native_uv,
+            "FrozenTextureUV": [(u, 1.0 - v) for u, v in native_uv],
+            "FrozenPanelUV": panel_uv}
+
+
 def add_panels(manifest, folder):
     images, materials = {}, {}
     for index, panel in enumerate(manifest["media"]["panels"]):
@@ -118,10 +130,7 @@ def add_panels(manifest, folder):
         # Same unit_plane vertices/winding and UVs as the native MediaPanel pass.
         mesh.from_pydata([(-0.5, 0.0, 0.5), (0.5, 0.0, 0.5), (0.5, 0.0, -0.5), (-0.5, 0.0, -0.5)], [], [(0, 1, 2, 3)])
         mesh.update()
-        left, top, width, height = panel["crop"]
-        native_uv = [(left + u * width, top + v * height) for u, v in [(0, 0), (1, 0), (1, 1), (0, 1)]]
-        maps = {"FrozenNativeUV": native_uv, "FrozenTextureUV": [(u, 1.0 - v) for u, v in native_uv],
-                "FrozenPanelUV": [(0, 0), (1, 0), (1, 1), (0, 1)]}
+        maps = panel_uv_maps(panel["crop"])
         for name, coordinates in maps.items():
             layer = mesh.uv_layers.new(name=name)
             for loop in mesh.loops:
