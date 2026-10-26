@@ -238,3 +238,39 @@ pub(crate) fn baseline_transport(
         format!("no compatible picture transport: desk offers {offered:?}, renderer offers {:?}; explicit benchmark requests cannot fall back", identity.transports)
     })
 }
+
+/// Local real-application captures reuse the verified internal-display placement without
+/// activating the benchmark frontend or changing the operator's other desktop windows.
+pub(crate) fn local_capture_requested() -> bool {
+    std::env::var_os("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY").is_some()
+}
+
+pub(crate) fn validate_local_capture() -> Result<(), String> {
+    if !local_capture_requested() {
+        return Ok(());
+    }
+    if std::env::var("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY")
+        .ok()
+        .as_deref()
+        != Some("internal")
+    {
+        return Err("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY only supports internal".into());
+    }
+    let address: std::net::SocketAddr = std::env::var("LIGHT_DESKTOP_TEST_BIND")
+        .map_err(|_| "Local capture requires an isolated loopback LIGHT_DESKTOP_TEST_BIND")?
+        .parse()
+        .map_err(|_| "Invalid local capture bind")?;
+    if !address.ip().is_loopback() || address.port() == 5000 {
+        return Err("Local capture requires an isolated loopback port distinct from5000".into());
+    }
+    Ok(())
+}
+
+pub(crate) async fn show_local_capture(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Local capture window is missing")?;
+    display::place(&window, false).await?;
+    window.show().map_err(|error| error.to_string())
+}

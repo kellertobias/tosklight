@@ -40,6 +40,23 @@ pub(crate) fn cancel_quit(app: tauri::AppHandle, state: tauri::State<'_, QuitSta
 
 #[tauri::command]
 pub(crate) fn frontend_ready(app: tauri::AppHandle) {
+    if crate::packaged_benchmark::local_capture_requested() {
+        static STARTED: AtomicBool = AtomicBool::new(false);
+        if STARTED.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        tauri::async_runtime::spawn(async move {
+            match crate::packaged_benchmark::show_local_capture(app.clone()).await {
+                Ok(()) => mark_frontend_ready(app),
+                Err(error) => eprintln!("Local capture remains hidden: {error}"),
+            }
+        });
+        return;
+    }
+    mark_frontend_ready(app);
+}
+
+fn mark_frontend_ready(app: tauri::AppHandle) {
     if let Some(marker) = std::env::var_os("LIGHT_DESKTOP_TEST_READY_FILE") {
         let _ = std::fs::write(
             marker,

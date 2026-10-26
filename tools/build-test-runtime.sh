@@ -23,6 +23,10 @@ light_configure_desktop_test_runtime() {
     echo "error: isolated launch requires an absolute LIGHT_DESKTOP_TEST_DATA_DIR" >&2
     return 1
   fi
+  if [[ -n "${LIGHT_DESKTOP_TEST_SHOW:-}" ]] && { [[ "$LIGHT_DESKTOP_TEST_SHOW" != /* ]] || [[ ! -f "$LIGHT_DESKTOP_TEST_SHOW" ]]; }; then
+    echo "error: LIGHT_DESKTOP_TEST_SHOW must name an existing absolute show file" >&2
+    return 1
+  fi
   require launchctl
   require ps
   require lsof
@@ -35,6 +39,7 @@ light_configure_desktop_test_runtime() {
   checksum="$(printf '%s' "$ROOT:$DATA_DIR:$LIGHT_DESKTOP_TEST_BIND" | cksum)"
   TEST_SERVER_LABEL="de.tokenet.tosklight.test-server.${checksum%% *}"
   TEST_SERVER_COMMAND="$TARGET_DIR/debug/light-headless --bind $LIGHT_DESKTOP_TEST_BIND --osc-bind $LIGHT_DESKTOP_TEST_OSC_BIND --data-dir $DATA_DIR --fixture-package-dir $FIXTURE_LIBRARY_DIR"
+  if [[ -n "${LIGHT_DESKTOP_TEST_SHOW:-}" ]]; then TEST_SERVER_COMMAND+=" --show $LIGHT_DESKTOP_TEST_SHOW"; fi
 }
 
 light_stop_desktop_test_runtime() {
@@ -94,9 +99,10 @@ light_start_desktop_test_runtime() {
     return 1
   fi
   mkdir -p "$DATA_DIR"
+  local server_args=("$server" --bind "$LIGHT_DESKTOP_TEST_BIND" --osc-bind "$LIGHT_DESKTOP_TEST_OSC_BIND" --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR")
+  if [[ -n "${LIGHT_DESKTOP_TEST_SHOW:-}" ]]; then server_args+=(--show "$LIGHT_DESKTOP_TEST_SHOW"); fi
   launchctl submit -l "$TEST_SERVER_LABEL" -o "$DATA_DIR/light-headless.log" -e "$DATA_DIR/light-headless.log" -- \
-    "$server" --bind "$LIGHT_DESKTOP_TEST_BIND" --osc-bind "$LIGHT_DESKTOP_TEST_OSC_BIND" \
-    --data-dir "$DATA_DIR" --fixture-package-dir "$FIXTURE_LIBRARY_DIR"
+    "${server_args[@]}"
   while (( attempts < 600 )); do
     if light_desktop_test_server_ready; then return 0; fi
     sleep 0.1
@@ -119,7 +125,7 @@ light_open_desktop_test_app() {
     --env "LIGHT_DESKTOP_TEST_DATA_DIR=$DATA_DIR")
   # LaunchServices does not inherit this shell's benchmark environment. Forward only the
   # explicitly present controls needed by this isolated launch, preserving each argument.
-  for name in LIGHT_STAGE_PACKAGED_BENCH_REPORT LIGHT_STAGE_PACKAGED_BENCH_DISPLAY \
+  for name in LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY LIGHT_DESKTOP_TEST_READY_FILE LIGHT_STAGE_PACKAGED_BENCH_REPORT LIGHT_STAGE_PACKAGED_BENCH_DISPLAY \
     LIGHT_STAGE_PACKAGED_BENCH_LAYOUT LIGHT_STAGE_PACKAGED_BENCH_PREPARED \
     LIGHT_STAGE_PACKAGED_BENCH_PROFILE LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS \
     LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS LIGHT_STAGE_PACKAGED_BENCH_STAGE \

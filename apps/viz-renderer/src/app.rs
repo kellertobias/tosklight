@@ -787,7 +787,7 @@ impl ApplicationHandler for Application {
         let attributes = Window::default_attributes()
             .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(1600.0, 900.0));
-        let window = match event_loop.create_window(attributes) {
+        let window = match crate::capture_display::create(event_loop, attributes) {
             Ok(window) => Arc::new(window),
             Err(error) => {
                 eprintln!("window: {error}");

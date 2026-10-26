@@ -214,6 +214,9 @@ fn builtin_origin() -> Result<(f64, f64), String> {
             "Exactly one active internal display is required; benchmark remains hidden".into(),
         );
     }
+    if builtin[0].is_in_mirror_set() {
+        return Err("Internal display is mirrored; capture remains hidden".into());
+    }
     let bounds = builtin[0].bounds();
     if !bounds.origin.x.is_finite() || !bounds.origin.y.is_finite() {
         return Err("Internal display has invalid bounds; benchmark remains hidden".into());
