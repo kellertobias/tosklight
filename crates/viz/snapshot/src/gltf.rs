@@ -7,6 +7,10 @@
 //! the snapshot document beside this file, where they can be described as optics rather than as
 //! whatever a punctual-light extension happens to support.
 
+mod affine;
+#[cfg(test)]
+mod affine_tests;
+
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use viz_render::SceneGeometry;
@@ -217,31 +221,42 @@ pub(crate) fn write_glb_with_names(
                 index
             }
         };
-        let mesh_index = match mesh_indices.get(&(instance.mesh, material_index)) {
-            Some(index) => *index,
-            None => {
-                let name = geometry
-                    .meshes
-                    .get(instance.mesh as usize)
-                    .map(|mesh| mesh.name.clone())
-                    .unwrap_or_default();
-                meshes.push(json!({
-                    "name": name,
-                    "primitives": [{
-                        "attributes": { "POSITION": position, "NORMAL": normal },
-                        "indices": indices,
-                        "material": material_index,
-                        "mode": TRIANGLES,
-                    }],
-                }));
-                let index = meshes.len() - 1;
-                mesh_indices.insert((instance.mesh, material_index), index);
-                index
-            }
+        let source_mesh = &geometry.meshes[instance.mesh as usize];
+        let baked = affine::bake_shear(source_mesh, instance.transform);
+        let (mesh_index, transform) = if let Some(mesh) = baked {
+            let position = binary.vec3(&mesh.positions, true);
+            let normal = if mesh.normals.len() == mesh.positions.len() {
+                binary.vec3(&mesh.normals, false)
+            } else {
+                position
+            };
+            let indices = binary.indices(&mesh.indices);
+            let index = push_mesh(
+                &mut meshes,
+                &mesh.name,
+                (position, normal, indices),
+                material_index,
+            );
+            (index, glam::Mat4::IDENTITY.to_cols_array_2d())
+        } else {
+            let index = match mesh_indices.get(&(instance.mesh, material_index)) {
+                Some(index) => *index,
+                None => {
+                    let index = push_mesh(
+                        &mut meshes,
+                        &source_mesh.name,
+                        (position, normal, indices),
+                        material_index,
+                    );
+                    mesh_indices.insert((instance.mesh, material_index), index);
+                    index
+                }
+            };
+            (index, instance.transform)
         };
         let mut node = json!({
             "mesh": mesh_index,
-            "matrix": flatten(instance.transform),
+            "matrix": flatten(transform),
         });
         if let Some(name) = names.get(&placement_index) {
             node["name"] = json!(name);
@@ -269,6 +284,21 @@ pub(crate) fn write_glb_with_names(
     }
 
     container(&document.to_string(), &binary.bytes)
+}
+
+fn push_mesh(
+    meshes: &mut Vec<Value>,
+    name: &str,
+    attributes: (usize, usize, usize),
+    material: usize,
+) -> usize {
+    let (position, normal, indices) = attributes;
+    let index = meshes.len();
+    meshes.push(json!({"name":name,"primitives":[{
+        "attributes":{"POSITION":position,"NORMAL":normal},
+        "indices":indices,"material":material,"mode":TRIANGLES,
+    }]}));
+    index
 }
 
 fn flatten(matrix: [[f32; 4]; 4]) -> Vec<f32> {
