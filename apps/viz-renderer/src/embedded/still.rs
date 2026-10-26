@@ -45,7 +45,6 @@ pub(super) fn service(state: &mut PaneState, source: &mut HelperSource, epoch: I
                         Arc::new(frozen),
                         crate::stills::StillOptions {
                             request_id: Some(request_id.clone()),
-                            configured_blender: state.still_blender.clone(),
                             ..Default::default()
                         },
                     )
@@ -66,11 +65,6 @@ pub(super) fn service(state: &mut PaneState, source: &mut HelperSource, epoch: I
                         notice: None,
                         phase: Phase::Failed { detail },
                     });
-                }
-            }
-            ToHelper::CaptureChoose { job_id, engine } => {
-                if let Err(detail) = state.stills.choose(&job_id, engine) {
-                    source.report(&detail);
                 }
             }
             ToHelper::CaptureCancel { job_id } => {

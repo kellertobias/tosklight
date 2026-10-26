@@ -1,7 +1,7 @@
 //! Pane-scoped capture intent and pushed job observations; never a live renderer quality change.
 use super::*;
 use tauri::Emitter;
-use viz_helper::still::{Engine, Phase, Status, StillJobId};
+use viz_helper::still::{Phase, Status, StillJobId};
 
 #[derive(Default)]
 pub(super) struct CaptureState {
@@ -102,7 +102,7 @@ impl StagePane {
         }
         Ok(())
     }
-    fn capture_control(&self, job_id: StillJobId, engine: Option<Engine>) -> Result<(), String> {
+    fn capture_cancel(&self, job_id: StillJobId) -> Result<(), String> {
         let mut inner = self.inner.lock().map_err(|_| "the Stage pane")?;
         let running = inner.as_mut().ok_or("Stage renderer is not running")?;
         let capture = self.capture.lock().map_err(|_| "capture state")?;
@@ -113,13 +113,7 @@ impl StagePane {
         if latest.job_id != job_id || latest.phase.is_terminal() {
             return Err("That capture job is no longer active".into());
         }
-        if engine.is_some() && !matches!(latest.phase, Phase::NeedsChoice { .. }) {
-            return Err("This job is not awaiting a quality choice".into());
-        }
-        running.send(&match engine {
-            Some(engine) => ToHelper::CaptureChoose { job_id, engine },
-            None => ToHelper::CaptureCancel { job_id },
-        });
+        running.send(&ToHelper::CaptureCancel { job_id });
         running.channel_error.clone().map_or(Ok(()), Err)
     }
     pub(super) fn accept_still(&self, status: Status) -> Result<(), String> {
@@ -198,23 +192,13 @@ pub(crate) fn start_stage_pane_capture(
     panes.with_capture_start(|| pane.capture_start(request_id, pane_id, picture))
 }
 #[tauri::command]
-pub(crate) fn choose_stage_pane_capture(
-    window: tauri::WebviewWindow,
-    panes: tauri::State<'_, StagePanes>,
-    pane_id: String,
-    job_id: StillJobId,
-    engine: Engine,
-) -> Result<(), String> {
-    owned(&panes, &window, &pane_id)?.capture_control(job_id, Some(engine))
-}
-#[tauri::command]
 pub(crate) fn cancel_stage_pane_capture(
     window: tauri::WebviewWindow,
     panes: tauri::State<'_, StagePanes>,
     pane_id: String,
     job_id: StillJobId,
 ) -> Result<(), String> {
-    owned(&panes, &window, &pane_id)?.capture_control(job_id, None)
+    owned(&panes, &window, &pane_id)?.capture_cancel(job_id)
 }
 
 #[tauri::command]

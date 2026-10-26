@@ -305,7 +305,7 @@ mod tests {
 
     #[test]
     fn actual_greeting_boundaries_refuse_major_eleven_and_twelve_in_both_directions() {
-        assert_eq!(PROTOCOL_MAJOR, 13);
+        assert_eq!(PROTOCOL_MAJOR, 14);
         for old in [11, 12] {
             let mut old_desk = Vec::new();
             write_frame(

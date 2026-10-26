@@ -78,8 +78,6 @@ pub struct Options {
     pub preferences_path: Option<PathBuf>,
     /// Open this show file on startup instead of connecting to a running desk.
     pub show: Option<PathBuf>,
-    /// The Blender to export snapshots with, for a machine with more than one.
-    pub blender: Option<PathBuf>,
     /// A directory of loose laser scan scripts that override the ones fixture packages ship.
     /// This is the authoring loop: edit `<profile id>.js` and the change is picked up live.
     pub laser_scripts: Option<PathBuf>,
@@ -217,7 +215,6 @@ impl Default for Options {
             benchmark_all_views: false,
             preferences_path: None,
             show: None,
-            blender: None,
             snapshot: false,
             helper: false,
             embed: false,
@@ -243,7 +240,6 @@ impl Options {
             "  --view <name>     Named view, for example top_down or full_3d\n",
             "  --quality <tier>  draft | standard | high | ultra\n",
             "  --show <path>     Open this show file instead of connecting to a running desk\n",
-            "  --blender <path>  Blender to export snapshots with (found automatically otherwise)\n",
             "  --laser-scripts <dir>  Laser scan scripts overriding the ones fixtures ship\n",
             "  --snapshot        Take one snapshot once the scene settles, then exit\n",
             "  --helper          Run as the desk's supervised renderer helper\n",
@@ -367,14 +363,6 @@ impl Options {
                             .ok_or_else(|| {
                                 "--laser-scripts needs a directory of scan scripts".to_owned()
                             })?
-                            .into(),
-                    );
-                }
-                "--blender" => {
-                    options.blender = Some(
-                        arguments
-                            .next()
-                            .ok_or_else(|| "--blender needs a path to Blender".to_owned())?
                             .into(),
                     );
                 }
@@ -525,9 +513,6 @@ pub struct Preferences {
     /// Where each overridden universe actually arrives. A universe with no entry follows the
     /// show's own output routes.
     pub input_overrides: Vec<viz_dmx::UniverseInput>,
-    /// The Blender to export snapshots with. Empty lets the application find one, which is what
-    /// an ordinary installation needs; naming one is for a machine with several.
-    pub blender: String,
     /// The network interface each protocol is received on. Machine-local: which network carries
     /// DMX is a property of this computer, never of the show.
     pub listen_interfaces: viz_dmx::ListenInterfaces,
@@ -559,18 +544,7 @@ impl Preferences {
             overlays_hidden: false,
             input_overrides: Vec::new(),
             listen_interfaces: viz_dmx::ListenInterfaces::default(),
-            blender: options
-                .blender
-                .as_ref()
-                .map(|path| path.display().to_string())
-                .unwrap_or_default(),
         }
-    }
-
-    /// The Blender the operator named, or `None` to let the application find one.
-    pub fn blender_path(&self) -> Option<PathBuf> {
-        let trimmed = self.blender.trim();
-        (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
     }
 
     /// The protocol the operator pinned for `universe`, or `None` to follow the show.
@@ -664,9 +638,7 @@ impl Preferences {
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "follow".into())
         ));
-        if !self.blender.trim().is_empty() {
-            text.push_str(&format!("blender {}\n", self.blender.trim()));
-        }
+
         for input in &self.input_overrides {
             text.push_str(&format!(
                 "input {} {}\n",
@@ -708,7 +680,6 @@ impl Preferences {
             show_labels: self.show_labels,
             show_selection: self.show_selection,
             floor_grid: self.floor_grid,
-            blender: self.blender.clone(),
             input_overrides: self
                 .input_overrides
                 .iter()
@@ -841,7 +812,6 @@ impl Preferences {
                 }
                 // Written by an earlier version, and deliberately not read: see the field.
                 "overlays_hidden" => {}
-                "blender" if options.blender.is_none() => self.blender = value.to_owned(),
                 "input" => {
                     if let Some((universe, protocol)) = value.split_once(char::is_whitespace)
                         && let Ok(universe) = universe.trim().parse::<u16>()
@@ -940,7 +910,6 @@ mod preference_tests {
         written.show_labels = false;
         written.show_selection = false;
         written.floor_grid = Some(false);
-        written.blender = "/opt/blender".into();
         written.set_input(3, Some(viz_dmx::Protocol::Sacn));
 
         let mut read = Preferences::from_options(&options);
@@ -961,8 +930,21 @@ mod preference_tests {
         assert!(!read.show_labels);
         assert!(!read.show_selection);
         assert_eq!(read.floor_grid, Some(false));
-        assert_eq!(read.blender, "/opt/blender");
         assert_eq!(read.input_for(3), Some(viz_dmx::Protocol::Sacn));
+    }
+
+    #[test]
+    fn obsolete_tool_preference_is_ignored_without_losing_native_settings() {
+        let options = Options::default();
+        let mut preferences = Preferences::from_options(&options);
+        preferences.adopt_file(
+            "blender /old/missing/tool\nquality draft\nexposure 1.2\n",
+            &options,
+        );
+        assert_eq!(preferences.quality_override, Some(RenderQuality::Draft));
+        assert_eq!(preferences.exposure, 1.2);
+        assert!(!preferences.to_file().contains("blender"));
+        assert!(!Options::usage().contains("--blender"));
     }
 
     /// A window that opens with nothing on it looks broken, so the one gesture that empties the

@@ -1,12 +1,38 @@
 //! Decode before atomic no-overwrite publication. Staging alone is disposable, never user images.
-use super::{UltimateError, check_cancel};
+
 use std::{
     fs::{self, File},
     io::BufReader,
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    sync::atomic::{AtomicBool, Ordering},
 };
-static NEXT: AtomicU64 = AtomicU64::new(1);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ImageError {
+    Cancelled,
+    Failed(String),
+}
+impl std::fmt::Display for ImageError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Cancelled => f.write_str("Image rendering cancelled"),
+            Self::Failed(detail) => f.write_str(detail),
+        }
+    }
+}
+impl std::error::Error for ImageError {}
+impl From<std::io::Error> for ImageError {
+    fn from(error: std::io::Error) -> Self {
+        Self::Failed(error.to_string())
+    }
+}
+fn check_cancel(cancel: &AtomicBool) -> Result<(), ImageError> {
+    if cancel.load(Ordering::Acquire) {
+        Err(ImageError::Cancelled)
+    } else {
+        Ok(())
+    }
+}
+
 const SIZE: (u32, u32) = (3840, 2160);
 
 #[derive(Clone, Debug)]
@@ -16,49 +42,14 @@ pub struct RenderedImage {
     pub height: u32,
 }
 
-pub(super) struct Staging {
-    pub directory: PathBuf,
-}
-impl Staging {
-    pub fn new(destination: &Path, frozen: &Path) -> Result<Self, UltimateError> {
-        let parent = validate_destination(destination)?;
-        let frozen = frozen.canonicalize()?;
-        if parent.starts_with(&frozen) {
-            return Err(UltimateError::Failed(
-                "Save the image outside its temporary frozen snapshot folder".into(),
-            ));
-        }
-        for _ in 0..100 {
-            let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
-            let directory = parent.join(format!(
-                ".tosklight-image-{}-{sequence}",
-                std::process::id()
-            ));
-            match fs::create_dir(&directory) {
-                Ok(()) => return Ok(Self { directory }),
-                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-                Err(error) => return Err(error.into()),
-            }
-        }
-        Err(UltimateError::Failed(
-            "Cannot allocate a unique image staging directory".into(),
-        ))
-    }
-}
-impl Drop for Staging {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.directory);
-    }
-}
-
-fn validate_destination(destination: &Path) -> Result<PathBuf, UltimateError> {
+fn validate_destination(destination: &Path) -> Result<PathBuf, ImageError> {
     if !destination
         .extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("png"))
         || destination.file_stem().is_none()
     {
-        return Err(UltimateError::Failed("Choose a PNG image filename".into()));
+        return Err(ImageError::Failed("Choose a PNG image filename".into()));
     }
     let parent = destination
         .parent()
@@ -69,7 +60,7 @@ fn validate_destination(destination: &Path) -> Result<PathBuf, UltimateError> {
     let snapshots = crate::default_root();
     let snapshots = snapshots.canonicalize().unwrap_or(snapshots);
     if parent.starts_with(snapshots) {
-        return Err(UltimateError::Failed("Choose an image folder outside the rotating scene-snapshot store so saved PNGs cannot be pruned".into()));
+        return Err(ImageError::Failed("Choose an image folder outside the rotating scene-snapshot store so saved PNGs cannot be pruned".into()));
     }
     Ok(parent)
 }
@@ -82,7 +73,7 @@ pub fn publish_png(
     staged: &Path,
     destination: &Path,
     cancel: &AtomicBool,
-) -> Result<RenderedImage, UltimateError> {
+) -> Result<RenderedImage, ImageError> {
     check_cancel(cancel)?;
     let parent = validate_destination(destination)?;
     decode(staged)?;
@@ -90,7 +81,7 @@ pub fn publish_png(
     check_cancel(cancel)?;
     let stem = destination
         .file_stem()
-        .ok_or_else(|| UltimateError::Failed("Choose an image filename".into()))?
+        .ok_or_else(|| ImageError::Failed("Choose an image filename".into()))?
         .to_string_lossy();
     for suffix in 0..10_000 {
         check_cancel(cancel)?;
@@ -110,21 +101,21 @@ pub fn publish_png(
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(error) => {
-                return Err(UltimateError::Failed(format!(
+                return Err(ImageError::Failed(format!(
                     "Cannot publish PNG atomically without overwrite: {error}; choose a writable folder on the staging filesystem"
                 )));
             }
         }
     }
-    Err(UltimateError::Failed(
+    Err(ImageError::Failed(
         "Too many images share this filename; choose another name".into(),
     ))
 }
-fn decode(path: &Path) -> Result<(), UltimateError> {
+fn decode(path: &Path) -> Result<(), ImageError> {
     let file = File::open(path)?;
     if !file.metadata()?.is_file() || file.metadata()?.len() > 256 * 1024 * 1024 {
-        return Err(UltimateError::Failed(
-            "Blender output is not a bounded PNG file".into(),
+        return Err(ImageError::Failed(
+            "Rendered output is not a bounded PNG file".into(),
         ));
     }
     let mut decoder = png::Decoder::new(BufReader::new(file));
@@ -134,7 +125,7 @@ fn decode(path: &Path) -> Result<(), UltimateError> {
     let mut reader = decoder.read_info().map_err(png_error)?;
     let info = reader.info();
     if (info.width, info.height) != SIZE || info.animation_control.is_some() {
-        return Err(UltimateError::Failed(format!(
+        return Err(ImageError::Failed(format!(
             "Expected one 3840×2160 PNG, received {}×{}{}",
             info.width,
             info.height,
@@ -149,15 +140,18 @@ fn decode(path: &Path) -> Result<(), UltimateError> {
         .output_buffer_size()
         .filter(|size| *size <= 128 * 1024 * 1024)
         .ok_or_else(|| {
-            UltimateError::Failed("PNG decoded image exceeds the capture memory limit".into())
+            ImageError::Failed("PNG decoded image exceeds the capture memory limit".into())
         })?;
     let mut pixels = vec![0; size];
     reader.next_frame(&mut pixels).map_err(png_error)?;
     reader.finish().map_err(png_error)?;
     Ok(())
 }
-fn png_error(error: png::DecodingError) -> UltimateError {
-    UltimateError::Failed(format!(
-        "Blender output is not a complete decodable PNG: {error}"
+fn png_error(error: png::DecodingError) -> ImageError {
+    ImageError::Failed(format!(
+        "Rendered output is not a complete decodable PNG: {error}"
     ))
 }
+
+#[cfg(test)]
+mod tests;

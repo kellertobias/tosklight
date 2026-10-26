@@ -45,7 +45,7 @@ pub struct StatusModel<'a> {
     /// The fixture the operator clicked on: its number, name, address and level. Nothing selected
     /// is the ordinary case, and the bar says nothing at all then.
     pub selection: Option<String>,
-    /// A short-lived word about something the operator just did — a snapshot taken, a Blender file
+    /// A short-lived word about something the operator just did — a snapshot taken, an image
     /// written — and whether it is bad news.
     pub notice: Option<(String, bool)>,
 }

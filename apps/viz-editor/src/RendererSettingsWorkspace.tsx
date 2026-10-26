@@ -84,7 +84,7 @@ export function RendererSettingsWorkspace({
 						For a 4K image, choose <strong>Open Viz</strong>, then use{" "}
 						<strong>File &gt; Render 4K Image</strong> in the native 3D window,
 						or press Cmd+Shift+R on macOS / Ctrl+Shift+R on Windows and Linux.
-						Choose native Ultra or Blender Ultimate when available; rendering
+						Render a full-quality native Ultra image; rendering
 						keeps the live window’s quality unchanged.
 					</p>
 				</header>
@@ -243,14 +243,6 @@ function FeaturesSettings({
 				Rounded 3D people in Ultra and 4K images. You can choose this while
 				previewing in Draft or 3D Lines; those live views stay lightweight.
 			</p>
-			<label>
-				<span>Blender path</span>
-				<input
-					value={draft.blender}
-					placeholder="Find automatically"
-					onChange={(event) => update({ blender: event.target.value })}
-				/>
-			</label>
 		</SettingsGroup>
 	);
 }

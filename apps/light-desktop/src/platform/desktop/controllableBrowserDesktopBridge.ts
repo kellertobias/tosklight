@@ -86,7 +86,6 @@ export function controllableBrowserDesktopBridge(
 		setStagePane: async () => undefined,
 		openStagePaneCapture: async () => { throw new Error("No native saved image is available"); },
 	startStagePaneCapture: async () => { throw new Error("4K rendering requires the native Stage application"); },
-		chooseStagePaneCapture: async () => { throw new Error("4K rendering requires the native Stage application"); },
 		cancelStagePaneCapture: async () => { throw new Error("No native image job is available"); },
 		onStageStill: async () => () => undefined,
 		setStagePaneVisibility: async () => undefined,

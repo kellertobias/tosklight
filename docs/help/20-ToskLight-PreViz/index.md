@@ -39,7 +39,7 @@ The Rig Editor patches fixtures, edits their installed geometry, configures venu
 ## Continue
 
 - [Default Models](01-default-models.md); the [Model Catalogue](../99-Appendix/01-model-catalogue.md) is in the Appendix
-- [Snapshots and Blender](03-snapshots-and-blender.md)
+- [Snapshots and 4K Images](03-snapshots-and-blender.md)
 - [Driving PreViz from the Desk](04-desk-view-control.md)
 - [Lasers](05-lasers.md) and [Particle Effects](07-particle-effects.md)
 - [Plan a Rig and Move It](06-planning-and-transfer.md)

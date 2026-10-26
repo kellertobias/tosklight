@@ -1,17 +1,17 @@
 use super::*;
 use std::{fs::OpenOptions, time::Instant};
-use viz_snapshot::ultimate::publish_png;
+use viz_snapshot::image::publish_png;
 
 pub(super) fn render(
     job: &Job,
     workspace: &storage::Workspace,
-) -> Result<RenderedImage, UltimateError> {
+) -> Result<RenderedImage, ImageError> {
     job.check_cancel()?;
     job.phase(Phase::Rendering { detail: "Native Ultra 3840×2160; this separate GPU job may temporarily reduce live Stage FPS, while desk/output work stays independent".into() });
     let deadline = Instant::now()
         .checked_add(job.options.native_timeout)
-        .ok_or_else(|| UltimateError::Failed("Invalid native image deadline".into()))?;
-    let mut capture = job.frozen.begin_native().map_err(UltimateError::Failed)?;
+        .ok_or_else(|| ImageError::Failed("Invalid native image deadline".into()))?;
+    let mut capture = job.frozen.begin_native().map_err(ImageError::Failed)?;
     let mut cancel_deadline = None;
     let image = loop {
         if job.cancel.load(Ordering::Acquire) && cancel_deadline.is_none() {
@@ -20,7 +20,7 @@ pub(super) fn render(
         }
         if let Some(image) = capture
             .poll()
-            .map_err(|error| UltimateError::Failed(error.to_string()))?
+            .map_err(|error| ImageError::Failed(error.to_string()))?
         {
             break image;
         }
@@ -28,9 +28,9 @@ pub(super) fn render(
         if now >= deadline || cancel_deadline.is_some_and(|deadline| now >= deadline) {
             job.phase(Phase::Cancelling { detail: "Native readback deadline reached; releasing the worker-owned GPU resources before another capture can start".into() });
             return Err(if job.cancel.load(Ordering::Acquire) {
-                UltimateError::Cancelled
+                ImageError::Cancelled
             } else {
-                UltimateError::Failed(
+                ImageError::Failed(
                     "Native 4K image readback exceeded its deadline; retry after GPU cleanup"
                         .into(),
                 )
@@ -43,7 +43,7 @@ pub(super) fn render(
         || stats.degraded
         || stats.render_scale != 1.0
     {
-        return Err(UltimateError::Failed("Native capture did not produce undegraded full-resolution 3840×2160 output; no image was published".into()));
+        return Err(ImageError::Failed("Native capture did not produce undegraded full-resolution 3840×2160 output; no image was published".into()));
     }
     // Keep the device on this worker through completion/destruction. A final Queue drop can
     // otherwise wait implicitly; it must never move onto the live/UI thread.
@@ -60,13 +60,13 @@ pub(super) fn render(
     encoder.set_depth(::png::BitDepth::Eight);
     let mut writer = encoder
         .write_header()
-        .map_err(|e| UltimateError::Failed(format!("Cannot write PNG header: {e}")))?;
+        .map_err(|e| ImageError::Failed(format!("Cannot write PNG header: {e}")))?;
     writer
         .write_image_data(&image.rgba)
-        .map_err(|e| UltimateError::Failed(format!("Cannot encode PNG: {e}")))?;
+        .map_err(|e| ImageError::Failed(format!("Cannot encode PNG: {e}")))?;
     writer
         .finish()
-        .map_err(|e| UltimateError::Failed(format!("Cannot finish PNG: {e}")))?;
+        .map_err(|e| ImageError::Failed(format!("Cannot finish PNG: {e}")))?;
     job.check_cancel()?;
     publish_png(&path, &workspace.destination, &job.cancel)
 }

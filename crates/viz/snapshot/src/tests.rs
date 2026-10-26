@@ -1,4 +1,4 @@
-//! Capture and store behaviour, exercised without a window, a GPU, or Blender.
+//! Capture and store behaviour, exercised without a window or a GPU.
 
 use super::*;
 use viz_scene::glam::Vec3;
@@ -285,7 +285,6 @@ fn a_capture_is_written_as_a_folder_that_names_itself() {
 
     assert!(entry.directory.join(GEOMETRY_FILE).is_file());
     assert!(entry.directory.join(DOCUMENT_FILE).is_file());
-    assert!(entry.blend.is_none(), "nothing has been exported yet");
     let name = entry
         .directory
         .file_name()
@@ -404,9 +403,7 @@ fn a_snapshot_is_labelled_by_the_time_it_was_taken() {
             live_beams: 130,
             triangles: 42,
         },
-        blend: None,
     };
     assert_eq!(entry.label(), "14:22:08");
     assert_eq!(entry.summary(), "301 fixtures, 130 live");
-    assert!(entry.blend_destination().ends_with(BLEND_FILE));
 }

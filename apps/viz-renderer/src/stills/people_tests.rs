@@ -1,7 +1,7 @@
-//! Explicit real native/Cycles evidence for a tiny, obliquely lit audience, never a perf run.
+//! Explicit real native evidence for a tiny, obliquely lit audience, never a perf run.
 use super::*;
 use glam::Vec3;
-use std::{fs, io::BufReader, path::Path, time::Instant};
+use std::{fs, path::Path, time::Instant};
 use viz_render::{CapturedImage, media::FrozenMedia, still::StillOrigin};
 use viz_scene::*;
 fn frozen(detailed: bool) -> FrozenStill {
@@ -76,20 +76,6 @@ fn retain(path: &Path, image: &CapturedImage) {
     writer.write_image_data(&image.rgba).unwrap();
     writer.finish().unwrap();
 }
-fn decoded(path: &Path) -> CapturedImage {
-    let mut decoder = png::Decoder::new(BufReader::new(fs::File::open(path).unwrap()));
-    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
-    let mut reader = decoder.read_info().unwrap();
-    let mut rgba = vec![0; reader.output_buffer_size().unwrap()];
-    let info = reader.next_frame(&mut rgba).unwrap();
-    assert_eq!(info.color_type, png::ColorType::Rgba);
-    rgba.truncate(info.buffer_size());
-    CapturedImage {
-        width: info.width,
-        height: info.height,
-        rgba,
-    }
-}
 fn assert_image(image: &CapturedImage, name: &str) {
     assert_eq!((image.width, image.height), (STILL_WIDTH, STILL_HEIGHT));
     assert!(
@@ -103,8 +89,8 @@ fn assert_image(image: &CapturedImage, name: &str) {
     );
 }
 #[test]
-#[ignore = "requires explicitly serialized native GPU, installed Blender, and human 3D audience image review"]
-fn detailed_people_native_ultra_and_real_ultimate_small_oblique_audience() {
+#[ignore = "requires explicitly serialized native GPU and human 3D audience image review"]
+fn detailed_people_native_ultra_small_oblique_audience() {
     let root = PathBuf::from(
         std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR")
             .expect("canonical tl876-people evidence root"),
@@ -131,47 +117,6 @@ fn detailed_people_native_ultra_and_real_ultimate_small_oblique_audience() {
     );
     retain(&root.join("native-ultra-silhouettes.png"), &simple);
     retain(&root.join("native-ultra-detailed.png"), &detailed);
-    let blender = PathBuf::from(
-        std::env::var_os("LIGHT_STILL_TEST_BLENDER").expect("explicit installed Blender"),
-    );
-    let mut jobs = StillJobs::default();
-    let id = jobs
-        .start(
-            on.clone(),
-            StillOptions {
-                destination: Some(root.join("ultimate-detailed.png")),
-                configured_blender: Some(blender),
-                probe_timeout: Duration::from_secs(30),
-                ultimate_timeout: Duration::from_secs(300),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(340);
-    let mut chose = false;
-    loop {
-        let status = jobs.status().unwrap();
-        if let Phase::NeedsChoice {
-            ultimate_reasons, ..
-        } = &status.phase
-        {
-            assert!(ultimate_reasons.is_empty(), "{ultimate_reasons:?}");
-            assert!(!chose);
-            jobs.choose(&id, Engine::Ultimate).unwrap();
-            chose = true;
-        }
-        if status.phase.is_terminal() {
-            let Phase::Saved { path } = status.phase else {
-                panic!("{:?}", status.phase)
-            };
-            assert!(chose);
-            assert_eq!(status.engine, Some(Engine::Ultimate));
-            assert_image(&decoded(&path), "actual Blender detailed");
-            break;
-        }
-        assert!(Instant::now() < deadline, "Ultimate people job timeout");
-        std::thread::sleep(Duration::from_millis(20));
-    }
     assert_eq!(on.view().quality, RenderQuality::Draft);
     assert!(on.view().detailed_people);
     println!("TL876 actual 3D crowd visual evidence: {}", root.display());

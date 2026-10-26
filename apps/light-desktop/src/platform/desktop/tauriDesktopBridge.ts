@@ -164,7 +164,6 @@ export const tauriDesktopBridge: DesktopBridge = {
 		const snapshot = structuredClone(picture);
 		return stagePaneCommands.run(paneId, () => invoke("start_stage_pane_capture", { paneId, requestId, picture: snapshot }));
 	},
-	chooseStagePaneCapture: (paneId, jobId, engine) => invoke("choose_stage_pane_capture", { paneId, jobId, engine }),
 	cancelStagePaneCapture: (paneId, jobId) => invoke("cancel_stage_pane_capture", { paneId, jobId }),
 	onStageStill: async (handler) => {
 		const api = await eventApi();

@@ -1,70 +1,29 @@
-//! Taking snapshots, keeping them, and exporting them to Blender.
-//!
-//! Pressing the key must not cost a frame, and exporting must not stop the picture: a rig of three
-//! hundred fixtures is megabytes of geometry to write, and Blender takes seconds to open one. So
-//! the only thing that happens on the thread that draws is the freeze itself — a copy of the scene
-//! and its values, which is the moment the operator asked for — and everything after that happens
-//! on a worker whose results are collected the next time a frame is built.
+//! Freeze scene snapshots and retain their JSON and GLB files without interrupting rendering.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::{Duration, Instant};
 use viz_scene::{Scene, SceneValues};
-use viz_snapshot::{
-    CaptureContext, ExportError, SnapshotEntry, SnapshotStore, capture, export_blend,
-};
+use viz_snapshot::{CaptureContext, SnapshotEntry, SnapshotStore, capture};
 
 /// How long a confirmation stays on the status surface. Long enough to read from arm's length,
 /// short enough that it is gone before it is in the way of the picture.
 const NOTICE_SECONDS: f32 = 5.0;
 
-/// Where one capture's Blender export has got to.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub enum ExportState {
-    #[default]
-    Idle,
-    Running,
-    Done(PathBuf),
-    Failed(String),
-}
-
-/// One kept capture and what has been done with it.
+/// One kept scene capture.
 #[derive(Clone, Debug)]
 pub struct SnapshotRow {
     pub entry: SnapshotEntry,
-    pub export: ExportState,
 }
 
 impl SnapshotRow {
-    /// The value shown beside the row: what the export is doing, or what is in the capture.
     pub fn status(&self) -> String {
-        match &self.export {
-            ExportState::Idle => match &self.entry.blend {
-                Some(_) => format!("{} \u{2014} exported", self.entry.summary()),
-                None => format!("{} \u{2014} Enter exports", self.entry.summary()),
-            },
-            ExportState::Running => "Exporting to Blender\u{2026}".to_owned(),
-            ExportState::Done(path) => match path.file_name().and_then(|name| name.to_str()) {
-                Some(name) => format!("Exported {name}"),
-                None => "Exported".to_owned(),
-            },
-            ExportState::Failed(reason) => reason.clone(),
-        }
-    }
-
-    /// Whether the row is reporting something that went wrong, so it can be coloured as such.
-    pub fn is_failure(&self) -> bool {
-        matches!(self.export, ExportState::Failed(_))
+        self.entry.summary()
     }
 }
 
-/// What a worker finished doing.
 enum Finished {
     Captured(Result<SnapshotEntry, String>),
-    Exported {
-        directory: PathBuf,
-        outcome: Result<PathBuf, String>,
-    },
 }
 
 pub struct Snapshots {
@@ -92,10 +51,7 @@ impl Snapshots {
         let rows = store
             .list()
             .into_iter()
-            .map(|entry| SnapshotRow {
-                entry,
-                export: ExportState::Idle,
-            })
+            .map(|entry| SnapshotRow { entry })
             .collect();
         Self {
             store,
@@ -137,30 +93,6 @@ impl Snapshots {
         });
     }
 
-    /// Export one kept capture to a Blender file.
-    ///
-    /// `blender` is whatever the operator configured; empty means find one.
-    pub fn export(&mut self, index: usize, blender: Option<PathBuf>) {
-        let Some(row) = self.rows.get_mut(index) else {
-            return;
-        };
-        if row.export == ExportState::Running {
-            return;
-        }
-        row.export = ExportState::Running;
-        let directory = row.entry.directory.clone();
-        let destination = row.entry.blend_destination();
-        let sender = self.sender.clone();
-        self.announce("Exporting to Blender\u{2026}", false);
-        self.outstanding += 1;
-        std::thread::spawn(move || {
-            let outcome = export_blend(&directory, &destination, blender.as_deref())
-                .map(|exported| exported.path)
-                .map_err(|error: ExportError| error.to_string());
-            let _ = sender.send(Finished::Exported { directory, outcome });
-        });
-    }
-
     /// Fold in whatever the workers finished since the last frame.
     pub fn pump(&mut self) {
         while let Ok(event) = self.events.try_recv() {
@@ -179,59 +111,21 @@ impl Snapshots {
                     self.announce(&notice, false);
                 }
                 Finished::Captured(Err(reason)) => self.announce(&reason, true),
-                Finished::Exported { directory, outcome } => {
-                    let notice = match &outcome {
-                        Ok(path) => format!(
-                            "Exported {}",
-                            path.file_name()
-                                .and_then(|name| name.to_str())
-                                .unwrap_or("Blender file")
-                        ),
-                        Err(reason) => reason.clone(),
-                    };
-                    let failed = outcome.is_err();
-                    if let Some(row) = self
-                        .rows
-                        .iter_mut()
-                        .find(|row| row.entry.directory == directory)
-                    {
-                        row.export = match outcome {
-                            Ok(path) => {
-                                row.entry.blend = Some(path.clone());
-                                ExportState::Done(path)
-                            }
-                            Err(reason) => ExportState::Failed(reason),
-                        };
-                    }
-                    self.announce(&notice, failed);
-                }
             }
         }
     }
 
-    /// Re-read the folder, keeping whatever each row was reporting.
+    /// Re-read the retained captures after the store applies its retention rule.
     fn reload(&mut self) {
-        let previous: Vec<(PathBuf, ExportState)> = self
-            .rows
-            .iter()
-            .map(|row| (row.entry.directory.clone(), row.export.clone()))
-            .collect();
         self.rows = self
             .store
             .list()
             .into_iter()
-            .map(|entry| {
-                let export = previous
-                    .iter()
-                    .find(|(directory, _)| *directory == entry.directory)
-                    .map(|(_, state)| state.clone())
-                    .unwrap_or_default();
-                SnapshotRow { entry, export }
-            })
+            .map(|entry| SnapshotRow { entry })
             .collect();
     }
 
-    /// Whether a capture or an export is still being written.
+    /// Whether a capture is still being written.
     pub fn busy(&self) -> bool {
         self.outstanding > 0
     }
@@ -278,52 +172,27 @@ mod tests {
                 live_beams: 4,
                 triangles: 900,
             },
-            blend: None,
         }
     }
 
     #[test]
-    fn a_capture_that_has_not_been_exported_says_how_to_export_it() {
+    fn a_saved_capture_lists_its_scene_without_an_export_action() {
         let row = SnapshotRow {
             entry: entry("14:22:08"),
-            export: ExportState::Idle,
         };
-        assert_eq!(row.status(), "12 fixtures, 4 live \u{2014} Enter exports");
-        assert!(!row.is_failure());
+        assert_eq!(row.status(), "12 fixtures, 4 live");
     }
 
     #[test]
-    fn a_running_export_says_so_rather_than_looking_idle() {
-        let row = SnapshotRow {
-            entry: entry("14:22:08"),
-            export: ExportState::Running,
-        };
-        assert_eq!(row.status(), "Exporting to Blender\u{2026}");
-    }
-
-    #[test]
-    fn a_failed_export_names_what_went_wrong_and_stays_visible() {
+    fn a_capture_failure_stays_visible() {
         let mut snapshots = Snapshots::new(SnapshotStore::new(
             std::env::temp_dir().join("viz-snapshot-notice"),
             4,
         ));
-        snapshots.announce("Blender not found", true);
-        assert_eq!(snapshots.notice(), Some(("Blender not found", true)));
-
-        let row = SnapshotRow {
-            entry: entry("14:22:08"),
-            export: ExportState::Failed("Blender not found".into()),
-        };
-        assert!(row.is_failure());
-        assert_eq!(row.status(), "Blender not found");
-    }
-
-    #[test]
-    fn an_exported_capture_names_the_file_it_produced() {
-        let row = SnapshotRow {
-            entry: entry("14:22:08"),
-            export: ExportState::Done(PathBuf::from("/tmp/x/rig.blend")),
-        };
-        assert_eq!(row.status(), "Exported rig.blend");
+        snapshots.announce("Snapshot could not be written", true);
+        assert_eq!(
+            snapshots.notice(),
+            Some(("Snapshot could not be written", true))
+        );
     }
 }

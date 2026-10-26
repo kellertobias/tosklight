@@ -5,17 +5,12 @@
 //! pointing, every colour and level the desk had it at, and the room around it. Taking one is
 //! instant and needs nothing installed — it is triangles and numbers written to a folder.
 //!
-//! Turning one into a Blender file is a separate step, because only Blender can write a Blender
-//! file. That separation is the point: an operator captures the moment while it is happening, on
-//! whatever machine is beside the stage, and produces the file later on whatever machine has
-//! Blender on it.
+//! Snapshot JSON and GLB remain portable scene assets. Native 4K images are rendered separately.
 
-mod blender;
 mod document;
 mod gltf;
-pub mod ultimate;
+pub mod image;
 
-pub use blender::{BLENDER_ENV, ExportError, ExportedBlend, export_blend, find_blender};
 pub use document::{
     FORMAT_VERSION, REFERENCE_INTENSITY, SnapshotBounds, SnapshotCamera, SnapshotCounts,
     SnapshotDocument, SnapshotLight, SnapshotLook, to_z_up, watts,
@@ -28,8 +23,6 @@ use viz_scene::{Scene, SceneValues};
 pub const GEOMETRY_FILE: &str = "rig.glb";
 /// The document beside it.
 pub const DOCUMENT_FILE: &str = "snapshot.json";
-/// The Blender file an export writes into the same folder.
-pub const BLEND_FILE: &str = "rig.blend";
 /// Environment variable that moves the snapshot folder, for a test or an operator who wants their
 /// captures somewhere they already back up.
 pub const SNAPSHOT_DIR_ENV: &str = "TOSKLIGHT_VIZ_SNAPSHOT_DIR";
@@ -190,7 +183,7 @@ fn describe_lights(scene: &Scene, values: &SceneValues) -> Vec<SnapshotLight> {
         if emitter.cells.len() > 1 {
             name.push_str(&format!(" cell {}", light.cell_index + 1));
         }
-        // Blender makes its own names unique with a numeric suffix. Doing it here instead keeps
+        // Modelling packages make their own names unique with a numeric suffix. Doing it here instead keeps
         // the suffix meaningful and the name stable between two exports of the same rig.
         let seen = used.entry(name.clone()).or_insert(0);
         *seen += 1;
@@ -230,8 +223,6 @@ pub struct SnapshotEntry {
     pub captured_at: String,
     pub show: String,
     pub counts: SnapshotCounts,
-    /// The Blender file, once one has been exported.
-    pub blend: Option<PathBuf>,
 }
 
 impl SnapshotEntry {
@@ -249,11 +240,6 @@ impl SnapshotEntry {
             "{} fixtures, {} live",
             self.counts.fixtures, self.counts.live_beams
         )
-    }
-
-    /// Where a Blender export of this capture goes.
-    pub fn blend_destination(&self) -> PathBuf {
-        self.directory.join(BLEND_FILE)
     }
 }
 
@@ -297,7 +283,6 @@ impl SnapshotStore {
             captured_at: capture.document.captured_at.clone(),
             show: capture.document.show.clone(),
             counts: capture.document.counts,
-            blend: None,
         };
         self.prune();
         Ok(entry)
@@ -327,13 +312,11 @@ impl SnapshotStore {
     fn read_entry(&self, directory: &Path) -> Option<SnapshotEntry> {
         let text = std::fs::read_to_string(directory.join(DOCUMENT_FILE)).ok()?;
         let document: SnapshotDocument = serde_json::from_str(&text).ok()?;
-        let blend = directory.join(BLEND_FILE);
         Some(SnapshotEntry {
             directory: directory.to_path_buf(),
             captured_at: document.captured_at,
             show: document.show,
             counts: document.counts,
-            blend: blend.is_file().then_some(blend),
         })
     }
 

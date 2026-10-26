@@ -67,7 +67,7 @@ export async function evaluateCapture(record, outputDirectory, metadata) {
     let image = null;
     try {
         const status = record?.status;
-        if (!record?.passed || record.ready?.kind !== "stage-ready" || !record.ui?.buttonClicked || !record.ui?.chooserClicked || !record.ui?.savedVisible ||
+        if (record?.schemaVersion !== 2 || !record.passed || record.ready?.kind !== "stage-ready" || !record.ui?.buttonClicked || !record.ui?.savedVisible ||
             status?.engine !== "ultra" || !status.phase?.saved?.path || status.followPreload ||
             status.requestId !== record.request?.requestId || status.paneId !== record.request?.paneId)
             throw new Error("Capture UI/status evidence is incomplete");
@@ -77,7 +77,7 @@ export async function evaluateCapture(record, outputDirectory, metadata) {
         if ((await stat(destination)).size > 64 * 1024 * 1024) throw new Error("Saved PNG exceeds bounded inspection size");
         image = { path: destination, ...inspectNativePng(await readFile(destination)), jobId: status.jobId };
     } catch (error) { failures.push(String(error)); }
-    return { schemaVersion: 1, kind: "packaged-stage-capture-verification", ...metadata,
+    return { schemaVersion: 2, kind: "packaged-stage-capture-verification", ...metadata,
         capture: record, image, failures, captureVerified: failures.length === 0,
         acceptanceGateEnforced: false, baselineMeasurementReady: false,
         boundary: "DOM-to-native saved image integration only; not physical input, fidelity, 60 FPS or human acceptance" };

@@ -16,7 +16,6 @@ export class PackagedStageCaptureExercise {
     private fault: string | null = null;
     private observations: StageStillStatus[] = [];
     private ready: NativeStageReadyEvidence | null = null;
-    private choices = 0;
     private stopped = false;
     private running: Promise<Record<string, unknown>> | null = null;
 
@@ -28,12 +27,6 @@ export class PackagedStageCaptureExercise {
                 this.request = { paneId, requestId };
                 try { await desktop.startStagePaneCapture!(paneId, requestId, picture); }
                 catch (error) { this.request = null; this.fault = String(error); throw error; }
-            },
-            chooseStagePaneCapture: async (paneId, jobId, engine) => {
-                if (paneId !== this.request?.paneId || jobId !== this.latest?.jobId || engine !== "ultra" || this.choices++)
-                    throw new Error("Capture exercise received an unexpected engine choice");
-                try { await desktop.chooseStagePaneCapture!(paneId, jobId, engine); }
-                catch (error) { this.fault = String(error); throw error; }
             },
         };
     }
@@ -95,10 +88,10 @@ export class PackagedStageCaptureExercise {
     private async execute(): Promise<Record<string, unknown>> {
         const failures: string[] = [];
         let unsubscribe: (() => void) | undefined;
-        let buttonClicked = false, chooserClicked = false, savedVisible = false;
+        let buttonClicked = false, savedVisible = false;
         try {
             if (!this.desktop.onStageStill || !this.desktop.startStagePaneCapture ||
-                !this.desktop.chooseStagePaneCapture || !this.desktop.cancelStagePaneCapture)
+                !this.desktop.cancelStagePaneCapture)
                 throw new Error("Native capture bridge is incomplete");
             unsubscribe = await this.desktop.onStageStill((event) => this.observe(event));
             const deadline = Date.now() + this.timeoutMs;
@@ -109,16 +102,9 @@ export class PackagedStageCaptureExercise {
                     candidates[0].closest('[data-stage-renderer="native"]') ? candidates[0] : null;
             }, deadline);
             button.click(); buttonClicked = true;
-            await this.wait(() => {
-                if (terminal(this.latest)) throw new Error("Capture completed without the required quality chooser");
-                const dialog = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Render 4K quality"]');
-                const buttons = [...(dialog?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
-                return this.latest && typeof this.latest.phase === "object" && "needsChoice" in this.latest.phase &&
-                    buttons.find((candidate) => candidate.textContent?.trim() === "Ultra · ToskLight" && !candidate.disabled);
-            }, deadline).then((choice) => { choice.click(); chooserClicked = true; });
             const saved = await this.wait(() => terminal(this.latest) ? this.latest : null, deadline);
-            if (typeof saved.phase !== "object" || !("saved" in saved.phase) || saved.engine !== "ultra" || this.choices !== 1)
-                throw new Error(`Capture did not save the selected Ultra job: ${JSON.stringify(saved.phase)}`);
+            if (typeof saved.phase !== "object" || !("saved" in saved.phase) || saved.engine !== "ultra")
+                throw new Error(`Capture did not save the native Ultra job: ${JSON.stringify(saved.phase)}`);
             const path = saved.phase.saved.path;
             await this.wait(() => {
                 const lane = document.querySelector('[data-visualization-lane="live"]');
@@ -131,9 +117,9 @@ export class PackagedStageCaptureExercise {
             failures.push(String(error));
             try { await this.cancelOwned(); } catch (cancelError) { failures.push(String(cancelError)); }
         } finally { unsubscribe?.(); }
-        return { schemaVersion: 1, kind: "packaged-stage-capture-complete", passed: failures.length === 0,
+        return { schemaVersion: 2, kind: "packaged-stage-capture-complete", passed: failures.length === 0,
             failures, request: this.request, status: this.latest, observations: this.observations, ready: this.ready,
-            ui: { buttonClicked, chooserClicked, savedVisible, openedOrRevealed: false },
+            ui: { buttonClicked, savedVisible, openedOrRevealed: false },
             boundary: "Programmatic real DOM controls through native capture; no physical pointer/shortcut, fidelity or displayed-FPS acceptance" };
     }
 }

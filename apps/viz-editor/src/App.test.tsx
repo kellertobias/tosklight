@@ -78,7 +78,6 @@ const rendererSettings = {
 	showLabels: true,
 	showSelection: true,
 	floorGrid: null,
-	blender: "",
 	inputOverrides: [],
 };
 

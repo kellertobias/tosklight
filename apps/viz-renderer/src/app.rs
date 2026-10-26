@@ -83,7 +83,7 @@ pub struct Application {
     renderer: Option<Renderer>,
     session: Option<Session>,
     quick_settings: QuickSettings,
-    /// Captures the operator has taken, and their Blender exports.
+    /// Retained scene snapshots taken by the operator.
     snapshots: crate::snapshots::Snapshots,
     /// Whether a `--snapshot` run has already asked for its one capture.
     snapshot_requested: bool,
@@ -677,10 +677,6 @@ impl Application {
                 self.quick_settings.message = format!("Switching to {}", kind.label());
                 self.reconnect();
             }
-            QuickSettingsOutcome::ExportSnapshot(index) => {
-                let blender = self.preferences.blender_path();
-                self.snapshots.export(index, blender);
-            }
             QuickSettingsOutcome::FocusView => self.focus_view(),
             QuickSettingsOutcome::Render4kImage => self.render_4k_image(),
             QuickSettingsOutcome::Close
@@ -963,9 +959,6 @@ impl ApplicationHandler for Application {
                 if pressed && button == MouseButton::Left && self.click_still_panel() {
                     return;
                 }
-                if self.still_ui.modal() {
-                    return;
-                }
                 if pressed
                     && button == MouseButton::Left
                     && self.hotspot_under_cursor() == Some(ui::Hotspot::OpenSettings)
@@ -995,8 +988,7 @@ impl ApplicationHandler for Application {
                 // drag has to work there too.
                 let previous = self.cursor;
                 self.cursor = (position.x, position.y);
-                let dragging =
-                    !self.still_ui.modal() && (self.turning || self.panning_camera_plane);
+                let dragging = self.turning || self.panning_camera_plane;
                 trace_input(&format!(
                     "cursor {:.1},{:.1} dragging {dragging} device {}",
                     position.x, position.y, self.drag_moved_by_device
@@ -1011,10 +1003,9 @@ impl ApplicationHandler for Application {
                 }
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
-                if self.still_ui.modal()
-                    || self
-                        .still_ui
-                        .contains(self.cursor.0 as f32, self.cursor.1 as f32)
+                if self
+                    .still_ui
+                    .contains(self.cursor.0 as f32, self.cursor.1 as f32)
                 {
                     self.scroll_still_panel(delta);
                     return;
@@ -1082,9 +1073,6 @@ impl ApplicationHandler for Application {
         _device: DeviceId,
         event: DeviceEvent,
     ) {
-        if self.still_ui.modal() {
-            return;
-        }
         match event {
             DeviceEvent::MouseMotion { delta } => {
                 if !self.turning && !self.panning_camera_plane {

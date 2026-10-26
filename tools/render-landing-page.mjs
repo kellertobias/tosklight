@@ -35,7 +35,7 @@ const GALLERY = marketingManifest.entries;
 
 const PRODUCT_GALLERIES = {
 	control: ["application-overview-icons.png", "tracked-programming.png", "dynamics.png"],
-	architect: ["architect-ultimate-4k.png", "architect-cad.png", "architect-patch.png"],
+	architect: ["architect-native-export-4k.png", "architect-cad.png", "architect-patch.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-library.png", "media-server-playback.png"],
 };
 // Homepage cards explain product capabilities; detail figures retain their capture-specific captions.
@@ -45,14 +45,14 @@ const HOMEPAGE_SHOT_COPY = {
 	"pixel-eight-layer-composite.png": { title: "Up to Eight Layers", caption: "Combine video, transparent images, visualizers, and text into one live output." },
 	"media-server-library.png": { title: "Library Management Built In", caption: "Prepare and organize the visual assets you need for the show." },
 	"media-server-playback.png": { title: "Control via DMX or in the Browser", caption: "Run Pixel from a lighting desk over Art-Net or sACN, or operate its live controls in your browser." },
-	"architect-ultimate-4k.png": { title: "Live 3D Visualizer", caption: "Preview your show live, then create a full-venue Ultimate 4K image with Blender for your customer." },
+	"architect-native-export-4k.png": { title: "Live 3D Visualizer", caption: "Preview your show live, then create a full-venue Ultra 4K image for your customer." },
 	"architect-cad.png": { title: "Generate Your Venue Plans", caption: "Build the venue and rig, then export measured PDF plans for the crew." },
 	"architect-patch.png": { title: "Patch Your Fixtures", caption: "Prepare fixture types, modes, universes, and addresses in the same Show." },
 };
 const DETAIL_GALLERIES = {
 	control: ["application-overview-icons.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-timecode.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
-	architect: [["architect-ultimate-4k.png", "architect-wireframe-native.png", "architect-renderer-draft.png", "architect-renderer-standard.png", "architect-media-stage-main.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null, ["architect-media-surface-config.png", "architect-media-crop-config.png", "architect-media-output-config.png"]],
+	architect: [["architect-native-export-4k.png", "architect-wireframe-native.png", "architect-renderer-draft.png", "architect-renderer-standard.png", "architect-renderer-ultra-live.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null, ["architect-media-surface-config.png", "architect-media-crop-config.png", "architect-media-output-config.png"]],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));

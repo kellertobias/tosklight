@@ -35,8 +35,8 @@ fn exact_4k_shortcut_rejects_repeat_ime_text_modal_and_extra_modifiers() {
 }
 
 #[test]
-fn still_controls_show_both_engines_reasons_cancel_and_saved_actions() {
-    use crate::stills::{Phase, Status, StillJobId};
+fn still_controls_show_native_progress_cancel_and_saved_actions() {
+    use crate::stills::{Engine, Phase, Status, StillJobId};
     let mut ui = StillUi::default();
     let mut status = Status {
         job_id: StillJobId("test-1".into()),
@@ -49,52 +49,32 @@ fn still_controls_show_both_engines_reasons_cancel_and_saved_actions() {
         width: 3840,
         height: 2160,
         framing: "16:9 framing".into(),
-        engine: None,
+        engine: Some(Engine::Ultra),
         notice: None,
-        phase: Phase::NeedsChoice {
-            blender_version: "4.5".into(),
-            ultimate_reasons: vec!["Live laser state requires Ultra".into()],
-            ultra_explanation: "Ultra uses ToskLight".into(),
-            ultimate_explanation: "Ultimate uses Blender/Cycles".into(),
+        phase: Phase::Rendering {
+            detail: "Rendering native Ultra image".into(),
         },
     };
     ui.observe(Some(status.clone()));
-    assert!(ui.modal());
     let mut overlay = viz_render::Overlay::default();
     ui.draw(&mut overlay, 1280.0, 720.0);
     assert!(!overlay.is_empty());
-    // The panel's disabled Ultimate button cannot dispatch a job choice.
-    assert!(ui.action_at(640.0, 584.0).is_none());
-    assert!(matches!(
-        ui.action_at(300.0, 584.0),
-        Some(ui::Action::Ultra)
-    ));
-    assert!(matches!(
-        ui.action_at(950.0, 584.0),
-        Some(ui::Action::Cancel)
-    ));
-    let explanation = ui.content().0.join(" ");
-    assert!(explanation.contains("Ultra uses ToskLight"));
-    assert!(explanation.contains("Ultimate uses Blender/Cycles"));
-    assert!(explanation.contains("Live laser state requires Ultra"));
-    assert!(ui.visible());
-    ui.fail("Temporary choice error".into());
-    ui.draw(&mut overlay, 1280.0, 720.0);
     assert!(
-        ui.modal(),
-        "errors do not dismiss the frozen chooser or its cancel controls"
+        ui.content()
+            .0
+            .join(" ")
+            .contains("Rendering native Ultra image")
     );
+    assert_eq!(ui.content().1, vec![("Cancel", Some(ui::Action::Cancel))]);
+    assert!(ui.visible());
     status.phase = Phase::Saved {
         path: std::path::PathBuf::from("/saved/image.png"),
     };
-    status.engine = Some(Engine::Ultimate);
-    ui.reset();
     ui.observe(Some(status.clone()));
     let saved = ui.content().0.join(" ");
     assert!(saved.contains("3840 × 2160 image saved"));
-    assert!(saved.contains("Ultimate · Blender"));
+    assert!(saved.contains("Ultra · ToskLight"));
     assert!(saved.contains("16:9 framing"));
-    assert!(!ui.modal());
     ui.draw(&mut overlay, 1280.0, 720.0);
     assert!(matches!(ui.action_at(300.0, 584.0), Some(ui::Action::Open)));
     assert!(matches!(
@@ -106,7 +86,7 @@ fn still_controls_show_both_engines_reasons_cancel_and_saved_actions() {
     ui.observe(Some(status));
     assert!(
         !ui.visible(),
-        "unchanged status polling cannot reopen a dismissed result"
+        "unchanged status cannot reopen a dismissed result"
     );
 }
 
@@ -128,56 +108,6 @@ fn invocation_resolves_latest_local_camera_without_changing_cached_view() {
             .position,
         resolved.camera.position
     );
-}
-
-#[test]
-fn modal_entry_and_exit_release_held_live_camera_input() {
-    let mut app = Application::new(crate::settings::Options {
-        embed: true,
-        ..Default::default()
-    });
-    let status = crate::stills::Status {
-        job_id: crate::stills::StillJobId("modal-job".into()),
-        request_id: None,
-        pane_id: "architect".into(),
-        follow_preload: false,
-        scene_revision: 1,
-        values_frame: 2,
-        time_seconds: 3.0,
-        width: 3840,
-        height: 2160,
-        framing: "16:9".into(),
-        engine: None,
-        notice: None,
-        phase: Phase::NeedsChoice {
-            blender_version: "4.5".into(),
-            ultimate_reasons: vec![],
-            ultra_explanation: "Ultra".into(),
-            ultimate_explanation: "Ultimate".into(),
-        },
-    };
-    app.turning = true;
-    app.panning_camera_plane = true;
-    app.drag_moved_by_device = true;
-    app.walk_keys.forward = true;
-    app.apply_still_status(Some(status.clone()));
-    assert!(app.still_ui.modal());
-    assert!(
-        !app.turning
-            && !app.panning_camera_plane
-            && !app.drag_moved_by_device
-            && !app.walk_keys.forward
-    );
-    // A release swallowed while modal must not resurrect any pre-modal held input afterwards.
-    app.turning = true;
-    app.walk_keys.back = true;
-    let mut rendering = status;
-    rendering.phase = Phase::Rendering {
-        detail: "Rendering frozen image".into(),
-    };
-    app.apply_still_status(Some(rendering));
-    assert!(!app.still_ui.modal());
-    assert!(!app.turning && !app.walk_keys.back);
 }
 
 #[test]

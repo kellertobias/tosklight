@@ -1,6 +1,6 @@
 //! Immutable invocation-time inputs and a separate full-budget native 4K renderer.
 //! Callers must supply the final resolved motion/physics/effect values and effective local
-//! camera, before probing Blender or opening a quality chooser. This core never advances them.
+//! camera, before the native image worker starts. This core never advances them.
 use crate::{CapturedImage, PendingCapture, RenderError, Renderer, media::FrozenMedia};
 use viz_scene::{RenderQuality, Scene, SceneValues, ViewConfiguration, ViewMode};
 

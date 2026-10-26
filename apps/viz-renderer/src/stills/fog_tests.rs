@@ -86,68 +86,39 @@ fn assert_visible_air(image: &CapturedImage, camera: &ResolvedCamera, engine: &s
         "{engine} must light empty air inside the frozen shaft"
     );
 }
-fn ultimate_image(
-    frozen: Arc<FrozenStill>,
-    blender: PathBuf,
-    destination: PathBuf,
-) -> (CapturedImage, Status) {
+fn published_image(frozen: Arc<FrozenStill>, destination: PathBuf) -> (CapturedImage, Status) {
     let mut jobs = StillJobs::default();
-    let id = jobs
+    let _id = jobs
         .start(
             frozen,
             StillOptions {
-                configured_blender: Some(blender),
                 destination: Some(destination),
-                probe_timeout: Duration::from_secs(30),
-                // The background CPU budget reserves desk capacity; fog at 4K is deliberately offline.
-                ultimate_timeout: Duration::from_secs(1800),
                 ..Default::default()
             },
         )
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(1860);
-    let mut chose = false;
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         let status = jobs.status().unwrap();
-        if let Phase::NeedsChoice {
-            ultimate_reasons, ..
-        } = &status.phase
-        {
-            assert!(
-                ultimate_reasons.is_empty(),
-                "default frozen cloudy haze refused: {ultimate_reasons:?}"
-            );
-            if !chose {
-                jobs.choose(&id, Engine::Ultimate).unwrap();
-                chose = true;
-            }
-        }
         if status.phase.is_terminal() {
             let Phase::Saved { path } = &status.phase else {
                 panic!("{:?}", status.phase)
             };
-            assert!(
-                chose,
-                "test requires real Ultimate selection, not native fallback"
+            assert_eq!(status.engine, Some(Engine::Ultra));
+            println!(
+                "Published native frozen fog visual evidence: {}",
+                path.display()
             );
-            assert_eq!(status.engine, Some(Engine::Ultimate));
-            println!("Ultimate frozen fog visual evidence: {}", path.display());
             return (decoded(path), status);
         }
-        assert!(
-            Instant::now() < deadline,
-            "Ultimate fog image job timed out"
-        );
+        assert!(Instant::now() < deadline, "Native fog image job timed out");
         std::thread::sleep(Duration::from_millis(20));
     }
 }
 
 #[test]
-#[ignore = "requires installed Blender and serialized real native/Ultimate 4K fog rendering; retains visual evidence"]
-fn frozen_default_cloudy_fog_is_visible_in_native_and_ultimate_4k_without_live_draft_mutation() {
-    let blender = PathBuf::from(
-        std::env::var_os("LIGHT_STILL_TEST_BLENDER").expect("explicit installed Blender"),
-    );
+#[ignore = "requires serialized real native 4K fog rendering; retains visual evidence"]
+fn frozen_default_cloudy_fog_is_visible_in_published_native_4k_without_live_draft_mutation() {
     let root = PathBuf::from(
         std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR").expect("canonical evidence directory"),
     );
@@ -208,9 +179,12 @@ fn frozen_default_cloudy_fog_is_visible_in_native_and_ultimate_4k_without_live_d
         "Native frozen fog visual evidence: {}",
         native_path.display()
     );
-    let destination = root.join(format!("ultimate-frozen-fog-{}.png", uuid::Uuid::new_v4()));
-    let (ultimate, status) = ultimate_image(frozen.clone(), blender, destination);
-    assert_visible_air(&ultimate, &camera, "Ultimate Cycles");
+    let destination = root.join(format!(
+        "published-native-frozen-fog-{}.png",
+        uuid::Uuid::new_v4()
+    ));
+    let (published, status) = published_image(frozen.clone(), destination);
+    assert_visible_air(&published, &camera, "Published native Ultra");
     assert_eq!(status.time_seconds, time);
     assert_eq!(status.values_frame, 851);
     assert_eq!(frozen.time_seconds(), time);
@@ -230,5 +204,4 @@ fn frozen_default_cloudy_fog_is_visible_in_native_and_ultimate_4k_without_live_d
     );
     assert_eq!(view.quality, RenderQuality::Draft);
     assert_eq!(values.atmosphere.density, 0.15);
-    // Cycles transport is deliberately not asserted pixel-identical to native beam integration.
 }

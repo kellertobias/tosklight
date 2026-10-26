@@ -24,7 +24,6 @@ export const browserDesktopBridge: DesktopBridge = {
 	setStagePane: noAction,
 	openStagePaneCapture: async () => { throw new Error("No native saved image is available"); },
 	startStagePaneCapture: async () => { throw new Error("4K rendering requires the native Stage application"); },
-	chooseStagePaneCapture: async () => { throw new Error("4K rendering requires the native Stage application"); },
 	cancelStagePaneCapture: async () => { throw new Error("No native image job is available"); },
 	onStageStill: async () => () => undefined,
 	setStagePaneVisibility: noAction,

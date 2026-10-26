@@ -36,8 +36,7 @@ beforeEach(() => {
 		showLabels: true,
 		showSelection: true,
 		floorGrid: false,
-		blender: "",
-		inputOverrides: [],
+			inputOverrides: [],
 		artNetInterface: null,
 		sacnInterface: null,
 	};
@@ -84,4 +83,7 @@ it("points to the actual native Open Viz menu and shortcut instead of creating a
 		screen.getByText(/Cmd\+Shift\+R on macOS \/ Ctrl\+Shift\+R/),
 	).toBeInTheDocument();
 	expect(screen.queryByRole("button", { name: /Render 4K/i })).not.toBeInTheDocument();
+	expect(screen.queryByText(/Blender|Ultimate/i)).not.toBeInTheDocument();
+	expect(screen.queryByPlaceholderText("Find automatically")).not.toBeInTheDocument();
+	expect(screen.getByText(/full-quality native Ultra image/)).toBeInTheDocument();
 });

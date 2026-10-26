@@ -614,25 +614,25 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const architectSections = [...architectPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
         assert.deepEqual(architectSections.slice(0, 3), ["Visualization", "Interchange", "CAD"]);
         const firstArchitectImage = [...architectPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
-        assert.equal(firstArchitectImage, "../screenshots/architect-ultimate-4k.png");
+        assert.equal(firstArchitectImage, "../screenshots/architect-native-export-4k.png");
         const visualizationSection = architectPage.split('<p class="eyebrow">Visualization</p>')[1]?.split('</article>')[0];
         assert.ok(visualizationSection, "Architect needs its render-quality comparison");
         const visualizationImages = [...visualizationSection.matchAll(/<img src="(\.\.\/screenshots\/[^"]+)"/gu)].map(match => match[1]);
         assert.deepEqual(visualizationImages, [
-            "../screenshots/architect-ultimate-4k.png",
+            "../screenshots/architect-native-export-4k.png",
             "../screenshots/architect-wireframe-native.png",
             "../screenshots/architect-renderer-draft.png",
             "../screenshots/architect-renderer-standard.png",
-            "../screenshots/architect-media-stage-main.png",
+            "../screenshots/architect-renderer-ultra-live.png",
         ]);
         const comparisonStart = visualizationSection.indexOf('<div class="product-detail-section-gallery"');
         assert.ok(comparisonStart > 0, "keep the customer export large above the quality comparison");
-        assert.match(visualizationSection.slice(0, comparisonStart), /architect-ultimate-4k\.png/u);
+        assert.match(visualizationSection.slice(0, comparisonStart), /architect-native-export-4k\.png/u);
         assert.equal(visualizationSection.slice(0, comparisonStart).match(/<figure class="shot">/gu)?.length, 1);
         assert.equal(visualizationSection.slice(comparisonStart).match(/<figure class="shot">/gu)?.length, 4);
         assert.match(visualizationSection, /--gallery-columns:2/u, "four preview qualities form a two-column comparison below the export");
         for (const [title, purpose] of [
-            ["Ultimate · 4K customer export", /full-venue 3840 × 2160 image rendered by Blender/u],
+            ["Ultra · 4K customer export", /full-venue 3840 × 2160 image rendered by ToskLight at its highest native quality/u],
             ["Wireframe · live checks", /fixture positions and beam directions during a live show/u],
             ["Draft · lightweight lighting preview", /live operation on a more capable machine, or pre-program on a machine with limited graphics power/u],
             ["Standard · everyday pre-programming", /Balance lighting detail and rendering speed/u],
@@ -641,7 +641,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
             assert.ok(visualizationSection.includes(`<strong>${title}</strong>`), `${title} needs a quality label`);
             assert.match(visualizationSection, purpose);
         }
-        assert.match(visualizationSection, /Ultra for high-quality customer images with the regular renderer/u);
+        assert.match(visualizationSection, /separate 4K export for high-quality customer images/u);
         assert.match(visualizationSection, /without changing the live preview quality/u);
         assert.doesNotMatch(visualizationSection, /original venue|rig in white|architect-renderer-(?:white|warm)-ultra\.png/iu);
         assert.match(architectPage, /Simulate your venue and rig\./u);
@@ -709,8 +709,8 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.equal([...landingPage.matchAll(/src="screenshots\/architect-media-stage-main\.png"/gu)].length, 1, "the native Ultra venue render remains the large top hero");
         const liveVisualizerCard = [...landingPage.matchAll(/<figure class="shot">[\s\S]*?<\/figure>/gu)].map(match => match[0]).find(figure => figure.includes("<strong>Live 3D Visualizer</strong>"));
         assert.ok(liveVisualizerCard, "Architect needs the Live 3D Visualizer homepage card");
-        assert.match(liveVisualizerCard, /src="screenshots\/architect-ultimate-4k\.png"/u);
-        assert.match(liveVisualizerCard, /full-venue Ultimate 4K image with Blender for your customer/u);
+        assert.match(liveVisualizerCard, /src="screenshots\/architect-native-export-4k\.png"/u);
+        assert.match(liveVisualizerCard, /full-venue Ultra 4K image for your customer/u);
         assert.doesNotMatch(liveVisualizerCard, /architect-renderer-white-ultra\.png/u);
         assert.doesNotMatch(architectPage, /screenshots\/architect-renderer-ultra\.png/u, "show the explicit render-quality comparison");
 

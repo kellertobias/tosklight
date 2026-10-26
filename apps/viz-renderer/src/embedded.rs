@@ -287,7 +287,6 @@ struct PaneState {
     cpu: cpu_runtime::CpuRuntime,
     stills: crate::stills::StillJobs,
     last_still_status: Option<viz_helper::still::Status>,
-    still_blender: Option<std::path::PathBuf>,
 }
 
 impl PaneState {
@@ -309,10 +308,6 @@ impl PaneState {
             renderer,
             stills: crate::stills::StillJobs::default(),
             last_still_status: None,
-            still_blender: crate::settings::Preferences::restored(
-                &crate::settings::Options::default(),
-            )
-            .blender_path(),
             scene: Scene::default(),
             values: SceneValues::default(),
             view: ViewConfiguration::default(),

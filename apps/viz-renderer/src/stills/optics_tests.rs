@@ -1,7 +1,7 @@
-//! Real two-engine asymmetric optical projection, including source self-occlusion and roll.
+//! Real native asymmetric optical projection, including source self-occlusion and roll.
 use super::*;
 use glam::Vec3;
-use std::{fs, io::BufReader, time::Instant};
+use std::{fs, time::Instant};
 use viz_render::{CapturedImage, ResolvedCamera, media::FrozenMedia, still::StillOrigin};
 use viz_scene::*;
 
@@ -93,29 +93,15 @@ fn receiver(image: &CapturedImage, camera: &ResolvedCamera, x: f32) -> f32 {
     }
     sum / 81.0
 }
-fn decoded(path: &std::path::Path) -> CapturedImage {
-    let mut decoder = png::Decoder::new(BufReader::new(fs::File::open(path).unwrap()));
-    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
-    let mut reader = decoder.read_info().unwrap();
-    let mut rgba = vec![0; reader.output_buffer_size().unwrap()];
-    let info = reader.next_frame(&mut rgba).unwrap();
-    rgba.truncate(info.buffer_size());
-    assert_eq!(info.color_type, png::ColorType::Rgba);
-    CapturedImage {
-        width: info.width,
-        height: info.height,
-        rgba,
-    }
-}
 #[test]
-#[ignore = "requires installed Blender, serialized native GPU and real 4K optical pixel proof"]
-fn ultimate_asymmetric_gate_matches_native_receiver_orientation() {
+#[ignore = "requires serialized native GPU and real 4K optical pixel proof"]
+fn native_asymmetric_gate_preserves_receiver_orientation() {
     render_optical_case(false);
 }
 
 #[test]
-#[ignore = "requires installed Blender, serialized native GPU and real 4K installed Fresnel cut proof"]
-fn ultimate_installed_manual_soft_fresnel_matches_native_receiver_orientation() {
+#[ignore = "requires serialized native GPU and real 4K installed Fresnel cut proof"]
+fn native_installed_manual_soft_fresnel_preserves_receiver_orientation() {
     render_optical_case(true);
 }
 
@@ -159,9 +145,6 @@ fn retain_native_manual_image(root: &std::path::Path, image: &CapturedImage) {
 }
 
 fn render_optical_case(manual: bool) {
-    let blender = PathBuf::from(
-        std::env::var_os("LIGHT_STILL_TEST_BLENDER").expect("explicit installed Blender"),
-    );
     let root = PathBuf::from(
         std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR").expect("canonical evidence dir"),
     );
@@ -210,64 +193,6 @@ fn render_optical_case(manual: bool) {
     ];
     println!("Native receiver levels: {native_pair:?}");
     assert!(native_pair[0].max(native_pair[1]) > native_pair[0].min(native_pair[1]) + 25.0);
-    let mut jobs = StillJobs::default();
-    let id = jobs
-        .start(
-            frozen,
-            StillOptions {
-                configured_blender: Some(blender),
-                probe_timeout: Duration::from_secs(30),
-                ultimate_timeout: Duration::from_secs(300),
-                destination: Some(root.join(format!(
-                    "ultimate-{}-{}.png",
-                    if manual {
-                        "manual-soft-fresnel"
-                    } else {
-                        "asymmetric-optics"
-                    },
-                    uuid::Uuid::new_v4()
-                ))),
-                ..Default::default()
-            },
-        )
-        .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(340);
-    let mut chose = false;
-    let status = loop {
-        let status = jobs.status().unwrap();
-        if let Phase::NeedsChoice {
-            ultimate_reasons, ..
-        } = &status.phase
-        {
-            assert!(ultimate_reasons.is_empty(), "{ultimate_reasons:?}");
-            assert!(!chose);
-            chose = true;
-            jobs.choose(&id, Engine::Ultimate).unwrap();
-        }
-        if status.phase.is_terminal() {
-            break status;
-        }
-        assert!(Instant::now() < deadline);
-        std::thread::sleep(Duration::from_millis(20));
-    };
-    let Phase::Saved { path } = status.phase else {
-        panic!("{:?}", status.phase)
-    };
-    let image = decoded(&path);
-    assert_eq!((image.width, image.height), (STILL_WIDTH, STILL_HEIGHT));
-    let pair = [
-        receiver(&image, &camera, -0.65),
-        receiver(&image, &camera, 0.65),
-    ];
-    println!(
-        "Blender receiver levels: {pair:?}; image {}",
-        path.display()
-    );
-    let bright = usize::from(native_pair[1] > native_pair[0]);
-    assert!(
-        pair[bright] > pair[1 - bright] + 25.0,
-        "frozen native shutter orientation lost: {pair:?}"
-    );
     assert_eq!(view.quality, RenderQuality::Draft);
     if manual {
         assert_eq!(scene.fixtures[0].installed_shaper_blades[0], 0.5);

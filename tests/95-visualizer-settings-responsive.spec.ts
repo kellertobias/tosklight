@@ -51,7 +51,6 @@ const SETTINGS = {
 	showLabels: true,
 	showSelection: true,
 	floorGrid: null,
-	blender: "",
 	persistence: 0.1,
 	persistenceFalloff: 2,
 	crowdAmount: 0.5,

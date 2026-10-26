@@ -3,7 +3,7 @@ use std::{sync::mpsc, time::Instant};
 use viz_render::{media::FrozenMedia, still::StillOrigin};
 use viz_scene::{Scene, SceneValues, ViewConfiguration};
 
-fn frozen() -> Arc<FrozenStill> {
+pub(super) fn frozen() -> Arc<FrozenStill> {
     let mut scene = Scene::default();
     scene.bounds = viz_scene::Aabb {
         min: glam::Vec3::ZERO,
@@ -37,66 +37,48 @@ fn await_status(jobs: &StillJobs, predicate: impl Fn(&Phase) -> bool) -> Status 
         std::thread::sleep(Duration::from_millis(1));
     }
 }
-fn fake_choice(job: &Job) -> Result<RenderedImage, UltimateError> {
-    let mut choice = job.choice.0.lock().unwrap();
-    choice.accepting = true;
-    choice.ultimate_reasons = vec!["unsupported optics".into()];
-    job.phase(Phase::NeedsChoice {
-        blender_version: "fake".into(),
-        ultimate_reasons: choice.ultimate_reasons.clone(),
-        ultra_explanation: Engine::Ultra.explanation().into(),
-        ultimate_explanation: Engine::Ultimate.explanation().into(),
-    });
-    let deadline = Instant::now() + Duration::from_secs(3);
-    loop {
-        job.check_cancel()?;
-        if let Some(engine) = choice.selected.take() {
-            choice.accepting = false;
-            assert_eq!(engine, Engine::Ultra);
-            job.update(|status| status.engine = Some(engine));
-            return Ok(RenderedImage {
+#[test]
+fn one_native_worker_and_frozen_lane_survive_async_rendering() {
+    let mut jobs = StillJobs::default();
+    let frozen = frozen();
+    let (ready, started) = mpsc::channel();
+    let (release, held) = mpsc::channel();
+    let id = jobs
+        .launch(frozen.clone(), StillOptions::default(), move |job| {
+            job.phase(Phase::Rendering {
+                detail: "Native Ultra".into(),
+            });
+            ready.send(()).unwrap();
+            held.recv_timeout(Duration::from_secs(3)).unwrap();
+            Ok(RenderedImage {
                 path: PathBuf::from("frozen-test.png"),
                 width: STILL_WIDTH,
                 height: STILL_HEIGHT,
-            });
-        }
-        assert!(Instant::now() < deadline, "fake chooser timed out");
-        choice = job
-            .choice
-            .1
-            .wait_timeout(choice, Duration::from_millis(10))
-            .unwrap()
-            .0;
-    }
-}
-#[test]
-fn one_worker_exact_job_choice_and_frozen_lane_survive_chooser() {
-    let mut jobs = StillJobs::default();
-    let frozen = frozen();
-    let id = jobs
-        .launch(frozen.clone(), StillOptions::default(), fake_choice)
+            })
+        })
         .unwrap();
-    let status = await_status(&jobs, |phase| matches!(phase, Phase::NeedsChoice { .. }));
+    started.recv_timeout(Duration::from_secs(3)).unwrap();
+    let status = jobs.status().unwrap();
     assert_eq!(status.pane_id, "preload");
     assert!(status.follow_preload);
     assert_eq!(status.time_seconds, 17.0);
+    assert_eq!(status.engine, Some(Engine::Ultra));
     assert!(
-        jobs.launch(frozen, StillOptions::default(), fake_choice)
+        jobs.launch(frozen, StillOptions::default(), |_| unreachable!())
             .is_err()
     );
-    let wrong = StillJobId("previous-helper-job".into());
-    assert!(jobs.choose(&wrong, Engine::Ultra).is_err());
-    assert!(jobs.cancel(&wrong).is_err());
-    assert!(jobs.choose(&id, Engine::Ultimate).is_err());
-    jobs.choose(&id, Engine::Ultra).unwrap();
-    assert!(jobs.choose(&id, Engine::Ultra).is_err());
-    let saved = await_status(&jobs, |phase| phase.is_terminal());
+    assert!(
+        jobs.cancel(&StillJobId("previous-helper-job".into()))
+            .is_err()
+    );
+    release.send(()).unwrap();
+    let saved = await_status(&jobs, Phase::is_terminal);
     assert!(matches!(saved.phase, Phase::Saved { .. }));
     assert_eq!(saved.engine, Some(Engine::Ultra));
     assert!(jobs.cancel(&id).is_err());
 }
 #[test]
-fn cancelled_choice_finishes_before_replacement_and_ignores_late_progress() {
+fn cancelled_native_job_finishes_before_replacement_and_ignores_late_progress() {
     let mut jobs = StillJobs::default();
     let id = jobs
         .launch(frozen(), StillOptions::default(), |job| {
@@ -110,7 +92,7 @@ fn cancelled_choice_finishes_before_replacement_and_ignores_late_progress() {
                 job.latest.lock().unwrap().as_ref().unwrap().phase,
                 Phase::Cancelling { .. }
             ));
-            Err(UltimateError::Cancelled)
+            Err(ImageError::Cancelled)
         })
         .unwrap();
     jobs.cancel(&id).unwrap();
@@ -122,7 +104,7 @@ fn cancelled_choice_finishes_before_replacement_and_ignores_late_progress() {
     }
     let replacement = jobs
         .launch(frozen(), StillOptions::default(), |_| {
-            Err(UltimateError::Cancelled)
+            Err(ImageError::Cancelled)
         })
         .unwrap();
     assert_ne!(id, replacement);
@@ -139,7 +121,7 @@ fn dropping_controller_cancels_owned_worker_without_joining_ui() {
             std::thread::sleep(Duration::from_millis(1));
         }
         send.send(()).unwrap();
-        Err(UltimateError::Cancelled)
+        Err(ImageError::Cancelled)
     })
     .unwrap();
     drop(jobs);

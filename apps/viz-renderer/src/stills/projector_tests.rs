@@ -1,4 +1,4 @@
-//! Explicit opt-in real 4K finite projector reach and no media repaint, in both render engines.
+//! Explicit opt-in real 4K finite projector reach and no media repaint, through the native image job.
 use super::*;
 use glam::Vec3;
 use std::{fs, io::BufReader, time::Instant};
@@ -143,48 +143,32 @@ fn native(frozen: &FrozenStill) -> CapturedImage {
         std::thread::sleep(Duration::from_millis(2));
     }
 }
-fn ultimate(frozen: Arc<FrozenStill>, blender: PathBuf, destination: PathBuf) -> CapturedImage {
+fn published(frozen: Arc<FrozenStill>, destination: PathBuf) -> CapturedImage {
     let mut jobs = StillJobs::default();
-    let id = jobs
+    let _id = jobs
         .start(
             frozen,
             StillOptions {
-                configured_blender: Some(blender),
-                probe_timeout: Duration::from_secs(30),
-                ultimate_timeout: Duration::from_secs(300),
                 destination: Some(destination),
                 ..Default::default()
             },
         )
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(340);
-    let mut chose = false;
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         let status = jobs.status().unwrap();
-        if let Phase::NeedsChoice {
-            ultimate_reasons, ..
-        } = &status.phase
-        {
-            assert!(ultimate_reasons.is_empty(), "{ultimate_reasons:?}");
-            assert!(!chose);
-            chose = true;
-            jobs.choose(&id, Engine::Ultimate).unwrap();
-        }
         if let Phase::Saved { path } = status.phase {
             return decoded(&path);
         }
         assert!(!status.phase.is_terminal(), "{:?}", status.phase);
-        assert!(Instant::now() < deadline, "Ultimate capture timed out");
+        assert!(Instant::now() < deadline, "Native image capture timed out");
         std::thread::sleep(Duration::from_millis(20));
     }
 }
 
 #[test]
-#[ignore = "requires installed Blender, serialized native GPU and real 4K projector pixel proof"]
-fn ultimate_projector_has_finite_reach_and_never_repaints_its_media_surface() {
-    let blender = PathBuf::from(
-        std::env::var_os("LIGHT_STILL_TEST_BLENDER").expect("explicit installed Blender"),
-    );
+#[ignore = "requires serialized native GPU and real 4K projector pixel proof"]
+fn native_image_projector_has_finite_reach_and_never_repaints_its_media_surface() {
     let root = PathBuf::from(
         std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR").expect("canonical evidence dir"),
     );
@@ -211,12 +195,15 @@ fn ultimate_projector_has_finite_reach_and_never_repaints_its_media_surface() {
         .unwrap(),
     );
     let native = native(&frozen);
-    let blender = ultimate(
+    let published = published(
         frozen,
-        blender,
-        root.join(format!("ultimate-projector-{}.png", uuid::Uuid::new_v4())),
+        root.join(format!("native-projector-{}.png", uuid::Uuid::new_v4())),
     );
-    for (name, image) in [("native", native), ("Blender", blender)] {
+    assert_eq!(
+        native.rgba, published.rgba,
+        "publication retains frozen native pixels"
+    );
+    for (name, image) in [("native", native), ("published", published)] {
         assert_eq!((image.width, image.height), (STILL_WIDTH, STILL_HEIGHT));
         let levels = [
             level(&image, &camera, NEAR),
@@ -237,12 +224,6 @@ fn ultimate_projector_has_finite_reach_and_never_repaints_its_media_surface() {
             levels[2] < levels[0] * 0.1 + 3.0,
             "{name} repainted its reflective media surface: {levels:?}"
         );
-        if name == "Blender" {
-            assert!(
-                levels[3] < levels[0] * 0.1 + 3.0,
-                "real opaque blocker stopped casting a shadow: {levels:?}"
-            );
-        }
     }
     assert_eq!(view.quality, RenderQuality::Draft);
 }

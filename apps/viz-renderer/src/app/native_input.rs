@@ -1,5 +1,5 @@
 //! Native key routing retains event metadata until repeat and ownership checks have run.
-use super::{Application, WalkKeys, still};
+use super::{Application, still};
 use winit::{event::ElementState, event_loop::ActiveEventLoop};
 
 impl Application {
@@ -17,21 +17,10 @@ impl Application {
                     self.modifiers,
                     event.repeat,
                     self.ime_composing,
-                    self.quick_settings.open || self.still_ui.modal(),
+                    self.quick_settings.open,
                 )
             {
                 self.render_4k_image();
-            }
-            return;
-        }
-        if self.still_ui.modal() {
-            self.walk_keys = WalkKeys::default();
-            if event.state == ElementState::Pressed && !event.repeat {
-                self.handle_key(
-                    event_loop,
-                    event.logical_key.clone(),
-                    event.text.map(|t| t.to_string()),
-                );
             }
             return;
         }

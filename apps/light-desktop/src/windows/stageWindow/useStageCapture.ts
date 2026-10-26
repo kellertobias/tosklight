@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
-import type { StageStillEngine, StageStillStatus, StageStillPhase, StagePanePicture } from "../../platform/desktop/types";
+import type { StageStillStatus, StageStillPhase, StagePanePicture } from "../../platform/desktop/types";
 
 export const terminalStillPhase = (phase: StageStillPhase) => phase === "cancelled" || (typeof phase === "object" && ("saved" in phase || "failed" in phase));
 type Request = { paneId: string; requestId: string; jobId: string | null; terminal: boolean };
@@ -16,7 +16,7 @@ export function useStageCapture(paneId: string, enabled: boolean, picture: Stage
 	const request = useRef<Request | null>(null);
 	const command = useRef(false);
 	const mounted = useRef(false);
-	const available = Boolean(desktop.available && desktop.startStagePaneCapture && desktop.chooseStagePaneCapture && desktop.cancelStagePaneCapture && desktop.onStageStill);
+	const available = Boolean(desktop.available && desktop.startStagePaneCapture && desktop.cancelStagePaneCapture && desktop.onStageStill);
 	useEffect(() => {
 		mounted.current = true;
 		request.current = null; command.current = false;
@@ -36,7 +36,7 @@ export function useStageCapture(paneId: string, enabled: boolean, picture: Stage
 				current.jobId = next.jobId;
 				current.terminal = terminalStillPhase(next.phase);
 				setStatus(next); setBusy(!current.terminal);
-				if (typeof next.phase !== "object" || !("needsChoice" in next.phase)) { command.current = false; setCommandPending(false); }
+				command.current = false; setCommandPending(false);
 			}).then((stop) => {
 				if (disposed) stop(); else { unsubscribe = stop; setSubscribed(true); }
 			}).catch((reason) => { if (!disposed) setError(`Cannot receive render progress: ${String(reason)}`); });
@@ -58,13 +58,12 @@ export function useStageCapture(paneId: string, enabled: boolean, picture: Stage
 			}
 		}
 	};
-	const control = async (engine?: StageStillEngine) => {
+	const cancel = async () => {
 		const current = request.current;
 		if (!current?.jobId || current.terminal || command.current) return;
 		command.current = true; setCommandPending(true); setError(null);
 		try {
-			if (engine) await desktop.chooseStagePaneCapture?.(paneId, current.jobId, engine);
-			else await desktop.cancelStagePaneCapture?.(paneId, current.jobId);
+			await desktop.cancelStagePaneCapture?.(paneId, current.jobId);
 		} catch (reason) {
 			if (mounted.current && request.current === current && !current.terminal) {
 				command.current = false; setCommandPending(false); setError(String(reason));
@@ -72,7 +71,7 @@ export function useStageCapture(paneId: string, enabled: boolean, picture: Stage
 		}
 	};
 	return { status, error, busy, commandPending, available, ready: available && subscribed && enabled,
-		start, choose: (engine: StageStillEngine) => control(engine), cancel: () => control(), openSaved: async (reveal: boolean) => {
+		start, cancel, openSaved: async (reveal: boolean) => {
 			const owner = request.current;
 			try { await desktop.openStagePaneCapture?.(paneId, reveal); }
 			catch (reason) { if (mounted.current && request.current === owner) setError(String(reason)); }

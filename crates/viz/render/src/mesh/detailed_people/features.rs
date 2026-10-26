@@ -1,4 +1,4 @@
-//! Baked static anatomical detail, shared unchanged by native Ultra and Ultimate geometry export.
+//! Baked static anatomical detail, shared by native Ultra images and geometry snapshots.
 //! Local +Z is the face/toe direction; authored crowd rotation remains authoritative.
 use super::*;
 

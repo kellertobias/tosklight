@@ -12,9 +12,9 @@
 use serde::{Deserialize, Serialize};
 
 /// The protocol this build speaks.
-// Detailed-people picture policy changes postcard's positional payload. Reject older peers
+// Native-only capture removes positional engine/phase/command variants. Reject older peers
 // before exchanging settings/surfaces; the immutable greeting payload is unchanged.
-pub const PROTOCOL_MAJOR: u16 = 13;
+pub const PROTOCOL_MAJOR: u16 = 14;
 /// Bounded shared ownership: retained front, host composition, and producer rendering.
 /// Copy transport independently permits only slot zero.
 pub const SHARED_FRAME_SLOTS: usize = 3;
@@ -223,14 +223,10 @@ pub enum ToHelper {
     ReleaseFrame {
         frame: FrameId,
     },
-    /// Freeze this pane before probing Blender or asking for an engine.
+    /// Freeze this pane for a separate full-quality native 4K image.
     CaptureStart {
         request_id: String,
         pane_id: String,
-    },
-    CaptureChoose {
-        job_id: crate::still::StillJobId,
-        engine: crate::still::Engine,
     },
     CaptureCancel {
         job_id: crate::still::StillJobId,

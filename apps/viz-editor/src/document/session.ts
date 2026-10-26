@@ -395,7 +395,6 @@ export interface RendererSettings {
 	showLabels: boolean;
 	showSelection: boolean;
 	floorGrid: boolean | null;
-	blender: string;
 	inputOverrides: RendererInputOverride[];
 	/** The interface Art-Net is received on, by system name; `null` is every interface. */
 	artNetInterface: string | null;

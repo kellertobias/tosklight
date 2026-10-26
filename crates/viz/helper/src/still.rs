@@ -10,22 +10,12 @@ pub struct StillJobId(pub String);
 #[serde(rename_all = "camelCase")]
 pub enum Engine {
     Ultra,
-    Ultimate,
 }
 impl Engine {
     pub fn explanation(self) -> &'static str {
         match self {
             Self::Ultra => {
                 "Ultra quality — regular ToskLight renderer; separate full-quality 4K image, with live quality unchanged"
-            }
-            Self::Ultimate => {
-                concat!(
-                    "Ultimate quality — Blender/Cycles offline renderer; may take substantially longer. ",
-                    "Known differences: aluminium, multiplex and fabric procedural finishes use plain PBR materials; ",
-                    "floor grid and selection guides are omitted; native bloom is not reproduced. ",
-                    "Cycles physical beam lighting, source softness, fog transport, global illumination and AgX tone mapping can differ. ",
-                    "Choose Ultra for the native ToskLight appearance."
-                )
             }
         }
     }
@@ -35,26 +25,11 @@ impl Engine {
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Phase {
     Queued,
-    CheckingBlender,
-    NeedsChoice {
-        blender_version: String,
-        ultimate_reasons: Vec<String>,
-        ultra_explanation: String,
-        ultimate_explanation: String,
-    },
-    Rendering {
-        detail: String,
-    },
+    Rendering { detail: String },
     Writing,
-    Cancelling {
-        detail: String,
-    },
-    Saved {
-        path: PathBuf,
-    },
-    Failed {
-        detail: String,
-    },
+    Cancelling { detail: String },
+    Saved { path: PathBuf },
+    Failed { detail: String },
     Cancelled,
 }
 impl Phase {
@@ -82,7 +57,7 @@ pub struct Status {
     pub height: u32,
     pub framing: String,
     pub engine: Option<Engine>,
-    /// E.g. unusable Blender and automatic Ultra fallback. Never silently discard this notice.
+    /// Frozen-media availability or another actionable capture notice.
     pub notice: Option<String>,
     pub phase: Phase,
 }
@@ -91,52 +66,18 @@ pub struct Status {
 mod tests {
     use super::*;
     #[test]
-    fn ultimate_chooser_discloses_known_native_appearance_differences() {
-        let explanation = Engine::Ultimate.explanation();
-        for detail in [
-            "aluminium, multiplex and fabric",
-            "plain PBR",
-            "floor grid and selection guides",
-            "native bloom is not reproduced",
-            "physical beam lighting",
-            "fog transport",
-            "AgX",
-            "Choose Ultra",
-        ] {
-            assert!(
-                explanation.contains(detail),
-                "missing chooser disclosure: {detail}"
-            );
-        }
-    }
-
-    #[test]
-    fn chooser_contract_names_engines_and_preserves_typed_job_identity() {
-        let phase = Phase::NeedsChoice {
-            blender_version: "test".into(),
-            ultimate_reasons: vec!["gobo".into()],
-            ultra_explanation: Engine::Ultra.explanation().into(),
-            ultimate_explanation: Engine::Ultimate.explanation().into(),
+    fn native_capture_contract_preserves_typed_identity_and_phase() {
+        assert!(Engine::Ultra.explanation().contains("ToskLight"));
+        assert_eq!(serde_json::to_string(&Engine::Ultra).unwrap(), "\"ultra\"");
+        let phase = Phase::Rendering {
+            detail: "Native Ultra 3840×2160".into(),
         };
-        let value = serde_json::to_value(&phase).unwrap();
-        assert_eq!(value["needsChoice"]["ultimateReasons"][0], "gobo");
-        assert!(
-            value["needsChoice"]["ultraExplanation"]
-                .as_str()
-                .unwrap()
-                .contains("ToskLight")
-        );
-        assert!(
-            value["needsChoice"]["ultimateExplanation"]
-                .as_str()
-                .unwrap()
-                .contains("Blender")
-        );
         let wire = postcard::to_allocvec(&phase).unwrap();
         assert_eq!(postcard::from_bytes::<Phase>(&wire).unwrap(), phase);
         assert_eq!(
             serde_json::to_string(&StillJobId("job-1".into())).unwrap(),
             "\"job-1\""
         );
+        assert!(serde_json::from_str::<Engine>("\"ultimate\"").is_err());
     }
 }

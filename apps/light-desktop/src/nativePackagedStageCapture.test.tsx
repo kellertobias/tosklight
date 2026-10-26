@@ -18,7 +18,7 @@ function Controls() {
         <StageCaptureControls capture={capture} paneId="live-pane" />
     </div></div>;
 }
-function setup(onChoice?: (emit: (phase: StageStillPhase, patch?: Partial<StageStillStatus>) => void) => void, ready = true) {
+function setup(onStart?: (emit: (phase: StageStillPhase, patch?: Partial<StageStillStatus>) => void) => void, ready = true) {
     const listeners = new Set<(event: StageStillEvent) => void>();
     let requestId = "";
     const emit = (phase: StageStillPhase, patch: Partial<StageStillStatus> = {}) => act(() => {
@@ -29,17 +29,14 @@ function setup(onChoice?: (emit: (phase: StageStillPhase, patch?: Partial<StageS
     });
     const start = vi.fn(async (_pane: string, request: string) => {
         requestId = request;
-        emit("queued");
-        emit({ needsChoice: { blenderVersion: "actual-path-test", ultimateReasons: [], ultraExplanation: "Native", ultimateExplanation: "Cycles" } });
-    });
-    const choose = vi.fn(async () => {
-        if (onChoice) onChoice(emit);
+        emit("queued", { engine: "ultra" });
+        if (onStart) onStart(emit);
         else emit({ saved: { path: "/isolated/Stage-owned-job.png" } }, { engine: "ultra" });
     });
     const cancel = vi.fn(async () => { emit("cancelled"); });
     const open = vi.fn(async () => {});
     const desktop: DesktopBridge = { ...browserDesktopBridge, available: true, startStagePaneCapture: start,
-        chooseStagePaneCapture: choose, cancelStagePaneCapture: cancel, openStagePaneCapture: open,
+        cancelStagePaneCapture: cancel, openStagePaneCapture: open,
         onStageStill: async (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; } };
     const exercise = new PackagedStageCaptureExercise(desktop, 500);
     const frame = { paneId: "main:live-pane", attachmentId: "owned-attachment", followPreload: false,
@@ -48,19 +45,18 @@ function setup(onChoice?: (emit: (phase: StageStillPhase, patch?: Partial<StageS
     const config = { baselineQuality: "draft", baselineView: "lines_3d" } as PackagedStageBenchmarkConfig;
     if (ready) exercise.acceptReady(evidence, config);
     render(<DesktopProvider bridge={exercise.bridge}><ModalProvider><Controls /></ModalProvider></DesktopProvider>);
-    return { exercise, start, choose, cancel, open, emit, listeners, evidence, config };
+    return { exercise, start, cancel, open, emit, listeners, evidence, config };
 }
 afterEach(cleanup);
 
-it("clicks actual capture controls once, follows native choice and visible saved result without opening it", async () => {
+it("clicks actual capture controls once and follows the native Ultra saved result without opening it", async () => {
     const harness = setup();
     const run = harness.exercise.run();
     expect(harness.exercise.run()).toBe(run);
     const result = await run;
     expect(result.passed).toBe(true);
-    expect(result.ui).toEqual({ buttonClicked: true, chooserClicked: true, savedVisible: true, openedOrRevealed: false });
+    expect(result.ui).toEqual({ buttonClicked: true, savedVisible: true, openedOrRevealed: false });
     expect(harness.start).toHaveBeenCalledTimes(1);
-    expect(harness.choose).toHaveBeenCalledWith("live-pane", "owned-job", "ultra");
     expect(harness.open).not.toHaveBeenCalled();
     expect(harness.listeners.size).toBe(1); // Only the real control's subscription remains.
 });
@@ -81,20 +77,18 @@ it("times out boundedly and waits for owned cancellation", async () => {
     expect(harness.cancel).toHaveBeenCalledTimes(1);
 });
 
-it("never counts automatic fallback as quality chooser coverage", async () => {
-    const harness = setup();
-    harness.start.mockImplementation(async (_pane, requestId) => {
-        harness.emit({ saved: { path: "/fallback.png" } }, { engine: "ultra", requestId });
-    });
+it("rejects a failed native render without treating it as a saved image", async () => {
+    const harness = setup((emit) => { emit({ failed: { detail: "Cannot render the image" } }, { engine: "ultra" }); });
     const result = await harness.exercise.run();
     expect(result.passed).toBe(false);
-    expect(harness.choose).not.toHaveBeenCalled();
+    expect(String(result.failures)).toContain("did not save the native Ultra job");
+    expect(harness.cancel).not.toHaveBeenCalled();
 });
 
 it("stops an in-flight exercise through owned cancellation", async () => {
     const harness = setup((emit) => { emit({ rendering: { detail: "render" } }, { engine: "ultra" }); });
     const run = harness.exercise.run();
-    await waitFor(() => expect(harness.choose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(harness.start).toHaveBeenCalledTimes(1));
     harness.exercise.stop();
     expect((await run).passed).toBe(false);
     expect(harness.cancel).toHaveBeenCalledWith("live-pane", "owned-job");

@@ -40,7 +40,6 @@ pub enum Row {
     PersistenceFalloff,
     InputUniverse,
     InputProtocol,
-    BlenderPath,
     /// One kept snapshot, by its position in the list, newest first.
     Snapshot(usize),
     Connect,
@@ -120,7 +119,6 @@ impl Row {
             Self::PersistenceFalloff => "Persistence falloff",
             Self::InputUniverse => "Input universe",
             Self::InputProtocol => "Arrives as",
-            Self::BlenderPath => "Blender",
             Self::Snapshot(_) => "Snapshot",
             Self::Connect => "Connect / Reconnect",
             Self::Cancel => "Cancel without reconnecting",
@@ -128,7 +126,7 @@ impl Row {
     }
 
     fn is_text(self) -> bool {
-        matches!(self, Self::Server | Self::Port | Self::BlenderPath)
+        matches!(self, Self::Server | Self::Port)
     }
 
     /// The `0..=1` fraction to draw as a bar beside the value, for rows that have one.
@@ -164,8 +162,6 @@ pub enum QuickSettingsOutcome {
         host: String,
         port: u16,
     },
-    /// Export the kept snapshot at this position to a Blender file.
-    ExportSnapshot(usize),
     /// The source changed; the application must switch providers atomically.
     SourceChanged(ProviderKind),
     /// Reframe the camera around the current rig.
@@ -183,9 +179,6 @@ pub struct QuickSettings {
     pub tab: QuickSettingsTab,
     pub editing: bool,
     pub staged: StagedConnection,
-    /// The Blender the operator named, empty to let the application find one. Unlike the
-    /// connection fields this applies as it is typed: it changes nothing that is running.
-    pub staged_blender: String,
     pub message: String,
     /// The universe the input rows are configuring.
     pub input_universe: u16,
@@ -197,9 +190,6 @@ pub struct QuickSettings {
     pub snapshots: Vec<crate::snapshots::SnapshotRow>,
     /// Where captures are being written, for the line under the list.
     pub snapshot_folder: String,
-    /// The Blender the application found on its own, looked for when the panel opens rather than
-    /// on every frame it is drawn.
-    discovered_blender: Option<std::path::PathBuf>,
 }
 
 impl QuickSettings {
@@ -210,14 +200,12 @@ impl QuickSettings {
             tab: QuickSettingsTab::Rendering,
             editing: false,
             staged: StagedConnection::from_preferences(preferences),
-            staged_blender: preferences.blender.clone(),
             message: String::new(),
             input_universe: 1,
             planner_available,
             planner_unavailable_reason: "Not available in this build".into(),
             snapshots: Vec::new(),
             snapshot_folder: String::new(),
-            discovered_blender: None,
         }
     }
 
@@ -226,11 +214,6 @@ impl QuickSettings {
         if self.open {
             // Re-stage from the live connection so cancelling can never disturb it.
             self.staged = StagedConnection::from_preferences(preferences);
-            self.staged_blender = preferences.blender.clone();
-            // Looking for Blender walks the search path, so it happens when the panel opens and
-            // not on every frame it is drawn on. An operator who installs Blender while the panel
-            // is up closes and reopens it, which is what they would do anyway.
-            self.discovered_blender = viz_snapshot::find_blender(None);
             self.message.clear();
             self.editing = false;
         }
@@ -242,7 +225,6 @@ impl QuickSettings {
             return;
         }
         self.staged = StagedConnection::from_preferences(preferences);
-        self.staged_blender = preferences.blender.clone();
     }
 
     /// Every row in the panel, in the order they are drawn.
@@ -285,7 +267,7 @@ impl QuickSettings {
                 ]
             }
             QuickSettingsTab::Snapshots => {
-                let mut rows = vec![Row::BlenderPath];
+                let mut rows = Vec::new();
                 rows.extend((0..self.snapshots.len()).map(Row::Snapshot));
                 rows
             }
@@ -518,11 +500,6 @@ impl QuickSettings {
         let row = self.row();
         if row.is_text() {
             self.editing = !self.editing;
-            // Where Blender is changes nothing that is running, so it is kept the moment editing
-            // finishes rather than waiting behind Connect with the endpoint fields.
-            if !self.editing && row == Row::BlenderPath {
-                preferences.blender = self.staged_blender.trim().to_owned();
-            }
             self.message = if self.editing {
                 "Type to edit, Enter to accept".into()
             } else {
@@ -537,16 +514,12 @@ impl QuickSettings {
                 let Some(snapshot) = self.snapshots.get(index) else {
                     return QuickSettingsOutcome::None;
                 };
-                if snapshot.export == crate::snapshots::ExportState::Running {
-                    self.message = "That snapshot is already being exported".into();
-                    return QuickSettingsOutcome::None;
-                }
                 self.message = format!(
-                    "Exporting the {} snapshot \u{2014} Blender writes it into {}",
+                    "Snapshot {} is saved in {}",
                     snapshot.entry.label(),
                     snapshot.entry.directory.display()
                 );
-                QuickSettingsOutcome::ExportSnapshot(index)
+                QuickSettingsOutcome::None
             }
             Row::Connect => match self.staged.validate() {
                 Ok((host, port)) => {
@@ -603,7 +576,6 @@ impl QuickSettings {
             Row::Port if character.is_ascii_digit() => {
                 self.staged.port_text.push(character);
             }
-            Row::BlenderPath => self.staged_blender.push(character),
             _ => {}
         }
         self.validate_in_place();
@@ -619,9 +591,6 @@ impl QuickSettings {
             }
             Row::Port => {
                 self.staged.port_text.pop();
-            }
-            Row::BlenderPath => {
-                self.staged_blender.pop();
             }
             _ => {}
         }
@@ -706,7 +675,6 @@ impl QuickSettings {
                     protocol.default_port()
                 ),
             },
-            Row::BlenderPath => self.blender_value(),
             Row::Snapshot(index) => match self.snapshots.get(index) {
                 Some(snapshot) => snapshot.status(),
                 None => String::new(),
@@ -725,21 +693,6 @@ impl QuickSettings {
                 None => "Snapshot".to_owned(),
             },
             other => other.label().to_owned(),
-        }
-    }
-
-    /// What the Blender row says: the path being used, or that nothing was found.
-    ///
-    /// An operator has to be able to tell "I have not set this and it found one anyway" from
-    /// "there is nothing here and exporting will fail", so the row answers both.
-    fn blender_value(&self) -> String {
-        let typed = self.staged_blender.trim();
-        if !typed.is_empty() {
-            return typed.to_owned();
-        }
-        match &self.discovered_blender {
-            Some(found) => format!("Found: {}", found.display()),
-            None => "Not found \u{2014} type a path to blender".to_owned(),
         }
     }
 }
@@ -1065,17 +1018,7 @@ fn draw_rows(
         );
         let value = settings.value(row, preferences);
         let editing_marker = if focused && settings.editing { "_" } else { "" };
-        let value_ink = if matches!(row, Row::Snapshot(index) if settings
-            .snapshots
-            .get(index)
-            .is_some_and(crate::snapshots::SnapshotRow::is_failure))
-        {
-            palette.bad
-        } else if focused {
-            palette.text
-        } else {
-            palette.dim
-        };
+        let value_ink = if focused { palette.text } else { palette.dim };
         overlay.clipped_text(
             x + panel_width * 0.42,
             *cursor,

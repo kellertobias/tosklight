@@ -6,10 +6,8 @@ use std::{
 };
 use viz_render::Overlay;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::app) enum Action {
-    Ultra,
-    Ultimate,
     Cancel,
     Open,
     Reveal,
@@ -78,13 +76,6 @@ impl StillUi {
                 .as_ref()
                 .is_some_and(|s| self.dismissed.as_ref() != Some(&s.job_id))
     }
-    pub(in crate::app) fn modal(&self) -> bool {
-        self.visible()
-            && self
-                .status
-                .as_ref()
-                .is_some_and(|s| matches!(s.phase, Phase::NeedsChoice { .. }))
-    }
     pub(in crate::app) fn close(&mut self) {
         self.error = None;
         self.dismissed = self.status.as_ref().map(|s| s.job_id.clone());
@@ -138,9 +129,6 @@ impl StillUi {
         let padding = 16.0 * scale;
         let text = [0.9, 0.94, 1.0, 1.0];
         let dim = [0.55, 0.65, 0.75, 1.0];
-        if self.modal() {
-            overlay.rect(0.0, 0.0, width, height, [0.0, 0.0, 0.0, 0.6]);
-        }
         overlay.rect(x, y, w, h, [0.015, 0.02, 0.03, 0.98]);
         overlay.text(
             x + padding,
@@ -219,37 +207,11 @@ impl StillUi {
             lines.push(error.clone());
         }
         let buttons = match &status.phase {
-            Phase::NeedsChoice {
-                blender_version,
-                ultimate_reasons,
-                ultra_explanation,
-                ultimate_explanation,
-            } => {
-                lines.extend([
-                    format!("Blender {blender_version} is available. Choose image quality:"),
-                    ultra_explanation.clone(),
-                    ultimate_explanation.clone(),
-                ]);
-                lines.extend(
-                    ultimate_reasons
-                        .iter()
-                        .map(|r| format!("Ultimate unavailable: {r}")),
-                );
-                vec![
-                    ("[U] Ultra · ToskLight", Some(Action::Ultra)),
-                    (
-                        "[B] Ultimate · Blender",
-                        ultimate_reasons.is_empty().then_some(Action::Ultimate),
-                    ),
-                    ("[Esc] Cancel", Some(Action::Cancel)),
-                ]
-            }
             Phase::Saved { path } => {
                 lines.extend(["3840 × 2160 image saved".into(), path.display().to_string()]);
                 if let Some(engine) = status.engine {
                     lines.push(match engine {
                         crate::stills::Engine::Ultra => "Ultra · ToskLight".into(),
-                        crate::stills::Engine::Ultimate => "Ultimate · Blender".into(),
                     });
                 }
                 vec![
@@ -269,7 +231,6 @@ impl StillUi {
             phase => {
                 lines.push(match phase {
                     Phase::Queued => "Image queued".into(),
-                    Phase::CheckingBlender => "Checking Blender availability…".into(),
                     Phase::Rendering { detail } => detail.clone(),
                     Phase::Writing => "Writing PNG…".into(),
                     Phase::Cancelling { detail } => detail.clone(),

@@ -28,7 +28,6 @@ pub struct RendererSettings {
     pub show_labels: bool,
     pub show_selection: bool,
     pub floor_grid: Option<bool>,
-    pub blender: String,
     pub input_overrides: Vec<RendererInputOverride>,
     /// The network interface Art-Net is received on, by its system name; `None` is every one.
     #[serde(default)]
@@ -88,7 +87,6 @@ pub enum RendererSettingChange {
     ShowLabels(bool),
     ShowSelection(bool),
     FloorGrid(Option<bool>),
-    Blender(String),
     InputOverrides(Vec<RendererInputOverride>),
     ArtNetInterface(Option<String>),
     SacnInterface(Option<String>),
@@ -118,7 +116,6 @@ impl Default for RendererSettings {
             show_labels: true,
             show_selection: true,
             floor_grid: None,
-            blender: String::new(),
             input_overrides: Vec::new(),
             art_net_interface: None,
             sacn_interface: None,
@@ -167,7 +164,6 @@ impl RendererSettings {
                 "labels" => settings.show_labels = value != "false",
                 "show_selection" => settings.show_selection = value != "false",
                 "floor_grid" => settings.floor_grid = parse_optional_bool(value),
-                "blender" => settings.blender = value.into(),
                 "input" => {
                     if let Some((universe, protocol)) = value.split_once(char::is_whitespace)
                         && let Ok(universe) = universe.parse::<u16>()
@@ -255,9 +251,6 @@ impl RendererSettings {
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "follow".into())
         );
-        if !self.blender.trim().is_empty() {
-            line!("blender", self.blender.trim());
-        }
         for input in &self.input_overrides {
             line!("input", format!("{} {}", input.universe, input.protocol));
         }
@@ -297,7 +290,6 @@ impl RendererSettings {
         field!(show_labels, ShowLabels);
         field!(show_selection, ShowSelection);
         field!(floor_grid, FloorGrid);
-        field!(blender, Blender);
         field!(input_overrides, InputOverrides);
         field!(art_net_interface, ArtNetInterface);
         field!(sacn_interface, SacnInterface);
@@ -338,7 +330,6 @@ impl RendererSettings {
                 RendererSettingChange::ShowLabels(value) => self.show_labels = *value,
                 RendererSettingChange::ShowSelection(value) => self.show_selection = *value,
                 RendererSettingChange::FloorGrid(value) => self.floor_grid = *value,
-                RendererSettingChange::Blender(value) => self.blender = value.clone(),
                 RendererSettingChange::InputOverrides(value) => {
                     self.input_overrides = value.clone()
                 }
@@ -375,7 +366,6 @@ impl RendererSettingChange {
             Self::ShowLabels(_) => "showLabels",
             Self::ShowSelection(_) => "showSelection",
             Self::FloorGrid(_) => "floorGrid",
-            Self::Blender(_) => "blender",
             Self::InputOverrides(_) => "inputOverrides",
             Self::ArtNetInterface(_) => "artNetInterface",
             Self::SacnInterface(_) => "sacnInterface",
@@ -438,6 +428,25 @@ quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\n
         assert_eq!(settings.art_net_interface.as_deref(), Some("en5"));
         assert_eq!(settings.sacn_interface, None);
         assert_eq!(RendererSettings::from_file(&settings.to_file()), settings);
+    }
+
+    #[test]
+    fn obsolete_tool_keys_are_ignored_and_never_written_back() {
+        let settings =
+            RendererSettings::from_file("blender /old/missing/tool\nquality draft\nexposure 1.2\n");
+        assert_eq!(settings.quality.as_deref(), Some("draft"));
+        assert_eq!(settings.exposure, 1.2);
+        assert!(!settings.to_file().contains("blender"));
+        let mut legacy = serde_json::to_value(&settings).unwrap();
+        legacy["blender"] = serde_json::json!("/old/missing/tool");
+        let loaded: RendererSettings = serde_json::from_value(legacy).unwrap();
+        assert_eq!(loaded, settings);
+        assert!(
+            serde_json::to_value(loaded)
+                .unwrap()
+                .get("blender")
+                .is_none()
+        );
     }
 
     #[test]

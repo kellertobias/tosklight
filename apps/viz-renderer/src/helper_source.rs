@@ -382,9 +382,9 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 desk,
                 surface_service,
             })),
-            message @ (ToHelper::CaptureStart { .. }
-            | ToHelper::CaptureChoose { .. }
-            | ToHelper::CaptureCancel { .. }) => outbox.send(FromChannel::Still(message)),
+            message @ (ToHelper::CaptureStart { .. } | ToHelper::CaptureCancel { .. }) => {
+                outbox.send(FromChannel::Still(message))
+            }
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             picture @ ToHelper::Picture { .. } => outbox.send(FromChannel::Picture(picture)),
             ToHelper::Selection { fixtures } => outbox.send(FromChannel::Selection(fixtures)),

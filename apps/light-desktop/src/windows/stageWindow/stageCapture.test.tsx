@@ -1,7 +1,7 @@
 import { capturePicture } from "./stageCaptureTestFixture";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ModalFrame, ModalProvider } from "@tosklight/ui/modals";
 import { DesktopProvider } from "../../platform/desktop";
@@ -13,9 +13,9 @@ import { useStageCapture } from "./useStageCapture";
 
 const listeners = new Set<(event: StageStillEvent) => void>();
 const paneInput = vi.fn();
-const start = vi.fn(); const choose = vi.fn(); const cancel = vi.fn(); const open = vi.fn(); const stop = vi.fn();
+const start = vi.fn(); const cancel = vi.fn(); const open = vi.fn(); const stop = vi.fn();
 const bridge: DesktopBridge = { ...browserDesktopBridge, available: true,
-	startStagePaneCapture: start, chooseStagePaneCapture: choose, cancelStagePaneCapture: cancel, openStagePaneCapture: open,
+	startStagePaneCapture: start, cancelStagePaneCapture: cancel, openStagePaneCapture: open,
 	onStageStill: async (listener) => { listeners.add(listener); return () => { listeners.delete(listener); stop(); }; },
 };
 function Harness({ id = "live", preload = false, enabled = true }: { id?: string; preload?: boolean; enabled?: boolean }) {
@@ -36,9 +36,7 @@ function push(next: StageStillStatus | null, overrides: Partial<StageStillEvent>
 	const [paneId, requestId] = request();
 	act(() => { for (const listener of listeners) listener({ paneId, requestId, status: next, error: null, ...overrides }); });
 }
-const choice = { needsChoice: { blenderVersion: "Blender test", ultimateReasons: [],
-	ultraExplanation: "Ultra uses the regular ToskLight renderer.", ultimateExplanation: "Ultimate renders with Blender/Cycles." } } satisfies StageStillPhase;
-beforeEach(() => { listeners.clear(); vi.clearAllMocks(); start.mockResolvedValue(undefined); choose.mockResolvedValue(undefined); cancel.mockResolvedValue(undefined); open.mockResolvedValue(undefined); });
+beforeEach(() => { listeners.clear(); vi.clearAllMocks(); start.mockResolvedValue(undefined); cancel.mockResolvedValue(undefined); open.mockResolvedValue(undefined); });
 afterEach(cleanup);
 
 it("leaves the Light Desk Stage export shortcut unintercepted", async () => {
@@ -76,36 +74,32 @@ it("routes Follow Preload and ignores other panes, stale requests and foreign jo
 	const button = screen.getByRole("button", { name: /Render 4K Follow Preload/ });
 	await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button);
 	expect(request()[0]).toBe("preload");
-	push(status(choice), { paneId: "live" });
-	push(status(choice), { requestId: "stale" });
+	push(status("queued"), { paneId: "live" });
+	push(status("queued"), { requestId: "stale" });
 	expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-	push(status(choice));
-	const dialog = screen.getByRole("dialog", { name: "Render 4K quality" });
-	expect(within(dialog).getByText(/Follow Preload scene frozen/)).toBeInTheDocument();
-	expect(within(dialog).getByText(/Live quality remains unchanged/)).toBeInTheDocument();
-	expect(within(dialog).getByText("camera")).toBeInTheDocument();
+	push(status("queued"));
+	expect(screen.getByText("4K render queued")).toBeInTheDocument();
+	expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 	push(status({ saved: { path: "/wrong.png" } }, { jobId: "foreign" }));
 	expect(screen.queryByText("/wrong.png")).not.toBeInTheDocument();
 });
 
-it("explains unavailable Ultimate honestly, chooses Ultra and cancels the owned native job", async () => {
+it("starts native Ultra directly and cancels only its acknowledged job", async () => {
 	mount();
 	const button = screen.getByRole("button", { name: /Render 4K Live/ });
 	await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button);
-	const unsupported = { needsChoice: { ...choice.needsChoice,
-		ultimateReasons: ["Frozen media cannot be reproduced"] } } as StageStillPhase;
-	push(status(unsupported));
-	const dialog = screen.getByRole("dialog");
-	expect(within(dialog).getByText("Frozen media cannot be reproduced")).toBeInTheDocument();
-	expect(within(dialog).getByRole("button", { name: "Ultimate · Blender" })).toBeDisabled();
-	fireEvent.click(within(dialog).getByRole("button", { name: "Ultra · ToskLight" }));
-	expect(choose).toHaveBeenCalledWith("live", `job-${request()[1]}`, "ultra");
-	push(status({ rendering: { detail: "Rendering full-quality frozen image" } }, { engine: "ultra", notice: "Blender unavailable; using Ultra" }));
-	expect(screen.getByText("Blender unavailable; using Ultra")).toBeInTheDocument();
+	push(status("queued", { engine: "ultra" }));
+	expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+	expect(button).toBeDisabled();
+	push(status({ rendering: { detail: "Rendering full-quality frozen image" } }, { engine: "ultra" }));
+	expect(screen.getByText("Rendering full-quality frozen image")).toBeInTheDocument();
 	fireEvent.click(screen.getByRole("button", { name: "Cancel render" }));
 	expect(cancel).toHaveBeenCalledWith("live", `job-${request()[1]}`);
+	push(status({ cancelling: { detail: "Stopping the image worker" } }));
+	expect(screen.getByRole("button", { name: "Cancel render" })).toBeDisabled();
 	push(status("cancelled"));
 	expect(screen.getByText("4K render cancelled")).toBeInTheDocument();
+	expect(start).toHaveBeenCalledTimes(1);
 });
 
 it("shows saved path and owned Open/Reveal actions, then rejects late terminal observations", async () => {
@@ -136,14 +130,14 @@ it("leaves browser capture explicitly unavailable and unsubscribes without polli
 	native.unmount(); expect(stop).toHaveBeenCalledOnce(); expect(listeners.size).toBe(0);
 });
 
-it("selects usable Ultimate through the same frozen in-app request", async () => {
+it("shows writing and failure progress without a quality-selection step", async () => {
 	mount(); const button = screen.getByRole("button", { name: /Render 4K Live/ });
 	await waitFor(() => expect(button).toBeEnabled()); fireEvent.click(button);
-	push(status(choice));
-	const dialog = screen.getByRole("dialog");
-	expect(within(dialog).getByText("Ultimate renders with Blender/Cycles.")).toBeInTheDocument();
-	fireEvent.click(within(dialog).getByRole("button", { name: "Ultimate · Blender" }));
-	expect(choose).toHaveBeenCalledWith("live", `job-${request()[1]}`, "ultimate");
+	push(status("writing", { engine: "ultra" }));
+	expect(screen.getByText("Writing 3840 × 2160 image…")).toBeInTheDocument();
+	push(status({ failed: { detail: "Cannot write the image" } }));
+	expect(screen.getByRole("alert")).toHaveTextContent("Cannot write the image");
+	expect(button).toBeEnabled();
 	expect(start).toHaveBeenCalledTimes(1);
 });
 

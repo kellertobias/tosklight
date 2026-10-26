@@ -99,7 +99,7 @@ Use Stage for spatial selection and inspection. **2D** shows the plan; **3D** sh
 **Render 4K** freezes this pane's camera and selected Live/Follow Preload look for a full-quality
 image. With Stage focused, use **Cmd+Shift+R** (macOS) or **Ctrl+Shift+R** (Windows/Linux).
 [4K image rendering](../../20-ToskLight-PreViz/03-snapshots-and-blender.md#render-a-4k-image)
-explains Ultra, the optional Blender Ultimate choice, framing, progress and saved images.
+explains native Ultra image quality, framing, progress and saved images.
 
 Drag to orbit, scroll to zoom, middle-drag to pan, and secondary-drag to slide. An unavailable Stage does not stop programming or DMX output.
 

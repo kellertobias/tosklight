@@ -56,13 +56,14 @@ test("real PNG decode and CRC inspection are tied to the exact owned saved path 
     try {
         const bytes = nativePng(), destination = path.join(directory, "Stage-owned-job.png");
         await writeFile(destination, bytes);
-        const record = { passed: true, failures: [], ready: { kind: "stage-ready" },
+        const record = { schemaVersion: 2, passed: true, failures: [], ready: { kind: "stage-ready" },
             request: { paneId: "live", requestId: "request" },
-            ui: { buttonClicked: true, chooserClicked: true, savedVisible: true },
+            ui: { buttonClicked: true, savedVisible: true },
             status: { paneId: "live", requestId: "request", jobId: "owned-job", engine: "ultra",
                 followPreload: false, phase: { saved: { path: destination } } } };
         const result = await evaluateCapture(record, directory, {});
         assert.equal(result.captureVerified, true);
+        assert.equal((await evaluateCapture({ ...record, schemaVersion: 1 }, directory, {})).captureVerified, false);
         assert.equal(result.image.width, 3840); assert.equal(result.image.height, 2160);
         assert.match(result.image.sha256, /^[0-9a-f]{64}$/);
         const bad = Buffer.from(bytes); bad[29] ^= 1;

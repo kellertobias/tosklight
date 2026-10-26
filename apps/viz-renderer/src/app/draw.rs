@@ -645,9 +645,7 @@ impl Application {
         // Held movement keys are applied once per frame so speed follows frame time.
         self.observe_still();
         let mode = self.view_mode();
-        if !self.still_ui.modal() {
-            self.apply_walk(mode, delta.clamp(0.0, 0.1));
-        }
+        self.apply_walk(mode, delta.clamp(0.0, 0.1));
         let (width, height) = self.surface_size();
 
         // Collect whatever the snapshot workers finished, and keep the panel's list in step with

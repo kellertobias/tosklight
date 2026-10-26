@@ -189,9 +189,8 @@ export interface StagePaneBenchmarkObservations {
 }
 
 /** The native still-job contract; live Stage settings are never changed by these commands. */
-export type StageStillEngine = "ultra" | "ultimate";
-export type StageStillPhase = "queued" | "checkingBlender" | "writing" | "cancelled"
-	| { needsChoice: { blenderVersion: string; ultimateReasons: string[]; ultraExplanation: string; ultimateExplanation: string } }
+export type StageStillEngine = "ultra";
+export type StageStillPhase = "queued" | "writing" | "cancelled"
 	| { rendering: { detail: string } } | { cancelling: { detail: string } }
 	| { saved: { path: string } } | { failed: { detail: string } };
 export interface StageStillStatus {
@@ -207,7 +206,6 @@ export interface StageStillEvent {
 export interface DesktopBridge {
 	startStagePaneCapture?(paneId: string, requestId: string, picture: StagePanePicture): Promise<void>;
 	openStagePaneCapture?(paneId: string, reveal: boolean): Promise<void>;
-	chooseStagePaneCapture?(paneId: string, jobId: string, engine: StageStillEngine): Promise<void>;
 	cancelStagePaneCapture?(paneId: string, jobId: string): Promise<void>;
 	onStageStill?(handler: (event: StageStillEvent) => void): Promise<DesktopUnsubscribe>;
 	readonly available: boolean;

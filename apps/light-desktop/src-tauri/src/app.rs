@@ -22,7 +22,6 @@ pub(crate) fn run() {
             crate::stage_pane::close_stage_pane,
             crate::stage_pane::stage_pane_input,
             crate::stage_pane::still::start_stage_pane_capture,
-            crate::stage_pane::still::choose_stage_pane_capture,
             crate::stage_pane::still::cancel_stage_pane_capture,
             crate::stage_pane::still::open_stage_pane_capture,
             crate::stage_pane::set_stage_pane_picture,

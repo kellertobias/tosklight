@@ -5,13 +5,10 @@
 	padding: 6px; border-radius: 6px; background: #171b23ed; color: #f2f4f8;
 	font-size: 12px;
 }
-.stage-capture-controls button, .stage-capture-dialog button {
+.stage-capture-controls button {
 	min-height: 40px; min-width: 40px; padding: 8px 12px;
 	border: 1px solid #65738a; border-radius: 5px; background: #303c50; color: #fff;
 }
-.stage-capture-controls button:disabled, .stage-capture-dialog button:disabled { opacity: .5; }
-.stage-capture-controls button:focus-visible, .stage-capture-dialog button:focus-visible { outline: 2px solid #9bc6ff; outline-offset: 2px; }
+.stage-capture-controls button:disabled { opacity: .5; }
+.stage-capture-controls button:focus-visible { outline: 2px solid #9bc6ff; outline-offset: 2px; }
 .stage-capture-path { overflow-wrap: anywhere; user-select: text; }
-.stage-capture-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; background: #171b23; color: #f2f4f8; border: 1px solid #65738a; border-radius: 8px; }
-.stage-capture-dialog-content { padding: 16px; }
-.stage-capture-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; }

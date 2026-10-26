@@ -53,7 +53,6 @@ and taskbar icon are set from the same artwork at runtime.
 | `--capture <path>` | Render, write one PNG, and exit. Used for golden images and benchmark evidence. |
 | `--capture-frames <n>` | Frames to let the scene settle before capturing. Default `60`. |
 | `--snapshot` | Take one snapshot once the scene has settled, print where it went, and exit. |
-| `--blender <path>` | The Blender to export snapshots with. Found automatically otherwise. |
 | `--verify` | Open the window, present a frame, and exit. Build-machine smoke check. |
 | `--preferences <path>` | Keep this window's settings here instead of in the operator's application-data folder. |
 
@@ -240,7 +239,7 @@ latency beside them. A badge is
   inside the last thirty seconds.
 
 The second row names the connection and its address, and says **Waiting for DMX** when the scene
-has loaded but nothing is arriving. A snapshot taken or a Blender file written is confirmed here
+has loaded but nothing is arriving. A snapshot or 4K image written is confirmed here
 and gone again in a few seconds. When the bar is too narrow for everything, the latency shortens
 and the badges shrink before any of them is dropped.
 
@@ -398,7 +397,7 @@ proxy and the reason is listed in the scene warnings. The same is true of a fixt
 carries no model at all, which today is every fixture in `assets/fixture-library` — none of the
 shipped packages carries geometry yet, so the rig is drawn from proxies until they do.
 
-## Snapshots, and rendering one in Blender
+## Snapshots and 4K images
 
 `Cmd`+`S` — `Ctrl`+`S` away from macOS, or **File → Take Snapshot** — keeps the moment that is on
 screen. Nothing is asked and nothing opens: the look worth keeping is usually about to be gone, and
@@ -415,7 +414,6 @@ It is a folder of its own:
 | --- | --- |
 | `rig.glb` | Every body, lamp face, truss and piece of scenery, in metres, where this frame put them. Ordinary glTF 2.0: anything opens it. |
 | `snapshot.json` | What triangles cannot say — one spot light per emitting head with its aim, cone, rim, colour, level and power, plus the camera, the haze, and the show it came from. |
-| `rig.blend` | Written by the export below. Absent until then. |
 
 Captures go to the platform's application-data folder — `~/Library/Application Support/ToskLight/
 Visualizer/Snapshots` on macOS, `%APPDATA%\ToskLight\Visualizer\Snapshots` on Windows,
@@ -423,41 +421,15 @@ Visualizer/Snapshots` on macOS, `%APPDATA%\ToskLight\Visualizer\Snapshots` on Wi
 `TOSKLIGHT_VIZ_SNAPSHOT_DIR` to put them somewhere that is already backed up. The last twelve are
 kept; taking a thirteenth drops the oldest. Anything else in that folder is left alone.
 
-### Exporting one to Blender
+### Render a 4K image
 
-The last snapshots are listed in **Quick Settings**, newest first, by the time they were taken.
-`Enter` on one exports it: Blender is run in the background, builds the scene, and writes
-`rig.blend` beside the capture. The row says what it is doing and what happened, and so does the
-status line.
+In Architect, open the Visualizer and choose **File → Render 4K Image**, or press
+**Cmd+Shift+R** on macOS and **Ctrl+Shift+R** elsewhere. The native Ultra renderer creates a
+3840 × 2160 PNG from the frozen camera, lighting, media and optional detailed people.
+The live preview keeps its current quality, including Draft. Progress, cancellation and
+Open/Reveal controls stay in the Visualizer; images are saved separately from rotating snapshots.
 
-Only Blender can write a Blender file, so this step needs Blender installed — and that is exactly
-why it is a separate step. Capturing needs nothing: an operator keeps the moment on whatever machine
-is beside the stage, and makes the file later on whatever machine has Blender on it.
-
-It is looked for in `/Applications`, in `Program Files`, and on the command search path. The
-**Blender** row in Quick Settings says which one was found, or that none was, and a path typed there
-is used instead — for a machine with several versions, or one that keeps it somewhere unusual. The
-`TOSKLIGHT_BLENDER` environment variable and `--blender` do the same for a scripted run.
-
-What the exported file contains:
-
-- the rig, in metres, Z up, at the placement and the pan and tilt of that moment;
-- one spot per emitting head, aimed where the desk aimed it, with its cone, its rim softness, its
-  colour, and a power that follows the fixture's own output and its zoom — a beam light is brighter
-  than a flood of the same engine, exactly as it is in the picture;
-- a box of hazed air over the rig, because a beam is only visible in air that has something in it;
-- the operator's camera, and Cycles set up to render it.
-
-The geometry, the placement, the aim and the colour are the desk's and are exact. The haze density,
-the exposure and the sample count are a *look*: they sit as named constants at the top of the import
-script written beside the capture, and everything downstream of them is ordinary Blender data to be
-edited by hand. What does not come across is named in `snapshot.json`: gobo artwork, prisms and
-framing shutters are this renderer's own optics, so a beam arrives as its cone, its colour and its
-level.
-
-A lamp's light is placed just outside the body that carries it rather than at its middle. The
-visualizer draws a shaft from the lens and never asks what is in the way; a renderer that traces
-light does ask, and a spot left inside its own head lights nothing at all.
+The last JSON/GLB snapshots remain listed in **Quick Settings**, newest first.
 
 ## Shadows
 
@@ -556,7 +528,7 @@ means the loop is starving its own input.
 - `crates/viz/project` — DMX to fixture-parameter projection using the shared fixture library.
 - `crates/viz/desk` — the lighting-desk provider.
 - `crates/viz/render` — the `wgpu` render core.
-- `crates/viz/snapshot` — freezing a rig, writing it as glTF, and exporting it with Blender.
+- `crates/viz/snapshot` — freezing a rig as JSON/glTF and publishing native image output.
 - `apps/viz-renderer` — this application: window, input, Quick Settings, diagnostics.
 
 Benchmark wall time excludes drawable-acquire wait and is not executing-thread CPU. Reports count successful presentation-queue submissions separately from attempted, skipped and failed draws. GPU percentiles use each completed, matching-scope sample once; sample counts and rejected provenance are explicit. Submission FPS does not prove displayed FPS.

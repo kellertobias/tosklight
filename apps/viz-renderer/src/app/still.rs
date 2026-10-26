@@ -1,11 +1,11 @@
-//! Freeze once at invocation; probing, rendering and writing belong to the isolated controller.
+//! Freeze once at invocation; rendering and writing belong to the isolated controller.
 #[cfg(test)]
 #[path = "still_tests.rs"]
 mod tests;
 #[path = "still_ui.rs"]
 mod ui;
 use super::Application;
-use crate::stills::{Engine, Phase, StillOptions};
+use crate::stills::{Phase, StillOptions};
 use std::sync::Arc;
 pub(super) use ui::StillUi;
 use viz_render::still::{FrozenStill, StillOrigin};
@@ -60,29 +60,17 @@ fn invocation_view(
 }
 
 impl Application {
-    /// Modal entry/exit clears input captured by the live picture, including button releases
-    /// swallowed by the chooser. A completed choice must never resume an old held camera drag.
+    /// Observe the native image job without changing live scene or quality.
     pub(super) fn observe_still(&mut self) {
         self.apply_still_status(self.still_jobs.status());
     }
 
     pub(super) fn apply_still_status(&mut self, status: Option<crate::stills::Status>) {
-        let was_modal = self.still_ui.modal();
         self.still_ui.observe(status);
-        if was_modal || self.still_ui.modal() {
-            self.turning = false;
-            self.panning_camera_plane = false;
-            self.drag_moved_by_device = false;
-            self.walk_keys = super::WalkKeys::default();
-        }
     }
 
     pub(super) fn render_4k_image(&mut self) {
-        if self.still_jobs.is_busy()
-            || self.still_ui.modal()
-            || self.ime_composing
-            || self.quick_settings.editing
-        {
+        if self.still_jobs.is_busy() || self.ime_composing || self.quick_settings.editing {
             return;
         }
         let frozen = (|| {
@@ -130,13 +118,8 @@ impl Application {
             )
         })();
         let result = frozen.and_then(|frozen| {
-            self.still_jobs.start(
-                Arc::new(frozen),
-                StillOptions {
-                    configured_blender: self.preferences.blender_path(),
-                    ..StillOptions::default()
-                },
-            )
+            self.still_jobs
+                .start(Arc::new(frozen), StillOptions::default())
         });
         match result {
             Ok(_) => {
@@ -156,27 +139,7 @@ impl Application {
 
     pub(super) fn handle_still_key(&mut self, key: &Key) -> bool {
         if self.command_chord() || self.modifiers.alt_key() || self.ime_composing {
-            return self.still_ui.modal();
-        }
-        if self.still_ui.modal() {
-            let action = match key.as_ref() {
-                Key::Character("u" | "U") | Key::Named(NamedKey::Enter) => Some(ui::Action::Ultra),
-                Key::Character("b" | "B") => Some(ui::Action::Ultimate),
-                Key::Named(NamedKey::Escape) => Some(ui::Action::Cancel),
-                Key::Named(NamedKey::ArrowDown) => {
-                    self.still_ui.scroll(1);
-                    None
-                }
-                Key::Named(NamedKey::ArrowUp) => {
-                    self.still_ui.scroll(-1);
-                    None
-                }
-                _ => None,
-            };
-            if let Some(action) = action {
-                self.still_action(action);
-            }
-            return true;
+            return false;
         }
         if key == &Key::Named(NamedKey::Escape) && self.still_ui.visible() {
             self.still_action(if self.still_jobs.is_busy() {
@@ -210,19 +173,6 @@ impl Application {
     fn still_action(&mut self, action: ui::Action) {
         let status = self.still_jobs.status();
         let result = match action {
-            ui::Action::Ultra | ui::Action::Ultimate => status
-                .as_ref()
-                .ok_or("No image job is awaiting a choice".into())
-                .and_then(|s| {
-                    self.still_jobs.choose(
-                        &s.job_id,
-                        if action == ui::Action::Ultra {
-                            Engine::Ultra
-                        } else {
-                            Engine::Ultimate
-                        },
-                    )
-                }),
             ui::Action::Cancel => status
                 .as_ref()
                 .ok_or("No image job is active".into())

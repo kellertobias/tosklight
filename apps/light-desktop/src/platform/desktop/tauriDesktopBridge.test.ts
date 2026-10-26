@@ -147,13 +147,11 @@ describe("Tauri desktop bridge", () => {
 	it("routes frozen image commands and pushed native status without polling or frontend paths", async () => {
 		const handler = vi.fn();
 		await tauriDesktopBridge.startStagePaneCapture?.("preload", "request", capturePicture());
-		await tauriDesktopBridge.chooseStagePaneCapture?.("preload", "job", "ultimate");
 		await tauriDesktopBridge.cancelStagePaneCapture?.("preload", "job");
 		await tauriDesktopBridge.openStagePaneCapture?.("preload", true);
 		await tauriDesktopBridge.onStageStill?.(handler);
 		expect(mocks.invoke.mock.calls).toEqual([
 			["start_stage_pane_capture", { paneId: "preload", requestId: "request", picture: capturePicture() }],
-			["choose_stage_pane_capture", { paneId: "preload", jobId: "job", engine: "ultimate" }],
 			["cancel_stage_pane_capture", { paneId: "preload", jobId: "job" }],
 			["open_stage_pane_capture", { paneId: "preload", reveal: true }],
 		]);
