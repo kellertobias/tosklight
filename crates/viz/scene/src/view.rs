@@ -352,7 +352,7 @@ impl RenderQuality {
     /// Render-target scale applied before the upscale/composite pass.
     pub fn resolution_scale(self) -> f32 {
         match self {
-            Self::Draft => 0.75,
+            Self::Draft => 0.25,
             Self::Standard => 1.0,
             Self::High => 1.0,
             Self::Ultra => 1.0,

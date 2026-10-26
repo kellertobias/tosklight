@@ -1,9 +1,13 @@
-//! What the GPU itself spent on a frame, split by named render pass.
+//! Observed GPU query interval coverage for one sampled frame.
+//! Logical pass intervals can overlap; the total unions them rather than summing them.
 //!
 //! Timestamp results are copied to a mapping buffer and collected on a later frame. Nothing in
 //! the presentation path waits for the GPU; while one readback is in flight, frames simply run
 //! without timing queries and keep the most recent completed measurement.
 
+#[cfg(test)]
+mod coverage_tests;
+mod intervals;
 #[cfg(test)]
 mod native_tests;
 mod provenance;
@@ -65,22 +69,17 @@ pub struct GpuPassTimings {
     pub bloom_micros: Option<u64>,
     pub composite_micros: Option<u64>,
     pub overlay_micros: Option<u64>,
+    /// Union of all valid raw query intervals in this completed sample, converted once.
+    /// This is observed interval coverage, not occupancy, percent usage or an exclusive pass sum.
+    pub interval_union_micros: Option<u64>,
+    /// Logical pass query intervals overlap; their durations cannot rank exclusive pass costs.
+    pub overlapping_passes: bool,
 }
 
 impl GpuPassTimings {
-    /// Sum of the passes that actually ran. Skipped passes remain absent rather than looking free.
+    /// Observed GPU interval coverage for this sample. Missing/invalid pairs remain unavailable.
     pub fn total_micros(self) -> Option<u64> {
-        let values = [
-            self.cull_micros,
-            self.shadow_micros,
-            self.opaque_micros,
-            self.beams_micros,
-            self.lasers_micros,
-            self.bloom_micros,
-            self.composite_micros,
-            self.overlay_micros,
-        ];
-        values.into_iter().flatten().reduce(u64::saturating_add)
+        self.interval_union_micros
     }
 
     /// Stable pass order for benchmark columns and diagnostics serialization.
@@ -404,6 +403,8 @@ fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
     if !period_nanos.is_finite() || period_nanos <= 0.0 {
         return timings;
     }
+    let mut intervals = [(0_u64, 0_u64); PASS_COUNT];
+    let mut count = 0;
     for pass in GpuPass::ALL {
         if mask & (1 << pass.index()) == 0 {
             continue;
@@ -423,20 +424,28 @@ fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
                 tick(end)
             );
         }
-        let Some(ticks) = tick(end)
-            .zip(tick(beginning))
-            .filter(|(end, start)| *end != u64::MAX && *start != u64::MAX)
-            .and_then(|(end, start)| end.checked_sub(start))
+        let Some((start, finish)) = tick(beginning)
+            .zip(tick(end))
+            .filter(|(start, end)| *end != u64::MAX && *start != u64::MAX && end >= start)
         else {
             // A partial/invalid pair cannot become a cheap zero or incomplete frame total.
             return GpuPassTimings::default();
         };
-        let nanos = ticks as f32 * period_nanos;
-        if !nanos.is_finite() {
+        let Some(micros) = intervals::micros(finish - start, period_nanos) else {
             return GpuPassTimings::default();
-        }
-        timings.set(pass, (nanos / 1000.0) as u64);
+        };
+        timings.set(pass, micros);
+        intervals[count] = (start, finish);
+        count += 1;
     }
+    let Some((ticks, overlap)) = intervals::union(&mut intervals[..count]) else {
+        return GpuPassTimings::default();
+    };
+    let Some(total) = intervals::micros(ticks, period_nanos) else {
+        return GpuPassTimings::default();
+    };
+    timings.interval_union_micros = Some(total);
+    timings.overlapping_passes = overlap;
     timings
 }
 
@@ -455,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_only_passes_that_ran_and_sums_them() {
+    fn decodes_only_passes_that_ran_and_unions_their_intervals() {
         let mut bytes = [0_u8; TIMESTAMP_BYTES as usize];
         for (query, ticks) in [(4_u32, 100_u64), (5, 350), (12, 500), (13, 650)] {
             let offset = query as usize * 8;

@@ -140,3 +140,6 @@ mod soft_profile_tests;
 
 #[path = "integral_optimization_tests.rs"]
 mod integral_optimization_tests;
+
+#[path = "curtain_union_tests.rs"]
+mod curtain_union_tests;

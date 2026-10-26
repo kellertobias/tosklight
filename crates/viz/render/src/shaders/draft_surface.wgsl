@@ -71,12 +71,15 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4<f32> {
     for (var index = 0u; index < count; index++) {
         let light = lights[tile_light_index(tile, index)];
         let offset = light.position_range.xyz - input.world_position;
-        let distance = length(offset);
-        if (distance > light.position_range.w) { continue; }
+        let distance_squared = dot(offset, offset);
+        if (distance_squared > light.position_range.w * light.position_range.w) { continue; }
+        // Positive distance normalization cannot change the diffuse dot's sign.
+        if (dot(normal, offset) <= 0.0) { continue; }
+        let distance = sqrt(distance_squared);
         let to_light = offset / max(distance, 1e-4);
         let diffuse = max(dot(normal, to_light), 0.0);
         if (diffuse <= 0.0) { continue; }
-        var cone = beam_profile(light, to_light);
+        var cone = draft_surface_beam_profile(light, to_light);
         if (cone <= 0.0) { continue; }
         // Opaque meshes still cast cached atlas shadows; current curtains remain exact even
         // for lights beyond the two-map budget. Draft removes material BRDF/noise, not blockers.

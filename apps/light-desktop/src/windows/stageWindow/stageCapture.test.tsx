@@ -12,6 +12,7 @@ import { StageCaptureControls } from "./StageCaptureControls";
 import { useStageCapture } from "./useStageCapture";
 
 const listeners = new Set<(event: StageStillEvent) => void>();
+const paneInput = vi.fn();
 const start = vi.fn(); const choose = vi.fn(); const cancel = vi.fn(); const open = vi.fn(); const stop = vi.fn();
 const bridge: DesktopBridge = { ...browserDesktopBridge, available: true,
 	startStagePaneCapture: start, chooseStagePaneCapture: choose, cancelStagePaneCapture: cancel, openStagePaneCapture: open,
@@ -19,7 +20,7 @@ const bridge: DesktopBridge = { ...browserDesktopBridge, available: true,
 };
 function Harness({ id = "live", preload = false, enabled = true }: { id?: string; preload?: boolean; enabled?: boolean }) {
 	const capture = useStageCapture(id, enabled, capturePicture({ followPreload: preload }));
-	return <section data-testid={id}><NativeStageSurface pane={{ id, active: enabled, ref: () => {}, trouble: null, renderer: "test", send: vi.fn() }} onCapture={() => { void capture.start(); }} />
+	return <section data-testid={id}><NativeStageSurface pane={{ id, active: enabled, ref: () => {}, trouble: null, renderer: "test", send: paneInput }} />
 		<StageCaptureControls capture={capture} paneId={id} followPreload={preload} /></section>;
 }
 function mount(children = <Harness />, desktop = bridge) {
@@ -40,24 +41,23 @@ const choice = { needsChoice: { blenderVersion: "Blender test", ultimateReasons:
 beforeEach(() => { listeners.clear(); vi.clearAllMocks(); start.mockResolvedValue(undefined); choose.mockResolvedValue(undefined); cancel.mockResolvedValue(undefined); open.mockResolvedValue(undefined); });
 afterEach(cleanup);
 
-it("owns exact focused Stage shortcut without taking Save, text, repeats, composition or extra modifiers", async () => {
-	const view = mount();
-	await waitFor(() => expect(screen.getByRole("button", { name: /Render 4K Live/ })).toBeEnabled());
-	const surface = view.container.querySelector<HTMLElement>("[data-native-stage]")!;
-	const keys = { key: "r", ctrlKey: true, shiftKey: true };
-	fireEvent.keyDown(surface, keys); expect(start).not.toHaveBeenCalled();
-	surface.focus();
-	for (const event of [{ ...keys, repeat: true }, { ...keys, isComposing: true }, { ...keys, altKey: true },
-		{ ...keys, metaKey: true }, { key: "s", metaKey: true }]) fireEvent.keyDown(surface, event);
-	expect(start).not.toHaveBeenCalled();
-	const input = document.createElement("input"); surface.append(input); input.focus();
-	fireEvent.keyDown(input, keys); expect(start).not.toHaveBeenCalled(); input.remove();
-	surface.focus();
-	fireEvent.keyDown(surface, keys); fireEvent.keyDown(surface, keys);
-	expect(start).toHaveBeenCalledTimes(1); expect(request()[0]).toBe("live");
+it("leaves the Light Desk Stage export shortcut unintercepted", async () => {
+    const view = mount();
+    const surface = view.container.querySelector<HTMLElement>("[data-native-stage]")!;
+    surface.focus();
+    for (const modifier of [{ ctrlKey: true }, { metaKey: true }]) {
+        const event = new KeyboardEvent("keydown", { key: "r", shiftKey: true, bubbles: true, cancelable: true, ...modifier });
+        fireEvent(surface, event);
+        expect(event.defaultPrevented).toBe(false);
+    }
+    expect(start).not.toHaveBeenCalled();
+    const walk = new KeyboardEvent("keydown", { key: "w", bubbles: true, cancelable: true });
+    fireEvent(surface, walk);
+    expect(walk.defaultPrevented).toBe(true);
+    expect(paneInput).toHaveBeenCalledWith("fly", 0, 0.35);
 });
 
-it("accepts the same shortcut on the focused own Render button and blocks it while another modal owns input", async () => {
+it("retains the internal capture harness button shortcut without wiring the Light Desk surface", async () => {
 	const view = mount();
 	const button = await screen.findByRole("button", { name: /Render 4K Live/ });
 	await waitFor(() => expect(button).toBeEnabled()); button.focus();

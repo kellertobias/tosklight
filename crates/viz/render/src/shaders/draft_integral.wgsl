@@ -69,6 +69,7 @@ fn draft_range_envelope_squared(squared: f32, reach: f32) -> f32 {
 // Normalising by the sampled unprofiled energy makes a constant field exact even near the
 // 5cm source clamp. General varying fields remain an explicit low-quality quadrature approximation.
 fn draft_profiled_integral(a: f32, b: f32, origin: vec3<f32>, direction: vec3<f32>, apex: vec3<f32>, light: Light) -> f32 {
+    if (b <= a) { return 0.0; }
     let range = draft_sphere(origin, direction, light.position_range.xyz, light.position_range.w);
     let first = max(a, range.x);
     let last = min(b, range.y);
@@ -133,17 +134,38 @@ fn draft_analytic(light: Light, origin: vec3<f32>, direction: vec3<f32>, apex: v
     if (light.gate.w >= 0.0 && globals.params4.w >= 1.0) {
         let header = u32(light.gate.w);
         let count = u32(curtain_blockers[header].planes[4].z);
-        if (count > 8u) { return -1.0; }
         for (var index = 0u; index < count; index++) {
             let interval = draft_curtain_interval(curtain_blockers[header + 1u + index], origin, direction, first, last);
             if (interval.y <= interval.x) { continue; }
-            var insert = used;
+            var merged = interval;
+            var insert = 0u;
             loop {
-                if (insert == 0u) { break; }
-                if (intervals[insert - 1u].x <= interval.x) { break; }
-                intervals[insert] = intervals[insert - 1u]; insert--;
+                if (insert >= used) { break; }
+                let existing = intervals[insert];
+                if (existing.y < merged.x) { insert++; continue; }
+                if (existing.x > merged.y) { break; }
+                merged = vec2<f32>(min(merged.x, existing.x), max(merged.y, existing.y));
+                // Remove this overlap; the expanded interval can also bridge its successor.
+                for (var shift = insert; shift + 1u < used; shift++) {
+                    intervals[shift] = intervals[shift + 1u];
+                }
+                used--;
             }
-            intervals[insert] = interval; used++;
+            // An opaque union covering the entire clipped ray is final: later blockers can
+            // only remove more light. Preserve every strictly positive gap without epsilon.
+            if (merged.x <= first && merged.y >= last) { return 0.0; }
+            // Bound storage by the actual ray union, not the number of candidate curtains.
+            // A later candidate might bridge an overflowing prefix; conservatively marching
+            // here still retains every curtain and never substitutes a truncated union.
+            if (used == 8u) { return -1.0; }
+            var shift = used;
+            loop {
+                if (shift <= insert) { break; }
+                intervals[shift] = intervals[shift - 1u];
+                shift--;
+            }
+            intervals[insert] = merged;
+            used++;
         }
     }
     var cursor = first;

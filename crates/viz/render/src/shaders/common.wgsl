@@ -305,6 +305,10 @@ fn shaper_transmission(light: Light, position: vec2<f32>, softness: f32) -> f32 
 // Basic optics are shared by surfaces, marched shafts and Draft's bounded field evaluation.
 // This is exactly the established High/Ultra radial formula, without a quality-tier bypass.
 fn beam_radial_profile(light: Light, to_light: vec3<f32>) -> f32 {
+    return radial_profile_with_math(light, to_light, false);
+}
+
+fn radial_profile_with_math(light: Light, to_light: vec3<f32>, draft_surface: bool) -> f32 {
     let axis = light.direction_cos_outer.xyz;
     let cos_angle = min(dot(-to_light, axis), 1.0);
     let cos_outer = light.direction_cos_outer.w;
@@ -325,13 +329,28 @@ fn beam_radial_profile(light: Light, to_light: vec3<f32>) -> f32 {
     // middle; a PAR is hot in the centre and has faded long before its own rim. `1` is flat, `0`
     // is a bright centre falling away to a dim edge.
     let uniformity = clamp(light.params.z, 0.0, 1.0);
-    let hot_spot = 0.35 + 2.4 * pow(1.0 - radial, 2.5);
+    var hot_spot: f32;
+    if (draft_surface) {
+        let centre = 1.0 - radial;
+        hot_spot = 0.35 + 2.4 * centre * centre * sqrt(centre);
+    } else {
+        hot_spot = 0.35 + 2.4 * pow(1.0 - radial, 2.5);
+    }
     let core = mix(hot_spot, 1.0, uniformity);
     return edge * core;
 }
 
 fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
-    var profile = beam_radial_profile(light, to_light);
+    return profile_with_math(light, to_light, false);
+}
+
+// Only Draft opaque surfaces select the algebraic hotspot; all other callers retain pow.
+fn draft_surface_beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
+    return profile_with_math(light, to_light, true);
+}
+
+fn profile_with_math(light: Light, to_light: vec3<f32>, draft_surface: bool) -> f32 {
+    var profile = radial_profile_with_math(light, to_light, draft_surface);
     if (profile <= 0.0) { return 0.0; }
     let axis = light.direction_cos_outer.xyz;
     let cos_outer = light.direction_cos_outer.w;

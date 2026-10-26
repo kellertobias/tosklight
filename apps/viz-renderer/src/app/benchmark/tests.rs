@@ -1,6 +1,25 @@
 use super::*;
 use std::time::Duration;
 use viz_render::{FrameStats, RenderError};
+use viz_scene::{ProviderCapabilities, ProviderEvent, ProviderKind, SceneProvider};
+struct Quiet;
+impl SceneProvider for Quiet {
+    fn capabilities(&self) -> ProviderCapabilities {
+        ProviderCapabilities {
+            kind: ProviderKind::LightingDesk,
+            available: true,
+            unavailable_reason: None,
+            default_host: String::new(),
+            default_port: 0,
+            uses_network_input: false,
+        }
+    }
+    fn poll(&mut self) -> Vec<ProviderEvent> {
+        vec![]
+    }
+    fn request_resync(&mut self) {}
+    fn shutdown(&mut self) {}
+}
 
 #[test]
 fn skipped_and_failed_draws_do_not_reuse_success_stats_or_inflate_fps() {
@@ -78,25 +97,6 @@ fn no_gpu_and_error_only_window_reports_no_gpu_samples_or_presentations() {
 fn completed_draw_restores_session_before_all_view_benchmark_advances() {
     use crate::session::Session;
     use crate::settings::Options;
-    use viz_scene::{ProviderCapabilities, ProviderEvent, ProviderKind, SceneProvider};
-    struct Quiet;
-    impl SceneProvider for Quiet {
-        fn capabilities(&self) -> ProviderCapabilities {
-            ProviderCapabilities {
-                kind: ProviderKind::LightingDesk,
-                available: true,
-                unavailable_reason: None,
-                default_host: String::new(),
-                default_port: 0,
-                uses_network_input: false,
-            }
-        }
-        fn poll(&mut self) -> Vec<ProviderEvent> {
-            vec![]
-        }
-        fn request_resync(&mut self) {}
-        fn shutdown(&mut self) {}
-    }
     let now = Instant::now();
     let mut application = Application::new(Options {
         helper: true,
@@ -107,6 +107,8 @@ fn completed_draw_restores_session_before_all_view_benchmark_advances() {
     application.epoch = now - Duration::from_secs(3);
     let session = Session::new(Box::new(Quiet), ProviderKind::LightingDesk, now);
     let measured = || Measured {
+        quality: viz_scene::RenderQuality::High,
+        output_size: (1280, 720),
         fixtures: 0,
         emitters: 0,
         show: String::new(),
@@ -147,6 +149,8 @@ fn queued_frame_after_final_report_cannot_count_or_report_again() {
     application.start_benchmark();
     application.benchmark_view_started = Instant::now() - Duration::from_secs(1);
     let measured = Measured {
+        quality: viz_scene::RenderQuality::High,
+        output_size: (1280, 720),
         fixtures: 0,
         emitters: 0,
         show: String::new(),
@@ -159,4 +163,75 @@ fn queued_frame_after_final_report_cannot_count_or_report_again() {
     let count = application.benchmark[0].frames;
     assert!(!application.record_benchmark(Instant::now(), &Ok(FrameStats::default()), &measured));
     assert_eq!(application.benchmark[0].frames, count);
+}
+
+#[test]
+fn overlapping_gpu_intervals_are_flagged_once_only_for_matching_unique_samples() {
+    let start = Instant::now();
+    let mut sample = BenchmarkSample::new(ViewMode::Full3d, start);
+    let timing = viz_render::GpuPassTimings {
+        beams_micros: Some(45_000),
+        lasers_micros: Some(45_000),
+        composite_micros: Some(45_000),
+        overlay_micros: Some(45_000),
+        interval_union_micros: Some(45_000),
+        overlapping_passes: true,
+        ..Default::default()
+    };
+    let mut stats = FrameStats {
+        gpu_sample_id: Some(7),
+        gpu_sample_matches_frame: true,
+        gpu_micros: timing.total_micros(),
+        gpu_passes: timing,
+        ..Default::default()
+    };
+    sample.record_outcome(&Ok(stats), start + Duration::from_secs(1));
+    sample.record_outcome(&Ok(stats), start + Duration::from_secs(2));
+    stats.gpu_sample_id = Some(8);
+    stats.gpu_sample_matches_frame = false;
+    sample.record_outcome(&Ok(stats), start + Duration::from_secs(3));
+    stats.gpu_sample_matches_frame = true;
+    sample.record_outcome(&Ok(stats), start + Duration::from_secs(4));
+    assert_eq!(sample.gpu_millis, vec![45.0]);
+    assert_eq!(sample.overlapping_gpu_samples, 1);
+    assert_eq!(sample.rejected_gpu, 1);
+    for pass in [3, 4, 6, 7] {
+        assert_eq!(sample.gpu_pass_millis[pass], vec![45.0]);
+    }
+}
+
+#[test]
+fn single_view_start_preserves_selected_mode_authored_and_local_camera() {
+    use crate::{session::Session, settings::Options};
+    for cli_view in [None, Some(ViewMode::Lines3d)] {
+        let mut application = Application::new(Options {
+            helper: true,
+            benchmark_seconds: Some(1.0),
+            view: cli_view,
+            ..Default::default()
+        });
+        let mut session = Session::new(Box::new(Quiet), ProviderKind::LightingDesk, Instant::now());
+        session.source_view.mode = ViewMode::Lines3d;
+        session.source_view.camera.position = glam::Vec3::new(6.5, 3.8, 12.0);
+        session.source_view.camera.target = glam::Vec3::new(0.0, 2.5, 0.0);
+        session.source_view.camera.fov_degrees = 54.0;
+        let authored = session.source_view.camera;
+        let mut local = authored;
+        local.position.x = -5.0;
+        application.camera.adopt(&local);
+        application.camera_is_local = true;
+        let before = application.camera.camera(&authored, ViewMode::Lines3d);
+        application.session = Some(session);
+        application.start_benchmark();
+        let source = &application.session.as_ref().unwrap().source_view;
+        assert_eq!(source.mode, ViewMode::Lines3d);
+        assert_eq!(source.camera, authored);
+        assert!(application.camera_is_local);
+        assert_eq!(
+            application.camera.camera(&source.camera, source.mode),
+            before
+        );
+        assert_eq!(application.benchmark[0].mode, ViewMode::Lines3d);
+        assert_eq!(application.benchmark_views(), vec![ViewMode::Lines3d]);
+    }
 }

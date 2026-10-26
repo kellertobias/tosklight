@@ -26,10 +26,16 @@ Down** is a plan of this rig rather than a plan of wherever the camera happened 
 how much the renderer spends on volumetrics, shadows and bloom, and applies immediately
 without the Visualizer reconnecting or reloading the show.
 
-**Draft** keeps fixture geometry, labels and lasers at the view's physical resolution, with a
-simpler diffuse surface shader and a separate beam layer at 25% of each physical dimension
-(about 6.25% of the full-resolution pixel area). Uniform unshadowed
-beam segments use analytic integration; optical and shadowed segments retain bounded sampling.
+**Draft** keeps the authored rig, optics and laser content while drawing the shaded scene at
+25% of each output dimension, then enlarging it to the window. Labels and editing overlays
+remain at the output resolution; fine model, video and lighting detail is softer. Its separate
+beam layer uses 25% of those reduced scene dimensions. Uniform unshadowed beam segments use
+analytic integration; optical and shadowed segments retain bounded sampling.
+When camera, geometry, lights, fog and shadow resources are unchanged, Draft reuses its beam
+layer while current video, lasers and composition continue updating. A moving head, changed level
+or color, moved curtain, camera gesture or resource replacement rebuilds the layer. This reuse
+does not guarantee a frame rate for a continually changing rig.
+
 Draft retains a two-light shadow budget for opaque scenery; other lamps can light through
 opaque objects outside that budget. Drapes retain separate blocking checks, and visible opaque
 silhouettes still clip the beam layer. The result is an interactive approximation for aim, color and

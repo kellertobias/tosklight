@@ -1,4 +1,4 @@
-//! Standalone-only CITP workers. Each unique source owns one capacity-one latest frame.
+//! CPU CITP workers shared by standalone and embedded capture. Each unique source owns one capacity-one latest frame.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,6 +7,7 @@ use std::time::Duration;
 use viz_render::media::{EDGE, MediaFrame};
 use viz_scene::{MediaSourceBinding, Scene};
 
+mod capture_cache;
 mod mailbox;
 use mailbox::Mailbox;
 #[cfg(test)]
@@ -49,6 +50,23 @@ pub struct MediaWorkers {
 }
 
 impl MediaWorkers {
+    /// Retain CPU pixels only: embedded wireframe never creates a live media atlas.
+    pub fn for_embedded_capture() -> Self {
+        let mut mailbox = Mailbox::default();
+        mailbox.enable_capture_cache();
+        Self {
+            workers: HashMap::new(),
+            mailbox: Arc::new(Mutex::new(mailbox)),
+        }
+    }
+
+    pub fn frozen_media(&self) -> Result<viz_render::media::FrozenMedia, String> {
+        self.mailbox
+            .lock()
+            .map_err(|_| "Media capture cache is unavailable".to_string())?
+            .snapshot(std::time::Instant::now())
+    }
+
     pub fn reconcile(&mut self, scene: &Scene) {
         self.reconcile_with(scene, spawn_source);
     }

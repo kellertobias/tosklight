@@ -9,20 +9,115 @@
 use std::time::{Duration, Instant};
 use viz_scene::{RenderQuality, ViewMode};
 
-/// Keep steady low-GPU rendering within 60 Hz without adding CPU work to that period.
-/// Input/reveal redraw requests remain immediate; the caller keeps static skip deadlines.
-pub fn low_gpu_deadline(
-    existing: Instant,
-    started: Instant,
-    quality: RenderQuality,
-    mode: ViewMode,
-) -> Instant {
-    if quality != RenderQuality::Draft && mode != ViewMode::Lines3d {
-        return existing;
+/// Scheduled animation ceiling only. Input/reveal redraws retain their immediate exception.
+/// Phase belongs to successful submissions; pending requests cannot advance it or queue bursts.
+#[derive(Default)]
+pub struct LowGpuSchedule {
+    due: Option<Instant>,
+    pending: bool,
+    diagnostics: PacingDiagnostics,
+}
+/// Bounded CPU observations only; reason predicates may overlap on one successful frame.
+#[derive(Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PacingDiagnostics {
+    successful_low_gpu_frames: u64,
+    late_admission_reanchors: u64,
+    render_crossed_deadline_reanchors: u64,
+    adaptive_above_period_frames: u64,
+    adaptive_deadline_extensions: u64,
+    adaptive_interval_nanos_range: Option<(u64, u64)>,
+}
+impl PacingDiagnostics {
+    pub fn merge(&mut self, other: Self) {
+        self.successful_low_gpu_frames += other.successful_low_gpu_frames;
+        self.late_admission_reanchors += other.late_admission_reanchors;
+        self.render_crossed_deadline_reanchors += other.render_crossed_deadline_reanchors;
+        self.adaptive_above_period_frames += other.adaptive_above_period_frames;
+        self.adaptive_deadline_extensions += other.adaptive_deadline_extensions;
+        if let Some((low, high)) = other.adaptive_interval_nanos_range {
+            self.adaptive_interval_nanos_range = Some(
+                self.adaptive_interval_nanos_range
+                    .map_or((low, high), |(a, b)| (a.min(low), b.max(high))),
+            );
+        }
     }
-    started
-        .checked_add(Duration::from_nanos(16_666_667))
-        .map_or(existing, |floor| existing.max(floor))
+    fn observe(&mut self, adaptive: Duration) {
+        self.successful_low_gpu_frames += 1;
+        let nanos = adaptive.as_nanos().min(u64::MAX as u128) as u64;
+        self.adaptive_interval_nanos_range = Some(
+            self.adaptive_interval_nanos_range
+                .map_or((nanos, nanos), |(low, high)| {
+                    (low.min(nanos), high.max(nanos))
+                }),
+        );
+    }
+}
+
+pub const LOW_GPU_PERIOD: Duration = Duration::from_nanos(16_666_667);
+
+pub fn low_gpu_mode(quality: RenderQuality, mode: ViewMode) -> bool {
+    quality == RenderQuality::Draft || mode == ViewMode::Lines3d
+}
+
+impl LowGpuSchedule {
+    pub fn take_diagnostics(&mut self) -> PacingDiagnostics {
+        std::mem::take(&mut self.diagnostics)
+    }
+
+    /// Winit coalesces redraws, but retain explicit ownership until delivery as well.
+    pub fn request(&mut self) -> bool {
+        if self.pending {
+            return false;
+        }
+        self.pending = true;
+        true
+    }
+    pub fn delivered(&mut self) {
+        self.pending = false;
+    }
+    /// Idle, hidden, mode transitions and failed attempts owe no catch-up work.
+    pub fn suspend(&mut self) {
+        self.due = None;
+    }
+    pub fn succeeded(
+        &mut self,
+        started: Instant,
+        completed: Instant,
+        adaptive: Duration,
+    ) -> Instant {
+        self.diagnostics.observe(adaptive);
+        if self
+            .due
+            .is_some_and(|due| started.saturating_duration_since(due) >= LOW_GPU_PERIOD)
+        {
+            self.diagnostics.late_admission_reanchors += 1;
+        }
+        let mut next = match self.due {
+            Some(due) if started >= due && started.duration_since(due) < LOW_GPU_PERIOD => {
+                due + LOW_GPU_PERIOD
+            }
+            _ => started + LOW_GPU_PERIOD,
+        };
+        // A render that itself exhausted the next slot must not cause a catch-up pair.
+        if completed >= next {
+            self.diagnostics.render_crossed_deadline_reanchors += 1;
+            next = completed + LOW_GPU_PERIOD;
+        }
+        // Respect the acquisition controller's slower backoff. Ignoring its output while
+        // continuing to integrate acquire error caused windup in the native diagnostic.
+        if adaptive > LOW_GPU_PERIOD {
+            self.diagnostics.adaptive_above_period_frames += 1;
+            self.diagnostics.adaptive_deadline_extensions += u64::from(completed + adaptive > next);
+            next = next.max(completed + adaptive);
+        }
+        self.due = Some(next);
+        next
+    }
+    pub fn retry(&mut self, now: Instant, existing: Instant) -> Instant {
+        self.suspend();
+        existing.max(now + LOW_GPU_PERIOD)
+    }
 }
 
 /// Frame pacing for a display whose refresh rate the window system will not name: 60 Hz.
@@ -66,60 +161,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn low_gpu_floor_uses_frame_start_instead_of_completion() {
-        let started = Instant::now();
-        let completed = started + Duration::from_millis(4);
-        let adaptive = completed + Duration::from_millis(2);
-        let next = low_gpu_deadline(adaptive, started, RenderQuality::Draft, ViewMode::Full3d);
-        assert_eq!(
-            next.duration_since(started),
-            Duration::from_nanos(16_666_667)
-        );
-        assert!(next < completed + Duration::from_nanos(16_666_667));
-    }
-    #[test]
-    fn slower_and_static_deadlines_are_never_pulled_forward() {
-        let started = Instant::now();
-        for delay in [20, 50, 100] {
-            let existing = started + Duration::from_millis(delay);
-            assert_eq!(
-                low_gpu_deadline(existing, started, RenderQuality::Draft, ViewMode::Full3d),
-                existing
-            );
-            assert_eq!(
-                low_gpu_deadline(existing, started, RenderQuality::Ultra, ViewMode::Lines3d),
-                existing
-            );
-        }
-    }
-    #[test]
-    fn low_gpu_selection_uses_effective_quality_and_view_without_changing_other_tiers() {
-        let started = Instant::now();
-        let fast = started + Duration::from_millis(8);
+    fn low_gpu_selection_does_not_change_other_quality_modes() {
         for quality in [
             RenderQuality::Standard,
             RenderQuality::High,
             RenderQuality::Ultra,
         ] {
-            for mode in [ViewMode::Full3d, ViewMode::Simple3d, ViewMode::TopDown] {
-                assert_eq!(low_gpu_deadline(fast, started, quality, mode), fast);
-            }
+            assert!(!low_gpu_mode(quality, ViewMode::Full3d));
+            assert!(low_gpu_mode(quality, ViewMode::Lines3d));
         }
-        for quality in [
-            RenderQuality::Draft,
-            RenderQuality::Standard,
-            RenderQuality::High,
-            RenderQuality::Ultra,
-        ] {
-            assert_eq!(
-                low_gpu_deadline(fast, started, quality, ViewMode::Lines3d),
-                started + Duration::from_nanos(16_666_667)
-            );
-        }
-        assert_eq!(
-            low_gpu_deadline(fast, started, RenderQuality::Draft, ViewMode::Simple3d),
-            started + Duration::from_nanos(16_666_667)
-        );
+        assert!(low_gpu_mode(RenderQuality::Draft, ViewMode::Full3d));
     }
 
     /// How long a frame would wait for a display refreshing every `period` seconds when the pace
@@ -172,3 +223,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "pacing_schedule_tests.rs"]
+mod schedule_tests;

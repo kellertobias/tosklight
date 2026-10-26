@@ -4,6 +4,9 @@
 //! method so the shaded ordering stays explicit: cull, shadows, opaque, beams, lasers, bloom
 //! and composite. The facade owns presentation, overlay and timestamp resolution.
 
+mod beam_cache;
+mod scale;
+
 use super::context::FrameContext;
 use super::{
     BLOOM_MIX, FrameStats, Globals, MAX_SHADOWS, SHADOW_DRAW_STRIDE, SHADOW_TILE_EDGE,
@@ -75,7 +78,7 @@ impl ShadedRenderer {
         }
         let shadows_changed = self.assign_shadows(scene.revision, view, plan.shadow_budget);
         self.upload_frame(scene, context.device, context.queue, media_atlas);
-        self.write_globals(&plan, values, view, time_seconds, context.queue);
+        let globals = self.write_globals(&plan, values, view, time_seconds, context.queue);
         if plan.passes.cull {
             self.cull_pass(encoder, context.timer);
         }
@@ -92,11 +95,13 @@ impl ShadedRenderer {
         let fused = self
             .draft
             .as_ref()
-            .is_some_and(|draft| draft.fuses_composite(beams_drawn, lasers_drawn));
+            .is_some_and(|draft| draft.fuses_composite(beams_drawn, lasers_drawn, context.size));
         #[cfg(test)]
         if let Some(draft) = self.draft.as_mut() {
             draft.last_fused_composite = fused;
         }
+        let beam_cache =
+            self.prepare_draft_beam_cache(scene, &globals, beams_drawn, fused, shadows_changed);
         let mut draw_calls = 0_u32;
         let mut instance_total = 0_u32;
         self.opaque_pass(
@@ -109,7 +114,7 @@ impl ShadedRenderer {
         );
         if beams_drawn {
             if self.draft.is_some() {
-                self.draft_beam_pass(encoder, context.timer, fused);
+                self.draft_beam_pass(encoder, context.timer, fused, beam_cache == Some(true));
             } else {
                 self.beam_pass(encoder, context.timer);
             }
@@ -142,6 +147,8 @@ impl ShadedRenderer {
             ultra_gpu_budget: plan.adaptive_degraded,
         };
         FrameStats {
+            draft_beam_cache_hit: beam_cache == Some(true),
+            draft_beam_cache_miss: beam_cache == Some(false),
             lights: self.lights.length,
             beams: self.beam_instances.length,
             instances: instance_total,
@@ -185,11 +192,10 @@ impl ShadedRenderer {
             };
         // A plan is drawn at the display's own resolution whatever the tier says: a stage plot is
         // outlines and type, and a cheaper tier must not soften the lines an operator prints.
-        self.set_target_scale(if plot || self.draft.is_some() {
-            1.0
-        } else {
-            view.quality.resolution_scale() * adaptive_scale
-        });
+        let render_scale = scale::scene_scale(view, self.capture_quality, adaptive_scale);
+        #[cfg(test)]
+        let render_scale = self.test_target_scale.unwrap_or(render_scale);
+        self.set_target_scale(render_scale);
         let control = crate::camera::CameraControl::from_camera(&view.camera);
         let (plot_right, plot_up) = control.page_axes(view.mode);
         let media_appearance = scene
@@ -300,11 +306,7 @@ impl ShadedRenderer {
             passes: PassPlan::for_view(view),
             volumetric_steps,
             shadow_budget,
-            render_scale: if plot || self.draft.is_some() {
-                1.0
-            } else {
-                view.quality.resolution_scale() * adaptive_scale
-            },
+            render_scale,
             adaptive_degraded,
             exposure,
             camera,
@@ -408,6 +410,9 @@ impl ShadedRenderer {
                 && let Some((name, mesh)) = crate::mesh::procedural(*kind)
             {
                 self.meshes.insert(*kind, GpuMesh::new(device, name, &mesh));
+                if let Some(draft) = self.draft.as_mut() {
+                    draft.beam_cache.resources_changed();
+                }
                 self.mesh_instances.entry(*kind).or_insert_with(|| {
                     DynamicBuffer::new(
                         device,
@@ -470,7 +475,7 @@ impl ShadedRenderer {
         view: &ViewConfiguration,
         time_seconds: f32,
         queue: &wgpu::Queue,
-    ) {
+    ) -> Globals {
         let (camera, exposure) = (&plan.camera, plan.exposure);
         let globals = Globals {
             view_projection: camera.view_projection.to_cols_array_2d(),
@@ -519,6 +524,7 @@ impl ShadedRenderer {
         if let Some(draft) = &self.draft {
             draft.write_globals(queue, &globals);
         }
+        globals
     }
 
     /// Sort the rig's lights into screen tiles, so a fragment tests the handful over it rather

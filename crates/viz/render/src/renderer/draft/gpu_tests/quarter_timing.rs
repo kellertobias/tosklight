@@ -149,6 +149,10 @@ fn quarter_shafts_matched_35_25_abba_valid_gpu_cost() {
         .unwrap();
     let mut renderer = Renderer::headless(1920, 1080).expect("requested native GPU required");
     let (scene, values, view) = diagnostic_rig();
+    // Keep the historical shaft-only A/B diagnostic at its declared full scene extent;
+    // otherwise changing the production scene scale would confound its old35%/25% scope.
+    capture(&mut renderer, &scene, &values, &view);
+    renderer.force_draft_scene_scale_for_test(1.0);
     let image = capture(&mut renderer, &scene, &values, &view);
     assert!(
         image

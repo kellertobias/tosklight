@@ -1,4 +1,6 @@
 //! Explicit local capture placement; ordinary renderer launches keep their existing behavior.
+mod size;
+
 use winit::{
     event_loop::ActiveEventLoop,
     window::{Window, WindowAttributes},
@@ -8,7 +10,14 @@ pub(crate) fn create(
     event_loop: &ActiveEventLoop,
     attributes: WindowAttributes,
 ) -> Result<Window, String> {
-    let requested = std::env::var("TOSKLIGHT_VIZ_CAPTURE_DISPLAY").ok();
+    let read = |name| match std::env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(std::env::VarError::NotPresent) => Ok(None),
+        Err(std::env::VarError::NotUnicode(_)) => Err(format!("{name} must be valid text")),
+    };
+    let requested = read("TOSKLIGHT_VIZ_CAPTURE_DISPLAY")?;
+    let dimensions = read("TOSKLIGHT_VIZ_CAPTURE_SIZE")?;
+    let requested_size = size::parse(requested.as_deref(), dimensions.as_deref())?;
     if requested.is_none() {
         return event_loop
             .create_window(attributes)
@@ -38,11 +47,7 @@ pub(crate) fn create(
             return Err("Internal capture display is mirrored; capture remains hidden".into());
         }
         let bounds = display.bounds();
-        let width = 1440.0_f64.min(bounds.size.width - 80.0);
-        let height = 900.0_f64.min(bounds.size.height - 100.0);
-        if width < 640.0 || height < 480.0 {
-            return Err("Internal display cannot fit the capture".into());
-        }
+        let (width, height) = size::fit(requested_size, (bounds.size.width, bounds.size.height))?;
         let window = event_loop
             .create_window(
                 attributes

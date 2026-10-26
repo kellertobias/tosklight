@@ -2,6 +2,7 @@
 use super::{MeshData, Vertex, unit_sphere};
 use glam::{Mat3, Mat4, Quat, Vec3};
 mod capsule;
+mod features;
 
 pub(super) fn build(part: u8, seated: bool) -> MeshData {
     let mut mesh = MeshData::default();
@@ -19,6 +20,7 @@ pub(super) fn build(part: u8, seated: bool) -> MeshData {
                 ),
                 true,
             );
+            features::skin(&mut mesh, seated);
             ellipsoid(
                 &mut mesh,
                 Vec3::new(0.0, 0.795, 0.0),
@@ -47,12 +49,7 @@ pub(super) fn build(part: u8, seated: bool) -> MeshData {
                 Vec3::new(0.215, 0.18, 0.155),
                 Quat::IDENTITY,
             );
-            ellipsoid(
-                &mut mesh,
-                Vec3::new(0.0, (hip + shoulder) * 0.5, 0.0),
-                Vec3::new(0.29, shoulder - hip + 0.065, 0.17),
-                Quat::IDENTITY,
-            );
+            features::shirt(&mut mesh, hip, shoulder);
             for side in [-1.0, 1.0] {
                 let upper = Vec3::new(side * 0.145, shoulder - 0.025, 0.0);
                 let elbow = Vec3::new(
@@ -70,6 +67,7 @@ pub(super) fn build(part: u8, seated: bool) -> MeshData {
             }
         }
         2 => {
+            features::dark(&mut mesh);
             ellipsoid(
                 &mut mesh,
                 Vec3::new(0.0, hip, 0.0),
@@ -150,7 +148,7 @@ mod tests {
                 let mesh = build(part, seated);
                 assert!(!mesh.indices.is_empty());
                 assert!(
-                    mesh.indices.len() / 3 <= 640,
+                    mesh.indices.len() / 3 <= 1200,
                     "bounded shared per-material geometry"
                 );
                 for triangle in mesh.indices.chunks_exact(3) {

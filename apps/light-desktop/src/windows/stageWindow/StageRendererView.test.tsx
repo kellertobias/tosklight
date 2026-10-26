@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { StageRendererView } from "./StageRendererView";
 import type { StageOptionsModel } from "./types";
@@ -16,7 +16,13 @@ vi.mock("./useStagePanePicture", () => ({
 	useStagePanePicture: vi.fn(),
 	stageViewMode: () => "lines_3d",
 }));
-vi.mock("./NativeStageSurface", () => ({ NativeStageSurface: () => null }));
+const captureHook = vi.hoisted(() => vi.fn());
+vi.mock("./useStageCapture", () => ({ useStageCapture: captureHook }));
+vi.mock("./StageCaptureControls", () => ({ StageCaptureControls: () => <button>Render 4K</button> }));
+vi.mock("./NativeStageSurface", () => ({ NativeStageSurface: (props: Record<string, unknown>) => {
+    expect(props).not.toHaveProperty("onCapture");
+    return null;
+} }));
 afterEach(() => {
 	cleanup();
 	vi.clearAllMocks();
@@ -45,4 +51,12 @@ it("only admits a native renderer while its Control Stage pane is active", () =>
 		/>,
 	);
 	expect(native).toHaveBeenLastCalledWith(true, false);
+});
+
+it.each(["2d", "3d"] as const)("never mounts capture controls or ownership for Light Desk %s", (view) => {
+    native.mockReturnValueOnce({ active: true, ref: () => undefined });
+    render(<StageRendererView options={{ view, side2d: "top" } as StageOptionsModel}
+        selection={{ fixtureIds: [] } as unknown as StageSelectionModel} active />);
+    expect(screen.queryByRole("button", { name: /Render 4K/i })).toBeNull();
+    expect(captureHook).not.toHaveBeenCalled();
 });

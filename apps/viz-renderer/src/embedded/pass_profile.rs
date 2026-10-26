@@ -42,6 +42,8 @@ struct Row<'a> {
     timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
     pass_labels: [&'static str; 8],
     pass_micros: [Option<u64>; 8],
+    gpu_interval_union_micros: Option<u64>,
+    gpu_pass_intervals_overlap: bool,
 }
 impl PassProfile {
     /// Called only when benchmark reporting is enabled, once per pane/helper lifetime.
@@ -103,6 +105,8 @@ impl PassProfile {
             timing_coverage,
             pass_labels: LABELS,
             pass_micros: stats.gpu_passes.as_array(),
+            gpu_interval_union_micros: stats.gpu_passes.total_micros(),
+            gpu_pass_intervals_overlap: stats.gpu_passes.overlapping_passes,
         };
         let mut encoded = RowBuffer::default();
         let result = serde_json::to_writer(&mut encoded, &row)

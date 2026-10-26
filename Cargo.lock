@@ -8292,6 +8292,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "core-graphics 0.25.0",
  "image",
  "light-application",
  "light-core",

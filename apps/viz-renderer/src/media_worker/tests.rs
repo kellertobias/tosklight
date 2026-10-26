@@ -197,3 +197,82 @@ fn fallback_transition_retires_live_generation_and_uploads_once_then_live_resume
     drop(workers);
     assert!(current.load(Ordering::Acquire));
 }
+
+#[test]
+fn embedded_cpu_cache_rejects_rebound_and_removed_sources_without_live_upload_queue() {
+    let mut workers = MediaWorkers::for_embedded_capture();
+    let mut scene = scene();
+    let id = scene.media_sources[0].id;
+    let mut starts = Vec::new();
+    reconcile(&mut workers, &scene, &mut starts);
+    assert!(workers.frozen_media().unwrap().sources().is_empty());
+    let valid = |pixel| MediaFrame {
+        source_id: id,
+        sequence: 1,
+        width: EDGE,
+        height: EDGE,
+        rgba: vec![pixel; (EDGE * EDGE * 4) as usize],
+        persistent: false,
+    };
+    let old = Arc::clone(&starts[0]);
+    assert!(publish(&workers, &old, valid(12)));
+    assert!(
+        workers.drain().is_empty(),
+        "CPU-only mode never queues atlas uploads"
+    );
+    let frozen = workers.frozen_media().unwrap();
+    scene.media_sources[0].port += 1;
+    reconcile(&mut workers, &scene, &mut starts);
+    assert!(workers.frozen_media().unwrap().sources().is_empty());
+    assert!(!publish(&workers, &old, valid(99)));
+    assert!(publish(&workers, &starts[1], valid(35)));
+    assert_eq!(
+        workers.frozen_media().unwrap().sources()[0].frame.rgba[0],
+        35
+    );
+    assert_eq!(frozen.sources()[0].frame.rgba[0], 12);
+    scene.media_sources.clear();
+    reconcile(&mut workers, &scene, &mut starts);
+    assert!(workers.frozen_media().unwrap().sources().is_empty());
+    assert!(!publish(&workers, &starts[1], valid(99)));
+}
+
+#[test]
+fn changed_fallback_pixels_refresh_the_same_capture_source_and_preserve_frozen_look() {
+    let mut workers = MediaWorkers::for_embedded_capture();
+    let mut scene = scene();
+    let id = scene.media_sources[0].id;
+    let pixels = |value| vec![value; (EDGE * EDGE * 4) as usize];
+    scene.media_sources[0].fallback_rgba = Some(pixels(12));
+    let mut starts = Vec::new();
+    reconcile(&mut workers, &scene, &mut starts);
+    let first = workers.frozen_media().unwrap();
+    let first_frame = &first.sources()[0].frame;
+    assert_eq!(first_frame.source_id, id);
+    assert_eq!(first_frame.rgba[0], 12);
+
+    // Same source/server/connection identity, with newly authored fallback artwork.
+    scene.media_sources[0].fallback_rgba = Some(pixels(35));
+    reconcile(&mut workers, &scene, &mut starts);
+    let second = workers.frozen_media().unwrap();
+    let second_frame = &second.sources()[0].frame;
+    assert_eq!(second_frame.source_id, id);
+    assert_eq!(second_frame.rgba[0], 35);
+    assert!(second_frame.sequence > first_frame.sequence);
+    assert_eq!(
+        first_frame.rgba[0], 12,
+        "an already frozen image remains immutable"
+    );
+
+    reconcile(&mut workers, &scene, &mut starts);
+    let unchanged = workers.frozen_media().unwrap();
+    assert!(Arc::ptr_eq(second_frame, &unchanged.sources()[0].frame));
+    assert!(
+        starts.is_empty(),
+        "static fallback updates start no worker/socket"
+    );
+    assert!(
+        workers.drain().is_empty(),
+        "CPU capture never queues GPU atlas uploads"
+    );
+}

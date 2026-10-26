@@ -30,6 +30,7 @@ impl BenchmarkSample {
             .push(stats.cpu_micros.saturating_sub(stats.acquire_micros) as f32 / 1000.0);
         self.wait_millis.push(stats.acquire_micros as f32 / 1000.0);
         self.record_gpu(stats);
+        self.budget.record(stats);
         self.lights = self.lights.max(stats.lights);
         self.degraded_frames += u64::from(stats.degraded);
         self.crowd_authored = self.crowd_authored.max(stats.crowd_authored);
@@ -51,6 +52,7 @@ impl BenchmarkSample {
             return;
         }
         if let Some(micros) = stats.gpu_micros {
+            self.overlapping_gpu_samples += u64::from(stats.gpu_passes.overlapping_passes);
             self.gpu_millis.push(micros as f32 / 1000.0);
         }
         for (samples, micros) in self

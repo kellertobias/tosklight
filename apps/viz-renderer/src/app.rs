@@ -63,6 +63,7 @@ impl viz_render::PresentationSurface for WindowSurface {
 }
 
 mod benchmark;
+mod cli_capture;
 mod draw;
 mod input;
 mod native_input;
@@ -123,6 +124,7 @@ pub struct Application {
     /// loop spends its time in the window system, where input is delivered, rather than parked
     /// inside the driver waiting for a drawable.
     next_frame: Instant,
+    low_gpu_schedule: crate::pacing::LowGpuSchedule,
     frame_interval: Duration,
     /// False while the window is hidden behind another one and nothing needs presenting.
     visible: bool,
@@ -131,6 +133,7 @@ pub struct Application {
     stats: FrameStats,
     overlay: Overlay,
     redraw_gate: crate::redraw::RedrawGate,
+    cli_capture: cli_capture::CliCapture,
     camera_is_local: bool,
     /// Ownership of the dedicated external 3D presentation camera. Embedded Stage helpers never
     /// consult this state: their camera remains the desk pane's local view.
@@ -255,6 +258,8 @@ impl ExternalCameraOwnership {
 
 /// The session facts one benchmark frame needs, read before the session borrow ends.
 struct Measured {
+    quality: viz_scene::RenderQuality,
+    output_size: (u32, u32),
     latency: (f32, f32, f32),
     dmx_hz: f32,
     fixtures: usize,
@@ -322,6 +327,7 @@ impl Application {
             media_notice: None,
             last_frame: Instant::now(),
             next_frame: Instant::now(),
+            low_gpu_schedule: crate::pacing::LowGpuSchedule::default(),
             frame_interval: DEFAULT_FRAME_INTERVAL,
             visible: true,
             frame_intervals: Vec::with_capacity(240),
@@ -329,6 +335,7 @@ impl Application {
             stats: FrameStats::default(),
             overlay: Overlay::default(),
             redraw_gate: crate::redraw::RedrawGate::default(),
+            cli_capture: cli_capture::CliCapture::default(),
             camera_is_local: false,
             external_camera: ExternalCameraOwnership::default(),
             hosted_show: None,
@@ -551,6 +558,15 @@ impl Application {
                 (size.width.max(1) as f32, size.height.max(1) as f32)
             })
             .unwrap_or((1280.0, 720.0))
+    }
+
+    /// Focus and reveal retain immediate redraws, outside the scheduled animation ceiling.
+    fn request_current_picture(&mut self) {
+        self.low_gpu_schedule.suspend();
+        self.next_frame = Instant::now();
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
     }
 
     /// How long to leave before the next frame falls due.
@@ -929,6 +945,7 @@ impl ApplicationHandler for Application {
                 // A window that comes back from behind another one has to show a current frame at
                 // once, not whatever was last presented before the system stopped compositing it.
                 self.visible = !occluded;
+                self.low_gpu_schedule.suspend();
                 if !occluded {
                     if let Some(renderer) = self.renderer.as_mut() {
                         renderer.reconfigure();
@@ -939,12 +956,7 @@ impl ApplicationHandler for Application {
                     }
                 }
             }
-            WindowEvent::Focused(true) => {
-                self.next_frame = Instant::now();
-                if let Some(window) = self.window.as_ref() {
-                    window.request_redraw();
-                }
-            }
+            WindowEvent::Focused(true) => self.request_current_picture(),
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 trace_input(&format!("button {button:?} {state:?}"));
@@ -1133,7 +1145,9 @@ impl ApplicationHandler for Application {
         if now >= self.next_frame {
             // One frame is owed however late this is; missed frames are never chased.
             self.next_frame = now + interval;
-            if let Some(window) = self.window.as_ref() {
+            if let Some(window) = self.window.as_ref()
+                && self.low_gpu_schedule.request()
+            {
                 window.request_redraw();
             }
         }

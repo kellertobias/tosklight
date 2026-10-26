@@ -8,6 +8,7 @@
 
 mod annotation;
 mod cad;
+mod capture_launch;
 mod company_logo;
 mod contract;
 mod demo;
@@ -268,39 +269,55 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
     {
         let _ = window.set_skip_taskbar(true);
     }
-    let source = fixture_library_source(app).map_err(std::io::Error::other)?;
+    let capture = capture_launch::configuration().map_err(std::io::Error::other)?;
+    let source = if capture.is_some() {
+        bundled_fixture_packages(app)
+            .or_else(checkout_fixture_packages)
+            .map(FixtureLibrarySource::Packages)
+    } else {
+        fixture_library_source(app).map_err(std::io::Error::other)?
+    };
     let app_data = crate::portable::app_data_dir(app).map_err(std::io::Error::other)?;
     let library = prepare_fixture_library(source, &app_data).map_err(std::io::Error::other)?;
     let session = app.state::<session::Session>();
     session.set_library_path(library);
-    session.set_binding_store(sync::SyncBindingStore::at(app_data.join("show-sync")));
-    sync::install(app.handle(), &session);
-    if let Ok(config) = app.path().app_config_dir() {
-        let legacy = config
-            .parent()
-            .map(|parent| parent.join("de.tokenet.tosklight.viz-editor/recent-show"));
-        session.set_recent_store(match legacy {
-            Some(legacy) => recent::RecentShow::migrating_from(config.join("recent-show"), legacy),
-            None => recent::RecentShow::at(config.join("recent-show")),
-        });
-        session.reopen_recent();
-    }
-    if session.document_name().is_none() {
-        let fallback = demo::open_default_copy(app.handle(), &session);
-        session.complete_startup_fallback(&fallback);
-        if let Err(error) = fallback {
-            eprintln!("open the default Demo Show: {error}");
+    if let Some(launch) = capture {
+        capture_launch::open_private(&session, launch).map_err(std::io::Error::other)?;
+    } else {
+        session.set_binding_store(sync::SyncBindingStore::at(app_data.join("show-sync")));
+        sync::install(app.handle(), &session);
+        if let Ok(config) = app.path().app_config_dir() {
+            let legacy = config
+                .parent()
+                .map(|parent| parent.join("de.tokenet.tosklight.viz-editor/recent-show"));
+            session.set_recent_store(match legacy {
+                Some(legacy) => {
+                    recent::RecentShow::migrating_from(config.join("recent-show"), legacy)
+                }
+                None => recent::RecentShow::at(config.join("recent-show")),
+            });
+            session.reopen_recent();
+        }
+        if session.document_name().is_none() {
+            let fallback = demo::open_default_copy(app.handle(), &session);
+            session.complete_startup_fallback(&fallback);
+            if let Err(error) = fallback {
+                eprintln!("open the default Demo Show: {error}");
+            }
         }
     }
     prepare_local_visualizer(app).map_err(std::io::Error::other)?;
-    announce_on_the_network(app);
+    if capture.is_none() {
+        announce_on_the_network(app);
+    }
     // An editor whose local API will not start is still an editor. Say so and carry on
     // rather than refusing to open a window over a port an operator may never use.
     match local_api::start(app) {
         Ok(handle) => println!("local editing API on 127.0.0.1:{}", handle.port),
+        Err(error) if capture.is_some() => return Err(std::io::Error::other(error).into()),
         Err(error) => eprintln!("{error}"),
     }
-    if let Some(address) = scene_address() {
+    if let Some(address) = scene_address().filter(|_| capture.is_none()) {
         let source = session.scene_source();
         tauri::async_runtime::spawn(async move {
             if let Err(error) = viz_planning::serve(source, address).await {
@@ -308,7 +325,9 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
             }
         });
     }
-    if let Some(window) = app.get_webview_window("main") {
+    if let Some(launch) = capture {
+        capture_launch::show_private(app, launch).map_err(std::io::Error::other)?;
+    } else if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
     }
     // `--verify` opens the window, waits for the interface to report itself, and exits
@@ -328,6 +347,11 @@ fn setup_editor(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> 
 }
 
 fn main() {
+    let mut context = tauri::generate_context!();
+    if let Err(error) = capture_launch::configure(context.config_mut()) {
+        eprintln!("Architect private validation refused: {error}");
+        std::process::exit(1);
+    }
     portable::prepare("ToskLight Architect");
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -432,7 +456,7 @@ fn main() {
             venue_models::import_venue_model,
         ])
         .setup(setup_editor)
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to build the ToskLight Viz editor")
         .run(|app, event| {
             // ExitRequested can still be cancelled; only terminal exit owns this cleanup.

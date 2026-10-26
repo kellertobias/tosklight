@@ -89,6 +89,12 @@ const pane = (kind: PaneModel["kind"], options = {}) =>
 	}) satisfies PaneModel;
 
 describe("Stage pane settings parity", () => {
+	it.each(["2d", "3d"] as const)("keeps %s Stage settings free of image export controls", (stageView) => {
+        render(<StagePaneSettings pane={pane("stage", { stageView })} />);
+        expect(screen.queryByRole("switch", { name: "Detailed people" })).toBeNull();
+        expect(screen.queryByText(/4K|image exposure|Render quality/i)).toBeNull();
+    });
+
 	it("offers the dedicated Stage controls relevant to each pane view", () => {
 		const { rerender } = render(
 			<StagePaneSettings pane={pane("stage", { stageView: "3d" })} />,
@@ -108,7 +114,7 @@ describe("Stage pane settings parity", () => {
 			<StagePaneSettings pane={pane("stage", { stageView: "3d-viz" })} />,
 		);
 		expect(screen.getByRole("switch", { name: /Beam direction guidelines/ })).toBeVisible();
-		for (const label of ["Fog / haze", "Environment brightness", "Render quality", "Exposure", "Fixture labels", "Lamp fog cloudiness", "Laser fog turbulence"])
+		for (const label of ["Fog / haze", "Render quality", "Fixture labels", "Lamp fog cloudiness", "Laser fog turbulence"])
 			expect(screen.queryByText(label)).toBeNull();
 		expect(screen.queryByText("3D Viz")).toBeNull();
 		fireEvent.click(screen.getByRole("switch", { name: /Beam direction guidelines/ }));

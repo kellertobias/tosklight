@@ -174,6 +174,10 @@ pub struct FrameStats {
     pub acquire_micros: u64,
     pub lights: u32,
     pub beams: u32,
+    /// Rust-only evidence: exact Draft dependencies reused the reduced beam attachment.
+    pub draft_beam_cache_hit: bool,
+    /// Eligible Draft cache miss; excluded/fused/no-beam frames set both cache flags false.
+    pub draft_beam_cache_miss: bool,
     pub instances: u32,
     pub particles_requested: u32,
     pub particles_drawn: u32,
@@ -183,14 +187,14 @@ pub struct FrameStats {
     /// The concrete limits responsible for [`Self::degraded`]. Kept as counts so the operator
     /// surface can explain what must change instead of reporting an unexplained warning.
     pub quality_reduction: QualityReduction,
-    /// What the GPU itself spent on a recent frame, where the adapter can time one. This is the
-    /// number that says whether there is headroom under a display-limited frame rate.
+    /// Union coverage of the recent frame's GPU query intervals, where timing is available.
+    /// This is neither GPU occupancy nor a sum of potentially overlapping logical pass costs.
     pub gpu_micros: Option<u64>,
     /// Identity of the most recent completed asynchronous timestamp sample.
     pub gpu_sample_id: Option<u64>,
     /// Whether that sample belongs to this scene/view/quality/size generation.
     pub gpu_sample_matches_frame: bool,
-    /// Named pass costs from the same asynchronously sampled frame as `gpu_micros`.
+    /// Logical query intervals from the same sample; these can overlap and are non-exclusive.
     pub gpu_passes: crate::timing::GpuPassTimings,
     /// Effective Ultra controls after the frame-budget controller is applied.
     pub volumetric_steps: u32,

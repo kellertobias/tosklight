@@ -388,6 +388,8 @@ export interface RendererSettings {
 	laserFogCloudiness: number;
 	laserFogTurbulence: number;
 	crowdAmount: number;
+	/** Raw local preference, retained in Draft/Lines for Ultra and 4K image jobs. */
+	detailedPeople: boolean;
 	theme: "light_on_dark" | "dark_on_light";
 	background: [number, number, number] | null;
 	showLabels: boolean;

@@ -1,5 +1,3 @@
-import { StageCaptureControls } from "./StageCaptureControls";
-import { useStageCapture } from "./useStageCapture";
 import { NativeStageSurface } from "./NativeStageSurface";
 import type { StageOptionsModel } from "./types";
 import { useNativeStagePane } from "./useNativeStagePane";
@@ -50,14 +48,13 @@ export function StageRendererView({
 	// And the answer goes back, so the renderer can draw what the desk decided was selected.
 	useStagePaneSelection(pane, selection, options.showSelection);
 	// The picture settings cross when the renderer starts, not only when one is moved.
-	const picture = useStagePanePicture(
+	useStagePanePicture(
 		pane,
 		stageViewMode(options.view, options.side2d),
 		options.followPreload,
 		options.paneId,
 		options.showBeamGuides,
 	);
-	const capture = useStageCapture(pane.id, active && interactive && pane.active, picture);
 	return (
 		<div
 			className="stage-canvas stage-canvas-3d"
@@ -74,9 +71,7 @@ export function StageRendererView({
 				pane={pane}
 				interactive={interactive}
 				plan={options.view === "2d"}
-				onCapture={capture.available && active && interactive ? () => { void capture.start(); } : undefined}
 			/>
-			{active && interactive && <StageCaptureControls capture={capture} paneId={pane.id} followPreload={options.followPreload} />}
 			{active && !pane.active && (
 				<div className="stage-unavailable" role="status">
 					<strong>No Stage on this screen</strong>

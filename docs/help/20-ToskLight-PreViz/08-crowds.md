@@ -16,7 +16,7 @@ It does not rewrite the show's authored area or density.
 
 ## Detailed people
 
-**Quick Settings > Features > Detailed people** adds rounded, three-dimensional bodies in Ultra.
+**Quick Settings > Features > Detailed people** adds three-dimensional bodies, shaped clothing, hair and facial features in Ultra.
 Control exposes the same **Detailed people** switch in Stage settings for 4K captures. It defaults
 to off, preserving the existing silhouettes. Clothing stays dark and skin and clothing respond
 to the show lights; the bodies have no artificial glow or bright contour lines.

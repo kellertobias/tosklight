@@ -1,6 +1,8 @@
-//! Dedicated Draft ownership: full-resolution geometry/lasers and reduced-resolution shafts.
+//! Dedicated Draft ownership: reduced scene attachments and further-reduced shafts.
 //! Shared scene upload and opaque/shadow topology are retained; quality backends do not share
 //! mutable targets, uniforms or shadow-cache identities.
+mod beam_cache;
+mod composite_policy;
 #[cfg(test)]
 mod cone_bounds_tests;
 mod fused;
@@ -9,6 +11,7 @@ mod gpu_tests;
 #[cfg(test)]
 mod math_tests;
 mod passes;
+pub(in crate::renderer) use beam_cache::{BeamCache, Key as BeamCacheKey};
 mod preparation;
 mod resources;
 use super::{FrameContext, ShadedRenderer};
@@ -27,3 +30,6 @@ impl DraftRenderer {
 
 #[cfg(test)]
 mod radial_profile_tests;
+
+#[cfg(test)]
+mod surface_math_tests;

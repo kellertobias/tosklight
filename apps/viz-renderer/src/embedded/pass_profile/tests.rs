@@ -27,6 +27,8 @@ fn sample(id: u64) -> FrameStats {
         gpu_passes: viz_render::GpuPassTimings {
             opaque_micros: Some(8),
             beams_micros: Some(4),
+            interval_union_micros: Some(12),
+            overlapping_passes: false,
             ..Default::default()
         },
         ..Default::default()
@@ -68,6 +70,8 @@ fn provenance_and_monotonic_sample_identity_gate_actual_jsonl_rows() {
         .collect();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0]["gpu_sample_id"], 7);
+    assert_eq!(rows[0]["gpu_interval_union_micros"], 12);
+    assert_eq!(rows[0]["gpu_pass_intervals_overlap"], false);
     assert_eq!(rows[0]["timing_coverage"]["diagnosticCadence"], "oneHz");
     assert_eq!(rows[0]["timing_coverage"]["framesAdmitted"], 1);
     assert_eq!(rows[0]["timing_coverage"]["completedReadbacks"], 3);

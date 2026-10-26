@@ -5,6 +5,7 @@ use viz_scene::uuid::Uuid;
 
 #[derive(Default)]
 pub(super) struct Mailbox {
+    capture: Option<super::capture_cache::CaptureCache>,
     active: HashMap<Uuid, Arc<AtomicBool>>,
     fallbacks: HashSet<Uuid>,
     latest: HashMap<Uuid, MediaFrame>,
@@ -13,7 +14,23 @@ pub(super) struct Mailbox {
     sequence: u64,
 }
 impl Mailbox {
+    pub fn enable_capture_cache(&mut self) {
+        self.capture = Some(Default::default());
+    }
+    pub fn snapshot(
+        &self,
+        now: std::time::Instant,
+    ) -> Result<viz_render::media::FrozenMedia, String> {
+        self.capture
+            .as_ref()
+            .ok_or("Media capture cache is disabled")?
+            .snapshot(now)
+    }
+
     pub fn retain(&mut self, wanted: &HashMap<Uuid, &MediaSourceBinding>) {
+        if let Some(cache) = self.capture.as_mut() {
+            cache.retain(wanted);
+        }
         self.active.retain(|id, token| {
             let keep = wanted.contains_key(id);
             if !keep {
@@ -26,6 +43,9 @@ impl Mailbox {
         self.health.retain(|id, _| wanted.contains_key(id));
     }
     fn retire(&mut self, id: Uuid) {
+        if let Some(cache) = self.capture.as_mut() {
+            cache.remove(id);
+        }
         if let Some(token) = self.active.remove(&id) {
             token.store(true, Ordering::Release);
         }
@@ -55,7 +75,11 @@ impl Mailbox {
         self.sequence = sequence;
         frame.sequence = sequence;
         self.set_live(frame.source_id, token, true);
-        self.latest.insert(frame.source_id, frame);
+        if let Some(cache) = self.capture.as_mut() {
+            cache.adopt(frame, std::time::Instant::now());
+        } else {
+            self.latest.insert(frame.source_id, frame);
+        }
         true
     }
     pub fn set_live(&mut self, id: Uuid, token: &Arc<AtomicBool>, live: bool) {
@@ -74,25 +98,37 @@ impl Mailbox {
         if self.active.contains_key(&source.id) {
             self.retire(source.id);
         }
-        if !self.fallbacks.insert(source.id) {
+        // Embedded capture reconciles scene changes, not every draw. Reuse the current immutable
+        // pixels only when their content is unchanged, so a source-ID-preserving artwork edit
+        // becomes a new frame without invalidating images already frozen by a job.
+        if self.fallbacks.contains(&source.id)
+            && self
+                .capture
+                .as_ref()
+                .is_none_or(|cache| cache.matches_fallback(source.id, rgba))
+        {
             return;
         }
+        self.fallbacks.insert(source.id);
         let Some(sequence) = self.sequence.checked_add(1) else {
             return;
         };
         self.sequence = sequence;
-        self.latest.insert(
-            source.id,
-            MediaFrame {
-                source_id: source.id,
-                sequence,
-                width: EDGE,
-                height: EDGE,
-                rgba: rgba.to_vec(),
-                persistent: true,
-            },
-        );
+        let frame = MediaFrame {
+            source_id: source.id,
+            sequence,
+            width: EDGE,
+            height: EDGE,
+            rgba: rgba.to_vec(),
+            persistent: true,
+        };
+        if let Some(cache) = self.capture.as_mut() {
+            cache.adopt(frame, std::time::Instant::now());
+        } else {
+            self.latest.insert(source.id, frame);
+        }
     }
+
     pub fn drain(&mut self) -> Vec<MediaFrame> {
         self.latest.drain().map(|(_, frame)| frame).collect()
     }

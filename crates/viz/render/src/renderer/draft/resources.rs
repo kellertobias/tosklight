@@ -8,6 +8,7 @@ pub(in crate::renderer) struct DraftPasses {
     #[cfg(test)]
     pub(in crate::renderer) last_fused_composite: bool,
     pub preparation: super::preparation::Preparation,
+    pub beam_cache: super::beam_cache::BeamCache,
     pub size: (u32, u32),
     pub beam: wgpu::TextureView,
     pub globals: wgpu::Buffer,
@@ -18,7 +19,7 @@ pub(in crate::renderer) struct DraftPasses {
     upsample_layout: wgpu::BindGroupLayout,
 }
 
-// Fixed candidate scale: geometry/depth/lasers remain at the physical output size.
+// Shafts are reduced relative to the scene attachments; the final UV composite scales to output.
 const DRAFT_BEAM_SCALE_NUM: u64 = 1;
 const DRAFT_BEAM_SCALE_DEN: u64 = 4;
 
@@ -133,6 +134,7 @@ impl DraftPasses {
             #[cfg(test)]
             last_fused_composite: false,
             preparation: Default::default(),
+            beam_cache: Default::default(),
             size,
             beam,
             globals,
@@ -153,6 +155,7 @@ impl DraftPasses {
         size: (u32, u32),
     ) {
         assert!(size.0 > 0 && size.1 > 0);
+        self.beam_cache.resources_changed();
         self.beam = beam_target_exact(device, size);
         self.upsample_group = upsample_group(
             device,
@@ -166,18 +169,33 @@ impl DraftPasses {
     pub(in crate::renderer) fn force_legacy_for_test(&mut self, legacy: bool) {
         self.force_legacy_composite = legacy;
     }
-    pub(in crate::renderer) fn fuses_composite(&self, beams: bool, lasers: bool) -> bool {
+    pub(in crate::renderer) fn fuses_composite(
+        &self,
+        beams: bool,
+        lasers: bool,
+        output: (u32, u32),
+    ) -> bool {
         #[cfg(test)]
         if self.force_legacy_composite {
             return false;
         }
-        beams && !lasers
+        super::composite_policy::compatible(beams, lasers, self.size, output)
     }
     pub(in crate::renderer) fn resize(&mut self, device: &wgpu::Device, targets: &Targets) {
         let size = (targets.width, targets.height);
         if self.size == size {
+            self.fused.resize(device, &targets.shaded);
+            // A rebuilt depth attachment can have the same extent as its predecessor.
+            self.upsample_group = upsample_group(
+                device,
+                &self.upsample_layout,
+                &self.beam,
+                &targets.depth,
+                &self.settings,
+            );
             return;
         }
+        self.beam_cache.resources_changed();
         self.size = size;
         self.beam = beam_target(device, size);
         self.fused.resize(device, &targets.shaded);

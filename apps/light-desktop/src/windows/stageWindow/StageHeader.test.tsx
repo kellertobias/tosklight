@@ -62,23 +62,18 @@ afterEach(() => {
 });
 
 describe("Stage settings are split between the views", () => {
-	it("asks a 2D Stage only which side it is seen from", () => {
+	it("keeps the 2D view lightweight without image export settings", () => {
 		openSettings();
 		expect(screen.getByText(/viewed from/i)).toBeTruthy();
 		expect(screen.queryByText(/render style/i)).toBeNull();
-		expect(screen.queryByText(/environment brightness/i)).toBeNull();
+		expect(screen.queryByText(/4K|image exposure|Detailed people/i)).toBeNull();
 	});
 
-	/*
-	 * The 3D view draws boxes and aim lines and simulates no light, so a render style and an
-	 * environment brightness would both be controls over nothing. The guidelines are not offered
-	 * either: here they are the picture rather than an addition to it.
-	 */
 	it("offers a 3D Stage optional beam direction guidelines", () => {
 		openSettings({ ...options, view: "3d" });
 		expect(screen.getByText(/floor grid/i)).toBeTruthy();
 		expect(screen.queryByText(/render style/i)).toBeNull();
-		expect(screen.queryByText(/environment brightness/i)).toBeNull();
+		expect(screen.queryByText(/4K|image exposure|Detailed people/i)).toBeNull();
 		const guidelines = screen.getByRole("switch", {
 			name: /beam direction guidelines/i,
 		});
@@ -93,7 +88,7 @@ describe("Stage settings are split between the views", () => {
 	it("treats a legacy Viz view as lightweight 3D settings", () => {
 		openSettings({ ...options, view: "3d-viz" });
 		expect(screen.getByRole("switch", { name: /beam direction guidelines/i })).toBeVisible();
-		for (const label of [/environment brightness/i, /render quality/i, /^Background$/, /fog/i])
+		for (const label of [/render quality/i, /^Background$/, /fog/i])
 			expect(screen.queryByText(label)).toBeNull();
 		expect(screen.queryByRole("tab", { name: "3D Viz" })).toBeNull();
 	});

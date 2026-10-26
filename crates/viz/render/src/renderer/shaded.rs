@@ -13,6 +13,8 @@ pub(super) struct ShadedRenderer {
     /// composite samples the result up to the surface, so the overlay and the plan views stay at
     /// the display's own resolution whatever this is.
     pub(super) target_scale: f32,
+    #[cfg(test)]
+    pub(super) test_target_scale: Option<f32>,
     pub(super) meshes: HashMap<MeshKind, GpuMesh>,
     asset_cache: super::shaded_assets::AssetCache,
     assets_changed: bool,
@@ -106,11 +108,7 @@ impl ShadedRenderer {
     ) -> Self {
         let device = context.device.clone();
         let queue = context.queue.clone();
-        let targets = if draft_mode {
-            Targets::new_draft(&device, context.size.0, context.size.1)
-        } else {
-            Targets::new(&device, context.size.0, context.size.1, samples)
-        };
+        let targets = Self::create_targets(&device, context.size, samples, draft_mode);
         let multisample = wgpu::MultisampleState {
             count: samples,
             ..Default::default()
@@ -184,6 +182,8 @@ impl ShadedRenderer {
             samples,
             targets,
             target_scale: 1.0,
+            #[cfg(test)]
+            test_target_scale: None,
             meshes,
             asset_cache: super::shaded_assets::AssetCache::default(),
             assets_changed: false,
@@ -295,15 +295,27 @@ impl ShadedRenderer {
         (width, height)
     }
 
+    /// Initial allocation and resize must choose the same attachment layout for a backend.
+    fn create_targets(
+        device: &wgpu::Device,
+        (width, height): (u32, u32),
+        samples: u32,
+        draft: bool,
+    ) -> Targets {
+        if draft {
+            Targets::new_draft(device, width, height)
+        } else {
+            Targets::new(device, width, height, samples)
+        }
+    }
+
     pub(super) fn rebuild_targets(&mut self) {
         let device = self.device.clone();
         let (width, height) = self.scaled_size();
-        self.targets = if self.draft.is_some() {
-            Targets::new_draft(&device, width, height)
-        } else {
-            Targets::new(&device, width, height, self.samples)
-        };
+        self.targets =
+            Self::create_targets(&device, (width, height), self.samples, self.draft.is_some());
         if let Some(draft) = self.draft.as_mut() {
+            draft.beam_cache.resources_changed();
             draft.resize(&device, &self.targets);
         }
         let tiles = self.targets.tile_count();
@@ -391,6 +403,9 @@ impl ShadedRenderer {
         let changes = self.asset_cache.reconcile(scene);
         self.assets_changed = !changes.changed.is_empty() || !changes.removed.is_empty();
         if self.assets_changed {
+            if let Some(draft) = self.draft.as_mut() {
+                draft.beam_cache.resources_changed();
+            }
             self.shadow_signature = None;
         }
         for kind in changes.removed {

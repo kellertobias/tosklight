@@ -57,6 +57,9 @@ pub fn broadcast_all<P: Serialize + Clone>(
 /// free one so an operator may open as many as the work needs.
 #[tauri::command]
 pub fn open_editor_window(app: tauri::AppHandle) -> Result<String, String> {
+    if crate::capture_launch::configuration()?.is_some() {
+        return Err("Extra windows are disabled for isolated internal-display validation".into());
+    }
     let label = next_label(&app);
     // Offset from the window that asked, so the new one is visibly a second window rather than
     // an exact overlay that looks like nothing happened.

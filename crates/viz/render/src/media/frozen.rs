@@ -20,6 +20,31 @@ pub struct FrozenMedia {
     sources: Vec<FrozenMediaSource>,
 }
 impl FrozenMedia {
+    /// Adopt bounded immutable CPU pixels without allocating textures or touching a GPU.
+    pub fn from_sources(mut sources: Vec<FrozenMediaSource>) -> Result<Self, String> {
+        if sources.len() > (MAX_SOURCES - 1) as usize {
+            return Err("Frozen media exceeds the native source budget".into());
+        }
+        let mut ids = HashSet::new();
+        for source in &sources {
+            let frame = &source.frame;
+            if !ids.insert(frame.source_id) {
+                return Err("Frozen media repeats a source identity".into());
+            }
+            if frame.width != EDGE
+                || frame.height != EDGE
+                || frame.rgba.len() != (EDGE * EDGE * 4) as usize
+            {
+                return Err(format!("Frozen media must be {EDGE}x{EDGE} RGBA8"));
+            }
+            if !source.flicker.is_finite() || !(0.0..=1.0).contains(&source.flicker) {
+                return Err("Frozen media has invalid flicker".into());
+            }
+        }
+        sources.sort_by_key(|source| source.frame.source_id);
+        Ok(Self { sources })
+    }
+
     pub fn sources(&self) -> &[FrozenMediaSource] {
         &self.sources
     }

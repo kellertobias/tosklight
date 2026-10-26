@@ -4,6 +4,7 @@
 //! view, so a regression can be told from a heavier scene. The report is printed in one place and
 //! read by build machines as well as by people.
 
+mod budget;
 mod measurement;
 #[cfg(test)]
 mod tests;
@@ -36,6 +37,9 @@ pub(super) struct BenchmarkSample {
     failed: u64,
     seen_gpu: HashSet<u64>,
     rejected_gpu: u64,
+    overlapping_gpu_samples: u64,
+    budget: budget::Budget,
+    pacing: crate::pacing::PacingDiagnostics,
     frame_millis: Vec<f32>,
     /// Elapsed renderer wall time excluding drawable acquire; thread CPU is not measured.
     cpu_millis: Vec<f32>,
@@ -74,6 +78,9 @@ impl BenchmarkSample {
             failed: 0,
             seen_gpu: HashSet::new(),
             rejected_gpu: 0,
+            overlapping_gpu_samples: 0,
+            budget: budget::Budget::default(),
+            pacing: crate::pacing::PacingDiagnostics::default(),
             frame_millis: Vec::new(),
             cpu_millis: Vec::new(),
             wait_millis: Vec::new(),
@@ -116,13 +123,18 @@ impl Application {
         if self.options.benchmark_all_views {
             ViewMode::ALL.to_vec()
         } else {
-            vec![self.options.view.unwrap_or(ViewMode::Full3d)]
+            vec![self.view_mode()]
         }
     }
 
     pub(super) fn start_benchmark(&mut self) {
+        self.low_gpu_schedule.take_diagnostics(); // Exclude warmup without changing its phase.
         let mode = self.benchmark_views()[0];
-        self.set_view_mode(mode);
+        // Startup already applied any explicit CLI view. Single-view measurement must not
+        // reframe the selected provider/local camera merely because warmup has finished.
+        if self.options.benchmark_all_views {
+            self.set_view_mode(mode);
+        }
         self.benchmark_view_started = Instant::now();
         self.benchmark
             .push(BenchmarkSample::new(mode, self.benchmark_view_started));
@@ -148,7 +160,15 @@ impl Application {
         let (p50, p95, max) = measured.latency;
         let dmx_hz = measured.dmx_hz;
         if let Some(sample) = self.benchmark.last_mut() {
+            sample
+                .pacing
+                .merge(self.low_gpu_schedule.take_diagnostics());
             sample.record_outcome(outcome, observed);
+            if outcome.is_ok() {
+                sample
+                    .budget
+                    .observe_view(measured.quality, measured.output_size);
+            }
             sample.latency_p50 = p50;
             sample.latency_p95 = p95;
             sample.latency_max = max;
@@ -193,6 +213,15 @@ impl Application {
             "lights"
         );
         for sample in &self.benchmark {
+            println!(
+                "  effective budget: {}",
+                sample.budget.report(self.options.quality)
+            );
+            println!(
+                "  scheduled low-GPU pacing: {}",
+                serde_json::to_string(&sample.pacing)
+                    .expect("integer pacing observations serialize")
+            );
             // Frame pacing matters more than average FPS, so report the frame-time percentiles.
             let (frame_p50, frame_p95) = sample.frame_percentiles();
             println!(
@@ -230,6 +259,10 @@ impl Application {
                 "  GPU unique samples: {}  rejected provenance: {}  thread CPU: unavailable; wall excludes acquire; presented means submitted to the presentation queue, not display-confirmed",
                 sample.gpu_millis.len(),
                 sample.rejected_gpu
+            );
+            println!(
+                "  GPU total semantics: union of raw query intervals; observed coverage, not percent usage. Overlapping samples: {}. Per-pass intervals are non-exclusive and must not be ranked as isolated pass costs when overlapping.",
+                sample.overlapping_gpu_samples
             );
             let pass_p95 = GPU_PASS_LABELS
                 .iter()

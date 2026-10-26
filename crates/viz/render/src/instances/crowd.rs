@@ -141,9 +141,14 @@ fn push_person(
     let rendered_height = size.height * posture_scale;
     let scale = Vec3::new(rendered_height * size.width, rendered_height, 1.0);
     if let Some((seed, index)) = detailed {
+        // Unlike the zero-depth silhouette, normalized anatomy must scale on all three axes.
         push_detailed(
             frame,
-            Mat4::from_scale_rotation_translation(scale, orientation, floor),
+            Mat4::from_scale_rotation_translation(
+                Vec3::new(scale.x, scale.y, scale.x),
+                orientation,
+                floor,
+            ),
             posture == CrowdPosture::Sitting,
             seed,
             index,

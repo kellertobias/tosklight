@@ -133,5 +133,8 @@ export function useStagePanePicture(
 	useEffect(() => {
 		if (active) void Promise.resolve(bridge.setStagePanePicture(pane.id, picture)).catch((error) => pane.reportError?.(error));
 	}, [active, bridge, pane.id, picture, pane.reportError]);
-	return picture;
+	// The live plan/Lines path keeps fog disabled; the separate HQ job freezes the operator's
+	// requested image haze instead of inheriting that lightweight pass suppression.
+	return useMemo(() => ({ ...picture, atmosphere: state.stageVizAtmosphere }),
+		[picture, state.stageVizAtmosphere]);
 }

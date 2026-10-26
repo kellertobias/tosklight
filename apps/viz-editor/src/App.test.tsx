@@ -72,6 +72,7 @@ const rendererSettings = {
 	laserFogCloudiness: 0.35,
 	laserFogTurbulence: 0.35,
 	crowdAmount: 1,
+	detailedPeople: false,
 	theme: "light_on_dark" as const,
 	background: null,
 	showLabels: true,

@@ -6,17 +6,22 @@ A snapshot stores the scene, not a screenshot.
 
 ## Render a 4K image
 
-Use **Render 4K** in a Control Stage pane, or **File > Render 4K Image** / the rendering row in
-Visualizer **Quick Settings**. With that view focused, press **Cmd+Shift+R** on macOS or
-**Ctrl+Shift+R** on Windows/Linux. The shortcut is inactive while entering text, using the Desk
-command line, or choosing in a modal dialog. Cmd/Ctrl+S keeps its existing scene-snapshot behavior.
+In **ToskLight Architect**, open the native 3D window with **Open Viz**. In that window, choose
+**File > Render 4K Image**, or the rendering row in **Quick Settings**. With the 3D window
+focused, press **Cmd+Shift+R** on macOS or **Ctrl+Shift+R** on Windows/Linux. The shortcut is
+inactive while entering text or choosing in a modal dialog. Cmd/Ctrl+S keeps its existing
+scene-snapshot behavior. The Light Desk's embedded Stage has no image-export action.
 
-The action freezes that pane's camera, Live or Follow Preload values, crowd amount, Detailed people preference, and available
-media pixels before checking Blender or asking for quality. Moving the rig while the choice is open does not
+The action freezes Architect's current camera, resolved fixture values, crowd amount, Detailed people
+preference, and available media pixels before checking Blender or asking for quality. Moving the rig while the choice is open does not
 change the captured moment. Both engines produce a new **3840 × 2160 PNG**; they do not enlarge
 the live pane's raster. The camera keeps its vertical field of view with 16:9 framing, so the image
 can show more or less at the sides than a differently shaped pane. An orthographic view stays
 orthographic. A 3D Lines invocation renders the same camera with full lighting.
+
+In Architect's **Quick Settings**, choose **Fog amount**, **Ambient**, **Exposure** and
+**Detailed people** before rendering. The image freezes those preferences, including Detailed
+people when the live quality omits them. A Draft or Lines preview keeps its existing quality.
 
 When a usable Blender is installed, choose:
 
@@ -33,8 +38,9 @@ Ultimate choice explains why it is unavailable.
 
 Without Blender, the action uses Ultra. A broken configured installation reports its problem and
 keeps Ultra available. Rendering does not change the live quality preference: Draft remains Draft.
-Missing media frames are identified explicitly; the image uses only the frozen known fallback or
-black, never a later server frame substituted after the choice.
+Architect freezes the latest available decoded media pixels. An expired feed or a capture made
+before the first decoded frame is identified explicitly. The image uses only the frozen known
+fallback or black, never a later server frame substituted after the choice.
 
 Progress, cancellation, failures and the saved path appear in the view. After success, use **Open**
 or **Reveal**. Another image can start when the current job and its cleanup finish. Cancellation

@@ -102,6 +102,12 @@ describe("Control Stage picture admission", () => {
 		}));
 	});
 
+	it("freezes the requested image haze without enabling live fog or shaded rendering", () => {
+		const { result } = renderHook(() => useStagePanePicture({ id: "stage", active: true } as NativeStagePane));
+		expect(result.current).toMatchObject({ atmosphere: 1, quality: "draft", mode: "lines_3d" });
+		expect(bridge.setStagePanePicture).toHaveBeenLastCalledWith("stage", expect.objectContaining({ atmosphere: 0, quality: "draft", mode: "lines_3d" }));
+	});
+
 	it("sends no settings to an inactive native pane", () => {
 		renderHook(() =>
 			useStagePanePicture({ id: "stage", active: false } as NativeStagePane),

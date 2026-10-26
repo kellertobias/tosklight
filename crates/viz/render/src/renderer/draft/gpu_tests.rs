@@ -133,7 +133,7 @@ fn actual_par_odd_physical_geometry_and_backend_switches_preserve_hq() {
         (draft_a.width, draft_a.height, renderer.samples()),
         (513, 289, 1)
     );
-    assert_eq!(renderer.stats().render_scale, 1.0);
+    assert_eq!(renderer.stats().render_scale, 0.25);
     assert!(
         draft_a
             .rgba
@@ -570,7 +570,12 @@ fn fused_composite_matches_legacy_and_preserves_lasers_and_clear_air() {
         roughness: 1.0,
         ..Default::default()
     });
+    // Historical fused/legacy parity deliberately keeps equal scene/output extents. The
+    // production reduced-scale path has separate media/depth/laser/resize acceptance below.
+    capture(&mut renderer, &scene, &values, &view);
+    renderer.force_draft_scene_scale_for_test(1.0);
     let fused = capture(&mut renderer, &scene, &values, &view);
+    assert_eq!(renderer.stats().render_scale, 1.0);
     assert_eq!(renderer.draft_composite_state_for_test(), (true, 0));
     renderer.force_draft_legacy_composite_for_test(true);
     let legacy = capture(&mut renderer, &scene, &values, &view);
@@ -589,6 +594,8 @@ fn fused_composite_matches_legacy_and_preserves_lasers_and_clear_air() {
     let no_beam = capture(&mut renderer, &scene, &values, &view);
     assert_eq!(renderer.draft_composite_state_for_test(), (false, 0));
     let mut fresh = Renderer::headless(513, 289).expect("requested native GPU required");
+    capture(&mut fresh, &scene, &values, &view);
+    fresh.force_draft_scene_scale_for_test(1.0);
     let fresh_no_beam = capture(&mut fresh, &scene, &values, &view);
     assert_eq!(
         no_beam.rgba, fresh_no_beam.rgba,
@@ -673,3 +680,7 @@ mod quarter_timing;
 mod narrow_profile;
 
 mod quarter_intervals;
+
+mod scaled_scene;
+
+mod beam_cache;

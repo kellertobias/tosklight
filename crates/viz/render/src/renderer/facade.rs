@@ -146,6 +146,23 @@ impl Renderer {
         self.stats.gpu_sample_matches_frame = false;
     }
     #[cfg(test)]
+    pub(in crate::renderer) fn force_draft_scene_scale_for_test(&mut self, scale: f32) {
+        assert!((0.25..=1.0).contains(&scale));
+        self.draft
+            .as_mut()
+            .expect("render Draft first")
+            .scene
+            .test_target_scale = Some(scale);
+        self.timing_context = invalidate_asset_scope(self.timing_context, true);
+        self.stats.gpu_sample_matches_frame = false;
+    }
+    #[cfg(test)]
+    pub(in crate::renderer) fn draft_target_sizes_for_test(&self) -> ((u32, u32), (u32, u32)) {
+        let scene = &self.draft.as_ref().expect("render Draft first").scene;
+        let beam = scene.draft.as_ref().unwrap().beam.texture().size();
+        (scene.render_size(), (beam.width, beam.height))
+    }
+    #[cfg(test)]
     pub(in crate::renderer) fn force_draft_legacy_composite_for_test(&mut self, legacy: bool) {
         self.draft
             .as_mut()
@@ -237,6 +254,57 @@ impl Renderer {
         self.timer.as_ref().map(GpuTimer::coverage)
     }
 
+    fn frame_timing_context(
+        &self,
+        scene: &Scene,
+        view: &ViewConfiguration,
+        size: (u32, u32),
+        render_size: (u32, u32),
+        assets_changed: bool,
+        cached: bool,
+    ) -> TimingContext {
+        TimingContext {
+            scene_revision: scene.revision,
+            show_id: scene.show_id.map(|id| id.as_u128()),
+            mode: view.mode,
+            quality: view.quality,
+            detailed_people: view.effective_detailed_people(),
+            size,
+            render_size,
+            generation: 0,
+        }
+        .following(invalidate_asset_scope(
+            self.timing_context,
+            assets_changed || self.stats.draft_beam_cache_hit != cached,
+        ))
+    }
+    fn draft_cache_begin_frame(&mut self) {
+        if let Some(draft) = self.draft.as_mut() {
+            draft.scene.draft.as_mut().unwrap().beam_cache.begin_frame();
+            if !self.active_draft {
+                draft.scene.draft.as_mut().unwrap().beam_cache.invalidate();
+            }
+        }
+    }
+    fn draft_cache_submitted(&mut self) {
+        if self.active_draft
+            && let Some(draft) = self.draft.as_mut()
+        {
+            draft.scene.draft.as_mut().unwrap().beam_cache.submitted();
+        }
+    }
+    #[cfg(test)]
+    pub(in crate::renderer) fn force_draft_beam_fresh_for_test(&mut self, force: bool) {
+        self.draft
+            .as_mut()
+            .unwrap()
+            .scene
+            .draft
+            .as_mut()
+            .unwrap()
+            .beam_cache
+            .force_fresh = force;
+    }
     pub fn render_into(
         &mut self,
         target: &wgpu::TextureView,
@@ -263,6 +331,7 @@ impl Renderer {
             .then(|| crate::still::capture_view(view));
         let view = capture_view.as_ref().unwrap_or(view);
         self.active_draft = view.mode.simulates_light() && view.quality == RenderQuality::Draft;
+        self.draft_cache_begin_frame();
         let started = std::time::Instant::now();
         let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         if let Some(timer) = self.timer.as_mut() {
@@ -344,17 +413,14 @@ impl Renderer {
             );
         }
         self.active_mode = view.mode;
-        let timing_context = TimingContext {
-            scene_revision: scene.revision,
-            show_id: scene.show_id.map(|id| id.as_u128()),
-            mode: view.mode,
-            quality: view.quality,
-            detailed_people: view.effective_detailed_people(),
-            size: context.size,
+        let timing_context = self.frame_timing_context(
+            scene,
+            view,
+            context.size,
             render_size,
-            generation: 0,
-        }
-        .following(invalidate_asset_scope(self.timing_context, assets_changed));
+            assets_changed,
+            stats.draft_beam_cache_hit,
+        );
         self.timing_context = Some(timing_context);
         let gpu_passes = self
             .timer
@@ -372,6 +438,7 @@ impl Renderer {
             .timer
             .as_ref()
             .is_some_and(|timer| timer.sample_matches(timing_context));
+        hide_unmatched_cached_timings(&mut stats);
         if let Some(id) = stats.gpu_sample_id
             && id != self.last_timing_sample
         {
@@ -389,6 +456,7 @@ impl Renderer {
             timer.resolve(&mut encoder, timing_context);
         }
         self.gpu.queue.submit(Some(encoder.finish()));
+        self.draft_cache_submitted();
         if let Some(timer) = self.timer.as_mut() {
             timer.request_readback();
         }
@@ -493,6 +561,14 @@ impl Renderer {
     }
 }
 
+/// A cache-hit row must never display an unmatched older shader cost as current upsample work.
+fn hide_unmatched_cached_timings(stats: &mut FrameStats) {
+    if stats.draft_beam_cache_hit && !stats.gpu_sample_matches_frame {
+        stats.gpu_micros = None;
+        stats.gpu_passes = Default::default();
+    }
+}
+
 /// Geometry may be replaced without a scene revision changing. Never let that reuse an old
 /// timestamp generation, including when a backend is revisited after another mode was drawn.
 fn invalidate_asset_scope(previous: Option<TimingContext>, changed: bool) -> Option<TimingContext> {
@@ -507,6 +583,52 @@ fn invalidate_asset_scope(previous: Option<TimingContext>, changed: bool) -> Opt
 #[cfg(test)]
 mod scope_tests {
     use super::*;
+
+    #[test]
+    fn cached_rows_hide_unmatched_shader_cost_but_keep_rejected_sample_identity() {
+        let mut stats = FrameStats {
+            draft_beam_cache_hit: true,
+            gpu_micros: Some(24000),
+            gpu_sample_id: Some(7),
+            ..Default::default()
+        };
+        stats.gpu_passes.beams_micros = Some(24000);
+        hide_unmatched_cached_timings(&mut stats);
+        assert_eq!(stats.gpu_micros, None);
+        assert_eq!(stats.gpu_passes.beams_micros, None);
+        assert_eq!(stats.gpu_sample_id, Some(7));
+        assert!(!stats.gpu_sample_matches_frame);
+        stats.gpu_sample_matches_frame = true;
+        stats.gpu_micros = Some(20);
+        stats.gpu_passes.beams_micros = Some(20);
+        hide_unmatched_cached_timings(&mut stats);
+        assert_eq!(stats.gpu_micros, Some(20));
+        assert_eq!(stats.gpu_passes.beams_micros, Some(20));
+    }
+
+    #[test]
+    fn retained_beam_hit_transitions_cannot_attribute_old_shader_samples_to_current_upsample() {
+        let scope = TimingContext {
+            scene_revision: 1,
+            show_id: None,
+            mode: ViewMode::Full3d,
+            quality: RenderQuality::Draft,
+            detailed_people: false,
+            size: (640, 360),
+            render_size: (160, 90),
+            generation: 0,
+        };
+        let miss = scope.following(None);
+        let hit = scope.following(invalidate_asset_scope(Some(miss), true));
+        assert_ne!(hit, miss);
+        assert_eq!(
+            scope.following(invalidate_asset_scope(Some(hit), false)),
+            hit
+        );
+        let miss_again = scope.following(invalidate_asset_scope(Some(hit), true));
+        assert_ne!(miss_again, hit);
+        assert!(miss_again.generation > miss.generation);
+    }
 
     #[test]
     fn geometry_replacement_at_same_revision_invalidates_old_timing_without_reusing_generation() {

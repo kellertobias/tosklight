@@ -18,6 +18,10 @@ use winit::event_loop::ActiveEventLoop;
 
 impl Application {
     pub(super) fn draw(&mut self, event_loop: &ActiveEventLoop) {
+        // Exit is deferred by the window system; already queued redraws must not capture again.
+        if self.cli_capture.started() {
+            return;
+        }
         let Some((now, delta, width, height)) = self.begin_frame(event_loop) else {
             return;
         };
@@ -149,10 +153,7 @@ impl Application {
             &mut self.frame_interval,
             &mut self.next_frame,
         );
-        // Anchor the low-GPU ceiling to frame start, preserving slower adaptive/retry deadlines.
-        // Static skips returned above; immediate input redraws remain independent of this pace.
-        self.next_frame =
-            crate::pacing::low_gpu_deadline(self.next_frame, now, view.quality, view.mode);
+        self.finish_frame_pacing(result.is_ok(), now, observed, &view);
         if self.options.verify_only && self.presented_frames >= 2 {
             event_loop.exit();
         }
@@ -160,6 +161,8 @@ impl Application {
             return None;
         }
         let measured = Measured {
+            quality: view.quality,
+            output_size: (width as u32, height as u32),
             latency: session.latency_percentiles(),
             dmx_hz: session.input_rate_hz(),
             fixtures: session.scene.fixtures.len(),
@@ -169,6 +172,29 @@ impl Application {
             scene_ready: !session.scene.emitters.is_empty(),
         };
         Some((measured, result, observed))
+    }
+
+    /// A carried animation phase is separate from hidden/retry/adaptive backoff.
+    fn finish_frame_pacing(
+        &mut self,
+        succeeded: bool,
+        started: Instant,
+        completed: Instant,
+        view: &viz_scene::ViewConfiguration,
+    ) {
+        if self.visible && crate::pacing::low_gpu_mode(view.quality, view.mode) {
+            self.next_frame = if succeeded {
+                self.low_gpu_schedule
+                    .succeeded(started, completed, self.frame_interval)
+            } else {
+                self.low_gpu_schedule.retry(completed, self.next_frame)
+            };
+        } else {
+            self.low_gpu_schedule.suspend();
+            if !self.visible {
+                self.next_frame = self.next_frame.max(started + self.pace());
+            }
+        }
     }
 
     /// Hand the session's media surfaces to the decode workers and upload what they finished.
@@ -312,12 +338,15 @@ impl Application {
             || self.options.benchmark_seconds.is_some();
         if !forced && !self.redraw_gate.should_draw(&redraw_state, time_driven) {
             self.next_frame = now + Duration::from_millis(50);
+            self.low_gpu_schedule.suspend();
             return None;
         }
         renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
-        if let Some(path) = self.options.capture.clone()
-            && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
-        {
+        if let Some(path) = self.cli_capture.take_due(
+            self.options.capture.as_deref(),
+            self.presented_frames,
+            self.options.capture_frames,
+        ) {
             write_capture(renderer, session, values, view, &self.overlay, time, &path);
             event_loop.exit();
             return None;
@@ -597,6 +626,7 @@ impl Application {
     /// ends the frame rather than drawing one.
     fn begin_frame(&mut self, event_loop: &ActiveEventLoop) -> Option<(Instant, f32, f32, f32)> {
         let now = Instant::now();
+        self.low_gpu_schedule.delivered();
         let delta = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
         // Hold the pace even when this frame returns early, so a session that is still connecting
