@@ -44,8 +44,8 @@ def transfer(mode: str, archive: Path, commit: str) -> None:
                 bundle.write(ROOT / name, name)
     else:
         with zipfile.ZipFile(archive) as bundle:
-            if sum(info.file_size for info in bundle.infolist()) > 150_000_000:
-                raise ValueError('Capture archive exceeds 150 MB')
+            if sum(info.file_size for info in bundle.infolist()) > 200_000_000:
+                raise ValueError('Capture archive exceeds 200 MB')
             metadata = json.loads(bundle.read('captures.json'))
             names = bundle.namelist()
             if len(names) != len(set(names)) or set(names) != paths | {'captures.json'}:
@@ -75,8 +75,8 @@ def restore_native(archive: Path) -> None:
     if not sources or not sources.issubset(allowed):
         raise ValueError('No valid native capture sources declared')
     with zipfile.ZipFile(archive) as bundle:
-        if sum(info.file_size for info in bundle.infolist()) > 150_000_000:
-            raise ValueError('Capture archive exceeds 150 MB')
+        if sum(info.file_size for info in bundle.infolist()) > 200_000_000:
+            raise ValueError('Capture archive exceeds 200 MB')
         names = bundle.namelist()
         if len(names) != len(set(names)):
             raise ValueError('Duplicate capture archive entries')
