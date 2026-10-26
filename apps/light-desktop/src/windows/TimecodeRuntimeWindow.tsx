@@ -439,6 +439,17 @@ function AudioFileField({
 	);
 }
 
+function timecodeSaveStatus(
+	audioImporting: boolean, saving: boolean, hasRecord: boolean,
+	hasSaveError: boolean, waveformLoading: boolean,
+) {
+	if (audioImporting) return "Importing audio…";
+	if (saving) return hasRecord ? "Saving…" : "Creating…";
+	if (hasSaveError) return "Not saved";
+	if (waveformLoading) return "Loading waveform…";
+	return hasRecord ? "Saved" : "Not saved";
+}
+
 export function TimecodeEditor({
 	showId,
 	item,
@@ -603,19 +614,7 @@ export function TimecodeEditor({
 				title={`Timecode ${draft.number}`}
 				info={{
 					primary: transport?.state ?? "Stopped",
-					secondary: audioImporting
-						? "Importing audio…"
-						: saving
-							? record
-								? "Saving…"
-								: "Creating…"
-							: saveError
-								? "Not saved"
-								: waveformLoading
-									? "Loading waveform…"
-									: record
-										? "Saved"
-										: "Not saved",
+					secondary: timecodeSaveStatus(audioImporting, saving, Boolean(record), Boolean(saveError), waveformLoading),
 				}}
 				groups={[
 					{ id: "timecode-add", actions: [addAction] },

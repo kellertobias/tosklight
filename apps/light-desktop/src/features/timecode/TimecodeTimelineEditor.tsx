@@ -706,6 +706,22 @@ function useLaneReorder({
 	};
 }
 
+function useTimelineLaneChoices(
+	cueLists: Props["cueLists"], cueListId: string, setCueListId: (value: string) => void,
+	definition: TimecodeDefinition, speedGroup: string, setSpeedGroup: (value: string) => void,
+) {
+	useEffect(() => {
+		if (!cueLists.some((cueList) => cueList.id === cueListId))
+			setCueListId(cueLists[0]?.id ?? "");
+	}, [cueListId, cueLists]);
+	const availableSpeedGroups = unusedSpeedGroups(definition);
+	useEffect(() => {
+		if (!availableSpeedGroups.includes(speedGroup as never))
+			setSpeedGroup(availableSpeedGroups[0] ?? "");
+	}, [availableSpeedGroups, speedGroup]);
+	return availableSpeedGroups;
+}
+
 export const TimecodeTimelineEditor = forwardRef<
 	TimecodeTimelineEditorHandle,
 	Props
@@ -874,15 +890,9 @@ export const TimecodeTimelineEditor = forwardRef<
 		fitTimeline,
 	});
 
-	useEffect(() => {
-		if (!cueLists.some((cueList) => cueList.id === cueListId))
-			setCueListId(cueLists[0]?.id ?? "");
-	}, [cueListId, cueLists]);
-	const availableSpeedGroups = unusedSpeedGroups(definition);
-	useEffect(() => {
-		if (!availableSpeedGroups.includes(speedGroup as never))
-			setSpeedGroup(availableSpeedGroups[0] ?? "");
-	}, [availableSpeedGroups, speedGroup]);
+	const availableSpeedGroups = useTimelineLaneChoices(
+		cueLists, cueListId, setCueListId, definition, speedGroup, setSpeedGroup,
+	);
 	// A selected Cuelist clip takes the encoder deck over, so the four Cue timings and the Cue
 	// itself sit on the encoders instead of the keyframe slots.
 	const cueContext = useCueEncoderContext({
