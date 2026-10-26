@@ -77,10 +77,39 @@ jobs:
             conclusion="$(gh run view "$candidate" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)"
             if [[ "$conclusion" == success ]]; then base_run="$candidate"; break; fi
           done < <(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=github-pages&per_page=100" --jq '[.artifacts[] | select(.expired == false)] | sort_by(.created_at) | reverse | .[].workflow_run.id')
-          test -n "$base_run"
-          mkdir -p .artifacts/tmp/manual-publication/pages-base .artifacts/generated/pages
-          gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --name github-pages --dir .artifacts/tmp/manual-publication/pages-base
-          tar -xf .artifacts/tmp/manual-publication/pages-base/artifact.tar -C .artifacts/generated/pages
+          if [[ -n "$base_run" ]]; then
+            echo "Reusing retained published Pages artifact from run $base_run."
+            mkdir -p .artifacts/tmp/manual-publication/pages-base .artifacts/generated/pages
+            gh run download "$base_run" --repo "$GITHUB_REPOSITORY" --name github-pages --dir .artifacts/tmp/manual-publication/pages-base
+            tar -xf .artifacts/tmp/manual-publication/pages-base/artifact.tar -C .artifacts/generated/pages
+          else
+            echo "No successful retained Pages artifact is available; rebuilding the complete site from current source and the verified manual."
+            published_status="$GITHUB_WORKSPACE/.artifacts/tmp/manual-publication/published-performance-status.json"
+            curl --fail --show-error --location --retry 3 --retry-delay 2 --retry-all-errors \
+              --connect-timeout 15 --max-time 120 \
+              https://kellertobias.github.io/tosklight/performance/status.json \
+              --output "$published_status"
+            node --input-type=module - "$published_status" <<'JS_STATUS'
+          import { readFileSync } from 'node:fs';
+          import { normalizePublicPerformanceStatus } from './tools/performance-publication.mjs';
+          const status = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+          if (normalizePublicPerformanceStatus(status) !== status) {
+            throw new Error('Published performance status is invalid; refusing to discard existing measurement evidence.');
+          }
+          console.log('Validated the published performance status for preservation.');
+          JS_STATUS
+            LIGHT_REUSE_MANUAL=1 LIGHT_RELEASE_VERSION="$LIGHT_MANUAL_VERSION" \
+              LIGHT_PERFORMANCE_STATUS_FILE="$published_status" npm run pages:generate
+            node --input-type=module - "$published_status" <<'JS_PRESERVED'
+          import { readFileSync } from 'node:fs';
+          import { deepStrictEqual } from 'node:assert';
+          const read = path => JSON.parse(readFileSync(path, 'utf8'));
+          deepStrictEqual(read('.artifacts/generated/pages/performance/status.json'), read(process.argv[2]),
+            'Rebuilding the site must preserve the published performance evidence.');
+          JS_PRESERVED
+            test -f .artifacts/generated/pages/storybook/index.html
+            test -f .artifacts/generated/pages/safari/index.html
+          fi
           test -f .artifacts/generated/pages/index.html
           rm -rf .artifacts/generated/pages/manual
           cp -R .artifacts/generated/manual/html/tosklight-manual .artifacts/generated/pages/manual
@@ -111,6 +140,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CAPTURE_SHA256: ${{ inputs.capture_sha256 }}
+          TOSKLIGHT_IMPRINT_CONTACT: ${{ secrets.TOSKLIGHT_IMPRINT_CONTACT }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: operator-manual-current
