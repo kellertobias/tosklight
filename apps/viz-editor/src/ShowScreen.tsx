@@ -6,10 +6,9 @@
  * is seen from both sides at once: its rig drawn on one half, and what describes it on paper — the
  * project, lighting designer, venue and contacts every printed page carries — on the other.
  */
-import { open } from "@tauri-apps/plugin-dialog";
 import { WindowHeader } from "@tosklight/ui/window-kit";
-import { useEffect, useRef, useState } from "react";
-import { CadProjectPanel, type CadPaperwork } from "./cad/CadProjectPanel";
+import { useState } from "react";
+import { ShowPaperwork } from "./ShowPaperwork";
 import { CadRigOverview } from "./cad/CadViewport";
 import type { CadSceneSnapshot } from "./cad/types";
 import { type DocumentSummary, documentSession } from "./document/session";
@@ -18,111 +17,6 @@ import { McpSettingsWorkspace } from "./McpSettingsWorkspace";
 import { ShowNameCaption } from "./ShowNameCaption";
 import { beginWindowDrag } from "./WindowChrome";
 import "./showScreen.css";
-
-function paperworkOf(document: DocumentSummary | null): CadPaperwork {
-	return {
-		project: document?.project ?? "",
-		lightingDesigner: document?.lightingDesigner ?? "",
-		venue: document?.venue ?? "",
-		contactEmail: document?.contactEmail ?? "",
-		contactPhone: document?.contactPhone ?? "",
-		showDate: document?.showDate ?? "",
-		showVersion: document?.showVersion ?? "",
-		companyLogo: document?.companyLogo ?? "",
-	};
-}
-
-const LOGO_FILTER = [{ name: "Logo image", extensions: ["png", "jpg", "jpeg", "webp"] }];
-
-/** The show's paperwork, edited as a draft and saved into the show on request. */
-function ShowPaperwork({
-	document,
-	onDocument,
-	onError,
-}: {
-	document: DocumentSummary | null;
-	onDocument: (document: DocumentSummary) => void;
-	onError: (reason: unknown) => void;
-}) {
-	const [draft, setDraft] = useState(() => paperworkOf(document));
-	const [saving, setSaving] = useState(false);
-	const [status, setStatus] = useState("");
-	const previousDocument = useRef(document);
-	useEffect(() => {
-		const previous = previousDocument.current;
-		previousDocument.current = document;
-		const before = paperworkOf(previous);
-		const next = paperworkOf(document);
-		const sameShow = previous?.showId === document?.showId;
-		// Rig counts/save time do not replace paperwork. An external paperwork edit updates a
-		// clean form, while an operator's unsaved fields survive changes to this same show.
-		if (sameShow && JSON.stringify(before) === JSON.stringify(next)) return;
-		setDraft((current) => (
-			!sameShow || JSON.stringify(current) === JSON.stringify(before) ? next : current
-		));
-	}, [document]);
-
-	if (!document)
-		return (
-			<section className="viz-show-paperwork" aria-label="Show information">
-				<p>Open or create a show to describe it.</p>
-			</section>
-		);
-	return (
-		<section className="viz-show-paperwork" aria-label="Show information">
-			<CadProjectPanel
-				paperwork={draft}
-				documentInfo={document}
-				saving={saving}
-				status={status}
-				onUploadLogo={async () => {
-					const path = await open({ multiple: false, filters: LOGO_FILTER });
-					if (typeof path !== "string") return;
-					setStatus("Reading logo…");
-					try {
-						const logo = await documentSession.readCompanyLogo(path);
-						setDraft((current) => ({ ...current, companyLogo: JSON.stringify(logo) }));
-						setStatus("Logo ready. Save project info to keep it in the show.");
-					} catch (reason) {
-						setStatus("");
-						onError(reason);
-					}
-				}}
-				onRemoveLogo={() => {
-					setDraft((current) => ({ ...current, companyLogo: "" }));
-					setStatus("Logo removed. Save project info to keep the change.");
-				}}
-				onMakeDefault={async () => {
-					try {
-						await documentSession.saveLightingDesignerDefault({
-							lightingDesigner: draft.lightingDesigner,
-							contactPhone: draft.contactPhone,
-							contactEmail: draft.contactEmail,
-							companyLogo: draft.companyLogo,
-						});
-						setStatus("Saved as the lighting designer for new shows on this computer.");
-					} catch (reason) {
-						onError(reason);
-					}
-				}}
-				onChange={(field, value) =>
-					setDraft((current) => ({ ...current, [field]: value }))
-				}
-				onSave={async () => {
-					setSaving(true);
-					try {
-						onDocument(await documentSession.savePaperwork(draft));
-						setStatus("");
-					} catch (reason) {
-						onError(reason);
-					} finally {
-						setSaving(false);
-					}
-				}}
-			/>
-		</section>
-	);
-}
 
 export function ShowScreen({
 	document,
@@ -194,11 +88,7 @@ export function ShowScreen({
 						) : (
 							<div className="viz-show-rig-overview is-empty" aria-hidden="true" />
 						)}
-						<ShowPaperwork
-							document={document}
-							onDocument={onDocument}
-							onError={onError}
-						/>
+						<ShowPaperwork document={document} onDocument={onDocument} onError={onError} />
 					</div>
 				</FileBar>
 			)}

@@ -57,7 +57,8 @@ export function CadProjectPanel({
 	saving,
 	status,
 	onChange,
-	onSave,
+	error,
+	onRetry,
 	onUploadLogo,
 	onRemoveLogo,
 	onMakeDefault,
@@ -68,7 +69,8 @@ export function CadProjectPanel({
 	/** What the last logo or default action did, so none of them is silent. */
 	status?: string;
 	onChange(field: TextField, value: string): void;
-	onSave(): void;
+	error?: string | null;
+	onRetry(): void;
 	onUploadLogo(): void;
 	onRemoveLogo(): void;
 	onMakeDefault(): void;
@@ -148,9 +150,8 @@ export function CadProjectPanel({
 					{status}
 				</p>
 			) : null}
-			<Button disabled={saving} onClick={onSave}>
-				{saving ? "Saving…" : "Save project info"}
-			</Button>
+            <p role="status">{saving ? "Saving project information…" : error ? "Changes are not saved." : "Project information saves automatically."}</p>
+            {error ? <div role="alert"><p>{error}</p><Button onClick={onRetry}>Retry saving project information</Button></div> : null}
 		</section>
 	);
 }

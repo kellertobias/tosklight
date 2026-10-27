@@ -27,7 +27,7 @@ import {
 	TITLE_W,
 } from "./printLayout";
 import { distance, n, path, text, titleMark } from "./printPdfOps";
-import { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleEntries } from "./printTitleBlock";
+import { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleSeparatorY, printTitleEntries } from "./printTitleBlock";
 import { titleText } from "./printTitleText";
 import {
 	entityPlanGeometry,
@@ -267,11 +267,14 @@ function furnitureCommands(
 		"0.08 G",
 		`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re S`,
 		`${n(tx + PRINT_TITLE_DIVIDER_X)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
-		...titleMark(parseCompanyLogo(info.companyLogo), tx + PRINT_TITLE_MARK.x, BORDER + PRINT_TITLE_MARK.y),
+		`${n(tx)} ${n(BORDER + printTitleSeparatorY(page, info))} ${n(PRINT_TITLE_DIVIDER_X)} 0 re S`,
+		...titleMark(parseCompanyLogo(info.companyLogo), tx + PRINT_TITLE_MARK.x, BORDER + PRINT_TITLE_MARK.y, PRINT_TITLE_MARK.size),
 		"0.08 0.08 0.08 rg",
-		...printTitleEntries(page, info).map((entry) => titleText(
-			entry.value, tx + entry.x, BORDER + entry.y, entry.size, entry.width, entry.bold,
-		)),
+		...printTitleEntries(page, info).flatMap((entry) => [
+			entry.muted ? "0.45 0.45 0.45 rg" : "0.08 0.08 0.08 rg",
+			titleText(entry.value, tx + entry.x, BORDER + entry.y, entry.size, entry.width, entry.bold),
+		]),
+		"0.08 0.08 0.08 rg",
 		titleText(
 			`Scale 1:${printScaleDenominator(page)} / Grid ${distance(frame.grid)}`,
 			BORDER + 5, BORDER + 8, 7, tx - BORDER - 10,

@@ -32,9 +32,11 @@ cancels. The filename stays unchanged. For a document following Control, this lo
 not rename the desk's library entry.
 
 Under **Show information**, enter the project, venue, date, version and lighting designer's
-contact details, then press **Save project info**. These details appear in printed title blocks.
+contact details. Edits save automatically to the open show and appear in printed title blocks.
+Wait for **Saving project information…** to finish before closing the document. A failed save keeps
+your draft and offers **Retry saving project information**.
 **Upload logo** accepts PNG, JPEG or WebP up to 10 MB. **Replace logo** and **Remove logo** are also
-saved with **Save project info**. **Make Default** keeps the designer details and logo on this
+saved automatically. **Make Default** keeps the designer details and logo on this
 computer for future **New Show** documents; it does not change existing shows.
 
 ## Stay in step with Control
@@ -296,10 +298,15 @@ rotation are saved in the portable show document and travel with **Save As**. Ex
 from this computer are adopted once when the document has no saved pages. Wait for page saving
 to finish before exporting; a failed save offers **Retry saving pages**.
 
-The compact white title block prints the page title above the project or show name, followed
-by **Generated with ToskLight Architect**. It includes the export's **Printed** timestamp,
-fixture and universe counts, scale, and any supplied designer contact details. The scale also
-appears in the separate left footer. The default branding uses a black vector mark on white.
+Use **Delete page** to remove the selected sheet. **Fixed scale** locks a plan to its **Scale 1:**
+denominator, including after paper rotation. The frame can still move; unlock it to resize freely.
+
+The title block prints the page title above the project or show name, then the venue and
+lighting designer's details. Missing phone and email rows are omitted. The right side holds
+the **Printed** timestamp, fixture and universe counts, scale and logo. A gray footer identifies
+ToskLight Architect and www.tosklight.de. The scale also appears in the separate left footer.
+The application shows white text on a dark block; PDF output uses black text on white.
+The default vector logo retains its blue accent in both.
 
 Top plans place the audience at the bottom; elevations look from their named direction. The
 viewport's orientation mark follows a rotated plan. Lens direction indicators show the fixtures'

@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use viz_document::PlanningDocument;
 use viz_document::{
     LiveDmxInputs, ManagedFallbackReference, MediaLayoutOutcome, MediaLayoutSnapshot,
     MediaObjectIntent,
 };
-use viz_document::{PaperworkMetadata, PlanningDocument};
 use viz_planning::SceneSource;
 
 /// The open document, shared with the visualizer.
@@ -71,21 +71,6 @@ pub struct DocumentSummary {
     pub company_logo: String,
     pub last_saved_at: u64,
     pub universe_count: usize,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PaperworkInput {
-    pub lighting_designer: String,
-    pub show_version: String,
-    pub venue: String,
-    pub contact_email: String,
-    pub contact_phone: String,
-    pub project: String,
-    pub show_date: String,
-    /// Absent from a window that predates logos, which leaves no logo.
-    #[serde(default)]
-    pub company_logo: String,
 }
 
 /// One fixture profile the operator can patch from.
@@ -393,7 +378,7 @@ impl Session {
     }
 }
 
-fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
+pub(crate) fn summarize(document: &PlanningDocument) -> Answer<DocumentSummary> {
     let snapshot = document
         .patch_snapshot()
         .map_err(|error| error.to_string())?;
@@ -498,32 +483,6 @@ pub fn open_document(
 #[tauri::command]
 pub fn document_summary(session: tauri::State<'_, Session>) -> Answer<Option<DocumentSummary>> {
     session.source.with(summarize).transpose()
-}
-
-#[tauri::command]
-pub fn save_document_paperwork(
-    app: tauri::AppHandle,
-    window: tauri::Window,
-    session: tauri::State<'_, Session>,
-    paperwork: PaperworkInput,
-) -> Answer<DocumentSummary> {
-    let summary = session.change(|document| {
-        document
-            .save_paperwork_metadata(&PaperworkMetadata {
-                lighting_designer: paperwork.lighting_designer,
-                show_version: paperwork.show_version,
-                venue: paperwork.venue,
-                contact_email: paperwork.contact_email,
-                contact_phone: paperwork.contact_phone,
-                project: paperwork.project,
-                show_date: paperwork.show_date,
-                company_logo: paperwork.company_logo,
-            })
-            .map_err(|error| error.to_string())?;
-        summarize(document)
-    })?;
-    announce_document_change(&app, &window)?;
-    Ok(summary)
 }
 
 /// Portable Art-Net and sACN receiver intent for the current planning document.

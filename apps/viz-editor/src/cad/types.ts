@@ -263,6 +263,8 @@ export interface CadPrintPage {
 	rotationQuarterTurns: number;
 	centreMillimetres: [number, number];
 	widthMillimetres: number;
+	/** An explicit 1:N scale locks frame resizing; absent permits free framing. */
+	fixedScaleDenominator?: number;
 	included: boolean;
 	orientation: "landscape" | "portrait";
 	showFixtureIds: boolean;

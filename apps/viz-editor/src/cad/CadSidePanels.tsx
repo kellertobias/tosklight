@@ -13,7 +13,7 @@ import {
 } from "@tosklight/ui";
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
-import { withPageViewRotation } from "./printFrameGeometry";
+import { CadPrintPageSettings } from "./CadPrintPageSettings";
 import { CadTextInfo } from "./CadTextInfo";
 import { duplicateSelection } from "./cadDuplicate";
 import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
@@ -151,35 +151,7 @@ function PlansPanel({
 					<p>Add a page from any view.</p>
 				)}
 			</div>
-			{selected && selected.kind !== "fixture_list" ? (
-				<section className="cad-print-page-settings" aria-label="Selected page settings">
-					<label>
-						Page title
-						<input aria-label="Page title" value={selected.name} maxLength={160}
-							onChange={(event) => printPages.change(selected.id, { name: event.currentTarget.value })} />
-					</label>
-					<Button onClick={() => printPages.rotate(selected.id)}>Rotate page</Button>
-					{selected.view === "top_down" ? (
-						<label>
-							View rotation
-							<select
-								aria-label="Page view rotation"
-								value={selected.rotationQuarterTurns ?? 0}
-								onChange={(event) =>
-									printPages.change(
-										selected.id,
-										withPageViewRotation(selected, Number(event.currentTarget.value)),
-									)
-								}
-							>
-								{[0, 1, 2, 3].map((rotation) => (
-									<option key={rotation} value={rotation}>{rotation * 90}°</option>
-								))}
-							</select>
-						</label>
-					) : null}
-				</section>
-			) : null}
+			{selected ? <CadPrintPageSettings page={selected} printPages={printPages} /> : null}
 			<Button
 				className="cad-export-pdf"
 				disabled={exporting || printPages.busy || !!printPages.error || !pages.some((page) => page.included)}

@@ -1,12 +1,13 @@
 import { useRef } from "react";
 import { pageFrameGeometry, pageFrameDelta } from "./printFrameGeometry";
-import architectIconUrl from "../../../../assets/branding/tosklight-icon-print-mono.svg";
+import architectIconUrl from "../../../../assets/branding/tosklight-icon-print-dark.svg";
 import { companyLogoUrl, parseCompanyLogo } from "../document/companyLogo";
 import { PrintPageLabels, PrintPageSettings } from "./CadPrintPageParts";
 import {
 	type CadPrintDocumentInfo,
 	PRINT_TITLE_MARK,
 	PRINT_TITLE_DIVIDER_X,
+	printTitleSeparatorY,
 	printTitleEntries,
 	fitTitleText,
 	PRINT_BORDER_MM,
@@ -56,6 +57,7 @@ function usePrintFrameInteraction({
 	} | null>(null);
 
 	function begin(gesture: FrameGesture, event: React.PointerEvent<HTMLElement>) {
+		if (gesture === "scale" && event.button !== 1 && page.fixedScaleDenominator !== undefined) return;
 		interaction.current = {
 			type: event.button === 1 ? "pan" : gesture,
 			start: [event.clientX, event.clientY],
@@ -109,7 +111,7 @@ function usePrintFrameInteraction({
 	return { begin, move, stop };
 }
 
-/** The same compact, white title block as the PDF, in the same point coordinates. */
+/** Screen paperwork uses the same geometry as print with white text on a dark ground. */
 function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | "documentInfo">) {
 	const info: CadPrintDocumentInfo = {
 		showName: "", lightingDesigner: "", showVersion: "", venue: "", contactEmail: "",
@@ -119,17 +121,18 @@ function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | 
 	const logo = parseCompanyLogo(info.companyLogo);
 	return (
 		<svg className="cad-print-title-block" viewBox={`0 0 ${TITLE_W} ${TITLE_H}`} role="img" aria-label={`${page.name} information`}>
-			<rect x="0" y="0" width={TITLE_W} height={TITLE_H} fill="white" stroke="#141414" strokeWidth="0.9" />
-			<line x1={PRINT_TITLE_DIVIDER_X} x2={PRINT_TITLE_DIVIDER_X} y1="0" y2={TITLE_H} stroke="#141414" strokeWidth="0.9" />
+			<rect x="0" y="0" width={TITLE_W} height={TITLE_H} fill="#0b0d10" stroke="#f5f5f5" strokeWidth="0.9" />
+			<line x1={PRINT_TITLE_DIVIDER_X} x2={PRINT_TITLE_DIVIDER_X} y1="0" y2={TITLE_H} stroke="#f5f5f5" strokeWidth="0.9" />
+			<line x1="0" x2={PRINT_TITLE_DIVIDER_X} y1={TITLE_H - printTitleSeparatorY(page, info)} y2={TITLE_H - printTitleSeparatorY(page, info)} stroke="#f5f5f5" strokeWidth="0.9" />
 			<image href={logo ? companyLogoUrl(logo) : architectIconUrl}
-				aria-label={logo ? "Company logo" : "ToskLight monochrome vector logo"}
+				aria-label={logo ? "Company logo" : "ToskLight vector logo with blue accent"}
 				x={PRINT_TITLE_MARK.x} y={TITLE_H - PRINT_TITLE_MARK.y - PRINT_TITLE_MARK.size}
 				width={PRINT_TITLE_MARK.size} height={PRINT_TITLE_MARK.size} preserveAspectRatio="xMidYMid meet" />
 			{printTitleEntries(page, info).map((entry, index) => {
 				const fitted = fitTitleText(entry.value, entry.size, entry.width, entry.bold);
 				return <text key={`${index}:${entry.value}`} x={entry.x} y={TITLE_H - entry.y}
 					fontSize={fitted.size} fontWeight={entry.bold ? "bold" : "normal"}
-					fontFamily="Helvetica, Arial, sans-serif" fill="#141414">{fitted.label}</text>;
+					fontFamily="Helvetica, Arial, sans-serif" fill={entry.muted ? "#a0a0a0" : "#f5f5f5"}>{fitted.label}</text>;
 			})}
 		</svg>
 	);
@@ -259,7 +262,9 @@ export function PrintFrame({
 			<button
 				type="button"
 				className="cad-print-scale"
-				aria-label={`Scale ${page.name}`}
+				aria-label={page.fixedScaleDenominator === undefined ? `Scale ${page.name}` : `Scale locked at 1:${page.fixedScaleDenominator}`}
+				disabled={page.fixedScaleDenominator !== undefined}
+				title={page.fixedScaleDenominator === undefined ? "Resize print frame" : "Disable Fixed scale in Plans to resize this page"}
 				onPointerDown={grab("scale")}
 				onPointerMove={move}
 				onPointerUp={stop}

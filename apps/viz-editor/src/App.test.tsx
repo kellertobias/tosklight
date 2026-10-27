@@ -604,37 +604,14 @@ describe("the Viz editor window", () => {
 				.compareDocumentPosition(halves as Element) &
 				Node.DOCUMENT_POSITION_FOLLOWING,
 		).toBeTruthy();
-		// The show's metadata is no longer a panel of the CAD screen.
-		// On a loaded CI runner the document summary can still arrive after the first edit and
-		// replace the draft with what the show says, so edit and save until the save carries it.
-		const savedDesigner = () =>
-			invoke.mock.calls.some(
-				([command, args]) =>
-					command === "save_document_paperwork" &&
-					(args as { paperwork?: { lightingDesigner?: string } })?.paperwork
-						?.lightingDesigner === "Tobias Keller",
-			);
-		await waitFor(
-			() => {
-				if (!savedDesigner()) {
-					fireEvent.change(
-						within(information).getByLabelText("Lighting designer name"),
-						{ target: { value: "Tobias Keller" } },
-					);
-					fireEvent.click(
-						within(information).getByRole("button", {
-							name: "Save project info",
-						}),
-					);
-				}
-				expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
-					paperwork: expect.objectContaining({
-						lightingDesigner: "Tobias Keller",
-					}),
-				});
-			},
-			{ timeout: 5_000 },
-		);
+		fireEvent.change(within(information).getByLabelText("Lighting designer name"), {
+			target: { value: "Tobias Keller" },
+		});
+		expect(within(information).queryByRole("button", { name: "Save project info" })).toBeNull();
+		await waitFor(() => expect(invoke).toHaveBeenCalledWith("save_document_paperwork", {
+			showId: SHOW_ID,
+			paperwork: expect.objectContaining({ lightingDesigner: "Tobias Keller" }),
+		}));
 	});
 
 	it("shows the layers the document itself carries", async () => {

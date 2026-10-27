@@ -3,27 +3,27 @@
  * document that carries the page streams. No PDF library is involved, so every helper here emits
  * content-stream syntax directly.
  */
-import architectIconSvg from "../../../../assets/branding/tosklight-icon-print-mono.svg?raw";
+import architectIconSvg from "../../../../assets/branding/tosklight-icon-print-light.svg?raw";
 import { type CompanyLogo, companyLogoHex } from "../document/companyLogo";
 import type { PrintFontSet } from "./printFonts";
 import type { PlanPoint } from "./projection";
 
-export function mark(x: number, y: number) {
+export function mark(x: number, y: number, box = 52) {
 	const cyanPath = svgIconPath(0);
 	const whitePath = svgIconPath(1);
-	const scale = 50 / 1024;
+	const scale = (box - 2) / 1024;
 	return [
 		"1 1 1 rg",
-		`${n(x)} ${n(y)} 52 52 re f`,
+		`${n(x)} ${n(y)} ${n(box)} ${n(box)} re f`,
 		"q",
-		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 51)} cm`,
-		"0 0 0 rg",
+		`${scale.toFixed(8)} 0 0 ${(-scale).toFixed(8)} ${n(x + 1)} ${n(y + box - 1)} cm`,
+		"0 0.71373 1 rg",
 		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
 		"2.27038 0 0 2.27038 479.14 600.211 cm",
 		`${cyanPath} f`,
 		"Q",
 		"q",
-		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 51)} cm`,
+		`${scale.toFixed(8)} 0 0 ${(-scale).toFixed(8)} ${n(x + 1)} ${n(y + box - 1)} cm`,
 		"0 0 0 rg",
 		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
 		"2.27038 0 0 2.27038 489.721 673.347 cm",
@@ -36,9 +36,8 @@ export function mark(x: number, y: number) {
  * The title block's corner mark: the company logo when the show has one, fitted into the same
  * 52-point square and kept in proportion, and the ToskLight mark otherwise.
  */
-export function titleMark(logo: CompanyLogo | null, x: number, y: number) {
-	if (!logo) return mark(x, y);
-	const box = 52;
+export function titleMark(logo: CompanyLogo | null, x: number, y: number, box = 52) {
+	if (!logo) return mark(x, y, box);
 	const scale = Math.min(box / logo.width, box / logo.height);
 	const width = logo.width * scale;
 	const height = logo.height * scale;
@@ -53,8 +52,7 @@ export function titleMark(logo: CompanyLogo | null, x: number, y: number) {
 export function svgIconPath(layer: number) {
 	const matches = [
 		...architectIconSvg.matchAll(/<path d="([^"]+)" style="fill:([^;]+);"/g),
-	]
-		.filter((match) => match[2] === "black");
+	];
 	if (!matches[layer])
 		throw new Error(
 			`ToskLight application SVG is missing its ${layer} vector path`,

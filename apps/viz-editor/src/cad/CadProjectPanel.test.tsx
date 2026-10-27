@@ -26,7 +26,7 @@ function paperwork(overrides: Partial<CadPaperwork> = {}): CadPaperwork {
 function setup(overrides: Partial<CadPaperwork> = {}) {
 	const handlers = {
 		onChange: vi.fn(),
-		onSave: vi.fn(),
+		onRetry: vi.fn(),
 		onUploadLogo: vi.fn(),
 		onRemoveLogo: vi.fn(),
 		onMakeDefault: vi.fn(),

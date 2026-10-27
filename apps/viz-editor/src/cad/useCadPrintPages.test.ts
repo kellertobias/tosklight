@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { underlaysForPage } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
 import { restorePrintPages, useCadPrintPages } from "./useCadPrintPages";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, render, renderHook, waitFor } from "@testing-library/react";
 import { printPageSession, type PrintPageSnapshot } from "./printPages";
-import type { CadPrintPage } from "./types";
+import type { CadPrintPage, CadSceneSnapshot } from "./types";
+import { createElement } from "react";
+import { PrintFrame } from "./CadPrintFrame";
+import { buildCadPdf } from "./print";
+import { PT_MM, printPageScale, withFixedPrintScale } from "./printLayout";
 
 const PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v2";
 const LEGACY_PRINT_KEY = "tosklight:viz-editor:cad-print-pages:v1";
@@ -185,6 +189,70 @@ describe("portable show-owned print pages", () => {
 		unmount();
 		const reopened = renderHook(() => useCadPrintPages("first"));
 		await waitFor(() => expect(reopened.result.current.pages).toEqual([expected]));
+	});
+
+	it("deletes pages with next, previous and empty selection, and does not resurrect the last page", async () => {
+		const pages = ["a", "b", "c"].map((id) => ({ ...fullPage, id }));
+		native.set("first", pages);
+		const { result, unmount } = renderHook(() => useCadPrintPages("first"));
+		await waitFor(() => expect(result.current.ready).toBe(true));
+		act(() => result.current.select("b"));
+		act(() => result.current.remove("b"));
+		expect(result.current.selectedId).toBe("c");
+		act(() => result.current.remove("c"));
+		expect(result.current.selectedId).toBe("a");
+		act(() => result.current.remove("a"));
+		expect(result.current.selectedId).toBeNull();
+		await waitFor(() => expect(result.current.busy).toBe(false));
+		expect(native.get("first")).toEqual([]);
+		unmount();
+		const reopened = renderHook(() => useCadPrintPages("first"));
+		await waitFor(() => expect(reopened.result.current.ready).toBe(true));
+		expect(reopened.result.current.pages).toEqual([]);
+	});
+
+	it("persists an exact fixed scale, retaining it through orientation and frame width edits", async () => {
+		native.set("first", [fullPage]);
+		const { result, unmount } = renderHook(() => useCadPrintPages("first"));
+		await waitFor(() => expect(result.current.ready).toBe(true));
+		act(() => result.current.change(fullPage.id, withFixedPrintScale(fullPage, 75)));
+		expect(printPageScale(result.current.pages[0])).toBeCloseTo(1 / 75, 12);
+		act(() => result.current.rotate(fullPage.id));
+		expect(result.current.pages[0].orientation).toBe("portrait");
+		act(() => result.current.change(fullPage.id, { widthMillimetres: 999 }));
+		expect(printPageScale(result.current.pages[0])).toBeCloseTo(1 / 75, 12);
+		await waitFor(() => expect(result.current.busy).toBe(false));
+		unmount();
+		const reopened = renderHook(() => useCadPrintPages("first"));
+		await waitFor(() => expect(reopened.result.current.ready).toBe(true));
+		expect(reopened.result.current.pages[0].fixedScaleDenominator).toBe(75);
+		expect(printPageScale(reopened.result.current.pages[0])).toBeCloseTo(1 / 75, 12);
+	});
+
+	it("normalizes inconsistent stored fixed-scale width for both frame and PDF geometry", async () => {
+		const stored = { ...fullPage, rotationQuarterTurns: 0, fixedScaleDenominator: 75, widthMillimetres: 5000 };
+		native.set("first", [stored]);
+		const { result } = renderHook(() => useCadPrintPages("first"));
+		await waitFor(() => expect(result.current.ready).toBe(true));
+		const loaded = result.current.pages[0];
+		expect(loaded.widthMillimetres).toBe(withFixedPrintScale(stored, 75).widthMillimetres);
+		expect(printPageScale(loaded)).toBeCloseTo(1 / 75, 12);
+		render(createElement(PrintFrame, {
+			page: loaded, entities: [], underlays: [], camera: { pan: [0, 0], zoom: 0.1 },
+			selected: true, onSelect: vi.fn(), onChange: vi.fn(), onCamera: vi.fn(),
+		}));
+		expect((document.querySelector(".cad-print-frame") as HTMLElement).style.width).toBe(`${loaded.widthMillimetres * 0.1}px`);
+		const scene: CadSceneSnapshot = { showId: "first", sceneRevision: 1, selectionRevision: 1, selectedIds: [], attachments: [], drawings: [], entities: [] };
+		const measuringLine: CadUnderlay = {
+			id: "measure", name: "7500 mm reference", sourceFormat: "dxf", view: "top_down", visible: true,
+			originMillimetres: [0, 0], scale: 1, rotationDegrees: 0, units: "mm",
+			geometry: { units: "mm", extentsMillimetres: [0, 0, 7500, 0], polylines: [{ points: [[0, 0], [7500, 0]], closed: false, layer: "reference" }] },
+		};
+		const pdf = new TextDecoder().decode(buildCadPdf(scene, [loaded], undefined, [measuringLine]));
+		expect(pdf).toContain("1:75");
+		// 7500 world millimetres at 1:75 must occupy 100 physical millimetres in the PDF.
+		const line = pdf.split("\n").find((command) => command.match(/^-?[\d.]+ -?[\d.]+ m -?[\d.]+ -?[\d.]+ l S$/) && Math.abs(Number(command.split(" ")[3]) - Number(command.split(" ")[0]) - 100 * PT_MM) < 0.02);
+		expect(line).toBeDefined();
 	});
 
 	it("coalesces pointer updates and preserves changes made in the same React batch", async () => {

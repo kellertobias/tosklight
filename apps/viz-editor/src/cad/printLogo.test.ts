@@ -68,6 +68,8 @@ describe("the company logo on printed pages", () => {
 	it("keeps the ToskLight mark and embeds no image when the show has no logo", () => {
 		const document = pdf();
 		expect(document).not.toContain("/Subtype /Image");
+		expect(document).toContain("0 0.71373 1 rg");
+		expect(document).toContain("0 0 0 rg");
 		expect(document).not.toContain("/CompanyLogo");
 	});
 });

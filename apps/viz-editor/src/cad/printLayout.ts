@@ -10,7 +10,7 @@ import {
 export const PT_MM = 72 / 25.4;
 export const PRINT_BORDER_MM = 7;
 export const PRINT_TITLE_WIDTH_MM = 116.42;
-export const PRINT_TITLE_HEIGHT_MM = 24;
+export const PRINT_TITLE_HEIGHT_MM = 29;
 export const BORDER = PRINT_BORDER_MM * PT_MM;
 export const TITLE_H = PRINT_TITLE_HEIGHT_MM * PT_MM;
 export const TITLE_W = PRINT_TITLE_WIDTH_MM * PT_MM;
@@ -47,8 +47,21 @@ export function printPageScale(page: Pick<CadPrintPage, "widthMillimetres" | "or
 	return fittedDrawingWidth(page) / page.widthMillimetres;
 }
 
-export function printScaleDenominator(page: Pick<CadPrintPage, "widthMillimetres" | "orientation">) {
-	return Math.max(1, Math.round(1 / printPageScale(page)));
+/** Set an exact paper-to-plan ratio; the same fitted drawing width drives PDF projection. */
+export function withFixedPrintScale(page: CadPrintPage, denominator: number | undefined): CadPrintPage {
+	if (denominator === undefined) return { ...page, fixedScaleDenominator: undefined };
+	if (!Number.isFinite(denominator) || denominator < 1 || denominator > 1_000_000) return page;
+	return { ...page, fixedScaleDenominator: denominator, widthMillimetres: fittedDrawingWidth(page) * denominator };
+}
+
+/** Enforce a stored fixed scale for every editing path, including old frame gestures. */
+export function changePrintPage(page: CadPrintPage, change: Partial<CadPrintPage>): CadPrintPage {
+	const next = { ...page, ...change };
+	return next.fixedScaleDenominator === undefined ? next : withFixedPrintScale(next, next.fixedScaleDenominator);
+}
+
+export function printScaleDenominator(page: Pick<CadPrintPage, "widthMillimetres" | "orientation" | "fixedScaleDenominator">) {
+	return page.fixedScaleDenominator ?? Math.max(1, Math.round(1 / printPageScale(page)));
 }
 
 export function printPageLayout(page: Pick<CadPrintPage, "orientation">) {

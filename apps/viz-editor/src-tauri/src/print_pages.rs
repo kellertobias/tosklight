@@ -103,6 +103,17 @@ fn validate(pages: &[CadPrintPage]) -> Answer<()> {
                 page.name
             ));
         }
+        if let Some(value) = page.extra.get("fixedScaleDenominator") {
+            if value
+                .as_f64()
+                .is_none_or(|scale| !scale.is_finite() || !(1.0..=1_000_000.0).contains(&scale))
+            {
+                return Err(format!(
+                    "Print page {} needs a fixed scale denominator between 1 and 1000000.",
+                    page.name
+                ));
+            }
+        }
         if let Some(cuts) = &page.cut_planes {
             if cuts
                 .near_millimetres

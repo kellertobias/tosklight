@@ -313,3 +313,19 @@
 	font-size: 12px;
 	line-height: 1.35;
 }
+
+.cad-print-page-settings > .cad-print-fixed-scale {
+	justify-content: flex-start;
+	min-height: 36px;
+}
+
+.cad-print-page-settings .cad-print-fixed-scale input {
+	width: 18px;
+	min-height: 18px;
+	flex: none;
+}
+
+.cad-print-scale:disabled {
+	cursor: default;
+	opacity: 0.45;
+}

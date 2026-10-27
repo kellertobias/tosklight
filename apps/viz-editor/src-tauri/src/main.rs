@@ -19,6 +19,7 @@ mod local_api;
 mod mcp;
 mod model_import;
 mod network_sources;
+mod paperwork;
 mod portable;
 mod print_pages;
 mod profile_update;
@@ -387,7 +388,7 @@ fn main() {
             verify::surface_ready,
             session::document_summary,
             session::startup_recovery::startup_recovery,
-            session::save_document_paperwork,
+            paperwork::save_document_paperwork,
             session::live_dmx_inputs,
             session::save_live_dmx_inputs,
             session::save_document_as,

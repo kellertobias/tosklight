@@ -3,6 +3,10 @@ import {
 	buildCadPdf,
 	printGridMillimetres,
 	printPageTitle,
+	printTitleEntries,
+	PRINT_TITLE_MARK,
+	PRINT_TITLE_DIVIDER_X,
+	printTitleSeparatorY,
 	printPageLayout,
 	printPageScale,
 	printScaleDenominator,
@@ -171,7 +175,7 @@ describe("CAD PDF export", () => {
 		expect(pdf.match(/\/Type \/Page\b/g)).toHaveLength(2);
 		expect(pdf).toContain(" re W n");
 		expect(pdf).toContain("ToskLight Architect");
-		expect(pdf).toContain("Festival");
+		expect(pdf).toContain("Summer Show");
 		expect(pdf).toContain("Alex Designer");
 		expect(pdf).toContain("Grand Hall");
 		expect(pdf).toContain("ID 1");
@@ -228,8 +232,8 @@ describe("CAD PDF export", () => {
 			expect(pdf).toContain("128 fixtures / 4 universes");
 			expect(pdf).toContain("tobias.keller@example.org");
 			expect(pdf).toContain("+49 1234 567890");
-			expect(pdf).toContain("Show date 2027-01-02");
-			expect(pdf).toContain("Version 2.4");
+			expect(pdf).toContain("Phone: +49 1234 567890");
+			expect(pdf).toContain("Email: tobias.keller@example.org");
 			expect(pdf).toContain("Scale 1:");
 			expect(pdf).not.toContain("0.02 0.71 1 rg");
 		} finally {
@@ -251,7 +255,7 @@ describe("CAD PDF export", () => {
 		const border = 7 * 72 / 25.4;
 		const titleLeft = widthPoints - border - titleWidthMillimetres * 72 / 25.4;
 		const fields = [...pdf.matchAll(/BT \/F[12] ([\d.]+) Tf ([\d.]+) ([\d.]+) Td \(([^\n]*)\) Tj ET/g)]
-			.filter((field) => Number(field[3]) < border + 24 * 72 / 25.4);
+			.filter((field) => Number(field[3]) < border + 29 * 72 / 25.4);
 		expect(fields.length).toBeGreaterThan(8);
 		for (const field of fields) {
 			const size = Number(field[1]);
@@ -261,7 +265,7 @@ describe("CAD PDF export", () => {
 			expect(y).toBeGreaterThan(border);
 			if (x > titleLeft) {
 				// Broad W glyphs are a useful worst-case check for field truncation.
-				const columnsEnd = x < titleLeft + 214 ? titleLeft + 208 : widthPoints - border - 6;
+				const columnsEnd = x < titleLeft + 219 ? titleLeft + 213 : widthPoints - border - 6;
 				const broadGlyphs = [...field[4]].filter((character) => character === "W").length;
 				expect(x + broadGlyphs * size * 0.944).toBeLessThan(columnsEnd);
 			} else {
@@ -269,6 +273,35 @@ describe("CAD PDF export", () => {
 				expect(x + field[4].length * size * 0.6).toBeLessThan(titleLeft);
 			}
 		}
+	});
+
+	it("orders title, project and venue above the divider and keeps contacts/footer clear of the right logo", () => {
+		const info = {
+			showName: "Festival", project: "Summer Show", lightingDesigner: "Alex Designer",
+			showVersion: "2.4", venue: "Grand Hall", showDate: "2027-01-02",
+			contactEmail: "tobias.keller@example.org", contactPhone: "+49 1234 567890",
+			lastSavedAt: 0, printedAt: 1_793_091_600, fixtureCount: 128, universeCount: 4,
+		};
+		const entries = printTitleEntries(page("Lighting Overview"), info);
+		expect(entries.slice(0, 3).map((entry) => entry.value)).toEqual(["Lighting Overview", "Summer Show / Festival", "Grand Hall"]);
+		const headings = entries.slice(0, 3);
+		for (const entry of headings) expect(entry.y).toBeGreaterThan(printTitleSeparatorY(page("Lighting Overview"), info));
+		const contacts = entries.filter((entry) => /^(Lighting Designer|Phone|Email):/.test(entry.value));
+		expect(contacts.map((entry) => entry.value)).toEqual(["Lighting Designer: Alex Designer", "Phone: +49 1234 567890", "Email: tobias.keller@example.org"]);
+		for (const entry of contacts) {
+			expect(entry.y + entry.size).toBeLessThan(printTitleSeparatorY(page("Lighting Overview"), info));
+			expect(entry.x + entry.width).toBeLessThan(PRINT_TITLE_DIVIDER_X);
+		}
+		const footer = entries.find((entry) => entry.muted);
+		expect(footer?.value).toBe("Generated with ToskLight Architect · www.tosklight.de");
+		expect((footer?.y ?? 0) + (footer?.size ?? 0)).toBeLessThan(contacts[2].y);
+		for (const entry of entries.filter((entry) => entry.x > PRINT_TITLE_DIVIDER_X)) {
+			expect(entry.y).toBeGreaterThan(PRINT_TITLE_MARK.y + PRINT_TITLE_MARK.size);
+		}
+		const blank = printTitleEntries(page("Page 1"), { ...info, lightingDesigner: "", venue: "", contactEmail: "", contactPhone: "" });
+		expect(blank[0].value).toBe("Summer Show");
+		expect(printTitleSeparatorY(page("Page 1"), info)).toBe(printTitleSeparatorY(page("Lighting Overview"), info) + 11);
+		expect(blank.some((entry) => /^(Lighting Designer|Phone|Email):/.test(entry.value))).toBe(false);
 	});
 
 	it("rotates an A4 page while retaining its drawing scale", () => {
@@ -282,7 +315,7 @@ describe("CAD PDF export", () => {
 			paperWidthMillimetres: 210,
 			paperHeightMillimetres: 297,
 			titleWidthMillimetres: 116.42,
-			titleHeightMillimetres: 24,
+			titleHeightMillimetres: 29,
 		});
 		const pdf = new TextDecoder().decode(buildCadPdf(scene, [portrait]));
 		expect(pdf).toContain("/MediaBox [0 0 595.28 841.89]");

@@ -2432,8 +2432,8 @@ body {
 	bottom: 0;
 	width: var(--cad-print-title-width);
 	height: var(--cad-print-title-height);
-	background: white;
-	color: #141414;
+	background: #0b0d10;
+	color: #f5f5f5;
 	overflow: hidden;
 }
 

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { printPageSession, type PrintPageSnapshot } from "./printPages";
 import { rotatePrintPage } from "./print";
+import { changePrintPage } from "./printLayout";
 import {
 	type CadPrintPage,
 	legacyTopDownPlanPoint,
@@ -93,7 +94,7 @@ export function rebasePrintPages(base: CadPrintPage[], local: CadPrintPage[], re
 	for (const page of local) {
 		if (!ids.has(page.id) && (!old.has(page.id) || JSON.stringify(old.get(page.id)) !== JSON.stringify(page))) merged.push(page);
 	}
-	return merged;
+	return merged.map((page) => changePrintPage(page, {}));
 }
 
 export interface CadPrintPages {
@@ -110,6 +111,7 @@ export interface CadPrintPages {
 	addFixtureList(): void;
 	change(id: string, change: Partial<CadPrintPage>): void;
 	rotate(id: string): void;
+	remove(id: string): void;
 }
 
 type PrintPageState = { showId: string | null; pages: CadPrintPage[] };
@@ -149,7 +151,7 @@ function connectPrintPagePersistence(
 	};
 	function accept(snapshot: PrintPageSnapshot) {
 		revision = snapshot.revision;
-		baseline = snapshot.pages ?? [];
+		baseline = (snapshot.pages ?? []).map((page) => changePrintPage(page, {}));
 		currentPages.current = baseline;
 		setState({ showId: currentShow, pages: baseline });
 	}
@@ -184,7 +186,7 @@ function connectPrintPagePersistence(
 			if (disposed) return;
 			const rebased = rebasePrintPages(baseline, currentPages.current, latest.pages ?? []);
 			revision = latest.revision;
-			baseline = latest.pages ?? [];
+			baseline = (latest.pages ?? []).map((page) => changePrintPage(page, {}));
 			currentPages.current = rebased;
 			setState({ showId: currentShow, pages: rebased });
 			pending = rebased;
@@ -331,9 +333,18 @@ export function useCadPrintPages(showId: string | null): CadPrintPages {
 		},
 		change(id, change) {
 			setPages((current) =>
-				current.map((page) => (page.id === id ? { ...page, ...change } : page)),
+				current.map((page) => (page.id === id ? changePrintPage(page, change) : page)),
 			);
 		},
+		remove(id) {
+			const existing = currentPages.current;
+			const index = existing.findIndex((page) => page.id === id);
+			if (index < 0 || writer.current?.showId !== showId) return;
+			const remaining = existing.filter((page) => page.id !== id);
+			setPages(() => remaining);
+			setSelectedId((selected) => selected === id ? remaining[Math.min(index, remaining.length - 1)]?.id ?? null : selected);
+		},
+
 		rotate(id) {
 			setPages((current) =>
 				current.map((page) => (page.id === id ? rotatePrintPage(page) : page)),

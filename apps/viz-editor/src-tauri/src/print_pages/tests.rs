@@ -8,7 +8,7 @@ fn page() -> CadPrintPage {
         "widthMillimetres":18000.0, "included":true, "orientation":"portrait",
         "showFixtureIds":true, "showDmxAddresses":true, "showMountingHardware":false,
         "cutPlanes":{"nearMillimetres":-8000.0,"farMillimetres":-5000.0},
-        "hiddenUnderlayIds":["section"], "futurePageOption":"preserved"
+        "hiddenUnderlayIds":["section"], "fixedScaleDenominator":75.0, "futurePageOption":"preserved"
     }))
     .unwrap()
 }
@@ -124,4 +124,17 @@ fn another_windows_stale_snapshot_cannot_overwrite_a_saved_page() {
     );
     drop(session);
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn invalid_fixed_scale_is_refused() {
+    let mut invalid = page();
+    invalid
+        .extra
+        .insert("fixedScaleDenominator".into(), json!(0));
+    assert!(
+        validate(&[invalid])
+            .unwrap_err()
+            .contains("fixed scale denominator")
+    );
 }

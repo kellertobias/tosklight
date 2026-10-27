@@ -496,7 +496,7 @@ export const documentSession = {
 		project: string;
 		showDate: string;
 		companyLogo?: string;
-	}) => invoke<DocumentSummary>("save_document_paperwork", { paperwork }),
+	}, showId: string) => invoke<DocumentSummary>("save_document_paperwork", { paperwork, showId }),
 	/** Read an image file and return the logo the show would keep: a fitted JPEG. */
 	readCompanyLogo: (path: string) =>
 		invoke<CompanyLogo>("read_company_logo", { path }),

@@ -130,6 +130,24 @@ describe("rotated print frame controls", () => {
 		expect(onChange).not.toHaveBeenCalled();
 	});
 
+	it("locks the physical resize handle at a fixed scale while the sheet remains movable", () => {
+		const onChange = vi.fn();
+		render(createElement(PrintFrame, {
+			page: page({ fixedScaleDenominator: 75 }), entities: [], underlays: [],
+			camera: { pan: [0, 0], zoom: 0.1 }, selected: true,
+			onSelect: vi.fn(), onChange, onCamera: vi.fn(),
+		}));
+		const handle = screen.getByRole("button", { name: "Scale locked at 1:75" });
+		expect(handle).toHaveProperty("disabled", true);
+		fireEvent.pointerDown(handle, { pointerId: 4, button: 0, clientX: 100, clientY: 100 });
+		fireEvent.pointerMove(handle, { pointerId: 4, clientX: 150, clientY: 150 });
+		expect(onChange).not.toHaveBeenCalled();
+		const frame = screen.getByText("Page 5").closest(".cad-print-frame") as HTMLElement;
+		fireEvent.pointerDown(frame, { pointerId: 5, button: 0, clientX: 100, clientY: 100 });
+		fireEvent.pointerMove(frame, { pointerId: 5, clientX: 120, clientY: 110 });
+		expect(onChange).toHaveBeenLastCalledWith({ centreMillimetres: [-800, 3400] });
+	});
+
 	it("resizes a portrait sheet through its rotated physical corner handle", () => {
 		const onChange = vi.fn();
 		render(createElement(PrintFrame, {
