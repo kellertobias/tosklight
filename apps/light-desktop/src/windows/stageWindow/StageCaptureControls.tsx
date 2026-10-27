@@ -1,3 +1,4 @@
+import { Button } from "@tosklight/ui";
 import { useModalKeyboardOwnership } from "@tosklight/ui/modals";
 import { isStageCaptureShortcut } from "./stageCaptureShortcut";
 import type { useStageCapture } from "./useStageCapture";
@@ -30,18 +31,18 @@ export function StageCaptureControls({ capture, followPreload }: {
 			if (!(event.target instanceof HTMLButtonElement) || !isStageCaptureShortcut(event, modalOwnsKeyboard())) return;
 			event.preventDefault(); event.stopPropagation(); void capture.start();
 		}}>
-			<button type="button" disabled={!capture.ready || capture.busy} onClick={() => { void capture.start(); }}
-				aria-label={`Render 4K ${followPreload ? "Follow Preload" : "Live"} image`}>Render 4K</button>
+			<Button type="button" disabled={!capture.ready || capture.busy} onClick={() => { void capture.start(); }}
+				aria-label={`Render 4K ${followPreload ? "Follow Preload" : "Live"} image`}>Render 4K</Button>
 			{!capture.available && <span>4K rendering requires native Stage.</span>}
 			{(capture.busy || capture.status) && <span role={failed ? "alert" : "status"} aria-live="polite">{progress(phase)}</span>}
-			{capture.busy && <button type="button" disabled={!capture.canCancel} onClick={() => { void capture.cancel(); }}>Cancel render</button>}
+			{capture.busy && <Button type="button" disabled={!capture.canCancel} onClick={() => { void capture.cancel(); }}>Cancel render</Button>}
 			{capture.status?.notice && <span role="status">{capture.status.notice}</span>}
 			{capture.error && <span role="alert">{capture.error}</span>}
 			{saved && <><code className="stage-capture-path">{saved}</code>
 				{capture.status?.engine && <span>Ultra · ToskLight · 3840 × 2160</span>}
 				{capture.status?.framing && <span>{capture.status.framing}</span>}
-				{capture.canOpenSaved && <><button type="button" onClick={() => { void capture.openSaved(false); }}>Open image</button>
-					<button type="button" onClick={() => { void capture.openSaved(true); }}>Reveal image</button></>}
+				{capture.canOpenSaved && <><Button type="button" onClick={() => { void capture.openSaved(false); }}>Open image</Button>
+					<Button type="button" onClick={() => { void capture.openSaved(true); }}>Reveal image</Button></>}
 			</>}
 		</div>
 	</>;
