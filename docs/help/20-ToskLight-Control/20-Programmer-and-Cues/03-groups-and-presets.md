@@ -6,7 +6,7 @@ Select fixtures, press `[REC]`, and choose a Group target or enter its number. N
 
 The Group Pool prominently highlights the live Group references selected for programming, including multiple Groups. The bottom-left fixture count is grey when none of the members are selected. When all members are selected, it shows only the total in white. When some members are selected, it shows selected/total, with the selected count in white and the remaining text grey. These counts also reflect frozen fixture selections without selecting the Group reference itself. Double-pressing a Group selects its current members as frozen fixtures. Clearing selection returns the count to grey.
 
-A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](01-command-line.md) for exact syntax.
+A Group reference remains connected to its source; dereference it when a frozen fixture list is required. Overwriting a Group from a selection made only of live Groups preserves their ordered references, so later source membership changes also reach the recorded Group. Derived Groups retain their ordering rule and source relationship. See [Command Line Reference](01-command-line.md) for exact syntax.
 
 Plain-click a Group to select its live membership. Double-press it quickly to select the current
 members as frozen fixtures. Right-clicking a populated Group is the pointer shortcut for `[SET]`

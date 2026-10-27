@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { planTransform } from "./planGeometry";
-import type { PlanGeometry } from "./projection";
+import type { PlanGeometry, PlanPoint } from "./projection";
 import { type CadEntity, projectPoint } from "./types";
 
 const UNTURNED: PlanGeometry = {
@@ -20,6 +20,7 @@ function element(rotationDegrees: [number, number, number]): CadEntity {
 	return {
 		id: "one",
 		logicalFixtureId: "one",
+		kind: "venue",
 		positionMillimetres: [0, 0, 0],
 		rotationDegrees,
 		sizeMillimetres: [1000, 1000, 1000],
@@ -34,7 +35,7 @@ function axes(
 	geometry: PlanGeometry = UNTURNED,
 ) {
 	const transform = planTransform(
-		element(rotationDegrees),
+		{ ...element(rotationDegrees), kind: geometry.source === "model_drawing" ? "fixture" : "venue" },
 		geometry,
 		view,
 		rotationQuarterTurns,
@@ -59,7 +60,7 @@ describe("an unturned element", () => {
 	});
 });
 
-describe("a lamp rolled 180 degrees about X", () => {
+describe("a physical venue slice rolled 180 degrees about X", () => {
 	it("hangs the other way up in an elevation, as it does in the Visualizer", () => {
 		// The operator's case: pointing down in 2D while pointing up in 3D, because the body
 		// symbol never received the roll and only the direction indicator did.
@@ -157,16 +158,45 @@ describe("a lamp whose drawing is read per side", () => {
 		).toEqual({ across: [0, 1], up: [-1, 0] });
 	});
 
-	it("foreshortens only the yaw no side's drawing could answer", () => {
-		// 45 degrees reads the side drawing, leaving half a quarter turn to foreshorten.
-		expect(axes([0, 0, 45], "front_to_back", 0, drawn(45)).across).toEqual([
-			0.707, 0,
-		]);
+	it("keeps the selected side full width when yaw lies out of the elevation plane", () => {
+		expect(axes([0, 0, 45], "front_to_back", 0, drawn(45)).across).toEqual([1, 0]);
 	});
 
-	it("keeps carrying roll, which no choice of drawing can express", () => {
-		expect(axes([180, 0, 90], "front_to_back", 0, drawn(90)).up).toEqual([
-			0, -1,
-		]);
+	it("does not flip a canonical front drawing for out-of-plane roll", () => {
+		expect(axes([180, 0, 90], "front_to_back", 0, drawn(90)).up).toEqual([0, 1]);
+	});
+});
+
+describe("canonical lamp drawings", () => {
+	const sheet = { ...UNTURNED, source: "model_drawing" } as PlanGeometry;
+	function lampAxes(rotation: [number, number, number], view: Parameters<typeof planTransform>[2], quarterTurns = 0) {
+		const transform = planTransform({ ...element(rotation), kind: "fixture" }, sheet, view, quarterTurns);
+		const round = (point: PlanPoint) => point.map((value) => (Math.round(value * 1000000) || 0) / 1000000);
+		return { across: round(transform([1, 0])), up: round(transform([0, 1])) };
+	}
+
+	it("keeps the ELP top drawing full size despite its 65.9 degree pitch and compound aim", () => {
+		expect(lampAxes([65.9, -13.5, 180], "top_down")).toEqual(lampAxes([0, 0, 180], "top_down"));
+	});
+
+	it("ignores rotations out of each view's plane", () => {
+		for (const view of ["top_down", "front_to_back", "back_to_front", "left_to_right", "right_to_left"] as const) {
+			const normal = view === "top_down" ? 2 : view === "front_to_back" || view === "back_to_front" ? 1 : 0;
+			const rotation: [number, number, number] = [67, 38, 24];
+			const inPlane: [number, number, number] = [0, 0, 0];
+			inPlane[normal] = rotation[normal];
+			expect(lampAxes(rotation, view)).toEqual(lampAxes(inPlane, view));
+		}
+	});
+
+	it("preserves lengths and perpendicular axes at every in-plane angle and page quarter turn", () => {
+		for (const view of ["top_down", "front_to_back", "back_to_front", "left_to_right", "right_to_left"] as const) {
+			for (const quarterTurns of [0, 1, 2, 3]) {
+				const { across, up } = lampAxes([67, 38, 24], view, quarterTurns);
+				expect(Math.hypot(...across)).toBeCloseTo(1, 3);
+				expect(Math.hypot(...up)).toBeCloseTo(1, 3);
+				expect(across[0] * up[0] + across[1] * up[1]).toBeCloseTo(0, 3);
+			}
+		}
 	});
 });

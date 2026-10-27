@@ -1374,3 +1374,18 @@ fn installed_manual_lens_never_overrides_a_live_zoom_channel() {
         reference.scene.emitters[0].field_angle_degrees
     );
 }
+
+#[test]
+fn a_profile_model_uses_the_same_hanging_dimensions_in_cad_and_the_renderer() {
+    let mut fixture = patched("led profile", ProfileOptics::default());
+    let profile = Arc::get_mut(&mut fixture.profile).unwrap();
+    profile.physical.width_millimetres = Some(259.0);
+    profile.physical.height_millimetres = Some(254.0);
+    profile.physical.depth_millimetres = Some(648.0);
+    let chosen = crate::profile_default_model(profile, Some(fixture.mode_id)).unwrap();
+    let plan = compile(&[fixture]);
+    let instance = &plan.scene.fixtures[0];
+    assert_eq!(instance.body.size, chosen.body_size_metres);
+    let model = &plan.scene.models[instance.model.unwrap() as usize];
+    assert!((model.scale_to(instance.body.size) - chosen.scale).abs() < 1e-6);
+}

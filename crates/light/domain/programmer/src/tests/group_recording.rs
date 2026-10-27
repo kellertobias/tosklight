@@ -185,6 +185,126 @@ fn live_and_single_gesture_sources_retain_relationships_and_div_rule() {
 }
 
 #[test]
+fn positive_group_union_retains_order_and_follows_future_source_membership() {
+    let scenario = CaptureScenario::new();
+    let mut groups = HashMap::from([
+        (
+            "first".into(),
+            GroupDefinition {
+                id: "first".into(),
+                fixtures: vec![scenario.fixtures[2], scenario.fixtures[0]],
+                ..Default::default()
+            },
+        ),
+        (
+            "second".into(),
+            GroupDefinition {
+                id: "second".into(),
+                fixtures: vec![scenario.fixtures[0], scenario.fixtures[1]],
+                ..Default::default()
+            },
+        ),
+    ]);
+    scenario.registry.select_expression(
+        scenario.session,
+        vec![
+            scenario.fixtures[2],
+            scenario.fixtures[0],
+            scenario.fixtures[1],
+        ],
+        SelectionExpression::Sources {
+            items: ["first", "second", "first"]
+                .into_iter()
+                .map(|id| SelectionReference::LiveGroup {
+                    group_id: id.into(),
+                })
+                .collect(),
+        },
+    );
+    let recorded = scenario.capture().overwrite("union", None, &groups);
+    assert_eq!(
+        recorded.source,
+        Some(GroupFixtureSource::References {
+            references: ["first", "second"]
+                .into_iter()
+                .map(|id| GroupReference {
+                    group_id: id.into(),
+                    rule: SelectionRule::All,
+                })
+                .collect(),
+        })
+    );
+    groups.insert("union".into(), recorded);
+    assert_eq!(
+        resolve_group("union", &groups).unwrap(),
+        vec![
+            scenario.fixtures[2],
+            scenario.fixtures[0],
+            scenario.fixtures[1]
+        ]
+    );
+    groups.get_mut("first").unwrap().fixtures = vec![scenario.fixtures[3], scenario.fixtures[1]];
+    assert_eq!(
+        resolve_group("union", &groups).unwrap(),
+        vec![
+            scenario.fixtures[3],
+            scenario.fixtures[1],
+            scenario.fixtures[0]
+        ]
+    );
+}
+
+#[test]
+fn positive_group_union_materializes_if_any_source_is_missing_or_cyclic() {
+    let scenario = CaptureScenario::new();
+    let groups = HashMap::from([
+        (
+            "source".into(),
+            GroupDefinition {
+                id: "source".into(),
+                fixtures: scenario.fixtures.clone(),
+                ..Default::default()
+            },
+        ),
+        (
+            "middle".into(),
+            GroupDefinition {
+                id: "middle".into(),
+                source: Some(GroupFixtureSource::References {
+                    references: vec![GroupReference {
+                        group_id: "target".into(),
+                        rule: SelectionRule::All,
+                    }],
+                }),
+                ..Default::default()
+            },
+        ),
+    ]);
+    for unsafe_source in ["missing", "target", "middle"] {
+        scenario.registry.select_expression(
+            scenario.session,
+            scenario.fixtures[..2].to_vec(),
+            SelectionExpression::Sources {
+                items: ["source", unsafe_source]
+                    .into_iter()
+                    .map(|id| SelectionReference::LiveGroup {
+                        group_id: id.into(),
+                    })
+                    .collect(),
+            },
+        );
+        let recorded = scenario.capture().overwrite("target", None, &groups);
+        assert_eq!(
+            recorded.source,
+            Some(GroupFixtureSource::Explicit {
+                fixture_ids: scenario.fixtures[..2].to_vec(),
+            }),
+            "unsafe source {unsafe_source}"
+        );
+    }
+}
+
+#[test]
 fn dereferenced_selection_records_concrete_fixtures_without_source_reference() {
     let scenario = CaptureScenario::new();
     scenario.registry.select_expression(

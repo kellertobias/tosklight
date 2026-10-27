@@ -41,13 +41,27 @@ pub fn profile_default_model(
     let traits = mode.map(traits).unwrap_or_default();
     let model = default_model::choose(profile.body_model.as_deref(), &profile.fixture_type, traits);
     let moving = mode.is_some_and(|mode| has_motion(profile, mode));
-    let body_size = crate::fallback::body_size(
+    let mut body_size = crate::fallback::body_size(
         crate::fallback::classify(&profile.fixture_type),
         moving,
         profile.physical.width_millimetres,
         profile.physical.height_millimetres,
         profile.physical.depth_millimetres,
     );
+    // Physical profile dimensions describe the normal horizontal lantern: width, body height,
+    // optical depth. This shipped body is authored hanging lens-down, with its optical length
+    // along model Y. Compare the declared depth with that long axis instead of shrinking the
+    // whole lantern until it fits the short body height. A profile already declaring its hanging
+    // height as the long axis, or unknown dimensions, keeps its existing fit.
+    if model.name == "profile-spot"
+        && profile
+            .physical
+            .depth_millimetres
+            .zip(profile.physical.height_millimetres)
+            .is_some_and(|(depth, height)| height > 20.0 && depth > height)
+    {
+        body_size = Vec3::new(body_size.x, body_size.z, body_size.y);
+    }
     let scale = model_extent(model).map_or(1.0, |extent| {
         viz_scene::FixtureModel {
             extent,
@@ -132,6 +146,56 @@ mod tests {
             "{}",
             chosen.scale
         );
+    }
+
+    #[test]
+    fn a_horizontal_profile_fits_its_optical_depth_to_the_hanging_model_long_axis() {
+        let mut profile = profile("led profile");
+        profile.physical.width_millimetres = Some(259.0);
+        profile.physical.height_millimetres = Some(254.0);
+        profile.physical.depth_millimetres = Some(648.0);
+        let physical = profile.physical.clone();
+        let chosen = profile_default_model(&profile, None).expect("profile body");
+        assert_eq!(chosen.model.name, "profile-spot");
+        assert!((chosen.body_size_metres - Vec3::new(0.259, 0.648, 0.254)).length() < 1e-6);
+        let model = viz_scene::read_glb(chosen.model.bytes).expect("real shipped profile model");
+        let size = model.extent * 2.0 * chosen.scale;
+        assert!((size.y - 0.648).abs() < 1e-6, "optical depth: {size:?}");
+        assert!(size.x > 0.19 && size.x <= 0.259, "body width: {size:?}");
+        assert!(
+            chosen.scale > 0.7,
+            "the old wrong-pose fit shrank it below 0.3"
+        );
+        assert_eq!(profile.physical, physical);
+    }
+
+    #[test]
+    fn profile_dimensions_that_are_unknown_and_other_body_families_keep_their_fit() {
+        let mut profile = profile("profile");
+        profile.physical.width_millimetres = None;
+        profile.physical.height_millimetres = None;
+        profile.physical.depth_millimetres = None;
+        let chosen = profile_default_model(&profile, None).unwrap();
+        assert_eq!(chosen.body_size_metres, Vec3::new(0.28, 0.34, 0.4));
+        profile.fixture_type = "fresnel".into();
+        profile.physical.width_millimetres = Some(259.0);
+        profile.physical.height_millimetres = Some(254.0);
+        profile.physical.depth_millimetres = Some(648.0);
+        let chosen = profile_default_model(&profile, None).unwrap();
+        assert!((chosen.body_size_metres - Vec3::new(0.259, 0.254, 0.648)).length() < 1e-6);
+    }
+
+    #[test]
+    fn dimensions_already_describing_a_hanging_profile_keep_their_existing_fit() {
+        let mut profile = profile("profile");
+        profile.physical.width_millimetres = Some(266.0);
+        profile.physical.height_millimetres = Some(878.0);
+        profile.physical.depth_millimetres = Some(230.0);
+        let chosen = profile_default_model(&profile, None).unwrap();
+        assert!((chosen.body_size_metres - Vec3::new(0.266, 0.878, 0.230)).length() < 1e-6);
+        let model = viz_scene::read_glb(chosen.model.bytes).unwrap();
+        assert!((chosen.scale - model.scale_to(Vec3::new(0.266, 0.878, 0.230))).abs() < 1e-6);
+        assert!(chosen.scale > 0.99);
     }
 
     #[test]

@@ -9,8 +9,8 @@ use std::collections::{HashMap, HashSet};
 /// Action-time, desk-local selection captured for one Group recording operation.
 ///
 /// Programmer values, Preload, timing, Highlight, modes, and transient state are deliberately
-/// absent. Relationship metadata is retained only when the complete selection has one supported
-/// source; mixed and subtractive expressions are materialized as concrete ordered fixtures.
+/// absent. Relationship metadata is retained for live Group selections and positive Group unions; mixed
+/// and subtractive expressions are materialized as concrete ordered fixtures.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GroupRecordingCapture {
     fixtures: Vec<FixtureId>,
@@ -21,8 +21,7 @@ pub struct GroupRecordingCapture {
 enum GroupRecordingRelationship {
     Materialized,
     Live {
-        source_group_id: String,
-        rule: SelectionRule,
+        references: Vec<(String, SelectionRule)>,
     },
 }
 
@@ -31,7 +30,7 @@ impl GroupRecordingCapture {
         &self.fixtures
     }
 
-    /// Overwrite while retaining a valid single-source Group relationship.
+    /// Overwrite while retaining valid live Group relationships.
     ///
     /// A self-reference, missing source, or transitive live cycle is materialized. Dereferenced
     /// selections are already concrete ordered fixtures and record without any source reference.
@@ -96,13 +95,9 @@ impl GroupRecordingCapture {
     ) {
         match &self.relationship {
             GroupRecordingRelationship::Materialized => {}
-            GroupRecordingRelationship::Live {
-                source_group_id,
-                rule,
-            } if source_group_id != &group.id => {
-                preserve_live_relationship(group, source_group_id, rule, groups);
+            GroupRecordingRelationship::Live { references } => {
+                preserve_live_relationship(group, references, groups);
             }
-            GroupRecordingRelationship::Live { .. } => {}
         }
     }
 }
@@ -187,36 +182,45 @@ fn relationship(expression: Option<SelectionExpression>) -> GroupRecordingRelati
     match expression {
         Some(SelectionExpression::LiveGroup { group_id, rule }) => {
             GroupRecordingRelationship::Live {
-                source_group_id: group_id,
-                rule,
+                references: vec![(group_id, rule)],
             }
         }
-        Some(SelectionExpression::Sources { items }) => single_live_source(items),
+        Some(SelectionExpression::Sources { items }) => live_sources(items),
         _ => GroupRecordingRelationship::Materialized,
     }
 }
 
-fn single_live_source(items: Vec<SelectionReference>) -> GroupRecordingRelationship {
-    match items.as_slice() {
-        [SelectionReference::LiveGroup { group_id }] => GroupRecordingRelationship::Live {
-            source_group_id: group_id.clone(),
-            rule: SelectionRule::All,
-        },
-        _ => GroupRecordingRelationship::Materialized,
+fn live_sources(items: Vec<SelectionReference>) -> GroupRecordingRelationship {
+    let mut references = Vec::new();
+    let mut seen = HashSet::new();
+    for item in items {
+        let SelectionReference::LiveGroup { group_id } = item else {
+            return GroupRecordingRelationship::Materialized;
+        };
+        if seen.insert(group_id.clone()) {
+            references.push((group_id, SelectionRule::All));
+        }
+    }
+    if references.is_empty() {
+        GroupRecordingRelationship::Materialized
+    } else {
+        GroupRecordingRelationship::Live { references }
     }
 }
 
 fn preserve_live_relationship(
     group: &mut GroupDefinition,
-    source_group_id: &str,
-    rule: &SelectionRule,
+    references: &[(String, SelectionRule)],
     groups: &HashMap<String, GroupDefinition>,
 ) {
     group.source = Some(GroupFixtureSource::References {
-        references: vec![GroupReference {
-            group_id: source_group_id.to_owned(),
-            rule: rule.clone(),
-        }],
+        references: references
+            .iter()
+            .map(|(group_id, rule)| GroupReference {
+                group_id: group_id.clone(),
+                rule: rule.clone(),
+            })
+            .collect(),
     });
     let mut candidate = groups.clone();
     candidate.insert(group.id.clone(), group.clone());

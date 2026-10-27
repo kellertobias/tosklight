@@ -48,6 +48,10 @@ top of the drawing and the audience at the bottom. The orientation mark in each 
 axes it shows. Rotating a top-down viewport turns the whole plan with it; the mark follows, so a
 quarter turn clockwise shows **+Y** to the right and **−X** up.
 
+A lamp's technical drawing keeps the shape of its selected top, front or side view. Rotation
+about that view's normal turns the drawing; rotations out of its plane do not squash or shear it.
+Live model projections and physical Venue elements retain their full 3D placement.
+
 ## Cut planes
 
 Seen from the side, a stage with curtains both sides is a wall: the near one hides the rig the
