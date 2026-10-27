@@ -112,28 +112,149 @@ export interface CadPrintPages {
 	rotate(id: string): void;
 }
 
+type PrintPageState = { showId: string | null; pages: CadPrintPage[] };
+type PrintPageWriter = {
+	showId: string;
+	update(pages: CadPrintPage[]): void;
+	retry(): Promise<void>;
+};
+
+interface PrintPagePersistenceBindings {
+	currentPages: { current: CadPrintPage[] };
+	writer: { current: PrintPageWriter | null };
+	setState(state: PrintPageState): void;
+	setBusy(busy: boolean): void;
+	setError(error: string | null): void;
+	setReadyShow(showId: string | null): void;
+}
+
+/** Connect one loaded show to its native page store until the hook changes shows or unmounts. */
+function connectPrintPagePersistence(
+	currentShow: string,
+	bindings: PrintPagePersistenceBindings,
+) {
+	const { currentPages, writer, setState, setBusy, setError, setReadyShow } = bindings;
+	let disposed = false;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let unlisten: (() => void) | undefined;
+	let pending: CadPrintPage[] | undefined;
+	let saving = false;
+	let dirty = false;
+	let failed = false;
+	let revision = 0;
+	let deferred: PrintPageSnapshot | undefined;
+	let baseline: CadPrintPage[] = [];
+	const fail = (reason: unknown) => {
+		if (!disposed) setError(`Print pages could not be saved or loaded: ${String(reason)}`);
+	};
+	function accept(snapshot: PrintPageSnapshot) {
+		revision = snapshot.revision;
+		baseline = snapshot.pages ?? [];
+		currentPages.current = baseline;
+		setState({ showId: currentShow, pages: baseline });
+	}
+	async function flush() {
+		if (saving || !pending || failed) return;
+		saving = true;
+		const next = pending;
+		pending = undefined;
+		try {
+			const saved = await printPageSession.save(currentShow, next, false, revision);
+			revision = saved.revision;
+			baseline = next;
+			dirty = pending !== undefined;
+			if (!disposed) setError(null);
+		} catch (reason) {
+			failed = true;
+			fail(reason);
+		} finally {
+			saving = false;
+			if (!dirty && deferred && deferred.revision > revision && !disposed) accept(deferred);
+			if (deferred && deferred.revision <= revision) deferred = undefined;
+			if (pending && !failed) void flush();
+			else if (!disposed) setBusy(false);
+		}
+	}
+	async function retry() {
+		if (saving) return;
+		clearTimeout(timer);
+		setBusy(true);
+		try {
+			const latest = await printPageSession.all(currentShow);
+			if (disposed) return;
+			const rebased = rebasePrintPages(baseline, currentPages.current, latest.pages ?? []);
+			revision = latest.revision;
+			baseline = latest.pages ?? [];
+			currentPages.current = rebased;
+			setState({ showId: currentShow, pages: rebased });
+			pending = rebased;
+			failed = false;
+			await flush();
+		} catch (reason) { fail(reason); setBusy(false); }
+	}
+	async function load() {
+		try {
+			const stop = await printPageSession.onDelta((snapshot) => {
+				if (disposed || snapshot.showId !== currentShow || snapshot.revision <= revision) return;
+				if (dirty || saving) {
+					if (!deferred || snapshot.revision > deferred.revision) deferred = snapshot;
+					return;
+				}
+				accept(snapshot);
+			});
+			if (disposed) { stop(); return; }
+			unlisten = stop;
+			const loaded = await printPageSession.all(currentShow);
+			if (disposed) return;
+			const legacy = legacyPagesForShow(currentShow);
+			const restored = loaded.pages === null
+				? await printPageSession.save(currentShow, legacy, true, loaded.revision)
+				: loaded;
+			if (disposed) return;
+			if (localStorage.getItem(ADOPTED_KEY) === currentShow) {
+				localStorage.removeItem(PRINT_KEY);
+				localStorage.removeItem(LEGACY_PRINT_KEY);
+			}
+			if (restored.revision >= revision) accept(restored);
+			writer.current = {
+				showId: currentShow,
+				retry,
+				update(next) {
+					pending = next;
+					dirty = true;
+					// A conflict remains visible until Retry rebases against the latest show.
+					if (failed) return;
+					setError(null);
+					setBusy(true);
+					clearTimeout(timer);
+					timer = setTimeout(() => void flush(), 250);
+				},
+			};
+			setReadyShow(currentShow);
+		} catch (reason) { fail(reason); }
+		finally { if (!disposed) setBusy(false); }
+	}
+	void load();
+	return () => {
+		disposed = true;
+		unlisten?.();
+		clearTimeout(timer);
+		void flush();
+	};
+}
+
 export function useCadPrintPages(showId: string | null): CadPrintPages {
-	const [state, setState] = useState<{ showId: string | null; pages: CadPrintPage[] }>({ showId: null, pages: [] });
+	const [state, setState] = useState<PrintPageState>({ showId: null, pages: [] });
 	const currentPages = useRef<CadPrintPage[]>([]);
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [busy, setBusy] = useState(false);
 	const [readyShow, setReadyShow] = useState<string | null>(null);
 	const [attempt, setAttempt] = useState(0);
 	const [error, setError] = useState<string | null>(null);
-	const writer = useRef<{ showId: string; update(pages: CadPrintPage[]): void; retry(): Promise<void> } | null>(null);
+	const writer = useRef<PrintPageWriter | null>(null);
 	const pages = state.showId === showId ? state.pages : [];
 
 	useEffect(() => {
-		let disposed = false;
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		let unlisten: (() => void) | undefined;
-		let pending: CadPrintPage[] | undefined;
-		let saving = false;
-		let dirty = false;
-		let failed = false;
-		let revision = 0;
-		let deferred: PrintPageSnapshot | undefined;
-		let baseline: CadPrintPage[] = [];
 		writer.current = null;
 		setReadyShow(null);
 		setSelectedId(null);
@@ -142,104 +263,9 @@ export function useCadPrintPages(showId: string | null): CadPrintPages {
 		setError(null);
 		setBusy(showId !== null);
 		if (showId === null) return;
-		const currentShow = showId;
-		const fail = (reason: unknown) => {
-			if (!disposed) setError(`Print pages could not be saved or loaded: ${String(reason)}`);
-		};
-		function accept(snapshot: PrintPageSnapshot) {
-			revision = snapshot.revision;
-			baseline = snapshot.pages ?? [];
-			currentPages.current = baseline;
-			setState({ showId: currentShow, pages: baseline });
-		}
-		async function flush() {
-			if (saving || !pending || failed) return;
-			saving = true;
-			const next = pending;
-			pending = undefined;
-			try {
-				const saved = await printPageSession.save(currentShow, next, false, revision);
-				revision = saved.revision;
-				baseline = next;
-				dirty = pending !== undefined;
-				if (!disposed) setError(null);
-			} catch (reason) {
-				failed = true;
-				fail(reason);
-			} finally {
-				saving = false;
-				if (!dirty && deferred && deferred.revision > revision && !disposed) accept(deferred);
-				if (deferred && deferred.revision <= revision) deferred = undefined;
-				if (pending && !failed) void flush();
-				else if (!disposed) setBusy(false);
-			}
-		}
-		async function retry() {
-			if (saving) return;
-			clearTimeout(timer);
-			setBusy(true);
-			try {
-				const latest = await printPageSession.all(currentShow);
-				if (disposed) return;
-				const rebased = rebasePrintPages(baseline, currentPages.current, latest.pages ?? []);
-				revision = latest.revision;
-				baseline = latest.pages ?? [];
-				currentPages.current = rebased;
-				setState({ showId: currentShow, pages: rebased });
-				pending = rebased;
-				failed = false;
-				await flush();
-			} catch (reason) { fail(reason); setBusy(false); }
-		}
-		async function load() {
-			try {
-				const stop = await printPageSession.onDelta((snapshot) => {
-					if (disposed || snapshot.showId !== currentShow || snapshot.revision <= revision) return;
-					if (dirty || saving) {
-						if (!deferred || snapshot.revision > deferred.revision) deferred = snapshot;
-						return;
-					}
-					accept(snapshot);
-				});
-				if (disposed) { stop(); return; }
-				unlisten = stop;
-				const loaded = await printPageSession.all(currentShow);
-				if (disposed) return;
-				const legacy = legacyPagesForShow(currentShow);
-				const restored = loaded.pages === null
-					? await printPageSession.save(currentShow, legacy, true, loaded.revision)
-					: loaded;
-				if (disposed) return;
-				if (localStorage.getItem(ADOPTED_KEY) === currentShow) {
-					localStorage.removeItem(PRINT_KEY);
-					localStorage.removeItem(LEGACY_PRINT_KEY);
-				}
-				if (restored.revision >= revision) accept(restored);
-				writer.current = {
-					showId: currentShow,
-					retry,
-					update(next) {
-						pending = next;
-						dirty = true;
-						// A conflict remains visible until Retry rebases against the latest show.
-						if (failed) return;
-						setError(null);
-						setBusy(true);
-						clearTimeout(timer);
-						timer = setTimeout(() => void flush(), 250);
-					},
-				};
-				setReadyShow(currentShow);
-			} catch (reason) { fail(reason); }
-			finally { if (!disposed) setBusy(false); }
-		}
-		void load();
-		return () => {
-			disposed = true;
-			unlisten?.();
-			clearTimeout(timer);
-			void flush();
-		};
+		return connectPrintPagePersistence(showId, {
+			currentPages, writer, setState, setBusy, setError, setReadyShow,
+		});
 	}, [showId, attempt]);
 
 	function setPages(change: (current: CadPrintPage[]) => CadPrintPage[]) {

@@ -1,5 +1,4 @@
 import { formatErrorDetails } from "@tosklight/ui";
-import { save } from "@tauri-apps/plugin-dialog";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -22,8 +21,8 @@ import { CadToolError, cadTitleGroups } from "./CadToolbar";
 import { useCadTools } from "./cadTools";
 import { VENUE_DRAW_KINDS } from "./venueDrawingGeometry";
 import { shortcutTile, useCadShortcuts } from "./cadShortcuts";
-import { buildCadPdf, type CadPrintDocumentInfo } from "./print";
-import { loadPrintFonts } from "./printFonts";
+import { type CadPrintDocumentInfo } from "./print";
+import { useCadPdfExport } from "./useCadPdfExport";
 import { cadSession } from "./session";
 import type { CadUnderlay } from "./underlays";
 import { useCadMove } from "./useCadMove";
@@ -217,7 +216,6 @@ export function CadApp() {
 	);
 	const printPageState = useCadPrintPages(documentInfo?.showId ?? null);
 	const { pages: printPages, selectedId: selectedPrintPageId } = printPageState;
-	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	// A short confirmation that an action did something, so a copy is not a silent change.
@@ -342,37 +340,13 @@ export function CadApp() {
 		setPrintPanel((current) => (current === panel ? null : panel));
 	}
 
-	async function exportPdf() {
-		if (!scene || printPageState.busy || printPageState.error) return;
-		const selected = printPages.filter((page) => page.included);
-		if (!selected.length) return;
-		const path = await save({
-			title: "Export CAD plan pages",
-			defaultPath: "ToskLight Architect Plan.pdf",
-			filters: [{ name: "PDF document", extensions: ["pdf"] }],
-		});
-		if (!path) return;
-		const pdfPath = path.toLowerCase().endsWith(".pdf") ? path : `${path}.pdf`;
-		setExporting(true);
-		try {
-			await cadSession.exportPdf(
-				pdfPath,
-				buildCadPdf(
-					scene,
-					selected,
-					printInfo(documentInfo, documentInfo ?? NO_PAPERWORK),
-					underlayState.underlays,
-					tools.annotations,
-					await loadPrintFonts(tools.annotations),
-				),
-			);
-			setNotice(`Exported ${selected.length} plan pages.`);
-		} catch (reason) {
-			setError(formatErrorDetails(reason));
-		} finally {
-			setExporting(false);
-		}
-	}
+	const { exporting, exportPdf } = useCadPdfExport({
+		scene, pages: printPages,
+		info: printInfo(documentInfo, documentInfo ?? NO_PAPERWORK),
+		underlays: underlayState.underlays, annotations: tools.annotations,
+		blocked: printPageState.busy || !!printPageState.error,
+		onNotice: setNotice, onError: setError,
+	});
 
 	async function history(direction: "undo" | "redo") {
 		if (!scene) return;
