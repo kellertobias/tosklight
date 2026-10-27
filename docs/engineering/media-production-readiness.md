@@ -1,7 +1,7 @@
 # Media server production readiness
 
 This record describes the September 2026 hardening pass for ToskLight Pixel. The operator
-contracts remain in `docs/help/30-ToskLight-Media/`; the media server remains one standalone Rust
+contracts remain in `docs/help/30-ToskLight-Pixel/`; the media server remains one standalone Rust
 process with an embedded browser interface and separately rendered outputs.
 
 ## Ownership and control flow

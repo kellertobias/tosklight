@@ -19,26 +19,27 @@ Double-click **tosklight-media-macos_arm64.app** to start ToskLight Pixel on the
 first valid DMX frame it shows the browser address and projector-alignment marks; its persistent
 configuration and library live under Application Support.
 
-The separate **ToskLight Hardware Controls** application is used for the attached hardware-control surface when that artifact is included in the release.
-
-Choose **OSC** for an on-screen surface over the network, or **Native Hardware** for a configured
-attached device. Native mode mirrors device feedback; its on-screen controls are dimmed.
-Set **Desk HTTP port** in Settings if Control does not use port 5000. The selected mode is remembered.
-**Native Simulator** is a development option; it requires a separately installed simulator extension.
+Use the separate **ToskLight Hardware Controls** application for an attached control surface when
+it is included in the release. Choose **OSC** for an on-screen surface over the network, or
+**Native Hardware** for a configured attached device. Native mode mirrors device feedback and
+dims its on-screen controls. Set **Desk HTTP port** in Settings if Control uses a port other than
+5000. The selected mode is remembered.
 
 ## Standalone server and browser desk
 
 Choose the archive matching macOS Apple Silicon, Windows AMD64, Linux AMD64, or Linux ARM64. Start `light-headless` with a writable data directory, then open the displayed address in a supported browser. Use `--bind 0.0.0.0:5000` only on a trusted lighting network.
 
-When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting it. Connect browser and API clients using that shared desk token. All attached surfaces operate the same desk.
+When the server is reachable over a LAN, set `LIGHT_DESK_TOKEN` before starting it. Browser and API clients must then send that shared desk token. Every connected surface operates the same desk and Programmer.
 
 ## First-start checklist
 
-- The status in Desk Setup is connected and the expected show is active.
+- Desk Setup reports a connected server and the expected active show.
 - A new show can be created and appears in the show library.
 - The correct physical screens are assigned.
 - OSC, native extensions, Art-Net, and sACN are disabled until intentionally configured.
 - The DMX view reports the expected frame rate with no send errors.
 - A named revision can be created and loaded as a separate autosaved copy before real programming begins, without rewinding the original show's Latest Autosave.
 
-Continue with [Desk Setup](../10-Desk/10-Show-Setup/index.md).
+Continue with [Architect](../10-ToskLight-Architect/index.md) to plan the rig, or [Control setup](../20-ToskLight-Control/10-Show-Setup/index.md) to work directly at the desk.
+
+The source and distribution terms are in the [ToskLight repository](https://github.com/kellertobias/tosklight), the [Community License](https://github.com/kellertobias/tosklight/blob/main/LICENSE), and the [third-party notices](https://kellertobias.github.io/tosklight/third-party-licenses.html).

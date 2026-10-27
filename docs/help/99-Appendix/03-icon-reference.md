@@ -2,8 +2,7 @@
 
 <!-- toc: exclude-headings -->
 
-Use these contact sheets to identify fixture and control icons. The label below each symbol is
-its name in the icon library.
+Use these sheets to identify the icons shown on fixtures, pools, and desk controls. The labels below each picture identify the corresponding icon.
 
 ## Beam size
 

@@ -87,14 +87,12 @@ def verify(site: Path, archive: Path) -> None:
     required = [
         "ToskLight Operator Manual",
         "Search the manual",
-        "Quick Start",
-        "ToskLight Control",
-        "Show Setup and Patching",
-        "Programmer and Cues",
-        "Windows and Panes",
+        "The ToskLight suite",
         "ToskLight Architect",
+        "ToskLight Control",
         "ToskLight Pixel",
-        "Protocols",
+        "Operator reference",
+        "Integration and development",
     ]
     missing = [text for text in required if text not in source]
     if missing:
@@ -114,6 +112,8 @@ def verify(site: Path, archive: Path) -> None:
         fail("HTML manual keycap variants are incomplete")
     if "[!danger]" in source or 'class="callout callout-danger ' not in source:
         fail("HTML manual did not render Obsidian danger callouts")
+    if "Missing graphic" in source:
+        fail("HTML manual contains an editorial graphic placeholder")
     if source.count('class="manual-section-divider"') != 6:
         fail("HTML manual does not contain the six top-level section dividers")
     if not archive.is_file() or archive.stat().st_size < 100_000:

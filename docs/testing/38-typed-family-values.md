@@ -4,8 +4,8 @@
 
 These scenarios are the acceptance contract for typed Color, Position and Focus/Zoom values from
 the command line, the desk keypad and OSC (TL-544 G3). The contract is
-[Command Line](../help/10-Desk/20-Programmer-and-Cues/01-command-line.md#setting-non-intensity-values)
-and the Family values section of [OSC Protocol](../help/90-Protocols/01-osc.md#family-values).
+[Command Line](../help/20-ToskLight-Control/20-Programmer-and-Cues/01-command-line.md#setting-non-intensity-values)
+and the Family values section of [OSC Protocol](../engineering/protocols/osc.md#family-values).
 
 A typed value is the same Programmer edit an encoder makes: Color Intent, Position Angles and Zoom
 degrees, never a normalized channel value. Values follow the family's first encoder page in

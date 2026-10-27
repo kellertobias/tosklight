@@ -2,7 +2,7 @@
 //!
 //! The desk is authoritative for Speed Group tempo; a Media Server only receives it. Each tick
 //! sends every group as one OSC message of the ToskLight Speed Group contract
-//! (`docs/help/90-Protocols/02-media-speed-groups.md`) to UDP port 4810 on the host of each
+//! (`docs/engineering/protocols/media-speed-groups.md`) to UDP port 4810 on the host of each
 //! patched ToskLight Media fixture's CITP endpoint. Sending continuously rather than on change is
 //! what lets a Media Server that restarts, or a network that drops packets, recover within one
 //! tick without any handshake.

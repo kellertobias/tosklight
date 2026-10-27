@@ -36,14 +36,12 @@ def verify(path: Path) -> None:
     full_text = "\n".join(text_by_page)
     required = [
         "Contents",
-        "Quick Start",
-        "ToskLight Control",
-        "Show Setup and Patching",
-        "Programmer and Cues",
-        "Windows and Panes",
+        "The ToskLight suite",
         "ToskLight Architect",
+        "ToskLight Control",
         "ToskLight Pixel",
-        "Protocols",
+        "Operator reference",
+        "Integration and development",
     ]
     missing = [title for title in required if title not in full_text]
     if missing:

@@ -4,7 +4,7 @@
 //! Art-Net and sACN carry level data, Art-Net TimeCode and MTC carry position rather than tempo,
 //! MIDI Beat Clock and Ableton Link carry exactly one tempo, and CITP/MSEX has no tempo message.
 //! Speed Groups therefore travel as OSC 1.0 over UDP, in the message this module decodes. The
-//! operator-facing contract is `docs/help/90-Protocols/02-media-speed-groups.md`.
+//! operator-facing contract is `docs/engineering/protocols/media-speed-groups.md`.
 //!
 //! ```text
 //! /tosklight/speed-group  ,siiffi  source sequence group bpm beat-phase running

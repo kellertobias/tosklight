@@ -1,4 +1,4 @@
-import fixtureHelp from "../../../../../../docs/help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md?raw";
+import fixtureHelp from "../../../../../../docs/help/10-ToskLight-Architect/02-Fixtures-and-Patch/13-installed-calibration.md?raw";
 import {
 	cleanup,
 	fireEvent,
@@ -84,14 +84,12 @@ function example() {
 describe("installed Color calibration editor", () => {
 	it("keeps installed calibration help consistent with the available path and live fitting", () => {
 		const installed = fixtureHelp
-			.split("### Installed Color calibration")[1]
+			.split("## Installed Color calibration")[1]
 			.split("## Physical geometry")[0];
 		expect(installed).toContain("choose **Color calibration…** directly");
 		expect(installed).toContain("no Stage geometry emitter");
-		expect(installed).toContain("used for live Color fitting");
-		expect(installed).toContain(
-			"Stored\nPreset and Cue Color intent stays unchanged",
-		);
+		expect(installed).toContain("apply to live Color fitting");
+		expect(installed).toMatch(/Stored\s+Preset and Cue Color intent remains unchanged/);
 		expect(installed).not.toContain("subsequent engine integration");
 	});
 

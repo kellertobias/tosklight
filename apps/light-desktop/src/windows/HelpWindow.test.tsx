@@ -50,13 +50,13 @@ describe("help key rendering", () => {
 		render(
 			<HelpMarkdown
 				markdown="[Command Line](../20-Programmer-and-Cues/01-command-line.md)"
-				topicId="10-Desk/30-Windows/index.md"
+				topicId="20-ToskLight-Control/30-Windows/index.md"
 				onSelectTopic={onSelectTopic}
 			/>,
 		);
 		fireEvent.click(screen.getByRole("link", { name: "Command Line" }));
 		expect(onSelectTopic).toHaveBeenCalledWith(
-			"10-Desk/20-Programmer-and-Cues/01-command-line.md",
+			"20-ToskLight-Control/20-Programmer-and-Cues/01-command-line.md",
 		);
 	});
 

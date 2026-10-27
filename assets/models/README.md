@@ -22,7 +22,7 @@ Anything that flies appears twice: `<model>.glb` with its mounting hardware and
 count, where its origin sits, its node list with each node's classification, which node is
 its truss coupler, and the hinges its hardware swivels on.
 
-`docs/help/20-ToskLight-PreViz/` shows the whole set with a render of each model; both the
+`docs/help/10-ToskLight-Architect/90-Advanced/01-models.md` shows the whole set with a render of each model; both the
 renders and that catalogue page come from `npm run models:render`.
 
 `2d/` holds an editable SVG line drawing of every model from above, the front and the side, as

@@ -4,7 +4,7 @@
 
 These scenarios are the acceptance contract for the change lead time in the DMX output pane's
 output summary (TL-659). The operator contract is
-[Utility and diagnostics › DMX output](../help/10-Desk/30-Windows/04-utility-and-diagnostics.md#dmx-output).
+[Utility and diagnostics › DMX output](../help/20-ToskLight-Control/30-Windows/04-utility-and-diagnostics.md#dmx-output).
 
 The change lead time is the longest time from the instant a Cue or Dynamic **should** start
 outputting to the instant the output frame that first carries it was **sent**. The start instant

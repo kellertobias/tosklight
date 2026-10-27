@@ -4,7 +4,7 @@
 
 These scenarios are the acceptance contract for TL-656: Color and Position Preset tiles preview
 the programming intention they store. The operator contract is
-[Groups and Presets › Automatic Color and Position previews](../help/10-Desk/20-Programmer-and-Cues/03-groups-and-presets.md#automatic-color-and-position-previews).
+[Preset previews](../help/20-ToskLight-Control/30-Windows/13-preset-previews.md).
 
 Executable coverage:
 

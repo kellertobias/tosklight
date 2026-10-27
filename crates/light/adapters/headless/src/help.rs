@@ -382,8 +382,9 @@ mod tests {
     #[test]
     fn embedded_help_contains_nested_command_line_topic() {
         assert!(
-            EmbeddedHelp::iter()
-                .any(|path| path == "10-Desk/20-Programmer-and-Cues/01-command-line.md")
+            EmbeddedHelp::iter().any(
+                |path| path == "20-ToskLight-Control/20-Programmer-and-Cues/01-command-line.md"
+            )
         );
     }
 }

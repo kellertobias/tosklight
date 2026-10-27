@@ -10,7 +10,7 @@ and manufacturer metadata do not establish measured lamp performance.
 
 - [Architecture and dependency plan](fixture-independent-programming.md).
 - [Numbered fixture-data acceptance scenarios](../testing/31-fixture-physical-mapping.md).
-- [Current operator authoring controls](../help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md).
+- [Current operator authoring controls](../help/10-ToskLight-Architect/02-Fixtures-and-Patch/10-edit-fixture-profiles.md).
 - [Repository fixture-authoring contract](../../.agents/skills/build-light-fixtures/references/tosklight-fixture-contract.md).
 - [Representative archive audit](../../.artifacts/test/visual-inspection/intention-programming/representative-fixture-package-audit.md): 128 packages / 263 modes, existing identifiers, native binding examples and source gaps. Its recorded manufacturer links require revalidation during adoption.
 - [TL-555 verification record](../../.artifacts/test/visual-inspection/intention-programming/tl555-gdtf-source-verification.md).

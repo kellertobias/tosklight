@@ -18,11 +18,11 @@ Do not create a second calibration registry or silently publish changes to the F
 | Show Patch → Light source → Color calibration | Unit-specific emitter gains and complete optical-path observations, exact source identity | Reuse evidence, recipe and validation controls; add measurement guidance and a clearly separate live-preview integration. |
 | Programmer Focus / Zoom, Iris and Position controls | Semantic requests, independent ownership and supported hardware/OSC gestures | Reuse their interaction components against an isolated commissioning output owner, never by overwriting Normal or Preload. |
 
-Source baseline: [fixture/profile help](../help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md#physical-mapping-calibration),
-[installed Position](../help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md#installed-position-calibration),
-[installed Color](../help/10-Desk/10-Show-Setup/11-fixture-types-and-gdtf.md#installed-color-calibration),
-[Focus and Zoom](../help/10-Desk/20-Programmer-and-Cues/06-focus-and-zoom.md),
-[replacement](../help/10-Desk/10-Show-Setup/12-patch-fixtures-and-scenery.md),
+Source baseline: [fixture/profile help](../help/10-ToskLight-Architect/02-Fixtures-and-Patch/11-physical-channel-mapping.md),
+[installed Position](../help/10-ToskLight-Architect/02-Fixtures-and-Patch/13-installed-calibration.md),
+[installed Color](../help/10-ToskLight-Architect/02-Fixtures-and-Patch/13-installed-calibration.md#installed-color-calibration),
+[Focus and Zoom](../help/20-ToskLight-Control/20-Programmer-and-Cues/06-focus-and-zoom.md),
+[replacement](../help/10-ToskLight-Architect/02-Fixtures-and-Patch/05-replace-a-fixture.md),
 and [MAP-01–06](../testing/42-release-acceptance.md).
 `PositionCalibration.tsx` and `ColorCalibration.tsx` under
 `apps/light-desktop/src/components/setup/fixturePatch/` already use exact root/copy

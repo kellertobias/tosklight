@@ -1,0 +1,23 @@
+# Sound to Light
+
+Switch the lower control section to Playbacks. An ordinary tap or click on Speed Group A-E performs tap tempo immediately in both the touch-only and hardware-connected views. Hold the control, use Shift while tapping/clicking it, or right-click it to open that group's settings.
+
+Tap tempo keeps a rolling calculation bucket. When the currently shown or calculated speed is 10 BPM or faster, a gap longer than 10 seconds makes the later tap the first tap of a new bucket. Below 10 BPM, that reset gap is longer than 30 seconds instead. The previous speed remains shown until the new bucket has enough taps to calculate a replacement.
+
+Choose the microphone once under **Desk Setup > Network & Inputs > Sound > Sound input**. Permission and the selected device ID stay in this browser, scoped to the desk rather than to an individual Speed Group. They are never written into the show, so another machine or browser starts unassigned instead of trying to open a device that may not exist there. If a saved local input still exists when the application reconnects, the browser resumes capture for Speed Groups that use Sound to Light.
+
+Each Speed Group source is exactly one of **Manual**, **Speed Group**, or **Sound to Light**. Manual hides source-specific settings. Speed Group follows another group; the current group is excluded and the desk rejects direct or indirect reference cycles. Sound to Light exposes the analysis settings and live feedback below.
+
+The current analysis mode is **Tempo / BPM**. Choose a preset region, Sub 30-80 Hz, Low 60-180 Hz, Mid 180-2,000 Hz, High 2,000-12,000 Hz, or Full range 30-18,000 Hz, or enter a custom ordered range from 20 to 20,000 Hz. Use the live input and selected-band meters to set input gain. Confidence threshold rejects uncertain tempo estimates; Tempo smoothing reduces abrupt accepted changes; minimum and maximum tempo reject estimates outside the useful range.
+
+The status strip distinguishes permission, input capture, and usable selected-band signal. The live panel shows detected tempo, confidence, effective speed, and the server's authoritative source. The browser analyzes at 100 ms intervals and sends normalized observations; normal request/network latency is additional. The server owns accepted tempo, smoothing, source selection, hold expiry, and the final Speed Group rate.
+
+The Sound speed ratio maps the detected tempo from 0.125× through 8×. The title bar provides `÷2`, `×2`, and **Pause/Resume** as immediate actions; they do not dirty the settings form. A Speed Master scale is applied after the Sound ratio. Pause freezes Speed Group phase without discarding its current rate. Attached OSC hardware receives the effective mapped BPM; its beat indication stops while paused, and its Speed Group encoder follows the same authoritative value.
+
+**Apply** is in the title bar. Closing an unchanged modal closes immediately. Closing after edits asks whether to **Close and discard**, **Close and save**, or **Stay**.
+
+If the input disappears, the selected band becomes quiet, confidence drops, or tempo leaves the accepted range, the group holds its last accepted Sound rate for the configured Signal-loss hold and then returns to its stored manual BPM. The modal reports the reason rather than failing silently. Disabling Sound-to-Light also returns to the stored manual rate. A direct BPM command or the first **Learn** tap deliberately takes manual ownership and disables Sound-to-Light.
+
+Several sessions may control the same desk and submit observations for that desk's physical input. A different desk cannot take over the same Speed Group while the first desk's short capture lease is active. The desk shares one Programmer, command line, and attached-hardware state across its connected surfaces. A different desk alias has its own interaction state.
+
+Sound-derived speed follows the normal Chaser, playback, Grand Master, Blackout, and output paths. It does not bypass output safety or create a second browser-only playback state.

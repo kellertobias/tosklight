@@ -165,7 +165,7 @@ For linked Preset PRG-04/05, live Group GRP-01/02 and Dynamic DYN-03, retain the
 
 ### Pending Preload inspection and exact Stop
 
-Use `docs/help/10-Desk/20-Programmer-and-Cues/12-preload.md` as the capture and gesture contract. Preserve a peer playback, normal Programmer value and stable wire baseline before each independent variant.
+Use `docs/help/20-ToskLight-Control/20-Programmer-and-Cues/12-preload.md` as the capture and gesture contract. Preserve a peer playback, normal Programmer value and stable wire baseline before each independent variant.
 
 | ID | UI procedure | Expected and evidence |
 | --- | --- | --- |
@@ -235,7 +235,7 @@ Save a named revision, reopen it through the UI and repeat the full, layer-only 
 | SAVE-02 | Open supported old show, declared contract-0 rejection and malformed show copies. | Explicit migration or current documented refusal; preserve source, actionable recovery and separate new show; application still starts. Never corrupt production input to perform this test. |
 | SAVE-03 | Run demo-sized show (~300 fixtures), switch Stage/Fixture Sheet/programming views while output runs; extended 1,000-fixture test where available. | Operator controls and output remain responsive. Measure full interaction→DMX path; bounded Stage load does not starve desk. Report measured values, dropped frames and soak duration. |
 
-OSC routes come from current `docs/help/90-Protocols/01-osc.md`; command semantics from `docs/help/10-Desk/20-Programmer-and-Cues/01-command-line.md`. Before attempting parity, create a per-case, per-operation OSC checklist for every requested UI workflow: exact documented route and arguments, desk/guest role, authoring versus replay, expected feedback/output, and independent result/evidence links. Record operations without a supported route as UNSUPPORTED with the current source contract; never silently omit them or count playback replay as authoring. All supported entries must pass for the OSC gate, rather than a representative sample. No API setup/programming may substitute for an acceptance UI action. Read-only inspection and packet capture may substantiate it.
+OSC routes come from current `docs/engineering/protocols/osc.md`; command semantics from `docs/help/20-ToskLight-Control/20-Programmer-and-Cues/01-command-line.md`. Before attempting parity, create a per-case, per-operation OSC checklist for every requested UI workflow: exact documented route and arguments, desk/guest role, authoring versus replay, expected feedback/output, and independent result/evidence links. Record operations without a supported route as UNSUPPORTED with the current source contract; never silently omit them or count playback replay as authoring. All supported entries must pass for the OSC gate, rather than a representative sample. No API setup/programming may substitute for an acceptance UI action. Read-only inspection and packet capture may substantiate it.
 
 ## Phase 8 — Marketing show and gallery
 

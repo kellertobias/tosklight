@@ -4,7 +4,7 @@
 
 These scenarios are the acceptance contract for building Position, Color and Zoom Dynamics by
 touch in the Dynamics editor (TL-648). The operator contract is
-[Programming Windows › Dynamic lanes](../help/10-Desk/30-Windows/06-programming-windows.md#dynamic-lanes).
+[Dynamic lanes](../help/20-ToskLight-Control/20-Programmer-and-Cues/28-dynamic-lanes.md).
 
 A lane on Pan, Tilt, Zoom or a Color component is a fixture-independent family lane, stored the
 way the desk stores any other Position, Color or Zoom programming: Pan and Tilt as Angles in

@@ -1,96 +1,48 @@
-# Quick Start
+# The ToskLight suite
 
-ToskLight is open-source show-control software, built with open-source Rust, JavaScript, and other
-third-party components. The source is published in the [ToskLight GitHub repository](https://github.com/kellertobias/tosklight). Read the [ToskLight Community License](https://github.com/kellertobias/tosklight/blob/main/LICENSE) and the generated [third-party license notices](https://kellertobias.github.io/tosklight/third-party-licenses.html) before distributing a bundled build.
+ToskLight is a suite for planning lighting rigs, programming shows, and running lighting and media. Start with the application that suits the job:
 
-> [!danger] ToskLight is still under active development.
-> Rehearse the complete production workflow, keep recoverable show copies, and verify physical output before relying on a testing build for a live event.
+- **ToskLight Architect** plans the rig. Add fixtures, arrange and patch them, then build the venue around them. Prepare drawings and inspect the result in the Visualizer.
+- **ToskLight Control** programs and runs the show. Select fixtures, build Groups and Presets, record Cues, and operate Playbacks. Control also builds and patches rigs directly.
+- **ToskLight Pixel** is the optional media server. Use it for video, pictures, text, generated visuals, and effects on screens, projectors, or mapped pixels.
 
-### The ToskLight Suite
+![ToskLight Control, Architect, and Pixel application icons](../assets/branding/tosklight-suite.png)
 
-The ToskLight bundle contains three operator products:
+Architect and Control use the same fixture library, patch sheet, and portable `.show` format. Architect is optional: you can add, position, and patch the whole rig in Control. The [shared fixture and patch instructions](../10-ToskLight-Architect/02-Fixtures-and-Patch/index.md) apply to both.
 
-![ToskLight Control, ToskLight Architect, and ToskLight Pixel application icons](../assets/branding/tosklight-suite.png)
+Architect's Visualizer draws the rig and its lighting. Use it to check the plan without a desk or follow Control's output while rehearsing the programmed show. The [Architect visualization guide](../10-ToskLight-Architect/11-visualizer.md) explains scene sources and live DMX. Control's Stage provides a 2D plan and lightweight 3D wireframe for selecting and positioning fixtures.
 
-- **ToskLight Control** is the lighting-control application. Use it to patch, program and run the lighting show.
-- **ToskLight Architect** combines CAD-based venue and rig planning with a standalone 3D visualizer. Its Rig Editor plans and patches a rig; its renderer draws it from live Art-Net or sACN, from the editor's preview, or from its built-in demonstration source.
-- **ToskLight Pixel** is the media server. It plays video, pictures, text, generated visuals, and effects on configured displays. Control operates its master and layers through patched Media fixtures and can use CITP/MSEX for names, thumbnails, libraries, and previews.
+Pixel's generated visuals are media content. They are separate from the lighting Visualizer, even though Pixel calls their settings page **Visualizers**.
 
-Control and Architect use the same portable `.show` format. **Get Show from Running ToskLight Control**
-and **Load from Visualizer** transfer a copy, not a shared live file. For live visualization, send the matching
-Art-Net or sACN universe to Architect. For Pixel, patch the Media fixture and configure its CITP
-address under **Show Patch > Media Servers**; numeric control remains available without CITP.
+## From rig to show
 
-```mermaid
-flowchart LR
-  Shows["Portable .show format<br/>copied documents"]
-  Discovery["Local network discovery"]
-  Control["ToskLight Control<br/>programming and output"]
-  Architect["ToskLight Architect<br/>rig planning and PreViz"]
-  Pixel["ToskLight Pixel<br/>media playback and layers"]
+This walkthrough starts in Architect. If you are working at the desk already, begin with the same fixture and patch tasks in Control.
 
-  Control <-->|"open or transfer a copy"| Shows
-  Architect <-->|"open or transfer a copy"| Shows
-  Control -->|"Art-Net / sACN"| Architect
-  Control -->|"Art-Net / sACN"| Pixel
-  Control <-->|"CITP / MSEX"| Pixel
-  Discovery -.-> Control
-  Discovery -.-> Architect
-  Discovery -.-> Pixel
-```
+1. **Add the fixtures.** Choose their profiles and modes, give them fixture IDs, and patch addresses when known. You can program unpatched fixtures and assign addresses later.
+2. **Arrange the rig.** Position, rotate, and align fixtures. Add truss, staging, scenery, and any media surfaces around them; group Venue elements when they should be handled together. Save the rig as a native `.show` file.
+3. **Open the rig in Control.** Publish it from Architect, load the offered show in Control, or open the saved file. Use a bound Architect document when rig changes should synchronize with the active Control show. Independent file copies stay independent.
+4. **Program the show.** Build ordered Groups, reusable Presets, and Dynamics. Record looks into Cues, arrange Cuelists, and assign Playbacks. Use touch controls, encoders, and the programmer command line together.
+5. **Rehearse in the Visualizer.** Check looks, Cue transitions, timing, and releases. Configure matching Art-Net or sACN output and input when following live DMX.
+6. **Add Pixel if needed.** Test its physical output, prepare the media library, then discover and patch its output in Control. Program media layers alongside lighting.
+7. **Check the production rig.** Verify actual fixtures, destinations, and media displays. Save a named revision before the show.
 
-### Start from the Demo Show
+The programmer command line is the desk's lighting command entry, such as `1 [THRU] 12 [AT] 100 [ENT]`. It is an operator control available alongside the keypad and encoders. Terminal commands used for installation are separate.
 
-Use the bundled **Demo Show** to learn the show structure:
+## Start with the Demo Show
 
-1. Stable Groups describe the physical rig, such as stage Profile fixtures, stage Wash fixtures, audience lights, or Sunstrips.
-2. Those physical Groups are combined or referenced to create the Groups used while busking.
-3. Presets store reusable Intensity, Color, Position, Beam, Shapers, Focus, Control, Media, or mixed looks for those selections.
-4. Cues, Cuelists, Dynamics, and Playbacks build the running show on top of that structure.
+The bundled Demo Show provides a rig and programming to inspect before building your own. Its physical Groups describe the rig, such as stage Profiles, Wash fixtures, audience lights, and Sunstrips. Referenced Groups combine those selections for busking; Presets, Cues, and Playbacks build on them.
 
-Open the Demo Show, inspect how its Groups lead to Presets and Playbacks, and adapt that structure to the production. Use **Load Clean Built-in Default** when a fresh working copy is needed; it leaves the untouched bundled source available for the next reset.
+Open the Demo Show and inspect a Group, a Preset, and its playback. **Load Clean Built-in Default** creates a fresh working copy when you want to start again. It leaves the bundled source available for another reset.
 
-![The default programming desk with fixture selection, Group shortcuts, Stage, and the live Programmer](../assets/screenshots/default-desk-overview.png)
+![Control with fixture selection, Groups, Stage, and the Programmer](../assets/screenshots/default-desk-overview.png)
 
-### First Control look
+## Continue with an application
 
-This example turns on a range of fixtures, records the Programmer to a playback, and then proves that the playback can reproduce the look.
+- [Install and start the suite](01-installation-and-first-start.md).
+- [Plan a rig in Architect](../10-ToskLight-Architect/index.md).
+- [Program and run a show in Control](../20-ToskLight-Control/index.md).
+- [Add media with Pixel](../30-ToskLight-Pixel/index.md).
+- [Look up keypad and keyboard controls](../99-Appendix/00-keypad-and-keyboard.md).
 
-1. Start **ToskLight Control** and load the Demo Show.
-2. Select the intended fixtures in the Fixture Sheet, Stage, or Group Pool. A simple command-line example is `1 [THRU] 12 [AT] 100 [ENT]`, which selects Fixtures 1 through 12 and gives them 100% Intensity in the Programmer.
-3. Press `[REC]`, then choose an empty playback. On the touch playback surface the complete playback is the Record target. On an attached desk, use its topmost playback button; the hardware fader is never intercepted by Record.
-4. The Desk creates a Cuelist, records its first Cue, and assigns that Cuelist to the playback.
-5. Press `[CLR]` once to clear the selection and again to clear the Programmer values.
-6. Press the playback's GO or Toggle button. The fixtures now come from the recorded Cue rather than from the Programmer.
-
-What is in the Programmer is what gets stored in the Cue. A resolved output value, Highlight, a running playback, or a fixture default is not recorded merely because it can be seen. Continue with [Show Setup and Patching](../10-Desk/10-Show-Setup/index.md), [Programmer and Cues](../10-Desk/20-Programmer-and-Cues/index.md), and the precise [Command Line Reference](../10-Desk/20-Programmer-and-Cues/01-command-line.md).
-
-### First Media output
-
-Start **ToskLight Pixel**, select and test its output, upload content, and wait for conversion to
-finish. Verify the physical display before patching the matching Media Server fixture in Control.
-Configure the corresponding Art-Net or sACN address and CITP endpoint in Show Patch.
-
-Pixel saves settings automatically. Check its restart prompts after changing display, audio or network settings.
-
-### First Architect rig
-
-1. Start **ToskLight Architect**. A standalone launch opens the **PreViz Rig Editor** first.
-2. Use its writable Demo Show copy, open another `.show` file, import MVR, or choose a discovered Desk with **Get Show from Running ToskLight Control**.
-3. Patch and position fixtures in the Rig Editor, then choose **Open Viz** to start the PreViz Renderer against that planning document.
-4. Use the editor's fixture preview for a quick check without a lighting desk. For live operation, configure the Art-Net or sACN inputs and send the matching universes from the Desk or another console.
-5. If discovery is unavailable, open the same portable show file directly or enter the Desk host and port manually. Discovery is a convenience, not a requirement.
-
-Continue with [ToskLight Architect](../20-ToskLight-PreViz/index.md).
-
-### Before doors
-
-- Save a named revision and prove that the intended show reopens.
-- Verify the active show, playback page, output routes, universes, and physical destinations.
-- Clear temporary Programmer, Highlight, Freeze, FixAT, and Preload states that are not part of the show.
-- Run every required Cuelist, Macro, Timecode, Dynamic, Preload transition, and release path.
-- Confirm Media displays, audio, CITP previews, and content slots from the production machine.
-- Confirm Architect scene data and every required Art-Net or sACN universe from the production network.
-- Keep the generated PDF manual with the release, or open **Help** from ToskLight Control.
-
-Continue with [Installation and First Start](01-installation-and-first-start.md), [ToskLight Control](../10-Desk/index.md), and [Windows and Panes](../10-Desk/30-Windows/index.md).
+> [!danger] Testing builds
+> Rehearse the production workflow, keep recoverable show copies, and verify physical output before using a testing build for a live event.
