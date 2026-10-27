@@ -35,7 +35,11 @@ two columns:
 * **Show**, on the left: **Project**, **Venue**, **Show date** and **Version**.
 * **Lighting designer**, on the right: **Name**, **Phone**, **Email** and the **Company logo**.
 
-Below both columns are the show name, last-saved time, and fixture and universe counts. Project information saves automatically to the open show and appears in printed title blocks. Wait for **Saving project information…** to finish before closing. A failed save keeps your draft and offers **Retry saving project information**.
+Below both columns are the show name, last-saved time, and fixture and universe counts. Project information saves automatically to the open show and appears in printed title blocks. Wait for **Saving project information…** to finish before closing the application. A failed save keeps your draft and offers **Retry saving project information**.
+
+Creating, opening, copying, publishing or exporting a show waits for pending project edits to
+save. A failed save stops that action. PDF export reads the updated project information before
+building its pages.
 
 **Upload logo** accepts PNG, JPEG, or WebP up to 10 MB. **Replace logo** and **Remove logo** save automatically too. The show carries the image, and each printed title block fits it without changing its proportions.
 

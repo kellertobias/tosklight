@@ -1,3 +1,4 @@
+import { afterPendingDocumentSaves } from "./pendingDocumentSaves";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
@@ -436,15 +437,15 @@ export interface StartupRecovery {
 export const documentSession = {
  startupRecovery: () => invoke<StartupRecovery | null>("startup_recovery"),
 	create: (path: string, name: string) =>
-		invoke<DocumentSummary>("create_document", { path, name }),
-	open: (path: string) => invoke<DocumentSummary>("open_document", { path }),
+		afterPendingDocumentSaves(() => invoke<DocumentSummary>("create_document", { path, name })),
+	open: (path: string) => afterPendingDocumentSaves(() => invoke<DocumentSummary>("open_document", { path })),
 	/**
 	 * Opens a fresh writable copy of the packaged demo show.
 	 *
 	 * The packaged file is a template: every call writes another copy into the operator's shows
 	 * folder and opens that one, so nothing an operator does to a demo reaches the next one.
 	 */
-	openDemoShow: () => invoke<DocumentSummary>("open_demo_show"),
+	openDemoShow: () => afterPendingDocumentSaves(() => invoke<DocumentSummary>("open_demo_show")),
 	/**
 	 * Open another editor window on the same document.
 	 *
@@ -510,24 +511,24 @@ export const documentSession = {
 	recentDocuments: () => invoke<string[]>("recent_documents"),
 	recentDocumentDetails: () => invoke<RecentDocument[]>("recent_document_details"),
 	/** Saves a copy as a new show — a new identity, bound to no desk — and continues there. */
-	saveAs: (path: string) => invoke<DocumentSummary>("save_document_as", { path }),
+	saveAs: (path: string) => afterPendingDocumentSaves(() => invoke<DocumentSummary>("save_document_as", { path })),
 	rename: (name: string) => invoke<void>("rename_document", { name }),
-	exportMvr: (path: string) => invoke<number>("export_mvr", { path }),
+	exportMvr: (path: string) => afterPendingDocumentSaves(() => invoke<number>("export_mvr", { path })),
 	previewMvr: (path: string) => invoke<MvrPreview>("preview_mvr", { path }),
 	importMvr: (token: string, resolutions: Record<string, MvrResolution> = {}, copyConflictingProfiles = false) =>
-		invoke<MvrImportReport>("import_mvr", { token, resolutions, copyConflictingProfiles }),
+		afterPendingDocumentSaves(() => invoke<MvrImportReport>("import_mvr", { token, resolutions, copyConflictingProfiles })),
 	cancelMvrPreview: (token: string) => invoke<void>("cancel_mvr_preview", { token }),
 	/** The desks on the network that have a show to offer. */
 	deskShows: (address: string) => invoke<DeskShow[]>("desk_shows", { address }),
 	loadDeskShow: (address: string, name: string, showId: string) =>
-		invoke<DocumentSummary>("load_desk_show", { address, name, showId }),
+		afterPendingDocumentSaves(() => invoke<DocumentSummary>("load_desk_show", { address, name, showId })),
 	sourceDesk: () => invoke<string | null>("source_desk"),
 	/**
 	 * Publishes the open document to a desk as a new show and continues with the desk's copy,
 	 * bound to it: the deliberate way to associate a standalone show or a Save As copy.
 	 */
 	publishToDesk: (instance: string) =>
-		invoke<DocumentSummary>("publish_to_desk", { instance }),
+		afterPendingDocumentSaves(() => invoke<DocumentSummary>("publish_to_desk", { instance })),
 	discoveredDesks: () => invoke<DeskPeer[]>("discovered_desks"),
 	liveDmxInputs: () => invoke<LiveDmxInputs>("live_dmx_inputs"),
 	saveLiveDmxInputs: (inputs: LiveDmxInputs) =>
@@ -561,7 +562,7 @@ export const documentSession = {
 		),
 	/** Take a copy of that desk's show and open it here. */
 	loadFromDesk: (instance: string) =>
-		invoke<DocumentSummary>("load_from_desk", { instance }),
+		afterPendingDocumentSaves(() => invoke<DocumentSummary>("load_from_desk", { instance })),
 	/** The rig as it currently stands, for surfaces outside the sheet that need the fixtures. */
 	patchSnapshot: () => invoke<PatchSnapshot>("patch_snapshot"),
 	/**

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CadPaperwork } from "../cad/CadProjectPanel";
 import { documentSession, type DocumentSummary } from "./session";
+import { registerPendingDocumentSave } from "./pendingDocumentSaves";
 
 export function paperworkOf(document: DocumentSummary): CadPaperwork {
 	return {
@@ -26,8 +27,8 @@ export function usePaperworkAutosave(document: DocumentSummary, onDocument: (doc
 		let disposed = false;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		let pending: CadPaperwork | undefined;
-		let active = false;
-		let failed = false;
+		let flight: Promise<void> | undefined;
+		let failure: unknown;
 		const showId = document.showId;
 		const initial = paperworkOf(document);
 		current.current = initial;
@@ -35,50 +36,61 @@ export function usePaperworkAutosave(document: DocumentSummary, onDocument: (doc
 		setDraft(initial);
 		setError(null);
 		setSaving(false);
-		async function flush() {
-			if (active || !pending || failed) return;
-			active = true;
-			const next = pending;
-			pending = undefined;
+		async function drain() {
 			try {
-				const saved = await documentSession.savePaperwork(next, showId);
-				if (!disposed) {
-					dirty.current = pending !== undefined;
-					setError(null);
-					callback.current(saved);
+				while (pending) {
+					const next = pending;
+					pending = undefined;
+					try {
+						const saved = await documentSession.savePaperwork(next, showId);
+						if (!disposed) {
+							dirty.current = pending !== undefined;
+							setError(null);
+							callback.current(saved);
+						}
+					} catch (reason) {
+						pending ??= next;
+						failure = reason;
+						if (!disposed) setError(`Project information could not be saved: ${String(reason)}`);
+						throw reason;
+					}
 				}
-			} catch (reason) {
-				pending ??= next;
-				failed = true;
-				if (!disposed) setError(`Project information could not be saved: ${String(reason)}`);
 			} finally {
-				active = false;
-				if (pending && !failed) void flush();
-				else if (!disposed) setSaving(false);
+				if (!disposed) setSaving(false);
 			}
 		}
+		function flush(): Promise<void> {
+			clearTimeout(timer);
+			if (failure !== undefined) return Promise.reject(failure);
+			if (flight) return flight;
+			if (!pending) return Promise.resolve();
+			flight = drain().finally(() => { flight = undefined; });
+			return flight;
+		}
+		function start() { void flush().catch(() => { /* The form exposes the error and Retry. */ }); }
+		const unregister = registerPendingDocumentSave(flush);
 		writer.current = {
 			update(value) {
 				pending = value;
 				dirty.current = true;
-				if (failed) return;
+				if (failure !== undefined) return;
 				setSaving(true);
 				clearTimeout(timer);
-				timer = setTimeout(() => void flush(), 350);
+				timer = setTimeout(start, 350);
 			},
 			retry() {
-				failed = false;
+				failure = undefined;
 				setError(null);
 				setSaving(true);
 				clearTimeout(timer);
-				void flush();
+				start();
 			},
 		};
 		return () => {
 			disposed = true;
 			writer.current = null;
 			clearTimeout(timer);
-			void flush();
+			void flush().catch(() => {}).finally(unregister);
 		};
 	}, [document.showId]);
 

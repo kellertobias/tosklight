@@ -342,7 +342,12 @@ export function CadApp() {
 
 	const { exporting, exportPdf } = useCadPdfExport({
 		scene, pages: printPages,
-		info: printInfo(documentInfo, documentInfo ?? NO_PAPERWORK),
+		loadInfo: async () => {
+			const latest = await documentSession.current();
+			if (!latest || latest.showId !== scene?.showId) throw new Error("The open show changed; reopen its CAD pages before exporting.");
+			setDocumentInfo(latest);
+			return printInfo(latest, latest);
+		},
 		underlays: underlayState.underlays, annotations: tools.annotations,
 		blocked: printPageState.busy || !!printPageState.error,
 		onNotice: setNotice, onError: setError,
