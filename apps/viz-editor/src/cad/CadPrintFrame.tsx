@@ -1,15 +1,21 @@
-import { Fragment, useRef } from "react";
-import architectIconUrl from "../../../../assets/branding/tosklight-icon-print.svg";
+import { useRef } from "react";
+import { pageFrameGeometry, pageFrameDelta } from "./printFrameGeometry";
+import architectIconUrl from "../../../../assets/branding/tosklight-icon-print-mono.svg";
 import { companyLogoUrl, parseCompanyLogo } from "../document/companyLogo";
 import { PrintPageLabels, PrintPageSettings } from "./CadPrintPageParts";
 import {
 	type CadPrintDocumentInfo,
+	PRINT_TITLE_MARK,
+	PRINT_TITLE_DIVIDER_X,
+	printTitleEntries,
+	fitTitleText,
 	PRINT_BORDER_MM,
 	PRINT_TITLE_HEIGHT_MM,
 	PRINT_TITLE_WIDTH_MM,
 	printGridMillimetres,
 	printScaleDenominator,
 } from "./print";
+import { TITLE_W, TITLE_H } from "./printLayout";
 import type { CadEntity, CadPrintPage, TileCamera } from "./types";
 import { printPageHeight, printPaperSize } from "./types";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
@@ -20,6 +26,7 @@ interface PrintFrameProps {
 	entities: readonly CadEntity[];
 	underlays: readonly CadUnderlay[];
 	camera: TileCamera;
+	viewportRotation?: number;
 	selected: boolean;
 	onSelect(): void;
 	onChange(change: Partial<CadPrintPage>): void;
@@ -36,9 +43,10 @@ type FrameGesture = "move" | "scale" | "pan";
 function usePrintFrameInteraction({
 	page,
 	camera,
+	viewportRotation = 0,
 	onChange,
 	onCamera,
-}: Pick<PrintFrameProps, "page" | "camera" | "onChange" | "onCamera">) {
+}: Pick<PrintFrameProps, "page" | "camera" | "viewportRotation" | "onChange" | "onCamera">) {
 	const interaction = useRef<{
 		type: FrameGesture;
 		start: [number, number];
@@ -63,6 +71,7 @@ function usePrintFrameInteraction({
 		if (!active) return;
 		const dx = event.clientX - active.start[0];
 		const dy = event.clientY - active.start[1];
+		const delta = pageFrameDelta(page, viewportRotation, [dx / camera.zoom, -dy / camera.zoom]);
 		if (active.type === "pan") {
 			onCamera({
 				...active.camera,
@@ -74,8 +83,8 @@ function usePrintFrameInteraction({
 		} else if (active.type === "move") {
 			onChange({
 				centreMillimetres: [
-					active.centre[0] + dx / camera.zoom,
-					active.centre[1] - dy / camera.zoom,
+					active.centre[0] + delta[0],
+					active.centre[1] + delta[1],
 				],
 			});
 		} else {
@@ -84,8 +93,8 @@ function usePrintFrameInteraction({
 					500,
 					active.width +
 						Math.max(
-							(dx * 2) / camera.zoom,
-							(dy * 2 * 297) / (camera.zoom * 210),
+							delta[0] * 2,
+							(-delta[1] * 2 * page.widthMillimetres) / printPageHeight(page),
 						),
 				),
 			});
@@ -100,54 +109,29 @@ function usePrintFrameInteraction({
 	return { begin, move, stop };
 }
 
-/** The paperwork corner of a sheet: who drew it, for which show, at what scale. */
-function PrintTitleBlock({
-	page,
-	documentInfo,
-}: Pick<PrintFrameProps, "page" | "documentInfo">) {
-	const logo = parseCompanyLogo(documentInfo?.companyLogo);
-	const rows: [string, string][] = [
-		...(documentInfo?.showName ? [["Show", documentInfo.showName] as [string, string]] : []),
-		...(documentInfo?.lightingDesigner
-			? [["Designer", documentInfo.lightingDesigner] as [string, string]]
-			: []),
-		...(documentInfo?.venue ? [["Venue", documentInfo.venue] as [string, string]] : []),
-		...(documentInfo?.showDate ? [["Show date", documentInfo.showDate] as [string, string]] : []),
-		...(documentInfo?.contactEmail
-			? [["Email", documentInfo.contactEmail] as [string, string]]
-			: []),
-		...(documentInfo?.contactPhone
-			? [["Phone", documentInfo.contactPhone] as [string, string]]
-			: []),
-		...(documentInfo?.showVersion
-			? [["Version", documentInfo.showVersion] as [string, string]]
-			: []),
-		["Scale", `1:${printScaleDenominator(page)}`],
-		[
-			"Rig",
-			`${documentInfo?.fixtureCount ?? 0} fixtures · ${documentInfo?.universeCount ?? 0} universes`,
-		],
-	];
+/** The same compact, white title block as the PDF, in the same point coordinates. */
+function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | "documentInfo">) {
+	const info: CadPrintDocumentInfo = {
+		showName: "", lightingDesigner: "", showVersion: "", venue: "", contactEmail: "",
+		contactPhone: "", project: "", showDate: "", lastSavedAt: 0, fixtureCount: 0,
+		universeCount: 0, ...documentInfo,
+	};
+	const logo = parseCompanyLogo(info.companyLogo);
 	return (
-		<div className="cad-print-title-block">
-			{logo ? (
-				<img src={companyLogoUrl(logo)} alt="Company logo" />
-			) : (
-				<img src={architectIconUrl} alt="ToskLight application icon" />
-			)}
-			<div className="cad-print-brand">
-				<strong>ToskLight Architect</strong>
-				{documentInfo?.project ? <span>{documentInfo.project}</span> : null}
-			</div>
-			<div className="cad-print-meta">
-				{rows.map(([label, value]) => (
-					<Fragment key={label}>
-						<span>{label}</span>
-						<strong>{value}</strong>
-					</Fragment>
-				))}
-			</div>
-		</div>
+		<svg className="cad-print-title-block" viewBox={`0 0 ${TITLE_W} ${TITLE_H}`} role="img" aria-label={`${page.name} information`}>
+			<rect x="0" y="0" width={TITLE_W} height={TITLE_H} fill="white" stroke="#141414" strokeWidth="0.9" />
+			<line x1={PRINT_TITLE_DIVIDER_X} x2={PRINT_TITLE_DIVIDER_X} y1="0" y2={TITLE_H} stroke="#141414" strokeWidth="0.9" />
+			<image href={logo ? companyLogoUrl(logo) : architectIconUrl}
+				aria-label={logo ? "Company logo" : "ToskLight monochrome vector logo"}
+				x={PRINT_TITLE_MARK.x} y={TITLE_H - PRINT_TITLE_MARK.y - PRINT_TITLE_MARK.size}
+				width={PRINT_TITLE_MARK.size} height={PRINT_TITLE_MARK.size} preserveAspectRatio="xMidYMid meet" />
+			{printTitleEntries(page, info).map((entry, index) => {
+				const fitted = fitTitleText(entry.value, entry.size, entry.width, entry.bold);
+				return <text key={`${index}:${entry.value}`} x={entry.x} y={TITLE_H - entry.y}
+					fontSize={fitted.size} fontWeight={entry.bold ? "bold" : "normal"}
+					fontFamily="Helvetica, Arial, sans-serif" fill="#141414">{fitted.label}</text>;
+			})}
+		</svg>
 	);
 }
 
@@ -206,6 +190,7 @@ export function PrintFrame({
 	entities,
 	underlays,
 	camera,
+	viewportRotation = 0,
 	selected,
 	onSelect,
 	onChange,
@@ -215,9 +200,11 @@ export function PrintFrame({
 	const { begin, move, stop } = usePrintFrameInteraction({
 		page,
 		camera,
+		viewportRotation,
 		onChange,
 		onCamera,
 	});
+	const frame = pageFrameGeometry(page, viewportRotation);
 	const height = printPageHeight(page);
 	const paper = printPaperSize(page);
 	const millimetrePixels = (page.widthMillimetres * camera.zoom) / paper.width;
@@ -234,8 +221,11 @@ export function PrintFrame({
 		<div
 			className={`cad-print-frame ${selected ? "is-selected" : ""}`}
 			style={{
-				left: `calc(50% + ${(page.centreMillimetres[0] - page.widthMillimetres / 2 + camera.pan[0]) * camera.zoom}px)`,
-				top: `calc(50% - ${(page.centreMillimetres[1] + height / 2 + camera.pan[1]) * camera.zoom}px)`,
+				left: `calc(50% + ${(frame.centreMillimetres[0] - page.widthMillimetres / 2 + camera.pan[0]) * camera.zoom}px)`,
+				top: `calc(50% - ${(frame.centreMillimetres[1] + height / 2 + camera.pan[1]) * camera.zoom}px)`,
+				transform: `rotate(${frame.rotationDegrees}deg)`,
+				transformOrigin: "center",
+				zIndex: selected ? 2 : 1,
 				width: `${page.widthMillimetres * camera.zoom}px`,
 				height: `${height * camera.zoom}px`,
 			}}

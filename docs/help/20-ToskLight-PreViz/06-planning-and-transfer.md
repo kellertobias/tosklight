@@ -282,9 +282,24 @@ Drawings appear only on their matching view axis and are not clipped by cut plan
 
 ## Compose and export plans
 
+Plan frames remain visible when you turn their CAD viewport. Each sheet keeps its saved view
+rotation, so the frame, labels and title block turn together relative to the rig. The Plans list
+shows that rotation. Use **View rotation** in the selected page settings to change the printed
+view while keeping its centre. **Rotate page** changes the paper between portrait and landscape.
+
 **Plans** holds print pages and fixture-list pages. Set project and designer details on **Show**;
 these supply every page's title block. Plans use the same fixture poses, wall joins and drawing
 geometry as CAD. **Mounting hardware** in a page's settings hides fixture clamps where supported.
+
+Set **Page title** in the selected page settings. Pages, titles, inclusion, framing and view
+rotation are saved in the portable show document and travel with **Save As**. Existing pages
+from this computer are adopted once when the document has no saved pages. Wait for page saving
+to finish before exporting; a failed save offers **Retry saving pages**.
+
+The compact white title block prints the page title above the project or show name, followed
+by **Generated with ToskLight Architect**. It includes the export's **Printed** timestamp,
+fixture and universe counts, scale, and any supplied designer contact details. The scale also
+appears in the separate left footer. The default branding uses a black vector mark on white.
 
 Top plans place the audience at the bottom; elevations look from their named direction. The
 viewport's orientation mark follows a rotated plan. Lens direction indicators show the fixtures'

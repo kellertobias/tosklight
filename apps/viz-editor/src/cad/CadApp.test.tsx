@@ -8,6 +8,7 @@ import {
 import { ModalProvider } from "@tosklight/ui/modals";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CadApp, keepNewerHalves } from "./CadApp";
+import type { CadPrintPage } from "./types";
 
 const fixtureId = "11111111-1111-4111-8111-111111111111";
 const secondFixtureId = "33333333-3333-4333-8333-333333333333";
@@ -74,15 +75,46 @@ const nativeWindow = vi.hoisted(() => ({
 	startDragging: vi.fn().mockResolvedValue(undefined),
 }));
 const workspace = new Map<string, string>();
+const portablePages = vi.hoisted(() => new Map<string, CadPrintPage[]>());
+const portableRevisions = vi.hoisted(() => new Map<string, number>());
 
 vi.mock("./session", () => ({ cadSession: mocks }));
 // The Elements panel reads the drawing arrangement straight from the show.
 vi.mock("@tauri-apps/api/core", () => ({
-	invoke: vi.fn((command: string) =>
-		command === "cad_drawing_tree"
-			? Promise.resolve({ folders: [], items: {} })
-			: Promise.reject(new Error(`unexpected command ${command}`)),
-	),
+	invoke: vi.fn((command: string, args?: {
+		showId: string;
+		pages?: CadPrintPage[];
+		onlyIfAbsent?: boolean;
+		expectedRevision?: number;
+	}) => {
+		if (command === "cad_drawing_tree") {
+			return Promise.resolve({ folders: [], items: {} });
+		}
+		if (command === "cad_print_pages" && args) {
+			return Promise.resolve({
+				showId: args.showId,
+				revision: portableRevisions.get(args.showId) ?? 0,
+				pages: portablePages.has(args.showId)
+					? JSON.parse(JSON.stringify(portablePages.get(args.showId))) : null,
+			});
+		}
+		if (command === "save_cad_print_pages" && args) {
+			if (!args.onlyIfAbsent || !portablePages.has(args.showId)) {
+				const revision = portableRevisions.get(args.showId) ?? 0;
+				if (args.expectedRevision !== revision) {
+					return Promise.reject(new Error("Print pages changed"));
+				}
+				portablePages.set(args.showId, JSON.parse(JSON.stringify(args.pages)));
+				portableRevisions.set(args.showId, revision + 1);
+			}
+			return Promise.resolve({
+				showId: args.showId,
+				revision: portableRevisions.get(args.showId) ?? 0,
+				pages: JSON.parse(JSON.stringify(portablePages.get(args.showId))),
+			});
+		}
+		return Promise.reject(new Error(`unexpected command ${command}`));
+	}),
 }));
 vi.mock("@tauri-apps/api/event", () => ({
 	listen: vi.fn(() => Promise.resolve(() => undefined)),
@@ -183,6 +215,8 @@ vi.mock("./CadViewport", () => ({
 
 beforeEach(() => {
 	workspace.clear();
+	portablePages.clear();
+	portableRevisions.clear();
 	vi.stubGlobal("localStorage", {
 		getItem: (key: string) => workspace.get(key) ?? null,
 		setItem: (key: string, value: string) => workspace.set(key, value),
@@ -390,7 +424,7 @@ describe("the CAD planning screen", () => {
 				[...row.children].map((cell) => cell.textContent),
 			);
 		expect(planRows).toEqual([
-			["1", "Page 1", "Top down", "A4 Landscape"],
+			["1", "Page 1", "Top down 0°", "A4 Landscape"],
 			["2", "Fixture List", "Fixture table", "A4 Landscape"],
 		]);
 		// The page just added stays the selected one, and its row says so.
@@ -403,7 +437,19 @@ describe("the CAD planning screen", () => {
 		fireEvent.pointerUp(screen.getByTestId("cad-canvas"));
 		await waitFor(() => expect(mocks.transform).not.toHaveBeenCalled());
 
-		fireEvent.click(screen.getByRole("button", { name: "Export to PDF" }));
+		fireEvent.click(screen.getByRole("button", { name: "1. Page 1" }));
+		fireEvent.change(screen.getByRole("textbox", { name: "Page title" }), {
+			target: { value: "Stage Detail" },
+		});
+		expect(screen.getByRole("button", { name: "1. Stage Detail" })).toHaveAttribute(
+			"aria-pressed", "true",
+		);
+		await waitFor(() => expect(
+			portablePages.get(snapshot.showId)?.map((page) => page.name),
+		).toEqual(["Stage Detail", "Fixture List"]));
+		const exportButton = screen.getByRole("button", { name: "Export to PDF" });
+		await waitFor(() => expect(exportButton).toBeEnabled());
+		fireEvent.click(exportButton);
 		await waitFor(() => expect(mocks.exportPdf).toHaveBeenCalledTimes(1));
 		const bytes = mocks.exportPdf.mock.calls[0][1] as Uint8Array;
 		const pdf = new TextDecoder().decode(bytes);
@@ -411,9 +457,15 @@ describe("the CAD planning screen", () => {
 		expect(pdf).toContain("Fixture ID");
 		expect(pdf).toContain("Robe Robin DLS Profile");
 		expect(pdf).toContain("Use secondary safety");
-		expect(workspace.get("tosklight:viz-editor:cad-print-pages:v2")).toContain(
-			"Page 1",
-		);
+		expect(pdf).toContain("Stage Detail");
+		expect(pdf).toContain("1 fixtures / 1 universes");
+		expect(pdf).toMatch(/Printed\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC/);
+		expect(pdf).not.toContain("Saved");
+		expect(portablePages.get(snapshot.showId)).toEqual(expect.arrayContaining([
+			expect.objectContaining({ name: "Stage Detail", view: "top_down", rotationQuarterTurns: 0 }),
+			expect.objectContaining({ name: "Fixture List", kind: "fixture_list" }),
+		]));
+		expect(workspace.has("tosklight:viz-editor:cad-print-pages:v2")).toBe(false);
 	});
 
 	it("opens plans and elements from their own window title buttons", async () => {

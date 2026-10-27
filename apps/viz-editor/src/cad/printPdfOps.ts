@@ -3,28 +3,28 @@
  * document that carries the page streams. No PDF library is involved, so every helper here emits
  * content-stream syntax directly.
  */
-import architectIconSvg from "../../../../assets/branding/tosklight-icon-print.svg?raw";
+import architectIconSvg from "../../../../assets/branding/tosklight-icon-print-mono.svg?raw";
 import { type CompanyLogo, companyLogoHex } from "../document/companyLogo";
 import type { PrintFontSet } from "./printFonts";
 import type { PlanPoint } from "./projection";
 
 export function mark(x: number, y: number) {
-	const cyanPath = svgIconPath("rgb(0,182,255)");
-	const whitePath = svgIconPath("white");
+	const cyanPath = svgIconPath(0);
+	const whitePath = svgIconPath(1);
 	const scale = 50 / 1024;
 	return [
-		"0.01 0.03 0.08 rg",
-		`${n(x)} ${n(y - 2)} 52 52 re f`,
+		"1 1 1 rg",
+		`${n(x)} ${n(y)} 52 52 re f`,
 		"q",
-		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 49)} cm`,
-		"0.02 0.71 1 rg",
+		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 51)} cm`,
+		"0 0 0 rg",
 		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
 		"2.27038 0 0 2.27038 479.14 600.211 cm",
 		`${cyanPath} f`,
 		"Q",
 		"q",
-		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 49)} cm`,
-		"1 1 1 rg",
+		`${n(scale)} 0 0 ${n(-scale)} ${n(x + 1)} ${n(y + 51)} cm`,
+		"0 0 0 rg",
 		"1.1301 0 0 1.10327 -91.1666 -52.8747 cm",
 		"2.27038 0 0 2.27038 489.721 673.347 cm",
 		`${whitePath} f`,
@@ -44,24 +44,23 @@ export function titleMark(logo: CompanyLogo | null, x: number, y: number) {
 	const height = logo.height * scale;
 	return [
 		"q",
-		`${n(width)} 0 0 ${n(height)} ${n(x + (box - width) / 2)} ${n(y - 2 + (box - height) / 2)} cm`,
+		`${n(width)} 0 0 ${n(height)} ${n(x + (box - width) / 2)} ${n(y + (box - height) / 2)} cm`,
 		"/CompanyLogo Do",
 		"Q",
 	];
 }
 
-export function svgIconPath(fill: string) {
+export function svgIconPath(layer: number) {
 	const matches = [
 		...architectIconSvg.matchAll(/<path d="([^"]+)" style="fill:([^;]+);"/g),
 	]
-		.filter((match) => match[2] === fill)
-		.sort((left, right) => right[1].length - left[1].length);
-	if (!matches[0])
+		.filter((match) => match[2] === "black");
+	if (!matches[layer])
 		throw new Error(
-			`ToskLight application SVG is missing its ${fill} vector path`,
+			`ToskLight application SVG is missing its ${layer} vector path`,
 		);
 	const tokens =
-		matches[0][1].match(/[MLCZ]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
+		matches[layer][1].match(/[MLCZ]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
 	const output: string[] = [];
 	for (let index = 0; index < tokens.length; ) {
 		const command = tokens[index++].toUpperCase();

@@ -41,7 +41,9 @@ pub(crate) use repository::{
     delete_legacy_object, mutate_legacy_objects, prepare_redo, prepare_undo, put_legacy_object,
     undo_legacy_object,
 };
-pub(crate) use store::{bump_revision, current_revision, initialise_revision};
+pub(crate) use store::{
+    bump_revision, current_revision, initialise_revision, stamp_writer_application_version,
+};
 
 #[cfg(test)]
 mod candidate_tests;

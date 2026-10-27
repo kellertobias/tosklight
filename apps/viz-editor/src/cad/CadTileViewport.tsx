@@ -12,7 +12,7 @@ import { CadViewport } from "./CadViewport";
 import { visibleEntities } from "./cutPlanes";
 import { withTurnedPlacements } from "./gizmoRotation";
 import { withDuplicatePreview } from "./cadDuplicate";
-import type { TileCamera, ViewportTile } from "./types";
+import type { TileCamera, TileNode, ViewportTile } from "./types";
 import { underlaysForView } from "./underlayGeometry";
 
 export function CadTileViewport({
@@ -39,17 +39,18 @@ export function CadTileViewport({
 		() => underlaysForView(props.underlays, node.view),
 		[props.underlays, node.view],
 	);
-	const printPages = useMemo(
-		() =>
-			props.printPages.filter(
-				(page) =>
-					page.kind !== "fixture_list" &&
-					page.tileId === node.id &&
-					page.view === node.view &&
-					page.rotationQuarterTurns === node.rotationQuarterTurns,
-			),
-		[props.printPages, node.id, node.view, node.rotationQuarterTurns],
-	);
+	const printPages = useMemo(() => {
+		const tiles = viewportTiles(props.root ?? node);
+		return props.printPages.filter((page) => {
+			if (page.kind === "fixture_list" || page.view !== node.view) return false;
+			// Portable pages can arrive from a different computer's workspace. Keep a live owner,
+			// otherwise show the sheet in the first current viewport of its saved plane.
+			const owner = tiles.find((tile) => tile.id === page.tileId)
+				?? tiles.find((tile) => tile.view === page.view);
+			return owner?.id === node.id;
+		});
+	}, [props.printPages, props.root, node.id, node.view]);
+
 	const { showGrid, gridColour, gridSpacingMillimetres, showSubGrid } = settings;
 	const grid = useMemo(
 		() => ({
@@ -102,4 +103,8 @@ export function CadTileViewport({
 			documentInfo={props.documentInfo}
 		/>
 	);
+}
+
+function viewportTiles(node: TileNode): ViewportTile[] {
+	return node.type === "tile" ? [node] : [...viewportTiles(node.first), ...viewportTiles(node.second)];
 }

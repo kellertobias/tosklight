@@ -10,6 +10,14 @@ mod portable;
 mod programming_contract;
 mod show_store;
 
+/// Application version used by release builds, with the workspace version for local builds.
+pub const APPLICATION_VERSION: &str = match option_env!("LIGHT_RELEASE_VERSION") {
+    Some(version) => version,
+    None => env!("CARGO_PKG_VERSION"),
+};
+/// Last application to commit portable show content, independent of its reader schema floor.
+pub const WRITER_APPLICATION_VERSION_METADATA_KEY: &str = "light.writer_application_version";
+
 pub use desk::{
     DeskPlaybackIncompatibility, DeskStore, PlaybackSurfaceRegistry,
     inspect_desk_playback_contract, resolve_playback_surface_pages,

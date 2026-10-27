@@ -64,6 +64,20 @@ impl ShowStore {
         path: impl AsRef<Path>,
         mut completed: impl FnMut(ShowStoreOpenPhase),
     ) -> Result<Self, StoreError> {
+        // Reject future readers before configuring SQLite or decoding future object shapes.
+        // Missing/corrupt schema data still follows the existing recovery path below.
+        {
+            let conn =
+                Connection::open_with_flags(path.as_ref(), OpenFlags::SQLITE_OPEN_READ_ONLY)?;
+            if conn
+                .query_row("SELECT version FROM schema_info", [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .is_ok()
+            {
+                portable::validate_reader_version(&conn)?;
+            }
+        }
         crate::validate_show_playback_contract(path.as_ref())?;
         completed(ShowStoreOpenPhase::PlaybackContract);
         let mut conn = Connection::open(path)?;
@@ -96,6 +110,7 @@ impl ShowStore {
         )?;
         transaction.execute("INSERT INTO metadata(key,value) VALUES ('name',?1)", [name])?;
         portable::initialise_revision(&transaction)?;
+        portable::stamp_writer_application_version(&transaction)?;
         transaction.commit()?;
         Ok((Self { conn }, id))
     }

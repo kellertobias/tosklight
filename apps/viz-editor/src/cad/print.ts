@@ -22,11 +22,17 @@ export {
 	PRINT_BORDER_MM,
 	PRINT_TITLE_HEIGHT_MM,
 	PRINT_TITLE_WIDTH_MM,
+	printDocumentDetails,
+	printDocumentSubtitle,
+	printPageTitle,
 	printGridMillimetres,
 	printPageLayout,
+	printPageScale,
 	printScaleDenominator,
 	rotatePrintPage,
 } from "./printLayout";
+export { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleEntries } from "./printTitleBlock";
+export { fitTitleText } from "./printTitleText";
 export type { CadPrintDocumentInfo } from "./printLayout";
 
 /** The printed document: one stream per included page, plan pages and fixture lists alike. */
@@ -51,6 +57,7 @@ export function buildCadPdf(
 	/** The CAD typefaces text is set in, from `loadPrintFonts`; without them text prints in Helvetica. */
 	fonts: PrintFontSet | null = null,
 ): Uint8Array {
+	info = { ...info, printedAt: info.printedAt ?? Date.now() / 1000 };
 	const drawings = new Map(
 		scene.drawings.map((drawing) => [drawing.id, drawing]),
 	);
@@ -202,7 +209,7 @@ function fixtureListStreams(
 				6.5,
 			),
 			text(
-				`Saved  ${saved(info.lastSavedAt)}`,
+				`Printed  ${saved(info.printedAt ?? Date.now() / 1000)}`,
 				W - BORDER - 180,
 				BORDER + 13,
 				6.5,

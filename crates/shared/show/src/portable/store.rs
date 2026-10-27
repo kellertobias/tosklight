@@ -90,6 +90,7 @@ pub(crate) fn initialise_revision(tx: &Transaction<'_>) -> Result<(), StoreError
 }
 
 pub(crate) fn bump_revision(tx: &Transaction<'_>) -> Result<PortableShowRevision, StoreError> {
+    stamp_writer_application_version(tx)?;
     let next = current_revision(tx)?
         .value()
         .checked_add(1)
@@ -203,4 +204,13 @@ fn parse_patch_revision(value: Option<&str>) -> Result<PortablePatchRevision, St
         .parse()
         .map_err(|_| StoreError::Invalid("portable patch revision metadata is invalid".into()))?;
     Ok(PortablePatchRevision::new(value))
+}
+
+/// Stamp only committed content writes; merely opening an older show retains its provenance.
+pub(crate) fn stamp_writer_application_version(conn: &Connection) -> Result<(), StoreError> {
+    conn.execute(
+        "INSERT INTO metadata(key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        [crate::WRITER_APPLICATION_VERSION_METADATA_KEY, crate::APPLICATION_VERSION],
+    )?;
+    Ok(())
 }

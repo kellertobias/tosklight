@@ -1,4 +1,4 @@
-/** Helvetica title-block fields fit their column while retaining complete searchable text. */
+/** Helvetica title-block fields stay readable and ellipsize at the column boundary. */
 import { text } from "./printPdfOps";
 
 // Standard Helvetica advances, ASCII space through tilde, in 1/1000 em.
@@ -11,25 +11,24 @@ const ADVANCES = [
 	500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500,
 	500, 334, 260, 334, 584,
 ];
-export function titleText(
-	value: string,
-	x: number,
-	y: number,
-	size: number,
-	width: number,
-	bold = false,
-): string {
-	const advance =
-		Array.from(value).reduce(
-			(sum, character) =>
-				sum + (ADVANCES[character.charCodeAt(0) - 32] ?? 1015),
-			0,
-		) / 1000;
-	// Bold's wider lower-case letters remain inside the same column; the margin also avoids
-	// touching a column divider after PDF coordinate rounding.
-	const fitted = Math.min(
-		size,
-		width / Math.max(0.001, advance * (bold ? 1.25 : 1)),
-	);
-	return text(value, x, y, Math.floor(fitted * 1000) / 1000, bold);
+export function fitTitleText(value: string, size: number, width: number, bold = false): { label: string; size: number } {
+	const clean = value.replace(/\s+/g, " ").trim();
+	const measure = (label: string) => Array.from(label).reduce(
+		(sum, character) => sum + (ADVANCES[character.charCodeAt(0) - 32] ?? 1015),
+		0,
+	) / 1000 * (bold ? 1.25 : 1);
+	// A conservative bold allowance also leaves breathing room beside a column divider.
+	const minimum = Math.min(size, bold && size >= 10 ? 10 : 6);
+	const fitted = Math.max(minimum, Math.min(size, width / Math.max(0.001, measure(clean))));
+	let label = clean;
+	if (measure(label) * fitted > width) {
+		while (label && measure(`${label}...`) * fitted > width) label = label.slice(0, -1);
+		label = label ? `${label}...` : "";
+	}
+	return { label, size: Math.floor(fitted * 1000) / 1000 };
+}
+
+export function titleText(value: string, x: number, y: number, size: number, width: number, bold = false): string {
+	const fitted = fitTitleText(value, size, width, bold);
+	return text(fitted.label, x, y, fitted.size, bold);
 }

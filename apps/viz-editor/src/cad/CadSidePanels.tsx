@@ -13,6 +13,7 @@ import {
 } from "@tosklight/ui";
 import { type KeyboardEvent, type PointerEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { CadElementsPanel, type ElementsRequests, type ElementsTab, elementsAddItems } from "./CadElementsPanel";
+import { withPageViewRotation } from "./printFrameGeometry";
 import { CadTextInfo } from "./CadTextInfo";
 import { duplicateSelection } from "./cadDuplicate";
 import { CadObjectMenu, type CadObjectMenuRequest } from "./CadObjectMenu";
@@ -138,7 +139,7 @@ function PlansPanel({
 								<span className="cad-print-row-number">{index + 1}</span>
 								<strong title={page.name}>{page.name}</strong>
 								<small className="cad-print-row-view">
-									{page.kind === "fixture_list" ? "Fixture table" : CAD_VIEW_LABELS[page.view]}
+									{page.kind === "fixture_list" ? "Fixture table" : `${CAD_VIEW_LABELS[page.view]}${page.view === "top_down" ? ` ${(page.rotationQuarterTurns ?? 0) * 90}°` : ""}`}
 								</small>
 								<small className="cad-print-row-paper">
 									A4 {page.orientation === "landscape" ? "Landscape" : "Portrait"}
@@ -152,12 +153,36 @@ function PlansPanel({
 			</div>
 			{selected && selected.kind !== "fixture_list" ? (
 				<section className="cad-print-page-settings" aria-label="Selected page settings">
+					<label>
+						Page title
+						<input aria-label="Page title" value={selected.name} maxLength={160}
+							onChange={(event) => printPages.change(selected.id, { name: event.currentTarget.value })} />
+					</label>
 					<Button onClick={() => printPages.rotate(selected.id)}>Rotate page</Button>
+					{selected.view === "top_down" ? (
+						<label>
+							View rotation
+							<select
+								aria-label="Page view rotation"
+								value={selected.rotationQuarterTurns ?? 0}
+								onChange={(event) =>
+									printPages.change(
+										selected.id,
+										withPageViewRotation(selected, Number(event.currentTarget.value)),
+									)
+								}
+							>
+								{[0, 1, 2, 3].map((rotation) => (
+									<option key={rotation} value={rotation}>{rotation * 90}°</option>
+								))}
+							</select>
+						</label>
+					) : null}
 				</section>
 			) : null}
 			<Button
 				className="cad-export-pdf"
-				disabled={exporting || !pages.some((page) => page.included)}
+				disabled={exporting || printPages.busy || !!printPages.error || !pages.some((page) => page.included)}
 				onClick={onExport}
 			>
 				{exporting ? "Exporting…" : "Export to PDF"}

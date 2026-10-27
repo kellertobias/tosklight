@@ -19,6 +19,11 @@ To make a reusable base, enable **Save as Template** when saving. **Edit descrip
 
 ### Load a show
 
+A file saved by a newer application reports its file revision and format version, the saved and
+current application versions, and the supported format version. The message asks you to update;
+the rejected file is left unchanged. Files saved before application-version tracking show
+**unknown** for that value.
+
 1. Open **Show > Load Show**.
 2. Choose **Internal**, a connected **USB** drive, or **Network** from the title-bar Source menu.
 3. Browse folders and choose **Load Latest** beside the show. **Up one folder** returns to its parent.

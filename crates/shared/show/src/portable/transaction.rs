@@ -296,6 +296,17 @@ impl ShowStore {
     ) -> Result<PortableShowCommit, StoreError> {
         changes.check_playback_contract()?;
         changes.stamp_playback_contract();
+        if !changes.is_empty()
+            && self
+                .metadata_value(crate::WRITER_APPLICATION_VERSION_METADATA_KEY)?
+                .as_deref()
+                != Some(crate::APPLICATION_VERSION)
+        {
+            changes.set_metadata(
+                crate::WRITER_APPLICATION_VERSION_METADATA_KEY,
+                crate::APPLICATION_VERSION,
+            );
+        }
         let tx = immediate_transaction(&self.conn)?;
         ensure_document_revision(&tx, changes.expected)?;
         let sync_request = changes.sync_request.clone();

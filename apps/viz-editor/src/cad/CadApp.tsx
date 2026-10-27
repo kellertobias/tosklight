@@ -212,7 +212,10 @@ export function CadApp() {
 	// Sheets belong to the Print panel; the others open the sidebar without papering the views.
 	const printMode = printPanel === "print";
 	const panelOpen = printPanel !== null;
-	const printPageState = useCadPrintPages();
+	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
+		null,
+	);
+	const printPageState = useCadPrintPages(documentInfo?.showId ?? null);
 	const { pages: printPages, selectedId: selectedPrintPageId } = printPageState;
 	const [exporting, setExporting] = useState(false);
 	const [activeTileId, setActiveTileId] = useState<string | null>(null);
@@ -224,9 +227,6 @@ export function CadApp() {
 		const clear = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
 		return () => clearTimeout(clear);
 	}, [notice]);
-	const [documentInfo, setDocumentInfo] = useState<DocumentSummary | null>(
-		null,
-	);
 	const tools = useCadTools();
 	const underlayState = useCadUnderlays(documentInfo?.showId ?? null);
 	const venueGroups = useCadVenueGroups(documentInfo?.showId ?? null);
@@ -343,7 +343,7 @@ export function CadApp() {
 	}
 
 	async function exportPdf() {
-		if (!scene) return;
+		if (!scene || printPageState.busy || printPageState.error) return;
 		const selected = printPages.filter((page) => page.included);
 		if (!selected.length) return;
 		const path = await save({
@@ -366,6 +366,7 @@ export function CadApp() {
 					await loadPrintFonts(tools.annotations),
 				),
 			);
+			setNotice(`Exported ${selected.length} plan pages.`);
 		} catch (reason) {
 			setError(formatErrorDetails(reason));
 		} finally {
@@ -473,7 +474,17 @@ export function CadApp() {
 			/>
 			<CadToolError tools={tools} />
 			{error ? <ErrorMessage className="cad-error" message={error} onDismiss={() => setError(null)} /> : null}
-			{!error && notice ? <output className="cad-notice">{notice}</output> : null}
+			{printPageState.error ? (
+				<div className="cad-error" role="alert">
+					{printPageState.error}
+					<Button onClick={printPageState.retry}>Retry saving pages</Button>
+				</div>
+			) : null}
+			{!error && (printPageState.busy || notice) ? (
+				<output className="cad-notice" aria-live="polite">
+					{printPageState.busy ? "Updating plan pages…" : notice}
+				</output>
+			) : null}
 			<div className={`cad-print-layout ${panelOpen ? "is-printing" : ""}`}>
 				<section className="cad-workspace">
 					{scene ? (
@@ -504,6 +515,7 @@ export function CadApp() {
 							printMode={printMode}
 							underlays={underlayState.underlays}
 							printPages={printPages}
+							printPagesReady={printPageState.ready}
 							selectedPrintPageId={selectedPrintPageId}
 							onAddPrintPage={printPageState.addPlanPage}
 							onSelectPrintPage={printPageState.select}
@@ -674,6 +686,7 @@ export interface CadTileProps {
 	printMode: boolean;
 	underlays: readonly CadUnderlay[];
 	printPages: readonly CadPrintPage[];
+	printPagesReady?: boolean;
 	selectedPrintPageId: string | null;
 	onAddPrintPage(tile: ViewportTile): void;
 	onSelectPrintPage(id: string): void;
@@ -721,6 +734,7 @@ function CadTile(props: CadTileProps) {
 			{props.printMode ? (
 				<Button
 					className="cad-add-print-page"
+					disabled={props.printPagesReady === false}
 					onPointerDown={(event) => event.stopPropagation()}
 					onClick={() => props.onAddPrintPage(node)}
 				>

@@ -20,11 +20,14 @@ import {
 	type CadPrintDocumentInfo,
 	printGridMillimetres,
 	printPageLayout,
+	printPageScale,
+	PT_MM,
 	printScaleDenominator,
 	TITLE_H,
 	TITLE_W,
 } from "./printLayout";
-import { distance, n, path, saved, text, titleMark } from "./printPdfOps";
+import { distance, n, path, text, titleMark } from "./printPdfOps";
+import { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleEntries } from "./printTitleBlock";
 import { titleText } from "./printTitleText";
 import {
 	entityPlanGeometry,
@@ -67,10 +70,7 @@ function pageFrame(page: CadPrintPage): PageFrame {
 	const height = layout.heightPoints;
 	const pageHeight = printPageHeight(page);
 	const drawingBottom = BORDER + TITLE_H;
-	const scale = Math.min(
-		(width - BORDER * 2) / page.widthMillimetres,
-		(height - drawingBottom - BORDER) / pageHeight,
-	);
+	const scale = printPageScale(page) * PT_MM;
 	const originX = (width - page.widthMillimetres * scale) / 2;
 	const originY =
 		drawingBottom + (height - drawingBottom - BORDER - pageHeight * scale) / 2;
@@ -255,18 +255,7 @@ function furnitureCommands(
 ): string[] {
 	const { width: W, height: H, drawingBottom } = frame;
 	const tx = W - BORDER - TITLE_W;
-	const details = [
-		["Project", info.project],
-		["Show", info.showName],
-		["Lighting designer", info.lightingDesigner],
-		["Venue", info.venue],
-		["Show date", info.showDate],
-		[
-			"Contact",
-			[info.contactEmail, info.contactPhone].filter(Boolean).join(" / "),
-		],
-		["Version", info.showVersion],
-	].filter((entry) => entry[1]);
+
 	return [
 		"Q",
 		"0.08 G",
@@ -277,53 +266,15 @@ function furnitureCommands(
 		`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re f`,
 		"0.08 G",
 		`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re S`,
-		`${n(tx + 70)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
-		`${n(tx + 70)} ${n(BORDER + TITLE_H / 2)} ${n(TITLE_W - 70)} 0 re S`,
-		...titleMark(parseCompanyLogo(info.companyLogo), tx + 12, BORDER + 18),
+		`${n(tx + PRINT_TITLE_DIVIDER_X)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
+		...titleMark(parseCompanyLogo(info.companyLogo), tx + PRINT_TITLE_MARK.x, BORDER + PRINT_TITLE_MARK.y),
 		"0.08 0.08 0.08 rg",
-		text("ToskLight Architect", tx + 76, BORDER + TITLE_H - 15, 10, true),
-		...details
-			.slice(0, 4)
-			.map(([label, value], index) =>
-				titleText(
-					`${label}  ${value}`,
-					tx + 76,
-					BORDER + TITLE_H - 29 - index * 10,
-					6.5,
-					108,
-					index === 0,
-				),
-			),
-		...details
-			.slice(4)
-			.map(([label, value], index) =>
-				titleText(
-					`${label}  ${value}`,
-					tx + 190,
-					BORDER + TITLE_H - 29 - index * 10,
-					6.5,
-					TITLE_W - 196,
-				),
-			),
+		...printTitleEntries(page, info).map((entry) => titleText(
+			entry.value, tx + entry.x, BORDER + entry.y, entry.size, entry.width, entry.bold,
+		)),
 		titleText(
-			`Saved  ${saved(info.lastSavedAt)}`,
-			tx + 190,
-			BORDER + 29,
-			7,
-			TITLE_W - 196,
-		),
-		titleText(
-			`${info.fixtureCount} fixtures / ${info.universeCount} universes`,
-			tx + 190,
-			BORDER + 17,
-			7,
-			TITLE_W - 196,
-		),
-		text(
 			`Scale 1:${printScaleDenominator(page)} / Grid ${distance(frame.grid)}`,
-			BORDER + 5,
-			BORDER + 8,
-			7,
+			BORDER + 5, BORDER + 8, 7, tx - BORDER - 10,
 		),
 		"Q",
 	];

@@ -401,7 +401,9 @@ fn observed_open_stops_at_newer_schema_or_missing_identity_failure() {
             Migration,
             Integrity,
         ];
-        if !newer_schema {
+        if newer_schema {
+            expected.clear();
+        } else {
             expected.push(SchemaValidation);
         }
         assert_eq!(phases, expected);
@@ -410,6 +412,117 @@ fn observed_open_stops_at_newer_schema_or_missing_identity_failure() {
         } else {
             "missing show_id"
         }));
+        let _ = fs::remove_file(path);
+    }
+}
+
+#[test]
+fn writer_application_version_survives_save_and_reopen() {
+    use crate::{APPLICATION_VERSION, WRITER_APPLICATION_VERSION_METADATA_KEY as KEY};
+    let path = temporary("writer-version");
+    let (show, _) = ShowStore::create(&path, "Provenance").unwrap();
+    assert_eq!(
+        show.metadata_value(KEY).unwrap().as_deref(),
+        Some(APPLICATION_VERSION)
+    );
+    // A legacy file gains provenance on a real edit, never merely by being opened.
+    show.conn
+        .execute("DELETE FROM metadata WHERE key=?1", [KEY])
+        .unwrap();
+    drop(show);
+    let show = ShowStore::open(&path).unwrap();
+    assert_eq!(show.metadata_value(KEY).unwrap(), None);
+    let mut document = show.portable_document().unwrap();
+    let mut transaction = document.transaction();
+    transaction.put("group", "front", serde_json::json!({"fixtures": []}));
+    let commit = show.apply_portable_transaction(transaction).unwrap();
+    document.apply_commit(&commit);
+    assert_eq!(document.metadata()[KEY], APPLICATION_VERSION);
+    drop(show);
+    let show = ShowStore::open(&path).unwrap();
+    assert_eq!(
+        show.metadata_value(KEY).unwrap().as_deref(),
+        Some(APPLICATION_VERSION)
+    );
+    // The older direct write path stamps the same version atomically with its edit.
+    show.conn
+        .execute(
+            "UPDATE metadata SET value='older-build' WHERE key=?1",
+            [KEY],
+        )
+        .unwrap();
+    show.put_object("group", "back", &serde_json::json!({"fixtures": []}), 0)
+        .unwrap();
+    drop(show);
+    let show = ShowStore::open(&path).unwrap();
+    assert_eq!(
+        show.metadata_value(KEY).unwrap().as_deref(),
+        Some(APPLICATION_VERSION)
+    );
+    drop(show);
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn newer_schema_error_reports_file_and_application_versions_without_changing_source() {
+    use crate::{APPLICATION_VERSION, WRITER_APPLICATION_VERSION_METADATA_KEY as KEY};
+    for writer in [Some("999.2.3"), None] {
+        let path = temporary("future-writer-version");
+        let (show, _) = ShowStore::create(&path, "Future").unwrap();
+        show.conn
+            .execute("UPDATE schema_info SET version=999", [])
+            .unwrap();
+        show.conn.execute("INSERT OR REPLACE INTO metadata(key,value) VALUES ('light.portable_show_revision','42')", []).unwrap();
+        match writer {
+            Some(version) => {
+                show.conn
+                    .execute("UPDATE metadata SET value=?1 WHERE key=?2", [version, KEY])
+                    .unwrap();
+            }
+            None => {
+                show.conn
+                    .execute("DELETE FROM metadata WHERE key=?1", [KEY])
+                    .unwrap();
+            }
+        }
+        // Future object layouts must not obscure the earlier reader-version rejection.
+        show.conn.execute("INSERT INTO objects(kind,id,body_json,revision,updated_at) VALUES ('playback_page','future','{}',1,'now')", []).unwrap();
+        show.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+            .unwrap();
+        drop(show);
+        let before = fs::read(&path).unwrap();
+        for error in [
+            ShowStore::open(&path).err().unwrap().to_string(),
+            crate::validate_show_reader_version(&path)
+                .unwrap_err()
+                .to_string(),
+            validate_show_file(&path).unwrap_err().to_string(),
+        ] {
+            assert!(
+                error.contains("show schema 999 is newer than supported schema 11"),
+                "{error}"
+            );
+            assert!(error.contains("file revision: 42"), "{error}");
+            assert!(
+                error.contains(&format!(
+                    "Saved by ToskLight {}",
+                    writer.unwrap_or("unknown")
+                )),
+                "{error}"
+            );
+            assert!(
+                error.contains(&format!(
+                    "Current application: ToskLight {APPLICATION_VERSION}"
+                )),
+                "{error}"
+            );
+            assert!(
+                error.contains("newer version of ToskLight. Please update ToskLight"),
+                "{error}"
+            );
+        }
+        assert_eq!(fs::read(&path).unwrap(), before);
         let _ = fs::remove_file(path);
     }
 }

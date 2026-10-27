@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	buildCadPdf,
 	printGridMillimetres,
+	printPageTitle,
 	printPageLayout,
+	printPageScale,
 	printScaleDenominator,
 	rotatePrintPage,
 } from "./print";
@@ -198,18 +200,75 @@ describe("CAD PDF export", () => {
 				lightingDesigner: "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
 			}),
 		);
-		expect(pdf).toMatch(
-			/0\.08 0\.08 0\.08 rg\nBT \/F2 10 Tf [^\n]+ToskLight Architect/,
-		);
+		expect(pdf).toMatch(/0\.08 0\.08 0\.08 rg\nBT \/F2 12 Tf [^\n]+Venue/);
 		expect(pdf).toContain("0 0.71 0.92 rg");
-		const field = pdf.match(
-			/BT \/F2 ([\d.]+) Tf [^\n]+\(Project {2}WWWW[^\n]+/,
-		);
-		expect(field).not.toBeNull();
-		expect(Number(field?.[1])).toBeLessThan(6.5);
-		// Even the forty broad W glyphs alone must stay inside the left detail column.
-		expect(Number(field?.[1]) * 40 * 0.944).toBeLessThan(108);
-		expect(pdf).toContain(project);
+		expect(pdf).toContain("Generated with ToskLight Architect");
+		// Long broad glyphs stay readable and are shortened instead of shrinking to invisibility.
+		const field = pdf.match(/BT \/F1 ([\d.]+) Tf [^\n]+\(WWWW[^\n]+/);
+		expect(Number(field?.[1])).toBeGreaterThanOrEqual(6);
+		expect(field?.[0]).toContain("...");
+		expect(pdf).not.toContain(project);
+	});
+
+	it("uses a custom page title first, with project/show below and one actual export timestamp", () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-10-27T09:14:00Z"));
+		try {
+			const pdf = new TextDecoder().decode(buildCadPdf(scene, [page("Lighting Overview"), page("Page 2")], {
+				showName: "Festival", project: "Summer Show", lightingDesigner: "Alex Designer",
+				showVersion: "2.4", venue: "Grand Hall", showDate: "2027-01-02",
+				contactEmail: "tobias.keller@example.org", contactPhone: "+49 1234 567890",
+				lastSavedAt: 1_700_000_000, fixtureCount: 128, universeCount: 4,
+			}));
+			expect(pdf).toMatch(/BT \/F2 12 Tf [^\n]+\(Lighting Overview\)/);
+			expect(pdf).toContain("Summer Show / Festival");
+			expect(pdf).toMatch(/BT \/F2 12 Tf [^\n]+\(Summer Show\)/);
+			expect(pdf.match(/Printed 2026-10-27 09:14 UTC/g)).toHaveLength(2);
+			expect(pdf).not.toContain("Saved  ");
+			expect(pdf).toContain("128 fixtures / 4 universes");
+			expect(pdf).toContain("tobias.keller@example.org");
+			expect(pdf).toContain("+49 1234 567890");
+			expect(pdf).toContain("Show date 2027-01-02");
+			expect(pdf).toContain("Version 2.4");
+			expect(pdf).toContain("Scale 1:");
+			expect(pdf).not.toContain("0.02 0.71 1 rg");
+		} finally {
+			vi.useRealTimers();
+		}
+		expect(printPageTitle(page("Page 42"))).toBe("");
+		expect(printPageTitle(page("Page42"))).toBe("");
+	});
+
+	it("keeps portrait footer and every compact title field inside their own columns", () => {
+		const sheet = { ...page("W".repeat(120)), orientation: "portrait" as const };
+		const pdf = new TextDecoder().decode(buildCadPdf(scene, [sheet], {
+			showName: "W".repeat(100), project: "W".repeat(100), lightingDesigner: "W".repeat(100),
+			venue: "W".repeat(100), showDate: "W".repeat(100), showVersion: "W".repeat(100),
+			contactEmail: "W".repeat(100), contactPhone: "W".repeat(100),
+			lastSavedAt: 0, printedAt: 1_793_091_600, fixtureCount: 128, universeCount: 4,
+		}));
+		const { widthPoints, titleWidthMillimetres } = printPageLayout(sheet);
+		const border = 7 * 72 / 25.4;
+		const titleLeft = widthPoints - border - titleWidthMillimetres * 72 / 25.4;
+		const fields = [...pdf.matchAll(/BT \/F[12] ([\d.]+) Tf ([\d.]+) ([\d.]+) Td \(([^\n]*)\) Tj ET/g)]
+			.filter((field) => Number(field[3]) < border + 24 * 72 / 25.4);
+		expect(fields.length).toBeGreaterThan(8);
+		for (const field of fields) {
+			const size = Number(field[1]);
+			const x = Number(field[2]);
+			const y = Number(field[3]);
+			expect(size).toBeGreaterThanOrEqual(6);
+			expect(y).toBeGreaterThan(border);
+			if (x > titleLeft) {
+				// Broad W glyphs are a useful worst-case check for field truncation.
+				const columnsEnd = x < titleLeft + 214 ? titleLeft + 208 : widthPoints - border - 6;
+				const broadGlyphs = [...field[4]].filter((character) => character === "W").length;
+				expect(x + broadGlyphs * size * 0.944).toBeLessThan(columnsEnd);
+			} else {
+				expect(field[4]).toContain("Scale 1:");
+				expect(x + field[4].length * size * 0.6).toBeLessThan(titleLeft);
+			}
+		}
 	});
 
 	it("rotates an A4 page while retaining its drawing scale", () => {
@@ -218,11 +277,12 @@ describe("CAD PDF export", () => {
 		const portrait = rotatePrintPage(landscape);
 		expect(portrait.orientation).toBe("portrait");
 		expect(printScaleDenominator(portrait)).toBe(denominator);
+		expect(printPageScale(portrait)).toBeCloseTo(printPageScale(landscape), 12);
 		expect(printPageLayout(portrait)).toMatchObject({
 			paperWidthMillimetres: 210,
 			paperHeightMillimetres: 297,
 			titleWidthMillimetres: 116.42,
-			titleHeightMillimetres: 30,
+			titleHeightMillimetres: 24,
 		});
 		const pdf = new TextDecoder().decode(buildCadPdf(scene, [portrait]));
 		expect(pdf).toContain("/MediaBox [0 0 595.28 841.89]");
@@ -248,6 +308,23 @@ describe("CAD PDF export", () => {
 		expect(pdf).not.toContain("Venue  ");
 		expect(pdf).not.toContain("Lighting designer  ");
 		expect(pdf).not.toContain("Untitled.show");
+	});
+
+	it.each(["landscape", "portrait"] as const)("prints a scale legend matching the measured vector geometry on %s paper", (orientation) => {
+		const sheet = { ...page("Measured scale"), orientation };
+		const measured: CadUnderlay = {
+			...underlay,
+			geometry: { ...underlay.geometry, polylines: [{ points: [[0, 0], [1000, 0]], closed: false, layer: "MEASURE" }] },
+		};
+		const pdf = new TextDecoder().decode(buildCadPdf({ ...scene, entities: [] }, [sheet], undefined, [measured]));
+		const line = pdf.match(/0\.55 G\n0\.4 w\n([\d.]+) ([\d.]+) m ([\d.]+) ([\d.]+) l S/);
+		expect(line).not.toBeNull();
+		const paperDistance = (Number(line?.[3]) - Number(line?.[1])) * 25.4 / 72;
+		const actualDenominator = 1000 / paperDistance;
+		const printedDenominator = printScaleDenominator(sheet);
+		expect(Math.abs(actualDenominator - printedDenominator)).toBeLessThan(0.51);
+		expect(pdf).toContain(`Scale 1:${printedDenominator}`);
+		expect(paperDistance).toBeCloseTo(1000 * printPageScale(sheet), 1);
 	});
 
 	it("derives a stable drawing scale and useful grid from each outline", () => {

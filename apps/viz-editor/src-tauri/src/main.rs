@@ -19,6 +19,7 @@ mod mcp;
 mod model_import;
 mod network_sources;
 mod portable;
+mod print_pages;
 mod profile_update;
 mod recent;
 mod session;
@@ -395,6 +396,8 @@ fn main() {
             underlay::import_cad_underlay,
             underlay::cad_underlays,
             underlay::save_cad_underlay,
+            print_pages::cad_print_pages,
+            print_pages::save_cad_print_pages,
             underlay::delete_cad_underlay,
             annotation::cad_annotations,
             annotation::save_cad_annotation,

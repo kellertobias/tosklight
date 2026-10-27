@@ -94,23 +94,42 @@ fn validate_integrity(conn: &Connection) -> Result<(), StoreError> {
 /// A preflight rejects only a genuinely newer readable version. Corrupt/missing schema data
 /// stays a SQL/read error so startup's ordinary corruption recovery remains authoritative.
 pub(crate) fn validate_reader_version(conn: &Connection) -> Result<(), StoreError> {
-    validate_supported_schema_version(schema_version(conn)?)
+    validate_supported_schema_version(conn, schema_version(conn)?)
 }
 
 fn validate_schema_version(conn: &Connection) -> Result<(), StoreError> {
     let version = schema_version(conn)
         .map_err(|_| StoreError::Invalid("not a Light show file: schema_info is missing".into()))?;
-    validate_supported_schema_version(version)
+    validate_supported_schema_version(conn, version)
 }
 
-fn validate_supported_schema_version(version: i64) -> Result<(), StoreError> {
+fn validate_supported_schema_version(conn: &Connection, version: i64) -> Result<(), StoreError> {
     if version <= SHOW_SCHEMA_VERSION {
         Ok(())
     } else {
         Err(StoreError::Invalid(format!(
-            "show schema {version} is newer than supported schema {SHOW_SCHEMA_VERSION}"
+            "This file was created or saved by a newer version of ToskLight. \
+             Please update ToskLight to open it. \
+             Saved by ToskLight {writer}; file revision: {revision}; \
+             show schema {version} is newer than supported schema {SHOW_SCHEMA_VERSION}. \
+             Current application: ToskLight {current}; supported schema: {SHOW_SCHEMA_VERSION}. \
+             The original file has not been changed.",
+            revision = diagnostic_metadata(conn, super::store::REVISION_METADATA_KEY),
+            writer = diagnostic_metadata(conn, crate::WRITER_APPLICATION_VERSION_METADATA_KEY),
+            current = crate::APPLICATION_VERSION,
         )))
     }
+}
+
+// A future writer may change its metadata layout. Missing/unreadable diagnostic metadata must
+// never hide the readable schema incompatibility or trigger a write to the rejected file.
+fn diagnostic_metadata(conn: &Connection, key: &str) -> String {
+    conn.query_row("SELECT value FROM metadata WHERE key=?1", [key], |row| {
+        row.get::<_, String>(0)
+    })
+    .ok()
+    .filter(|value| !value.trim().is_empty())
+    .unwrap_or_else(|| "unknown".into())
 }
 
 fn validate_identity(conn: &Connection) -> Result<(), StoreError> {
