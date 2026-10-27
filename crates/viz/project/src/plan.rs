@@ -364,13 +364,18 @@ pub fn compile(fixtures: &[PatchedFixture]) -> ScenePlan {
             &mut defaults,
             &mut warnings,
         );
-        let body_size = fallback::body_size(
-            class,
-            moving,
-            fixture.profile.physical.width_millimetres,
-            fixture.profile.physical.height_millimetres,
-            fixture.profile.physical.depth_millimetres,
-        );
+        let body_size = crate::profile_default_model(&fixture.profile, Some(mode.id))
+            .filter(|chosen| chosen.model.name == "profile-spot")
+            .map(|chosen| chosen.body_size_metres)
+            .unwrap_or_else(|| {
+                fallback::body_size(
+                    class,
+                    moving,
+                    fixture.profile.physical.width_millimetres,
+                    fixture.profile.physical.height_millimetres,
+                    fixture.profile.physical.depth_millimetres,
+                )
+            });
         let plan_projections = resolve_plan_artwork(
             fixture,
             mode,

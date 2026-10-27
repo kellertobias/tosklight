@@ -122,18 +122,15 @@ export function fitCadGeometry(
 /**
  * Where the two axes of an entity's own drawing end up on the page, once the entity is turned.
  *
- * A drawing is a flat slice: its points are `[across, up]` in the unturned axes of the view it was
- * built for. Turning it therefore means turning that slice's two axes in the show and projecting
- * each — not spinning the points about the page, which can only express yaw seen from above. Read
- * this way a lamp rolled 180 degrees about X hangs upside down in an elevation, and a truss yawed
- * away from the viewer foreshortens, both of which a single page angle cannot say.
+ * A lamp's canonical SVG is already the requested technical view. Only rotation about the
+ * view's normal turns that drawing on the page; pitch or yaw out of its plane must not squash or
+ * shear it. Venue geometry still represents a physical volume: its slice receives the complete
+ * placement rotation, so a truss turned side-on foreshortens as before.
  *
  * `live_model` geometry has already been turned in three dimensions when it was projected, so its
- * axes are taken as they are. A drawing read per side answers part of the yaw the same way, by
- * reading whichever side a quarter turn brings toward an elevation, and says so in
- * `yawQuarterTurnsShown`; only the yaw left over turns its slice. Otherwise a lamp yawed 90, 180
- * or 270 degrees would be turned twice and an elevation would foreshorten the correct side view it
- * just read away to a line.
+ * axes are taken as they are. A projection read per side reports the quarter turns its selected
+ * drawing already represents in `yawQuarterTurnsShown`; a physical slice receives only the yaw
+ * left over. Lamp sheets keep the selected side's dimensions instead of reprojecting that side.
  */
 function planBasis(
 	entity: CadEntity,
@@ -142,14 +139,26 @@ function planBasis(
 	rotationQuarterTurns: number,
 ): [PlanPoint, PlanPoint] {
 	const shown = geometry.yawQuarterTurnsShown ?? 0;
+	const placed: readonly [number, number, number] = [
+		entity.rotationDegrees[0],
+		entity.rotationDegrees[1],
+		entity.rotationDegrees[2] - 90 * shown,
+	];
+	const lampDrawing =
+		entity.kind !== "venue" &&
+		!entity.scenery &&
+		(geometry.source === "model_drawing" || geometry.source === "model" ||
+			geometry.source === "typed" || geometry.source === "unknown");
 	const rotation: readonly [number, number, number] =
 		geometry.source === "live_model"
 			? [0, 0, 0]
-			: [
-					entity.rotationDegrees[0],
-					entity.rotationDegrees[1],
-					entity.rotationDegrees[2] - 90 * shown,
-				];
+			: !lampDrawing
+				? placed
+				: view === "top_down"
+					? [0, 0, placed[2]]
+					: view === "front_to_back" || view === "back_to_front"
+						? [0, placed[1], 0]
+						: [placed[0], 0, 0];
 	const axis = (local: [number, number]): PlanPoint =>
 		projectPoint(
 			rotateDeskPoint(planeDelta(local, view), rotation),

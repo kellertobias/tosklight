@@ -323,6 +323,10 @@ installed aim. Objects following a Control **3D Point** remain at their authored
 CAD. **Settings > General > Show fixture IDs** also shows their reference labels; select an
 object to read its full reference in Placement Info without covering the plan.
 
+A lamp's technical drawing keeps the shape of its selected top, front or side view. Placement
+rotation about that view's normal turns the drawing; rotations out of its plane do not squash
+or shear it. Live model projections and physical Venue elements retain their full 3D placement.
+
 Use the viewport's **From / To** cut planes to omit obstructing scenery. Top views cut by height,
 elevations by depth. Empty limits are unrestricted; **Show all** clears the cut. Objects wholly
 outside the slice are hidden and cannot be picked. A page created from the viewport retains that
