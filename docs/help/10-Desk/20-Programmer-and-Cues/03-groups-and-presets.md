@@ -20,6 +20,8 @@ and the white total when all are selected. This follows fixture selection as wel
 ![Group member-count states](../../assets/screenshots/panes/groups-tile-counts.png)
 
 A live reference follows later membership changes. Dereference it when you need a frozen list.
+Overwriting a Group from a selection made only of live Groups preserves their ordered references,
+so later source membership changes also reach the recorded Group.
 Derived Groups preserve their ordering rule and source relationship; see exact syntax in the
 [Command Line Reference](01-command-line.md#dereferencing-groups).
 
