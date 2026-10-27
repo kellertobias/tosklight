@@ -4,11 +4,13 @@ This engineering guide covers the build and review workflow for the operator man
 Help. It is deliberately outside `docs/help`: that tree is published to desk users.
 
 Run `npm run manual` to build and verify the PDF and offline HTML manual from the numbered Markdown
-below `docs/help`. The command invokes the pinned `@tobisk/markdown-manuals` package through `npx`
-and provisions its Python preprocessing/verification environment under
+below `docs/help`. The command uses `@tobisk/markdown-manuals`, pinned to an immutable Git revision
+in `tools/build.sh`. It installs that revision under `.artifacts/cache/manual-renderer/` and runs
+its built CLI. Published package overrides run through `npx`. It provisions the Python
+preprocessing and verification environment under
 `.artifacts/cache/manual-venv`. Its outputs are the PDF, HTML directory, and deployable ZIP under
 `.artifacts/generated/manual/`. Set `LIGHT_MANUAL_RENDERER_PACKAGE` only when deliberately testing
-a different published renderer version.
+a different package or renderer revision.
 
 Help screenshots are declared in `docs/help/screenshot-manifest.json`. Use
 `npm run screenshots:help` to regenerate candidates from the Storybook and live-desk capture paths,

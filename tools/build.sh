@@ -16,7 +16,7 @@ MANUAL_REQUIREMENTS="$ROOT/docs/help/.tooling/requirements.txt"
 MANUAL_VENV_DIR="$LIGHT_ARTIFACTS_DIR/cache/manual-venv"
 MANUAL_PYTHON="$MANUAL_VENV_DIR/bin/python"
 MANUAL_CONFIG="$ROOT/docs/help/manual.config.json"
-MANUAL_RENDERER_PACKAGE="${LIGHT_MANUAL_RENDERER_PACKAGE:-@tobisk/markdown-manuals@1.3.4}"
+MANUAL_RENDERER_PACKAGE="${LIGHT_MANUAL_RENDERER_PACKAGE:-git+https://github.com/kellertobias/markdown-docgen.git#9b9d953fc1516403c9a5c663b8cfbc50196b3bb9}"
 CONTROL_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-control-artifacts.json"
 HARDWARE_TAURI_CONFIG="$LIGHT_TMP_DIR/tauri-hardware-artifacts.json"
 DEV_SERVER_LABEL="de.tokenet.tosklight.dev-server"
@@ -91,9 +91,7 @@ generate_attribute_reference() {
       "$ROOT/docs/help/99-Appendix/02-default-attributes.md"
 }
 
-# npx fetches the renderer from the registry on every run, and a single ECONNRESET there has
-# failed the whole documentation build. The download is retried on its own so that the renderer
-# itself still runs exactly once: a manual that genuinely fails to render must not be retried.
+# Retry registry downloads without rerunning a failed render.
 prefetch_manual_renderer() {
   local attempt
   for attempt in 1 2 3; do
@@ -107,12 +105,34 @@ prefetch_manual_renderer() {
 }
 
 run_manual_renderer() {
-  require npx
   require node
   require npm
-  prefetch_manual_renderer
+  local renderer_command
+  case "$MANUAL_RENDERER_PACKAGE" in
+    git+* | github:* | gitlab:* | bitbucket:*)
+      # npm cache add and older npx versions cannot prepare Git dependencies. Install an
+      # immutable revision once in its own cache, then run its built CLI directly.
+      local cache_key renderer_dir renderer_cli
+      cache_key="$(node -p 'require("node:crypto").createHash("sha256").update(process.argv[1]).digest("hex")' "$MANUAL_RENDERER_PACKAGE")"
+      renderer_dir="$LIGHT_ARTIFACTS_DIR/cache/manual-renderer/$cache_key"
+      renderer_cli="$renderer_dir/node_modules/@tobisk/markdown-manuals/dist/cli.js"
+      if [[ ! -f "$renderer_dir/installed" || ! -f "$renderer_cli" ]]; then
+        mkdir -p "$renderer_dir"
+        printf '{"private":true}\n' > "$renderer_dir/package.json"
+        npm install --prefix "$renderer_dir" --no-save --package-lock=false --no-audit --no-fund "$MANUAL_RENDERER_PACKAGE"
+        [[ -f "$renderer_cli" ]] || { echo "manual renderer installation did not produce its CLI" >&2; return 1; }
+        touch "$renderer_dir/installed"
+      fi
+      renderer_command=(node "$renderer_cli")
+      ;;
+    *)
+      require npx
+      prefetch_manual_renderer
+      renderer_command=(npx --yes --package "$MANUAL_RENDERER_PACKAGE" markdown-manual)
+      ;;
+  esac
   LIGHT_MANUAL_VERSION="${LIGHT_MANUAL_VERSION:-$(node -p "require(process.argv[1]).version" "$ROOT/package.json")}" \
-    npx --yes --package "$MANUAL_RENDERER_PACKAGE" markdown-manual "$@"
+    "${renderer_command[@]}" "$@"
 }
 
 build_icon_contact_sheets() {
