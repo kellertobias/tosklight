@@ -6,6 +6,7 @@ export interface LabelRequest {
 	lines: string[];
 	width: number;
 	height: number;
+	symbolBounds?: LabelBounds;
 }
 export interface PlacedLabel extends LabelRequest {
 	box: LabelBounds;
@@ -63,6 +64,15 @@ function placed(request: LabelRequest, box: LabelBounds): PlacedLabel {
 }
 function* candidates(request: LabelRequest, gap: number) {
 	const [x, y] = request.anchor;
+	const body = request.symbolBounds;
+	if (body) {
+		const right = body.x + body.width + gap, left = body.x - gap - request.width;
+		const above = body.y - gap - request.height, below = body.y + body.height + gap;
+		for (const [cx, cy] of [[right, y - request.height / 2], [left, y - request.height / 2],
+			[x - request.width / 2, above], [x - request.width / 2, below],
+			[right, above], [left, above], [right, below], [left, below]])
+			yield { x: cx, y: cy, width: request.width, height: request.height };
+	}
 	for (let ring = 0; ring < 7; ring++) {
 		const distance = 3 + ring * (request.height + gap);
 		for (const [cx, cy] of [

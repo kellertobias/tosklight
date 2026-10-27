@@ -95,7 +95,7 @@ export function CadEntityLabels({ entities, drawings = [], preview, view, rotati
 			if (anchor[0] < bounds.x || anchor[0] > bounds.x + bounds.width || anchor[1] < bounds.y || anchor[1] > bounds.y + bounds.height) continue;
 			const lines = [fixtureLabelLines(entity, showFixtureIds, showDmxAddresses).join(" · ")].filter(Boolean);
 			if (showFixtureIds && entity.positionReference) lines.push(`Follows 3D Point ${entity.positionReference}`);
-			if (lines.length) requests.push({ key: entity.id, anchor, lines, width: labelWidth(lines, 10, 5), height: lines.length * 12 + 6 });
+			if (lines.length) requests.push({ key: entity.id, anchor, lines, symbolBounds: entity.kind !== "venue" ? obstacles.at(-1) : undefined, width: labelWidth(lines, 10, 5), height: lines.length * 12 + 6 });
 		}
 		return placeLabels(requests, bounds, 3, obstacles);
 	}, [enabled, entities, drawings, preview, view, rotationQuarterTurns, camera, showFixtureIds, showDmxAddresses, viewport.width, viewport.height]);

@@ -41,7 +41,7 @@ export function printFixtureLabelLayout(page: CadPrintPage, entities: readonly C
 			(page.centreMillimetres[1] + height / 2 - point[1]) * scale,
 		];
 		if (anchor[0] < 0 || anchor[0] > widthPoints || anchor[1] < 0 || anchor[1] > heightPoints) continue;
-		requests.push({ key: entity.id, anchor, lines, width: labelWidth(lines, FIXTURE_LABEL_SIZE), height: lines.length * FIXTURE_LABEL_LINE_HEIGHT + FIXTURE_LABEL_PADDING * 2 });
+		requests.push({ key: entity.id, anchor, lines, symbolBounds: obstacles.at(-1), width: labelWidth(lines, FIXTURE_LABEL_SIZE), height: lines.length * FIXTURE_LABEL_LINE_HEIGHT + FIXTURE_LABEL_PADDING * 2 });
 	}
 	return { ...placeLabels(requests, bounds, 1.5, obstacles), obstacles, bounds, scale, widthPoints, heightPoints };
 }
