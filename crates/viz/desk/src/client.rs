@@ -158,9 +158,17 @@ impl DeskClient {
     /// For a renderer drawing the desk's Stage inside the desk's own window. It is the same
     /// numbers the desk is sending, read from the desk rather than heard from the network, because
     /// there may be no network: a desk with no output routes still has a Stage to draw.
-    pub async fn output_dmx(&self) -> Option<crate::wire::OutputDmxSnapshot> {
+    /// Only a renderer following Preload needs its additional native/compatibility lane.
+    pub async fn output_dmx(
+        &self,
+        include_preload: bool,
+    ) -> Option<crate::wire::OutputDmxSnapshot> {
         self.get_json::<crate::wire::OutputDmxSnapshot>(
-            "/api/v2/output/dmx?include_preload=true",
+            if include_preload {
+                "/api/v2/output/dmx?include_preload=true"
+            } else {
+                "/api/v2/output/dmx"
+            },
             "desk output",
         )
         .await

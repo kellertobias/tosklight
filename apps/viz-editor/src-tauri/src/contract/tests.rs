@@ -17,6 +17,10 @@ fn installed_appearance_crosses_the_planning_contract_without_identity_loss() {
             },
         },
         shaper_angles_degrees: [-10.0, 20.0, 0.0, 179.0],
+        manual_optics: Some(light_fixture::InstalledManualOptics {
+            zoom_degrees: Some(48.0),
+            shaper_blades: [0.15, 0.25, 0.5, 0.75],
+        }),
     };
 
     let value = serde_json::to_value(InstalledAppearanceDto::from(&appearance)).unwrap();
@@ -27,6 +31,11 @@ fn installed_appearance_crosses_the_planning_contract_without_identity_loss() {
     assert_eq!(
         value["gel"]["embeddedFallback"]["visualizerSrgb"],
         "#C01020"
+    );
+    assert_eq!(value["manualOptics"]["zoomDegrees"], 48.0);
+    assert_eq!(
+        value["manualOptics"]["shaperBlades"],
+        serde_json::json!([0.15_f32, 0.25, 0.5, 0.75])
     );
     let decoded: InstalledAppearanceDto = serde_json::from_value(value).unwrap();
     assert_eq!(InstalledFixtureAppearance::from(decoded), appearance);
@@ -364,4 +373,75 @@ fn venue_construction_survives_the_architect_fixture_dto_and_patch_candidate() {
         payload["sceneryOptions"]
     );
     assert_eq!(SceneryOptions::from(dto), options);
+}
+
+#[test]
+fn manual_optics_survive_architect_root_and_copy_source_gel_edits() {
+    let mut fixture: FixtureDto = serde_json::from_value(serde_json::json!({
+        "fixtureId":Uuid::new_v4(),"fixtureNumber":1,"virtualFixtureNumber":null,
+        "name":"Front Fresnel","profileId":Uuid::new_v4(),"profileRevision":1,"modeId":Uuid::new_v4(),
+        "splitPatches":[],"layerId":"default","location":{"x":0,"y":0,"z":0},
+        "rotation":{"x":0,"y":0,"z":0},
+        "installedAppearance":{"manualOptics":{"zoomDegrees":48,"shaperBlades":[0.1,0.2,0.3,0.4]}},
+        "multipatch":[{"id":Uuid::new_v4(),"name":"Copy","splitPatches":[],
+            "location":{"x":1,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0},
+            "installedAppearance":{"manualOptics":{"zoomDegrees":null,"shaperBlades":[0.4,0.3,0.2,0.1]}}}]
+    })).unwrap();
+    fixture.installed_appearance.light_source = InstalledLightSourceDto::Halogen;
+    fixture.multipatch[0].installed_appearance.gel = GelAssignmentDto::Custom {
+        name: "Warm".into(),
+        color_srgb: "#FFEEDD".into(),
+        note: None,
+    };
+    let candidate = PatchFixtureCandidate::from(fixture);
+    assert_eq!(
+        candidate
+            .patch
+            .installed_appearance
+            .manual_optics
+            .as_ref()
+            .unwrap()
+            .zoom_degrees,
+        Some(48.0)
+    );
+    assert_eq!(
+        candidate.patch.multipatch[0]
+            .installed_appearance
+            .manual_optics
+            .as_ref()
+            .unwrap()
+            .zoom_degrees,
+        None
+    );
+    let returned = serde_json::to_value(FixtureDto::from(PatchFixtureProjection {
+        fixture_revision: 1,
+        profile: candidate.profile,
+        patch: candidate.patch,
+    }))
+    .unwrap();
+    assert_eq!(
+        returned["installedAppearance"]["manualOptics"],
+        serde_json::json!({"zoomDegrees":48.0,"shaperBlades":[0.1_f32,0.2_f32,0.3_f32,0.4_f32]})
+    );
+    assert_eq!(
+        returned["multipatch"][0]["installedAppearance"]["manualOptics"],
+        serde_json::json!({"zoomDegrees":null,"shaperBlades":[0.4_f32,0.3_f32,0.2_f32,0.1_f32]})
+    );
+    assert_eq!(
+        returned["installedAppearance"]["lightSource"]["type"],
+        "halogen"
+    );
+    assert_eq!(
+        returned["multipatch"][0]["installedAppearance"]["gel"]["name"],
+        "Warm"
+    );
+}
+
+#[test]
+fn legacy_architect_appearance_omits_manual_optics_without_inventing_defaults() {
+    let legacy: InstalledAppearanceDto = serde_json::from_value(serde_json::json!({})).unwrap();
+    let native = InstalledFixtureAppearance::from(legacy);
+    assert_eq!(native.manual_optics, None);
+    let returned = serde_json::to_value(InstalledAppearanceDto::from(&native)).unwrap();
+    assert!(returned.get("manualOptics").is_none());
 }

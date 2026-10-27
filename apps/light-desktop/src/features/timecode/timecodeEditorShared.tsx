@@ -1,3 +1,4 @@
+import type { TimecodeDefinition } from "../../api/types/timecode";
 import { Button } from "@tosklight/ui";
 import type { CSSProperties, RefObject } from "react";
 import type { CueList } from "../../api/types";
@@ -139,7 +140,7 @@ export function timelineScroller(
 /** A pending overview-window resize, held while the operator is still dragging it. */
 export interface OverviewResize {
 	zoom: number;
-	startFraction: number;
+	startFrame: number;
 	revision: number;
 }
 
@@ -149,3 +150,21 @@ export function AudioLaneFileName({ name }: { name?: string | null }) {
 	return <span className="timecode-audio-lane-file">{name}</span>;
 }
 
+/** Stable display sections do not rewrite the portable show's lane order. */
+export function displayedTimecodeLanes(definition: TimecodeDefinition) {
+	const rank = (
+		kind: TimecodeDefinition["lanes"][number]["content"]["kind"],
+	) =>
+		kind === "audio_volume"
+			? definition.audio
+				? 0
+				: 4
+			: kind === "speed_group"
+				? 1
+				: kind === "cue_list"
+					? 2
+					: 3;
+	return [...definition.lanes].sort(
+		(left, right) => rank(left.content.kind) - rank(right.content.kind),
+	);
+}

@@ -213,6 +213,8 @@ export function reduceHydration(
 						? action.windowSettings.stageVizBackground
 						: state.stageVizBackground,
 				stageVizQuality: "draft",
+				stageVizDetailedPeople: typeof action.windowSettings?.stageVizDetailedPeople === "boolean"
+					? action.windowSettings.stageVizDetailedPeople : false,
 				stageVizAtmosphere: numberOr(
 					action.windowSettings?.stageVizAtmosphere,
 					state.stageVizAtmosphere,

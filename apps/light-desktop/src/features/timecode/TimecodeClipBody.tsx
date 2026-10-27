@@ -1,3 +1,5 @@
+import { ClipBehaviorLabels } from "./TimecodeClipBehaviorLabels";
+import { ClipEndHandle } from "./TimecodeClipEndHandle";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { CueList } from "../../api/types";
 import type { TimecodeCueListClip } from "../../api/types/timecode";
@@ -27,6 +29,17 @@ export function CueListClipBody({
 	onPlaceCueStart,
 	onSetClipFade,
 	onCueTimingError,
+	selectedCueId = null,
+	onSelectCue,
+	onCloseCue: _onCloseCue,
+	expanded = false,
+	inspectorHost = null,
+	onMoveClip,
+	onPreviewMoveClip,
+	onSetClipEnd,
+	onPreviewClipEnd,
+	clipEndMinimum,
+	clipEndMaximum,
 }: {
 	item: TimelineItem;
 	clip: TimecodeCueListClip;
@@ -49,25 +62,44 @@ export function CueListClipBody({
 		frames: number,
 	): void;
 	onCueTimingError?(message: string): void;
+	selectedCueId?: string | null;
+	onSelectCue?(cueId: string): void;
+	onCloseCue?(): void;
+	expanded?: boolean;
+	inspectorHost?: HTMLElement | null;
+	onMoveClip?(clipId: string, startFrame: number): void;
+	onPreviewMoveClip?(clipId: string, startFrame: number | null): void;
+	onSetClipEnd?(clipId: string, frame: number): void;
+	onPreviewClipEnd?(clipId: string, frame: number | null): void;
+	clipEndMinimum?: number;
+	clipEndMaximum?: number;
 }) {
 	return (
 		<>
+			<ClipBehaviorLabels clip={clip} />
 			<span
 				className="timecode-clip-handle"
+				title="Drag to move the Cuelist clip"
 				onPointerDown={(event) => {
 					event.stopPropagation();
 					startDrag(event, item.selection, item.frame, undefined, startVolume);
 				}}
 			>
-				<b>{item.label}</b>
-				{cueList?.number !== undefined && <small>{cueList.number}</small>}
+				<b>{cueList?.number !== undefined ? `Cuelist ${cueList.number} · ` : ""}{cueList?.name ?? item.label}</b>
 			</span>
-			{onSetClipFade && (
+			{expanded && onSetClipFade && (
 				<ClipFadeHandles
 					clip={clip}
 					pixelsPerFrame={pixelsPerFrame}
 					onCommit={(kind, frames) => onSetClipFade(clip.id, kind, frames)}
 				/>
+			)}
+			{!cueList?.body && (
+				<span className="timecode-cue-clip-diagnostic" role="status">
+					{cueList
+						? "Cue details unavailable. Reopen this Timecode to reload them."
+						: "Cuelist is missing from this show."}
+				</span>
 			)}
 			{cueList?.body && timingDefaults && (
 				<CueListClipContents
@@ -78,8 +110,31 @@ export function CueListClipBody({
 					onSaveCueList={onSaveCueList}
 					onPlaceCueStart={onPlaceCueStart}
 					onError={onCueTimingError}
+					selectedCueId={selectedCueId}
+					onSelectCue={onSelectCue}
+					expanded={expanded}
+					inspectorHost={inspectorHost}
+					onMoveClip={onMoveClip}
+					onPreviewMoveClip={onPreviewMoveClip}
+					onSetClipFade={onSetClipFade}
 				/>
 			)}
+			<ClipEndHandle
+				onSelectCue={onSelectCue}
+				clip={clip}
+				pixelsPerFrame={pixelsPerFrame}
+				expanded={expanded}
+				minimum={clipEndMinimum}
+				maximum={clipEndMaximum}
+				onCommit={
+					onSetClipEnd ? (frame) => onSetClipEnd(clip.id, frame) : undefined
+				}
+				onPreview={
+					onPreviewClipEnd
+						? (frame) => onPreviewClipEnd(clip.id, frame)
+						: undefined
+				}
+			/>
 			<span
 				className="timecode-clip-edge start"
 				aria-hidden="true"

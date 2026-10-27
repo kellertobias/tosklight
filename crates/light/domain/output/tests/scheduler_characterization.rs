@@ -34,6 +34,9 @@ async fn scheduler_updates_health_and_stops_on_cancellation() {
     let result = result.lock().unwrap().clone();
     assert_eq!(result.frames_sent, 3);
     assert_eq!(result.packets_sent, 6);
+    let (fine_counts, fine_total) = result.complete_fine_tick_duration_counts().unwrap();
+    assert_eq!(fine_total, result.frames_sent);
+    assert_eq!(fine_counts.iter().sum::<u64>(), result.frames_sent);
     assert_eq!(result.frame_hz, 44.0);
     assert_eq!(
         result.tick_duration_bucket_counts.iter().sum::<u64>(),

@@ -26,6 +26,34 @@ Down** is a plan of this rig rather than a plan of wherever the camera happened 
 how much the renderer spends on volumetrics, shadows and bloom, and applies immediately
 without the Visualizer reconnecting or reloading the show.
 
+**Draft** keeps the authored rig, optics and laser content while drawing the shaded scene at
+25% of each output dimension, then enlarging it to the window. Labels and editing overlays
+remain at the output resolution; fine model, video and lighting detail is softer. Its separate
+beam layer uses 25% of those reduced scene dimensions. Uniform unshadowed beam segments use
+analytic integration; optical and shadowed segments retain bounded sampling.
+When camera, geometry, lights, fog and shadow resources are unchanged, Draft reuses its beam
+layer while current video, lasers and composition continue updating. A moving head, changed level
+or color, moved curtain, camera gesture or resource replacement rebuilds the layer. This reuse
+does not guarantee a frame rate for a continually changing rig.
+
+Draft retains a two-light shadow budget for opaque scenery; other lamps can light through
+opaque objects outside that budget. Drapes retain separate blocking checks, and visible opaque
+silhouettes still clip the beam layer. The result is an interactive approximation for aim, color and
+scene relationships; use Ultra or a [4K image render](03-snapshots-and-blender.md#render-a-4k-image)
+to inspect fine lighting detail.
+
+**3D Lines** uses model-derived edges and actual depth occlusion without the lighting, shadow or
+bloom passes. A held static view does not need recurring render submissions. Camera movement and
+moving heads still redraw the real rig.
+
+Standalone Draft and 3D Lines use a 60 Hz ceiling for steady animation, including on 120 Hz screens.
+Immediate input or reveal redraws can occur sooner; static pictures stop GPU submissions.
+Standard, High and Ultra lighting views retain display-driven pacing.
+
+Fresnel fields have soft edges; PAR and ACL fields retain a brighter centre with a soft falloff. Draft and Standard retain these basic field shapes and physical barn-door cuts. Draft's unshadowed, unshaped shafts keep a fixed four-point angular estimate alongside analytic distance integration.
+
+Explicit tungsten and halogen sources use a nominal lamp response: fast heating, fast initial dimming and slower cooling near low levels. Choose the installed **Light source** in Show Patch when the profile does not identify it. LED and unknown sources remain immediate. This changes the visualized lamp only; DMX values and Cue fades keep their own timing. Observer persistence remains separate. The response is an estimated preview, not measured calibration for every lamp or dimmer.
+
 **Reset physics scenery** is a separate authoritative show-control action. It restores every
 released physics body on the selected renderer target to its authored pose. Re-selecting a view,
 losing DMX, or reconnecting is not a reset.

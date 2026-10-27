@@ -46,6 +46,7 @@ fn two_light_surface_scene() -> (Scene, SceneValues, ViewConfiguration) {
     use viz_scene::{glam::Vec3, uuid::Uuid};
 
     let fixture = |name: &str, position: Vec3| FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: Uuid::new_v4(),
@@ -60,6 +61,7 @@ fn two_light_surface_scene() -> (Scene, SceneValues, ViewConfiguration) {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody::default(),
         patched: true,
         address: None,

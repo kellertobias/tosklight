@@ -1,3 +1,10 @@
+mod capture;
+mod display;
+mod layout;
+mod phases;
+mod picture;
+mod transport;
+
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -20,6 +27,10 @@ const EXPECTED_FIXTURE_RECORDS_ENV: &str = "LIGHT_STAGE_PACKAGED_BENCH_EXPECTED_
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PackagedStageBenchmarkConfig {
+    #[serde(flatten)]
+    baseline: layout::BaselineOptions,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    capture_exercise: Option<String>,
     duration_seconds: u64,
     control_duration_seconds: u64,
     profile: String,
@@ -27,10 +38,12 @@ pub(crate) struct PackagedStageBenchmarkConfig {
     stage_enabled: bool,
     fixture_sheet: bool,
     expected_fixture_records: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    baseline_phases: Option<String>,
 }
 
 #[tauri::command]
-pub(crate) fn packaged_stage_benchmark_config(
+pub(crate) async fn packaged_stage_benchmark_config(
     window: tauri::WebviewWindow,
 ) -> Result<Option<PackagedStageBenchmarkConfig>, String> {
     if window.label() != "main" {
@@ -40,9 +53,54 @@ pub(crate) fn packaged_stage_benchmark_config(
         return Ok(None);
     }
     let stage_enabled = stage_enabled(std::env::var(STAGE_ENV).ok().as_deref())?;
-    let _ = window.show();
-    let _ = window.set_focus();
+    let baseline = layout::BaselineOptions::from_env()?;
+    let fixed_pixels = baseline.baseline_layout.is_some();
+    transport::requested(
+        report_path().is_some(),
+        baseline.baseline_layout.as_deref(),
+        std::env::var(transport::TRANSPORT_ENV).ok().as_deref(),
+    )?;
+    let baseline_phases = phases::configured(std::env::var(phases::PHASES_ENV).ok().as_deref())?;
+    if baseline_phases.is_some() {
+        if !stage_enabled {
+            return Err("Baseline phases require Stage enabled".into());
+        }
+        phases::validate(
+            window.label(),
+            report_path().as_deref(),
+            baseline.baseline_layout.as_deref(),
+            baseline_phases.as_deref(),
+            &std::env::var(PROFILE_ENV).unwrap_or_default(),
+            std::env::var("LIGHT_PACKAGED_STAGE_DYNAMICS")
+                .ok()
+                .as_deref()
+                == Some("1"),
+            std::env::var(DURATION_ENV)
+                .ok()
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(30),
+        )?;
+    }
+    let capture_exercise = capture::configured(
+        std::env::var(capture::ENV).ok().as_deref(),
+        baseline.baseline_layout.as_deref(),
+        stage_enabled,
+        baseline_phases.as_deref(),
+        std::env::var("LIGHT_DESKTOP_TEST_BIND").ok().as_deref(),
+        std::env::var("LIGHT_STAGE_PACKAGED_BENCH_DISPLAY")
+            .ok()
+            .as_deref(),
+        std::env::var("TOSKLIGHT_VIZ_IMAGE_DIR").ok().as_deref(),
+    )?;
+    display::place(&window, fixed_pixels).await?;
+    window.show().map_err(|error| error.to_string())?;
+    if !fixed_pixels {
+        window.set_focus().map_err(|error| error.to_string())?;
+    }
     Ok(Some(PackagedStageBenchmarkConfig {
+        baseline,
+        baseline_phases,
+        capture_exercise,
         duration_seconds: std::env::var(DURATION_ENV)
             .ok()
             .and_then(|value| value.parse::<u64>().ok())
@@ -55,9 +113,10 @@ pub(crate) fn packaged_stage_benchmark_config(
             .unwrap_or(30),
         profile: std::env::var(PROFILE_ENV).unwrap_or_else(|_| "default-stage".to_string()),
         additional_stage_window: stage_enabled
+            && !fixed_pixels
             && env_enabled_by_default(ADDITIONAL_STAGE_WINDOW_ENV),
         stage_enabled,
-        fixture_sheet: env_enabled_by_default(FIXTURE_SHEET_ENV),
+        fixture_sheet: !fixed_pixels && env_enabled_by_default(FIXTURE_SHEET_ENV),
         expected_fixture_records: std::env::var(EXPECTED_FIXTURE_RECORDS_ENV)
             .ok()
             .and_then(|value| value.parse::<usize>().ok())
@@ -141,4 +200,77 @@ fn report_path() -> Option<PathBuf> {
         .filter(|value| !value.is_empty())
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())
+}
+
+/// Only the private fixed baseline may request a photorealistic Control test pane.
+pub(crate) fn baseline_picture(message: &mut viz_helper::protocol::ToHelper) -> Result<(), String> {
+    if report_path().is_some() && std::env::var_os(layout::LAYOUT_ENV).is_some() {
+        picture::apply(message, &layout::BaselineOptions::from_env()?);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn exercise_packaged_stage_benchmark_visibility(
+    window: tauri::WebviewWindow,
+) -> Result<phases::VisibilityEvidence, String> {
+    phases::exercise(&window).await
+}
+
+/// A transport override belongs exclusively to the private, fixed-pixel benchmark.
+pub(crate) fn baseline_transport(
+    identity: &viz_helper::handshake::HelperIdentity,
+    available: Vec<viz_helper::protocol::FrameTransport>,
+) -> Result<viz_helper::protocol::FrameTransport, String> {
+    let report = report_path().is_some();
+    let layout = if report {
+        layout::BaselineOptions::from_env()?.baseline_layout
+    } else {
+        None
+    };
+    let request = transport::requested(
+        report,
+        layout.as_deref(),
+        std::env::var(transport::TRANSPORT_ENV).ok().as_deref(),
+    )?;
+    let offered = transport::filter(available, request)?;
+    identity.embeddable_with(&offered).ok_or_else(|| {
+        format!("no compatible picture transport: desk offers {offered:?}, renderer offers {:?}; explicit benchmark requests cannot fall back", identity.transports)
+    })
+}
+
+/// Local real-application captures reuse the verified internal-display placement without
+/// activating the benchmark frontend or changing the operator's other desktop windows.
+pub(crate) fn local_capture_requested() -> bool {
+    std::env::var_os("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY").is_some()
+}
+
+pub(crate) fn validate_local_capture() -> Result<(), String> {
+    if !local_capture_requested() {
+        return Ok(());
+    }
+    if std::env::var("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY")
+        .ok()
+        .as_deref()
+        != Some("internal")
+    {
+        return Err("LIGHT_DESKTOP_TEST_CAPTURE_DISPLAY only supports internal".into());
+    }
+    let address: std::net::SocketAddr = std::env::var("LIGHT_DESKTOP_TEST_BIND")
+        .map_err(|_| "Local capture requires an isolated loopback LIGHT_DESKTOP_TEST_BIND")?
+        .parse()
+        .map_err(|_| "Invalid local capture bind")?;
+    if !address.ip().is_loopback() || address.port() == 5000 {
+        return Err("Local capture requires an isolated loopback port distinct from5000".into());
+    }
+    Ok(())
+}
+
+pub(crate) async fn show_local_capture(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    let window = app
+        .get_webview_window("main")
+        .ok_or("Local capture window is missing")?;
+    display::place(&window, false).await?;
+    window.show().map_err(|error| error.to_string())
 }

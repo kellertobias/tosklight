@@ -5,6 +5,22 @@ the Default Stage and a deterministic large scene. It combines the existing
 frontend Stage diagnostics with the authenticated runtime output and
 visualization diagnostics.
 
+## Current native acceptance boundary (TL-852)
+
+The authoritative scenarios are `docs/testing/16-stage-performance.md`. Preserve the legacy 10 Hz source cadence, 120 ms source-to-reported-native-frame p95 and 200 ms hard delivery/gap ceilings. The protocol's `FramePresented` is a helper submission witness, not an on-glass presentation event. A passing delivery collector does not prove displayed 60 FPS.
+
+TL-852 proposes a separate five-minute active display gate: at least 59 actually displayed distinct Stage FPS, missed 60 Hz opportunities at or below 1%, interval p95 at or below 18.5 ms and p99 at or below 33.4 ms. Declare drawable identity, presentation timebase and opportunity denominator. On the internal 120 Hz panel, the intentional Stage target is 60 Hz; alternate unused monitor refreshes are not misses. These display targets remain unproven without correlated platform presentation evidence.
+
+Proposed GPU reductions are at least 70% for Draft and 90% for Lines against the recorded before build at matched actual 60 Hz, using whole-Stage GPU time per second. Include both helper lanes and Control compositing, account for other load and overlapping scopes, and retain comparable camera/scene/look/transport/physical pixels. Sparse timestamp sums and a submission cap cannot establish these percentages. Keep missing, short or unmatched evidence explicitly unverified. See `docs/engineering/stage-gpu-measurement.md` for instrument scope and trace limits.
+
+The fixed matrix measures one 1920 × 1080 physical drawable or two 1920 × 540 Live/Follow Preload drawables: the same total pixel area. Record actual DPR, refresh, native GPU/backend, bundle/build identity and helper/compositor ownership. Private benchmark overrides can measure Full3d Draft as well as Lines; they do not change ordinary Control policy. The internal display is selected and containment verified before showing a benchmark window. Isolated HTTP/OSC ports and data/output directories preserve the operator's active desk and persistent settings.
+
+Static, moving-camera, resident-hidden and revealed phases are distinct evidence. After a healthy static/hidden settling boundary, require zero recurring helper submissions and compositor acquire/submission admissions over verified interior native intervals with per-pane coverage. Missing telemetry, gaps and unknown boundary spans are not zero work. Keep helpers resident and CPU/input state current; on reveal show the latest state within the existing 200 ms ceiling without replaying old frames. Admission counters alone cannot prove whole-Stage zero GPU time. Neither idle savings nor a successful short phase substitutes for the active 500-instance display/GPU targets.
+
+## Historical browser collector
+
+The following browser workflow and its detailed historical workloads are diagnostic evidence. They do not establish current packaged/native capacity or TL-852 acceptance. The 1,000-instance profile below spans 37 universes and exceeds the current 24-universe supported output cap; it is not a supported-capacity claim.
+
 Run the focused collector with:
 
 ```sh
@@ -83,8 +99,7 @@ npm run benchmark:packaged-stage -- 300 large-stage
 npm run benchmark:packaged-stage -- 1 improved-beam-spike
 ```
 
-The runner stops the already-open development desk and service, launches the
-exact debug Tauri application with an isolated fresh benchmark data directory,
+Without an isolated-port override, the runner stops the already-open development desk and service. For reference-host review use `LIGHT_PACKAGED_STAGE_PORT=5160` plus an unused `LIGHT_PACKAGED_STAGE_OSC_PORT`: this starts the bundled server beside the user desk and stops only owned processes. The isolated path launches the packaged executable directly; macOS restoration overrides are process-local arguments, not persistent user defaults. Both paths use a fresh benchmark data directory,
 authenticates through the production session and Patch routes, and prepares the
 requested profile before either measured Stage surface mounts. On macOS it
 launches the `.app` through LaunchServices; on Windows and Linux it launches
@@ -96,13 +111,13 @@ Dynamic instances. The runner releases the benchmark-only preparation barrier on
 after the profile is ready, then records a consolidated report under
 `.artifacts/performance/stage/`.
 
-The benchmark surface keeps independent Live and Follow Preload views open,
-cycles every render quality, exercises 2D/3D native surfaces, resizes their
-shared drawable, tears down and recreates the live renderer helper, and drives
+The historical lifecycle exercise kept independent Live and Follow Preload views open,
+cycled render qualities, exercised 2D/3D surfaces, resized the
+shared drawable, tore down and recreated the live renderer helper, and drove
 alternating Live and Preload values through the
-production command and Preload lifecycle capabilities. Before either Stage
-surface mounts, it drives the same changes for an equal-duration no-Stage
-output baseline. The runner takes authenticated production diagnostics
+production command and Preload lifecycle capabilities. Current lifecycle profiles preserve the Control Draft/wireframe admission rules; explicit fixed-layout matrix runs instead select one mode/quality and suppress lifecycle resize, show-switch and suspend exercises. Before either Stage
+surface mounts, the runner drives a bounded no-Stage
+output baseline capped at 300 seconds. The runner takes authenticated production diagnostics
 snapshots before the baseline, at the Stage boundary, and after the Stage
 window. It subtracts the fixed scheduler-duration histogram buckets, enforces
 the 1 ms-or-5-percent p99 rule, and rejects Stage-window deadline misses or send
@@ -124,11 +139,11 @@ size, and lifecycle transition per lane, so a long run cannot grow an
 unbounded frontend history. The report is marked
 `measurementSurface: packaged-tauri-native-stage` and enforces the 120 ms p95 and
 200 ms hard changing-frame ceilings, the 200 ms presentation-gap ceiling, both
-lane samples, all four qualities, and native renderer restart/resize ownership. It
+lane samples, Control-admitted view/quality, and native renderer restart/resize ownership for lifecycle runs. Explicit fixed-layout conditions record their selected mode/quality separately. It
 also records the requested profile and verified fixture/instance counts,
 native drawable dimensions, instance and draw-call counts, degraded frames,
-and measured CPU acquisition and GPU submission time from the production
-renderer helper. Process resident memory is sampled separately by the runner.
+and elapsed renderer/acquire wall time plus scoped sparse GPU pass timings from the production
+renderer helper. These are neither executing-thread CPU nor displayed-frame timings. Process resident memory is sampled separately by the runner.
 
 The `improved-beam-spike` profile is a synchronous packaged WebGL capability
 experiment rather than a latency-duration run. It prepares the same 500-instance
@@ -153,10 +168,11 @@ It does not complete the full Phase 0 gate without the canonical production
 Default Stage and large-scene packaged runs. Windows and Linux packaged reports
 remain separate release gates.
 
-The duration argument applies independently to the no-Stage and Stage windows,
-so `300` produces a five-minute baseline followed by a five-minute measured
-Stage window. Use 300 seconds for the canonical comparative latency/output runs
-and 1800 seconds for the retained-resource run. Keep the JSON reports with the
+The duration argument specifies the Stage window; the no-Stage control window
+is `min(duration, 300)` seconds. Thus `300` requests five minutes each, while
+`1800` requests a five-minute control baseline and a 30-minute Stage window.
+Use 300 seconds for canonical comparative latency/output runs and 1800 seconds
+for the retained-resource run. Keep the JSON reports with the
 completion evidence; a shorter development run does not replace either release
 gate.
 
@@ -165,17 +181,50 @@ runner samples the `light-desktop` main-process resident set once per
 second, excludes the first Stage minute as warmup, and rejects a fitted growth
 slope above 1 MiB per minute. It compares the first and last five-minute
 post-warmup render windows, rejects growth in native instance or draw-call
-ownership, rejects degraded frames, and requires the late-window CPU frame p95
-to stay at or below 16.7 ms. Main-process resident memory does not claim
-complete Metal driver allocation ownership; native frame telemetry is the
-authoritative renderer evidence.
+ownership per pane, rejects degraded frames, and requires the late-window CPU frame p95
+to stay at or below 16.7 ms. This CPU value is elapsed submission wall time from a source-deduplicated retained subset; it does not measure every 60 Hz frame, executing-thread CPU, GPU completion or display latency. The sampled RSS covers only the `light-desktop` main process; it excludes separate WebView processes and GPU/driver allocations. Native frame telemetry supplies separate renderer ownership evidence, not a complete VRAM measurement.
+
+The long-run evaluator must use independently recorded Stage start/end times,
+not infer its window from the first/last retained render or memory sample. Require
+the full declared Stage duration; report cold-start observations separately, then require complete RSS and per-pane render coverage from Stage start +60 seconds to Stage completion. Compare the first and last five-minute post-warmup windows and report actual sampled spans and gaps. Ordinary runs of at least 1800 seconds poll every 250 ms; short, phase and capture runs use 100 ms. The declared maximum duration is 3600 seconds. Histories retain bounded prefixes (32,000 host/timeline rows, 64,000 activity rows, 24,000 heartbeats and 100,000 source-deduplicated frames). GPU submission aggregates consume every drained native batch before source deduplication. Special phase/capture runs still fail if their higher poll rate exhausts a bound. Any rejected row, overflow or observation error
+invalidates complete-run evidence: a retained prefix cannot become a passing
+30-minute report. A static interval may legitimately have no new submissions,
+but still requires resident/native ownership and coverage witnesses. A short or
+truncated run, missing boundary clock, missing lane, or missing final observation
+must remain failed/incomplete rather than pass on a few early samples.
 
 The macOS user session must remain unlocked with ToskLight visible. The runner
 reports a stalled native presentation stream as a failed cadence/presentation
 gate rather than treating control timers or data delivery as packaged
 performance evidence.
 
-## Evidence boundary
+## Separate frozen 4K verification (TL-851)
+
+Run each engine through an actual 3840 × 2160 render from frozen invocation-time
+scene/values/media/camera/time and local preferences, starting with live Draft or
+Lines. Native Ultra uses an isolated full-budget capture renderer and upgrades
+3D outline/simple views to the full lighting path without changing live settings.
+Keep orthographic views orthographic and disclose the 16:9 side-framing change.
+With usable Blender, the operator chooses native Ultra or Blender/Cycles Ultimate;
+without usable Blender, native Ultra remains available. Verify saved engine,
+dimensions/framing/path, visible progress/failure, owned cancellation/cleanup and
+subsequent-job admission. Keep the native and Ultimate PNGs and their job identities.
+
+Ultimate's supported-feature guard and chooser disclosure are part of the result:
+plan symbols/outlines and active laser scan transfer require Ultra; procedural
+finishes, absent grid/selection guides, native bloom and physical beam/source/fog/
+GI/AgX differences are explicit limitations. Freeze missing-media fallback and
+availability too; a later server image cannot replace invocation-time pixels.
+Do not claim full native/Cycles or physical parity.
+
+The explicit isolated `live-ultra` packaged exercise drives actual DOM controls,
+waits for accepted native Live readiness, chooses Ultra and retains Saved UI plus
+a decoded, CRC-checked job-associated PNG. Its private dual/internal-display run
+and output directory are separate from performance acceptance. It records output
+counters during capture, but does not prove physical pointer/shortcut behavior,
+visual acceptance or the 60 FPS/GPU targets; the 4K worker may compete for GPU time.
+
+## Historical browser evidence boundary
 
 This collector runs the production frontend in Chromium under Playwright. It
 does **not** control or measure the packaged Tauri WebView. Every JSON report
@@ -210,3 +259,430 @@ cross-platform GPU capability checks remain separate release gates. A runner
 code path for a platform does not itself provide GPU or packaged-runtime
 evidence; retain distinct reports from actual supported Windows, Apple Silicon
 macOS, and Linux reference machines.
+
+
+Native Stage lane demand retains a narrow volatile-polling exception to API rules: the
+current visualization WebSocket carries resolved attribute snapshots/deltas and typed readouts,
+not complete per-instance native raw vectors, mode identities, ownership masks and Point poses.
+Until an equivalent accepted-native push contract exists, native Stage reads the existing DMX
+snapshot at its existing source cadence. Only a helper following Preload requests its extra
+lane; Live omits it. A renderer-local demand serial rejects both native and legacy overlay
+responses from earlier display modes, including a double switch back to the original mode.
+This saves unused Preload construction/serialization and legacy compatibility work. It does not
+establish a cause for the sustained-run output deadline regression: current production family
+adapters already use retained Pending publications, and the diagnostic captured no fresh
+observational Dynamic projections. This change does not modify that publication contract or
+output scheduling.
+
+
+## Retained macOS results — 25 October 2026
+
+These isolated internal-display runs preserve failed gates. All use animated
+Stage-500, dual Live/Preload panes, 1920×1080 total physical pixels and a 60 Hz
+helper ceiling. Other desks remained running; no builds, tests or profiling
+competed with these measurement windows. Reports and raw samples are under
+`.artifacts/performance/stage/` with the following report stems:
+
+| Profile / active duration | Report suffix | Output p99 bucket, control → Stage | Added deadline misses | Result |
+| --- | --- | --- | --- | --- |
+| Debug Draft / 1,860 s | `2026-10-25T02-03-03-304Z` | 12 → 16 ms | 12 | Fail |
+| Release Draft / 1,860 s | `2026-10-25T02-46-57-077Z` | 8 → 16 ms | 1 | Fail |
+| Release Lines / 360 s | `2026-10-25T03-23-52-457Z` | 8 → 12 ms | 0 | Fail |
+| Release Draft, macOS child priority / 45 s | `2026-10-25T03-42-50-923Z` | 8 → 12 ms | 0 | Fail |
+
+Full report names are `packaged-tauri-stage-500-<suffix>.json`; corresponding
+`.jsonl` files retain samples. Every listed control and Stage window had zero
+send errors. The unchanged p99 allowance is max(1 ms, 5% of control), so zero
+misses alone does not pass output isolation. Histogram buckets are conservative
+bounds, not exact percentile measurements.
+
+The sustained Draft runs passed complete retained-resource coverage and their
+RSS/late CPU-wall gates. Release Draft had a main-process RSS slope of
+−1,346 bytes/min and late sampled CPU-wall p95 of 5.611 ms. Release Lines had
+late CPU-wall p95 of 1.696 ms; its shorter duration does not establish the
+30-minute resource gate. Renderer CPU fields measure elapsed wall time.
+
+The first three bundles were built from commit `0441d5800`. The short priority row retains its
+host/server from that commit and uses renderer helper `51533c6d3` in the resealed
+release bundle. The actual two embedded children ran at nice +5; desktop and
+headless stayed at 0. This verifies the optional hint, without establishing that
+CPU scheduling caused the failures or that the hint resolves them.
+
+Displayed-frame timing, matched-rate whole-Stage GPU execution per second,
+cross-platform evidence and human image acceptance remain open. Sparse helper
+GPU samples and compositor submission counts cannot substitute for those gates.
+No result here constitutes final acceptance of TL-846 or TL-852.
+
+
+### Offline Metal interval accounting
+
+`tools/stage-gpu-intervals.py` consumes an exported `metal-gpu-intervals` table.
+Pass every verified owned renderer/compositor PID with repeated `--owned-pid`
+arguments, together with the actual TOC duration (`--trace-duration-seconds`) or
+one explicit common window (`--window-start-ns` and `--window-end-ns`). Requested
+recording duration and export-tool wall time are not observation durations.
+
+The parser resolves export-local XML identities and column mnemonics, clips
+Active execution to that window, and unions duplicate, nested and overlapping
+intervals per GPU. `activeWallMillisPerSecond` is the non-overlapping execution
+interval metric. Channel unions are also reported, but their sum can exceed wall
+time because channels execute concurrently. Raw duration sums double-count
+nested/overlapping work. GPU names are display labels; canonical XML IDs separate
+same-named devices within that export, without asserting identity across traces.
+
+Missing selected-process execution, unknown selected states, unresolved refs,
+ambiguous columns and invalid windows fail instead of becoming zero. Caller
+proof of process ownership, lifetime, trace completeness and the exact workload
+is still required. Attaching xctrace to one PID can capture other processes;
+WindowServer and unrelated applications must remain outside the owned PID set.
+The native compositor belongs to the desktop process, not WindowServer.
+
+The retained historical static standalone trace has 162,988,873 ns of owned
+execution union over 11.000456 seconds (14.817 ms/wall-second). It has no embedded
+compositor evidence and cannot establish current Draft/Lines GPU savings.
+Neither this metric nor Core Animation Requested Time/status fields establish
+actual displayed frames. Keep display timing and human acceptance separate.
+
+
+### Isolated server ownership correction
+
+The older runner started headless and the app concurrently. Slow server startup
+could cause the app to launch its bundled fallback, racing the original child
+for the same port and truncating `light-headless.log`. The retained release
+Draft/Lines logs and the 03:57 diagnostic contain bind errors. Preserve their
+observed output failures, but backend PID/build and diagnostic-policy attribution
+were not verified. In particular, the 03:57 bucket pass cannot provide CPU or
+wake evidence: its log contains no such observations.
+
+New isolated runs preflight the port, await the original child's readiness and
+verify its unique listener PID before launching the app. They verify ownership
+and executable SHA256 again at the end, and report `isolatedServerIdentity`.
+The original child log is `owned-light-headless.log`; an app fallback cannot
+truncate it. Missing ownership tooling, a foreign listener, child exit, timeout
+or changed executable fails the run. Non-isolated workflows remain separate.
+For opt-in CPU/wake investigation, set `LIGHT_OUTPUT_PHASE_DIAGNOSTICS=all` and
+include `light_output=info,light_engine=info,light_headless_runtime=info` in
+`RUST_LOG`; the normal default filter does not enable every diagnostic target.
+
+
+### Fine timing and owned comparison
+
+TL-872 preserves the original 20-bin histogram and adds an optional versioned
+histogram with fixed runtime storage: 250 µs inclusive bins through 32 ms and
+explicit wider tails. Older health JSON remains readable; missing, partial or
+overflowed fine data is not invented. Wire generation follows the normal typed
+contract workflow. Recording adds one bounded counter update under the existing
+lock, with no per-tick allocation; a health snapshot copies about 1 KiB more.
+
+The collector validates geometry, version and count conservation across resets
+and both windows. It retains the old coarse comparison. Fine p99 is an interval,
+so regression is bounded by Stage lower minus control upper through Stage upper
+minus control lower. The unchanged allowance is max(1 ms, 5% of control). A pass
+requires the regression upper bound to fit the smallest possible allowance;
+a proven excess fails, and overlap remains indeterminate and cannot pass.
+
+The clean owned 45 s Draft report `2026-10-25T04-35-46-060Z` proves a real failure:
+control p99 is 7,501–7,750 µs, Stage p99 is 8,751–9,000 µs, and regression is
+1,001–1,499 µs against the 1,000 µs allowance. Both had zero missed deadlines and
+send errors. Coarse 8→12 ms remains visible. Backend/listener PID 3439 and its
+SHA256 are verified unchanged at both endpoints in `isolatedServerIdentity`.
+This result is not dismissed as a coarse-bucket artifact.
+
+The earlier owned instrumented report `2026-10-25T04-09-02-052Z` has valid CPU
+and wait observations: exact tick-wall p99 8.137→8.691 ms and timer-resume p99
+3.846→3.793 ms. Some extra caller CPU accompanies increased wall time, but worker
+CPU decreases. These observations do not establish process-total CPU growth,
+saturation, parking or preemption as the cause. Instrumented short runs remain
+separate from clean acceptance.
+
+### Presentation calibration remains unavailable
+
+The bounded Swift probe preserves requested time, callback arrival and SDK
+`presentedTime` as separate fields. It validates internal-display containment,
+layer attachment and process ownership; it never synthesizes a display sample.
+Three retained attempts under `presentation-calibration-*` each completed one
+GPU command but received no actual presentation callback before the timeout.
+The first trace contains a matching CA request/IOSurface and no handler event.
+Later runs verify visibility and layer attachment but still report actual time
+zero. These are unsuccessful calibration experiments, not Stage FPS evidence.
+The tool exits on its bounded failure and does not leave a monitor running.
+
+### Owned CPU stack diagnostic
+
+`2026-10-25T04-48-16-676Z` is explicitly a sampled diagnostic. The runner's
+`LIGHT_STAGE_BENCH_DIAGNOSTIC_LABEL` marks the report `diagnosticOnly`, disables
+acceptance flags and prevents canonical-report replacement. Observed failures
+and the original exit decision remain intact. Empty labels preserve the normal
+workflow; labels over 128 trimmed characters fail before launching anything.
+
+Three-second `/usr/bin/sample` captures target only verified helper PID 4857
+and headless PID 4588, with executable/parent/UID/start-time identity retained
+before and after. The report verifies backend/listener ownership and SHA256 at
+both endpoints. Raw stacks and identity files are under `.artifacts/tmp`, indexed
+by `.artifacts/performance/stage/tl852-owned-cpu-stack-diagnostic.json`.
+Waiting stacks and wall-sample counts are not CPU-utilization measurements.
+The run retains two Stage deadline misses and a 3,751–4,249 µs fine-p99 regression;
+profiling perturbs the target, so these observations are not clean acceptance.
+
+Renderer stacks expose repeated runtime content hashing and scene-value decode
+work. Server stacks also expose substantial full-diagnostics observation work.
+These guide bounded experiments; neither establishes the cause of the earlier
+clean regression. Preserve the clean failure and use a fresh uninstrumented
+paired run after any change.
+
+### Runtime content hashing experiment (TL-873)
+
+The owned helper sample identifies content hashing inside preparation, full model
+reconciliation and shadow-pose signatures. A release CPU-only benchmark compares
+the identical production traversal with DefaultHasher and the workspace's
+FxHasher, using 500 fixtures/emitters and three real GLB models (37 parts, 16,034
+vertices). Seven alternating rounds of 256 iterations retain both sides in
+`.artifacts/tmp/tl873-hash-before-after.json`. Median preparation elapsed time is
+166.82→110.47 µs; asset fingerprint traversal is 84.44→18.88 µs. These are elapsed
+CPU-work timings, not measured thread CPU, GPU savings or FPS acceptance.
+
+The renderer now uses FxHasher only for ephemeral content fingerprints on 64-bit
+targets; 32-bit targets retain DefaultHasher's 64-bit output. Field/geometry
+traversal, current-scene ownership and same-slot/same-revision replacement checks
+remain intact. No persisted/protocol/security hashes, visual quality or pacing
+thresholds change. All 276 ordinary renderer tests and 19 explicit native GPU
+tests pass. The first broad ignored-test invocation also selected the release-only
+CPU benchmark in debug mode and correctly rejected that invocation; a GPU-only
+invocation passed all 19. Private packaged output validation remains separate.
+
+Counter-only benchmark observations now use `/api/v2/diagnostics/performance`,
+whose typed output health is identical to full diagnostics. Full before/after
+snapshots remain. This avoids repeatedly serializing programmer definitions;
+it does not erase historical failures or establish their cause. FIFO read/window
+closure, counter-reset handling and fine histograms are preserved by focused tests.
+
+
+### Final clean release observations after TL-873
+
+The 2026-10-25 final release bundle combines the runtime-hash change and the
+counter-only observer. Both conditions ran serially on the internal display,
+with no concurrent build, tests, CPU worker or profiler. Each used animated
+Stage-500, dual 1920×540 physical panes, Draft quality and a requested 60 Hz
+helper ceiling. The paired no-Stage control lasted 300 seconds. Original backend
+PID/listener and SHA256 were verified at both endpoints. Raw reports and compact
+summaries remain under canonical artifacts.
+
+| Condition | Stage duration | Control → Stage output p99 | Regression | Output gate |
+| --- | ---: | --- | --- | --- |
+| Full 3D Draft | 1,860 s | 7,751–8,000 → 10,501–10,750 µs | 2,501–2,999 µs | **Fail**: allowance 1,000 µs |
+| Lines | 360 s | 7,751–8,000 → 8,001–8,250 µs | 1–499 µs | Pass |
+
+Reports are `packaged-tauri-stage-500-2026-10-25T05-06-19-539Z.json` and
+`packaged-tauri-stage-500-2026-10-25T05-43-17-980Z.json`. Both windows in both
+conditions recorded zero deadline misses, send errors and late intervals.
+Draft still fails the p99 comparison; a short prior pass does not supersede it.
+No scheduler policy or acceptance threshold was changed.
+
+Draft passed the enforced 30-minute retained-resource gate with complete RSS
+and both-lane coverage: RSS slope −15,012 bytes/min and late sampled CPU wall
+p95 2.805 ms. Lines has complete six-minute observations, RSS slope +34,243
+bytes/min and late CPU wall p95 1.581 ms, but its 30-minute resource gate was
+not enforced. Its early/late resource windows overlap.
+
+Draft recorded 223,115 helper and 222,859 compositor submissions; Lines recorded
+43,152 and 43,151. Sparse helper GPU means were 16.35/15.44 ms for Draft
+Live/Preload and 2.53/2.59 ms for Lines. Sparse timing is not whole-Stage GPU
+usage; submission counts are not on-screen FPS. Sustained displayed 60 FPS and
+70%/90% matched-rate total-GPU reductions remain unproved. These observations do
+not isolate a root cause or establish a hash-only benefit.
+
+
+### Interrupted final sustained attempt after TL-875
+
+The complete release bundle at `b0eab21b8` began a finite 300-second control /
+1,860-second Draft sequence at 09:06 UTC, followed by an independent planned
+300-second control / 360-second Lines sequence. Profiling and timing-cadence
+overrides were unset. The tool session was interrupted; later inspection found
+no coordinator/runner/owned runtime processes or private 5160 listener, and no
+completion report or exit files. The raw journal
+`packaged-tauri-stage-500-2026-10-25T09-06-10-126Z.jsonl` ends after Stage-ready.
+This is **incomplete**, not a pass or a measured product failure. The queued Lines
+condition did not run. Its source bundle and partial artifacts are retained.
+
+The actual-default-cadence 45-second diagnostic pass is documented separately
+in `stage-gpu-measurement.md`; it does not supersede the retained earlier
+sustained Draft output failure. A fresh quiet run must start after the newly
+requested optional detailed-people implementation is built and verified.
+
+
+### Completed combined release observations after TL-875/876/877
+
+The complete macOS release bundle at `085dc8c2e` includes the one-Hz Draft/Lines
+timing sampler, optional detailed people, and the compatible explicit absent
+lamp-response serialization slot. Authoritative isolated `npm run build:open`,
+readiness, complete release packaging and strict code-signature checks passed.
+No install or primary-checkout integration occurred. The finite detached
+coordinator ran both conditions serially on the internal display with profiling
+and cadence overrides unset, no concurrent build/tests/profiler, and independent
+300-second no-Stage controls. Other user desks were preserved.
+
+| Condition | Stage duration | Control → Stage fine output p99 | Conservative regression | Output gate |
+| --- | ---: | --- | --- | --- |
+| Dual Full 3D Draft / 500 animated fixtures | 1,860.004 s | 8,001–8,250 → 9,251–9,500 µs | 1,001–1,499 µs | **Fail**: allowance 1,000 µs |
+| Dual Lines / 500 animated fixtures | 360.006 s | 7,751–8,000 → 7,501–7,750 µs | −499–−1 µs | Pass |
+
+Both conditions had zero deadline misses, send errors, late-interval witnesses,
+counter resets or observation overflows. Draft's coarse 12→12 ms bucket passes,
+but cannot override the finer failed comparison. No threshold was changed.
+Reports are `packaged-tauri-stage-500-2026-10-25T10-06-15-203Z.json` and
+`packaged-tauri-stage-500-2026-10-25T10-43-12-133Z.json`; compact exact summaries
+are `tl876-final-draft-summary.json` and `tl876-final-lines-summary.json` beside
+them. Backend PID/listener and SHA256 matched both endpoints: Draft53481,
+Lines63107, SHA256 `8679e7317e450d1a63bac907beb73e6fd77f977f3bfbd5094edf6e6a480e3391`.
+The coordinator and owned runtime exited; private5158/5160 listeners were absent.
+
+Draft passed the enforced retained-resource gate with complete RSS and both-pane
+coverage. Main-process RSS slope was −19,951 bytes/min; late sampled helper CPU
+wall p95 was 2.386 ms. Geometry/draw ownership stayed10,641/63 per pane.
+Lines had complete six-minute observations, RSS slope +47,617 bytes/min and
+late sampled CPU wall p95 1.492 ms, but its 30-minute resource gate was not
+exercised. Geometry/draw ownership stayed6,388/3 per pane.
+
+Draft recorded223,131 helper/222,889 compositor submissions; Lines43,152/43,151.
+Steady per-pane whole-second submission means were approximately60 for both;
+Draft buckets ranged57–61 and Lines59–61. These are helper submissions, not
+actual displayed pictures. Sparse unique helper GPU means were18.76/18.30 ms
+for Draft and2.87/2.53 ms for Lines. They are not whole-Stage GPU cost or a
+matched-rate reduction. Actual displayed60FPS and the proposed70%/90% GPU
+reductions remain unverified.
+
+The all-window fine histogram cannot locate the p99 tail in time. Stage contains
+856 ticks above9,250 µs (1.035% of82,720); only13 of13,228 control ticks exceed
+that bound. Per-second histograms were accumulated and discarded, and raw JSONL
+has render/heartbeat timing rather than output histograms. The only >=20 ms
+Stage log event is34.113 ms at Stage+51.004 seconds; this locates one extreme
+in warmup but cannot explain the8–10 ms tail. Do not infer a startup or thermal
+cause from renderer CPU trends. Timestamped bounded per-minute deltas of existing
+fine histograms would diagnose cold/steady/late behavior without another HTTP
+observer, full per-tick phase logging, or weakening the whole-window gate.
+
+
+### Timestamped output windows and later CPU attribution
+
+TL-878 adds optional bounded diagnostic windows from the existing counter reads,
+without extra HTTP requests. A window closes at the actual receipt boundary after
+at least60seconds; a sampled interval crossing a nominal minute is never split.
+Client receipt clocks are not engine tick timestamps. Final partials, schema and
+clock errors, resets, failed reads and capacity overflow remain explicit. The
+maximum is256rows. None of these rows changes the original all-window gate.
+
+The labeled report `2026-10-25T11-13-45-722Z` has complete metadata coverage,
+zero errors/resets/overflow, and exact window→aggregate frame totals13227/13398.
+Its full-minute control p99 was8,001–8,250µs throughout. Stage minute groups were
+7,751–8,000;8,501–8,750;9,501–9,750;9,501–9,750;8,501–8,750µs. Thus the elevated
+p99 is present after startup in this diagnostic. The whole-window comparison
+still fails with regression1,251–1,749µs. This labeled run does not replace the
+31-minute failure or certify acceptance. Receipt:
+`.artifacts/performance/stage/tl878-output-windows/actual-diagnostic-summary.json`.
+
+A separate150-second-control/150-second-Stage all-mode diagnostic is retained as
+`2026-10-25T11-32-52-478Z`. Exact owned backend70284/listener and the same8679e7…
+SHA were verified at both endpoints. Core tick/nested/CPU/pool/wait classes reach
+both window ends with13,633total ticks, no duplicate sequences or16,384attempt
+cap. Control's log/counter boundary mismatch is retained (6,617 vs6,626ticks);
+Stage is6,721/6,721. Independent cleanup timing hit its65,536job cap at Stage
++58.104seconds, so late cleanup observations are unavailable.
+
+| Diagnostic metric | Control | Stage | Stage final30seconds |
+| --- | ---: | ---: | ---: |
+| Logged tick wall p99 | 8.105ms | 9.453ms | 9.950ms |
+| Ordered preparation wall p99 | 7.899ms | 9.211ms | 9.697ms |
+| Timer-resume offset p99 | 3.874ms | 3.886ms | 3.882ms |
+| PrepareFamilies caller CPU mean | 1.190ms | 1.338ms | 1.550ms |
+
+All CPU summaries use schema3 with valid reads and unchanged family count vectors
+and per-frame worker-job counts[52,32,32].105slow Stage ticks>=9,250µs join uniquely
+to nested/CPU/pool records;92occur in the final30seconds. On those ticks, both
+caller and covered worker CPU costs rise. Counter-read overhead is retained and
+small relative to the approximately1ms tail difference; the instrumented run is
+still diagnostic-only. Overlapping caller/worker/substage CPU must not be added,
+and wall-minus-CPU is not a parking measurement. These facts distinguish the
+observed increase from worsening timer overshoot, but cannot establish extra
+instructions, cache/frequency effects, GPU causation or wider host contention.
+Receipt `.artifacts/performance/stage/tl878-late-cpu-wake-summary.json` and parser
+`.artifacts/tmp/tl878-analyze-late-cpu-wake.py` preserve limits and raw-log linkage.
+
+Control startup ordering was independently checked: startup Picture(Draft/Lines)
+precedes Embed through both FIFO channel stages, is retained before embedding
+returns, and is applied before preparation/drawing. The temporary defaultHigh
+view cannot initialize the wrong backend in this production path. Draft also
+uses its own lazy backend; unused shared startup resources are opportunities,
+not demonstrated causes of the later tail. No speculative startup or global
+priority/timer change was made.
+
+
+### Draft quarter candidate and invocation capture ordering (TL-879 / TL-881)
+
+The sealed5bc989d89 candidate completed a quiet300-second control plus300-second
+Stage comparison on the internal display with500animated fixtures and two
+1920×540panes. Report `2026-10-25T12-36-23-382Z` retains output p99 bounds
+8,001–8,250µs versus9,251–9,500µs: conservative regression1,001–1,499µs still
+fails the unchanged1,000µs limit. Both windows have zero deadline misses and send
+errors. Resource failures are empty, but the30-minute gate is not enforced here.
+The quarter shaft image/cost improvement does not establish output isolation,
+whole-GPU utilization reduction or displayed60FPS. No unchanged sustained run
+was repeated. Receipt `tl879-quarter/short-quiet-summary.json` retains identities.
+
+Capture now carries an immutable current Picture snapshot in its native start
+command, taken synchronously before awaiting any bridge operation. Native start
+uses the ordinary picture normalization and queues Picture then CaptureStart
+under the same pane lock. A short-command FIFO per pane orders earlier updates,
+input and selection before capture, and later updates afterward. Only adjacent
+not-yet-started complete Picture updates may coalesce; capture/input barriers
+prevent replacement across the invocation. Ordinary commands are bounded at128,
+with one reserved latest Picture and one idempotent lifecycle close. Long image
+jobs are not serialized through this acknowledgement queue. Numeric camera
+placement carries the queued owner's pane ID into a window-owned native lookup;
+retired explicit addresses never fall back to another live pane. Legacy absent
+addresses retain the existing global live-camera behavior. This frontend queue
+is local to one webview; it is not global cross-window traffic serialization.
+
+Deferred-delivery regression tests cover both preference directions, starting
+before the passive Picture effect, prior/later camera and selection, later live
+changes, queue pressure and close/reopen. Conditional baseline reproduction fails
+two deferred-delivery cases and the fix passes both; this is a deterministic
+simulation, not a physically reproduced Tauri race. CPU evidence is retained in
+`.artifacts/tmp/tl881/verification.json`:69focused frontend tests, final18-test
+owner/ordering subset, TypeScript,4native Picture tests,5writer FIFO tests and
+1native camera-owner test pass. Source-size, Rust format and diff checks pass.
+Physical button/shortcut and native interactive-camera acceptance remain separate.
+
+
+### Owned backend Running CPU profile diagnostic
+
+At705de92cb, the labeled300-second-control/300-second-Draft report
+`2026-10-25T13-34-34-675Z` still fails output isolation: p99 bounds8,001–8,250µs
+versus9,501–9,750µs, conservative regression1,251–1,749µs, zero deadline misses
+and send errors. This diagnostic includes two requested3-second Time Profiler
+recordings and cannot replace quiet acceptance. The exact owned backend86258,
+its c5e05b… SHA and UUIDD3D6D340-5582-3AD2-9E53-6B9645F4F0F3 were verified before
+and after both recordings and the overall workload. All owned processes and
+5158/5160listeners were independently verified absent afterward. No security
+settings, global scheduler policy or protected desk runtimes changed.
+
+The new exports resolve every XML reference and identify PID86258 and Running
+thread state in every row, with1ms sample weights. Control has3,726rows, including
+three empty stacks excluded from attribution; Stage has4,538resolved rows.
+Attributed covered weight is3.723s/4.538s, trace wall duration3.854s/3.670s and
+sample span3.591s/3.391s. These are unequal short statistical windows; covered
+sample weight does not establish complete process CPU. Function-level symbols
+and raw addresses are retained, without invented source-line/inline coverage.
+Exclusive leaf and inclusive-unique-frame rankings stay separate; inclusive
+rows overlap and must not be summed.
+
+Memmove leaf share rises6.688%→8.131% and controller-preparation leaf share
+1.585%→2.182%. Copy ancestry mostly resolves to shared sampling/preparation and
+retained-position paths present in both recordings. No dominant new Stage
+subscription/serialization function is established. `swtch_pri` remains a large
+leaf19.903%→17.056%; its Running-tagged samples near yield/wait entry are not
+blocked wall time or proof of computation. Two sequential short profiles cannot
+distinguish changed instructions, cache/frequency effects, operation counts or
+GPU causality. Receipt `.artifacts/performance/stage/tl879-running-stack-comparison.json`
+and parser `.artifacts/tmp/tl879-compare-running-stacks.py` retain per-sample joins,
+raw symbols, exact identity, core/thread coverage and exclusions. No further
+unchanged sustained test or speculative output-engine mutation followed.

@@ -17,6 +17,7 @@ mod atmosphere;
 mod bracket;
 mod diagnostics;
 pub mod input_monitor;
+mod lamp_response;
 mod model;
 mod persistence;
 mod points;
@@ -30,11 +31,13 @@ mod view;
 
 pub use atmosphere::{Atmosphere, AtmospherePreference, DEFAULT_DENSITY};
 pub use bracket::{bracket_turned, is_mounting_hardware};
+pub use diagnostics::timing as gpu_timing;
 pub use diagnostics::{
     ConnectionState, FallbackReason, InputHealth, InputMappingStatus, ProviderDiagnostics,
     SourceProtocol, UniverseGrade, UniverseHealth,
 };
 pub use glam;
+pub use lamp_response::{LampResponseProfile, LampResponseState};
 pub use model::{
     EmittingSurface, FixtureModel, ModelError, ModelPart, ModelPartKind, VENUE_MODEL_MAX_TRIANGLES,
     read_glb, read_glb_nodes, read_glb_with_limit,

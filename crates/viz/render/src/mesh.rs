@@ -3,6 +3,9 @@
 //! Fixture models resolve to these proxies whenever no model asset is available, so a
 //! light-producing head is always visible.
 
+mod detailed_people;
+pub mod feature_edges;
+
 use crate::instances::MeshKind;
 use bytemuck::{Pod, Zeroable};
 use glam::{Vec2, Vec3};
@@ -464,6 +467,15 @@ pub fn procedural(kind: MeshKind) -> Option<(&'static str, MeshData)> {
         MeshKind::Sphere => Some(("sphere", unit_sphere(8, 14))),
         MeshKind::Lens => Some(("lens", unit_lens(24, 3))),
         MeshKind::Plane => Some(("plane", unit_plane())),
+        MeshKind::DetailedPeopleSkin(seated) => {
+            Some(("detailed-people-skin", detailed_people::build(0, seated)))
+        }
+        MeshKind::DetailedPeopleTop(seated) => {
+            Some(("detailed-people-top", detailed_people::build(1, seated)))
+        }
+        MeshKind::DetailedPeopleBottom(seated) => {
+            Some(("detailed-people-bottom", detailed_people::build(2, seated)))
+        }
         MeshKind::CrowdPerson => Some(("crowd-person", unit_crowd_person())),
         MeshKind::CrowdPersonOutline => Some(("crowd-person-outline", unit_crowd_person_outline())),
         MeshKind::ModelPart(..) | MeshKind::PlanArtwork(..) => None,

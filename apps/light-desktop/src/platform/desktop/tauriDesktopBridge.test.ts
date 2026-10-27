@@ -1,3 +1,4 @@
+import { capturePicture } from "../../windows/stageWindow/stageCaptureTestFixture";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import desktopCapability from "../../../src-tauri/capabilities/default.json";
 import type { ScreenAttachment } from "../../api/client/screenAttachment";
@@ -143,6 +144,23 @@ describe("Tauri desktop bridge", () => {
 		expect(requested).toHaveBeenCalledOnce();
 	});
 
+	it("routes frozen image commands and pushed native status without polling or frontend paths", async () => {
+		const handler = vi.fn();
+		await tauriDesktopBridge.startStagePaneCapture?.("preload", "request", capturePicture());
+		await tauriDesktopBridge.cancelStagePaneCapture?.("preload", "job");
+		await tauriDesktopBridge.openStagePaneCapture?.("preload", true);
+		await tauriDesktopBridge.onStageStill?.(handler);
+		expect(mocks.invoke.mock.calls).toEqual([
+			["start_stage_pane_capture", { paneId: "preload", requestId: "request", picture: capturePicture() }],
+			["cancel_stage_pane_capture", { paneId: "preload", jobId: "job" }],
+			["open_stage_pane_capture", { paneId: "preload", reveal: true }],
+		]);
+		expect(mocks.listen).toHaveBeenCalledWith("stage-still", expect.any(Function));
+		const payload = { paneId: "preload", requestId: "request", status: null, error: "helper closed" };
+		mocks.listen.mock.calls.at(-1)?.[1]({ payload });
+		expect(handler).toHaveBeenCalledWith(payload);
+	});
+
 	// Every native window command the bridge issues is rejected at runtime unless the desktop
 	// capability grants it, and a rejected destroy leaves a screen window that cannot be closed.
 	it("runs on capabilities that grant every native window command it issues", () => {
@@ -160,4 +178,32 @@ describe("Tauri desktop bridge", () => {
 			expect.arrayContaining(["main", "screen-*"]),
 		);
 	});
+});
+
+
+it("reports resident Stage visibility through its scoped native command", async () => {
+	await tauriDesktopBridge.setStagePaneVisibility("pane-7", false);
+	expect(mocks.invoke).toHaveBeenLastCalledWith("set_stage_pane_visibility", { paneId: "pane-7", visible: false });
+});
+
+it("pins a queued numeric camera placement to its invocation owner", async () => {
+	Reflect.set(window, "__TAURI_INTERNALS__", { invoke: mocks.invoke });
+	const geometry = { x: 0, y: 0, width: 640, height: 480, scale: 1, surfaceWidth: 640, surfaceHeight: 480 };
+	let release!: () => void;
+	const blocked = new Promise<void>((resolve) => { release = resolve; });
+	mocks.invoke.mockImplementation(async (command: string) => {
+		if (command === "set_stage_pane_picture") await blocked;
+	});
+	await tauriDesktopBridge.openStagePane("old-owner", true, geometry);
+	const pending = tauriDesktopBridge.setStagePanePicture("old-owner", capturePicture());
+	const placement = tauriDesktopBridge.placeStagePaneCamera({ pan: 25 });
+	// Simulate a different live owner before the delayed old-owner operation executes.
+	await tauriDesktopBridge.openStagePane("new-owner", true, geometry);
+	release(); await pending; await placement;
+	expect(mocks.invoke).toHaveBeenCalledWith("place_stage_pane_camera", { pan: 25, paneId: "old-owner" });
+	await tauriDesktopBridge.closeStagePane("old-owner");
+	await tauriDesktopBridge.closeStagePane("new-owner");
+	await tauriDesktopBridge.placeStagePaneCamera({ tilt: 10 });
+	expect(mocks.invoke).toHaveBeenLastCalledWith("place_stage_pane_camera", { tilt: 10, paneId: undefined });
+	Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
 });

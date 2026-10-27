@@ -20,6 +20,7 @@ pub enum Row {
     Port,
     Quality,
     Focus,
+    Render4kImage,
     Appearance,
     Background,
     Ambient,
@@ -34,11 +35,11 @@ pub enum Row {
     LaserFogTurbulence,
     LaserBrightness,
     CrowdAmount,
+    DetailedPeople,
     Persistence,
     PersistenceFalloff,
     InputUniverse,
     InputProtocol,
-    BlenderPath,
     /// One kept snapshot, by its position in the list, newest first.
     Snapshot(usize),
     Connect,
@@ -98,6 +99,7 @@ impl Row {
             Self::Port => "Port",
             Self::Quality => "Render quality",
             Self::Focus => "Focus",
+            Self::Render4kImage => "Render 4K Image",
             Self::Appearance => "Appearance",
             Self::Background => "Background color",
             Self::Ambient => "Environment brightness",
@@ -112,11 +114,11 @@ impl Row {
             Self::LaserFogTurbulence => "Laser fog turbulence",
             Self::LaserBrightness => "Laser brightness",
             Self::CrowdAmount => "Crowd amount",
+            Self::DetailedPeople => "Detailed people",
             Self::Persistence => "Persistence of vision",
             Self::PersistenceFalloff => "Persistence falloff",
             Self::InputUniverse => "Input universe",
             Self::InputProtocol => "Arrives as",
-            Self::BlenderPath => "Blender",
             Self::Snapshot(_) => "Snapshot",
             Self::Connect => "Connect / Reconnect",
             Self::Cancel => "Cancel without reconnecting",
@@ -124,7 +126,7 @@ impl Row {
     }
 
     fn is_text(self) -> bool {
-        matches!(self, Self::Server | Self::Port | Self::BlenderPath)
+        matches!(self, Self::Server | Self::Port)
     }
 
     /// The `0..=1` fraction to draw as a bar beside the value, for rows that have one.
@@ -160,12 +162,11 @@ pub enum QuickSettingsOutcome {
         host: String,
         port: u16,
     },
-    /// Export the kept snapshot at this position to a Blender file.
-    ExportSnapshot(usize),
     /// The source changed; the application must switch providers atomically.
     SourceChanged(ProviderKind),
     /// Reframe the camera around the current rig.
     FocusView,
+    Render4kImage,
     /// Quality or fog changed and applies immediately without reconnecting.
     AppliedLocally,
     /// The staged edit is invalid; the message is shown in place.
@@ -178,9 +179,6 @@ pub struct QuickSettings {
     pub tab: QuickSettingsTab,
     pub editing: bool,
     pub staged: StagedConnection,
-    /// The Blender the operator named, empty to let the application find one. Unlike the
-    /// connection fields this applies as it is typed: it changes nothing that is running.
-    pub staged_blender: String,
     pub message: String,
     /// The universe the input rows are configuring.
     pub input_universe: u16,
@@ -192,9 +190,6 @@ pub struct QuickSettings {
     pub snapshots: Vec<crate::snapshots::SnapshotRow>,
     /// Where captures are being written, for the line under the list.
     pub snapshot_folder: String,
-    /// The Blender the application found on its own, looked for when the panel opens rather than
-    /// on every frame it is drawn.
-    discovered_blender: Option<std::path::PathBuf>,
 }
 
 impl QuickSettings {
@@ -205,14 +200,12 @@ impl QuickSettings {
             tab: QuickSettingsTab::Rendering,
             editing: false,
             staged: StagedConnection::from_preferences(preferences),
-            staged_blender: preferences.blender.clone(),
             message: String::new(),
             input_universe: 1,
             planner_available,
             planner_unavailable_reason: "Not available in this build".into(),
             snapshots: Vec::new(),
             snapshot_folder: String::new(),
-            discovered_blender: None,
         }
     }
 
@@ -221,11 +214,6 @@ impl QuickSettings {
         if self.open {
             // Re-stage from the live connection so cancelling can never disturb it.
             self.staged = StagedConnection::from_preferences(preferences);
-            self.staged_blender = preferences.blender.clone();
-            // Looking for Blender walks the search path, so it happens when the panel opens and
-            // not on every frame it is drawn on. An operator who installs Blender while the panel
-            // is up closes and reopens it, which is what they would do anyway.
-            self.discovered_blender = viz_snapshot::find_blender(None);
             self.message.clear();
             self.editing = false;
         }
@@ -237,7 +225,6 @@ impl QuickSettings {
             return;
         }
         self.staged = StagedConnection::from_preferences(preferences);
-        self.staged_blender = preferences.blender.clone();
     }
 
     /// Every row in the panel, in the order they are drawn.
@@ -256,6 +243,7 @@ impl QuickSettings {
             QuickSettingsTab::Rendering => vec![
                 Row::Quality,
                 Row::Focus,
+                Row::Render4kImage,
                 Row::Ambient,
                 Row::Exposure,
                 Row::FogAmount,
@@ -275,10 +263,11 @@ impl QuickSettings {
                     Row::ShowSelection,
                     Row::FloorGrid,
                     Row::CrowdAmount,
+                    Row::DetailedPeople,
                 ]
             }
             QuickSettingsTab::Snapshots => {
-                let mut rows = vec![Row::BlenderPath];
+                let mut rows = Vec::new();
                 rows.extend((0..self.snapshots.len()).map(Row::Snapshot));
                 rows
             }
@@ -338,12 +327,7 @@ impl QuickSettings {
                 self.message = format!("Rendering quality: {}", preferences.quality_label());
                 QuickSettingsOutcome::AppliedLocally
             }
-            Row::Exposure => {
-                preferences.exposure =
-                    (preferences.exposure + 0.05 * delta as f32).clamp(0.05, 4.0);
-                self.message = format!("Exposure {:.2}×", preferences.exposure);
-                QuickSettingsOutcome::AppliedLocally
-            }
+            Row::Exposure => adjust_exposure(preferences, delta, &mut self.message),
             Row::Appearance => {
                 preferences.theme = preferences.theme.toggled();
                 self.message = format!("Appearance: {}", preferences.theme.label());
@@ -468,6 +452,7 @@ impl QuickSettings {
                 };
                 QuickSettingsOutcome::AppliedLocally
             }
+            Row::DetailedPeople => toggle_detailed_people(preferences, &mut self.message),
             Row::CrowdAmount => {
                 let step = 0.05 * delta as f32;
                 preferences.crowd_amount = (preferences.crowd_amount + step).clamp(0.0, 1.0);
@@ -515,11 +500,6 @@ impl QuickSettings {
         let row = self.row();
         if row.is_text() {
             self.editing = !self.editing;
-            // Where Blender is changes nothing that is running, so it is kept the moment editing
-            // finishes rather than waiting behind Connect with the endpoint fields.
-            if !self.editing && row == Row::BlenderPath {
-                preferences.blender = self.staged_blender.trim().to_owned();
-            }
             self.message = if self.editing {
                 "Type to edit, Enter to accept".into()
             } else {
@@ -529,20 +509,17 @@ impl QuickSettings {
         }
         match row {
             Row::Focus => QuickSettingsOutcome::FocusView,
+            Row::Render4kImage => QuickSettingsOutcome::Render4kImage,
             Row::Snapshot(index) => {
                 let Some(snapshot) = self.snapshots.get(index) else {
                     return QuickSettingsOutcome::None;
                 };
-                if snapshot.export == crate::snapshots::ExportState::Running {
-                    self.message = "That snapshot is already being exported".into();
-                    return QuickSettingsOutcome::None;
-                }
                 self.message = format!(
-                    "Exporting the {} snapshot \u{2014} Blender writes it into {}",
+                    "Snapshot {} is saved in {}",
                     snapshot.entry.label(),
                     snapshot.entry.directory.display()
                 );
-                QuickSettingsOutcome::ExportSnapshot(index)
+                QuickSettingsOutcome::None
             }
             Row::Connect => match self.staged.validate() {
                 Ok((host, port)) => {
@@ -583,7 +560,9 @@ impl QuickSettings {
             | Row::Appearance
             | Row::Ambient
             | Row::Labels => self.adjust(1, preferences),
-            Row::ShowSelection | Row::FloorGrid => self.adjust(1, preferences),
+            Row::ShowSelection | Row::FloorGrid | Row::DetailedPeople => {
+                self.adjust(1, preferences)
+            }
             _ => QuickSettingsOutcome::None,
         }
     }
@@ -597,7 +576,6 @@ impl QuickSettings {
             Row::Port if character.is_ascii_digit() => {
                 self.staged.port_text.push(character);
             }
-            Row::BlenderPath => self.staged_blender.push(character),
             _ => {}
         }
         self.validate_in_place();
@@ -613,9 +591,6 @@ impl QuickSettings {
             }
             Row::Port => {
                 self.staged.port_text.pop();
-            }
-            Row::BlenderPath => {
-                self.staged_blender.pop();
             }
             _ => {}
         }
@@ -649,6 +624,12 @@ impl QuickSettings {
             Row::Port => self.staged.port_text.clone(),
             Row::Quality => preferences.quality_label(),
             Row::Focus => "Frame rig".into(),
+            Row::Render4kImage => if cfg!(target_os = "macos") {
+                "Cmd+Shift+R"
+            } else {
+                "Ctrl+Shift+R"
+            }
+            .into(),
             Row::Appearance => preferences.theme.label().to_owned(),
             Row::Background => background_label(preferences.background),
             Row::Ambient => format!("{:.0}%", preferences.ambient * 100.0),
@@ -671,6 +652,12 @@ impl QuickSettings {
             }
             Row::LaserBrightness => format!("{:.0}%", preferences.laser_brightness * 100.0),
             Row::CrowdAmount => format!("{:.0}%", preferences.crowd_amount * 100.0),
+            Row::DetailedPeople => if preferences.detailed_people {
+                "On"
+            } else {
+                "Off"
+            }
+            .into(),
             Row::Persistence => {
                 if preferences.persistence.decay_seconds <= 0.0 {
                     "off".into()
@@ -688,7 +675,6 @@ impl QuickSettings {
                     protocol.default_port()
                 ),
             },
-            Row::BlenderPath => self.blender_value(),
             Row::Snapshot(index) => match self.snapshots.get(index) {
                 Some(snapshot) => snapshot.status(),
                 None => String::new(),
@@ -707,21 +693,6 @@ impl QuickSettings {
                 None => "Snapshot".to_owned(),
             },
             other => other.label().to_owned(),
-        }
-    }
-
-    /// What the Blender row says: the path being used, or that nothing was found.
-    ///
-    /// An operator has to be able to tell "I have not set this and it found one anyway" from
-    /// "there is nothing here and exporting will fail", so the row answers both.
-    fn blender_value(&self) -> String {
-        let typed = self.staged_blender.trim();
-        if !typed.is_empty() {
-            return typed.to_owned();
-        }
-        match &self.discovered_blender {
-            Some(found) => format!("Found: {}", found.display()),
-            None => "Not found \u{2014} type a path to blender".to_owned(),
         }
     }
 }
@@ -1047,17 +1018,7 @@ fn draw_rows(
         );
         let value = settings.value(row, preferences);
         let editing_marker = if focused && settings.editing { "_" } else { "" };
-        let value_ink = if matches!(row, Row::Snapshot(index) if settings
-            .snapshots
-            .get(index)
-            .is_some_and(crate::snapshots::SnapshotRow::is_failure))
-        {
-            palette.bad
-        } else if focused {
-            palette.text
-        } else {
-            palette.dim
-        };
+        let value_ink = if focused { palette.text } else { palette.dim };
         overlay.clipped_text(
             x + panel_width * 0.42,
             *cursor,
@@ -1092,4 +1053,33 @@ pub(super) fn visible_window(rows: usize, selected: usize, room: usize) -> (usiz
         .saturating_sub(visible / 2)
         .min(rows - visible);
     (first, visible)
+}
+
+fn toggle_detailed_people(
+    preferences: &mut Preferences,
+    message: &mut String,
+) -> QuickSettingsOutcome {
+    preferences.detailed_people = !preferences.detailed_people;
+    *message = format!(
+        "Detailed people {} — Ultra and 4K only; Draft/Lines stay lightweight",
+        if preferences.detailed_people {
+            "on"
+        } else {
+            "off"
+        }
+    );
+    QuickSettingsOutcome::AppliedLocally
+}
+
+#[cfg(test)]
+mod detailed_people_tests;
+
+fn adjust_exposure(
+    preferences: &mut Preferences,
+    delta: i32,
+    message: &mut String,
+) -> QuickSettingsOutcome {
+    preferences.exposure = (preferences.exposure + 0.05 * delta as f32).clamp(0.05, 4.0);
+    *message = format!("Exposure {:.2}×", preferences.exposure);
+    QuickSettingsOutcome::AppliedLocally
 }

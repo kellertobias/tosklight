@@ -104,6 +104,7 @@ pub(super) fn pack(emitter: &EmitterInstance, value: &EmitterValues, half_angle:
             }
         } else {
             let generic = EmitterValues {
+                lamp_response: None,
                 prism: selected.position,
                 ..Default::default()
             };
@@ -156,6 +157,7 @@ mod tests {
             ],
         ];
         let value = EmitterValues {
+            lamp_response: None,
             gobo_wheels: vec![
                 OpticalWheelValues {
                     position: 0.75,

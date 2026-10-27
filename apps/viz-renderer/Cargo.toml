@@ -32,6 +32,7 @@ viz-render.workspace = true
 viz-scene.workspace = true
 viz-snapshot.workspace = true
 winit.workspace = true
+wgpu.workspace = true
 
 [lints]
 workspace = true
@@ -39,7 +40,9 @@ workspace = true
 [dev-dependencies]
 light-fixture = { path = "../../crates/shared/fixture" }
 pollster.workspace = true
-wgpu.workspace = true
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rustix = { version = "=1.1.4", features = ["process"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = "0.25"

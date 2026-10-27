@@ -1062,3 +1062,6 @@ async fn tl795_assigned_go_resumes_paused_frame_and_scheduled_cue_history() {
     );
     let _ = std::fs::remove_dir_all(data_dir);
 }
+
+#[path = "timecode_execution_proof_tests.rs"]
+mod execution_proof;

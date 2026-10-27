@@ -13,9 +13,8 @@ struct Globals {
     params5: vec4<f32>,           // lamp cloudiness/turbulence, laser cloudiness/turbulence
 };
 
-// What the quality tier has paid for. The tiers are a ladder of what is in the beam: Draft draws
-// the cone, Standard puts the glass in it, High gives it its fall-off, Ultra makes the haze itself
-// uneven. Asking here rather than branching on a tier number keeps the tiers a renderer concern.
+// Quality controls expensive glass/noise work, not a fixture's basic field or physical cuts.
+// Draft and Standard retain soft radial optics; High/Ultra retain their established formula.
 fn gobos_enabled() -> bool {
     return globals.params4.x > 0.5;
 }
@@ -41,6 +40,7 @@ struct Light {
     optics: vec4<f32>,            // gobo slot, gobo rotation, prism facets, prism rotation
     shapers: vec4<f32>,           // blade insertions: +u, -u, +v, -v
     shaper_angles: vec4<f32>,     // per-blade rotation in radians
+    shaper_params: vec4<f32>,    // manual edge >0; zero inherits dynamic feather+frost; yzw reserved
     gate: vec4<f32>,              // first artwork layer or -1, gobo wheel count, prism wheel count, curtain header or -1
     shadow: vec4<f32>,            // atlas tile index or -1, tile origin u, v, tile size
     gobo_wheels: array<vec4<f32>, 8>, // slot, rotation, artwork layer or -1, spare
@@ -256,14 +256,25 @@ fn gobo_transmission(slot: u32, position: vec2<f32>) -> f32 {
     }
 }
 
+// Explicit installation endpoints must not retain a penumbra at the open/opposite field edge.
+// Keep the legacy dynamic-DMX interpolation unchanged between its existing endpoints.
+fn shaper_plane_transmission(blade: f32, position: f32, edge: f32, manual: bool) -> f32 {
+    if (manual) {
+        if (blade <= 0.0) { return 1.0; }
+        if (blade >= 2.0) { return 0.0; }
+    }
+    return smoothstep(1.0 - blade + edge, 1.0 - blade - edge, position);
+}
+
 /// The framing shutters, as four straight cuts across the gate.
 fn shaper_transmission(light: Light, position: vec2<f32>, softness: f32) -> f32 {
     let blades = light.shapers;
     if (blades.x + blades.y + blades.z + blades.w <= 0.001) {
         return 1.0;
     }
-    // A blade at `0` is fully open and at `1` has crossed the whole gate.
-    let edge = max(softness, 0.02);
+    // Legacy live insertion 1 reaches centre; installed full-stroke insertion 2 crosses it.
+    // Manual barn-door penumbra is independent of a Fresnel's broad radial feather/frost.
+    let edge = select(max(softness, 0.02), light.shaper_params.x, light.shaper_params.x > 0.0);
     let rotated = array<vec2<f32>, 4>(
         vec2<f32>(
             position.x * cos(light.shaper_angles.x) - position.y * sin(light.shaper_angles.x),
@@ -282,47 +293,71 @@ fn shaper_transmission(light: Light, position: vec2<f32>, softness: f32) -> f32 
             position.x * sin(light.shaper_angles.w) + position.y * cos(light.shaper_angles.w),
         ),
     );
+    let manual = light.shaper_params.x > 0.0;
     var transmission = 1.0;
-    transmission *= smoothstep(1.0 - blades.x + edge, 1.0 - blades.x - edge, rotated[0].x);
-    transmission *= smoothstep(1.0 - blades.y + edge, 1.0 - blades.y - edge, -rotated[1].x);
-    transmission *= smoothstep(1.0 - blades.z + edge, 1.0 - blades.z - edge, rotated[2].y);
-    transmission *= smoothstep(1.0 - blades.w + edge, 1.0 - blades.w - edge, -rotated[3].y);
+    transmission *= shaper_plane_transmission(blades.x, rotated[0].x, edge, manual);
+    transmission *= shaper_plane_transmission(blades.y, -rotated[1].x, edge, manual);
+    transmission *= shaper_plane_transmission(blades.z, rotated[2].y, edge, manual);
+    transmission *= shaper_plane_transmission(blades.w, -rotated[3].y, edge, manual);
     return transmission;
 }
 
-fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
+// Basic optics are shared by surfaces, marched shafts and Draft's bounded field evaluation.
+// This is exactly the established High/Ultra radial formula, without a quality-tier bypass.
+fn beam_radial_profile(light: Light, to_light: vec3<f32>) -> f32 {
+    return radial_profile_with_math(light, to_light, false);
+}
+
+fn radial_profile_with_math(light: Light, to_light: vec3<f32>, draft_surface: bool) -> f32 {
     let axis = light.direction_cos_outer.xyz;
-    let cos_angle = dot(-to_light, axis);
+    let cos_angle = min(dot(-to_light, axis), 1.0);
     let cos_outer = light.direction_cos_outer.w;
-    if (cos_angle <= cos_outer) {
+    let span = 1.0 - cos_outer;
+    if (span <= 0.0 || cos_angle <= cos_outer) {
         return 0.0;
     }
-    let cos_inner = max(light.params.x, cos_outer + 0.0005);
-    // Sharpness is the width of this transition: a profile cuts within a fraction of a degree,
-    // a wash blends across its whole field.
-    let edge = smoothstep(cos_outer, cos_inner, cos_angle);
-    let radial = clamp((1.0 - cos_angle) / max(1.0 - cos_outer, 1e-5), 0.0, 1.0);
+    // A fixed cosine epsilon can put the inner edge beyond the physically reachable axis
+    // of a narrow cone. Bound the guard by its available span, preserving authored sharpness.
+    // Work with widths: adding a tiny guard to cos_outer can round both smoothstep endpoints
+    // to the same f32, whereas the positive span-relative width remains representable.
+    let transition = min(max(light.params.x - cos_outer, min(0.0005, span * 0.01)), span);
+    let edge_position = clamp((cos_angle - cos_outer) / transition, 0.0, 1.0);
+    let edge = edge_position * edge_position * (3.0 - 2.0 * edge_position);
+    let radial = clamp((1.0 - cos_angle) / span, 0.0, 1.0);
     // Uniformity is how the light inside that field is distributed, which is a separate question
     // from how the field ends. A good LED wash has no rim at all and is still flat across the
     // middle; a PAR is hot in the centre and has faded long before its own rim. `1` is flat, `0`
     // is a bright centre falling away to a dim edge.
     let uniformity = clamp(light.params.z, 0.0, 1.0);
-    let hot_spot = 0.35 + 2.4 * pow(1.0 - radial, 2.5);
-    let core = mix(hot_spot, 1.0, uniformity);
-    // Fall-off is the field ending softly and the light dropping away across the pool. Without it
-    // the cone is evenly filled and cut square at its rim, which reads perfectly clearly and is
-    // what the cheap tiers draw.
-    //
-    // Anything past the field edge has already returned zero above, so without fall-off the cone
-    // is simply full to its own rim.
-    var profile = 1.0;
-    if (beam_falloff_enabled()) {
-        profile = edge * core;
+    var hot_spot: f32;
+    if (draft_surface) {
+        let centre = 1.0 - radial;
+        hot_spot = 0.35 + 2.4 * centre * centre * sqrt(centre);
+    } else {
+        hot_spot = 0.35 + 2.4 * pow(1.0 - radial, 2.5);
     }
+    let core = mix(hot_spot, 1.0, uniformity);
+    return edge * core;
+}
 
+fn beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
+    return profile_with_math(light, to_light, false);
+}
+
+// Only Draft opaque surfaces select the algebraic hotspot; all other callers retain pow.
+fn draft_surface_beam_profile(light: Light, to_light: vec3<f32>) -> f32 {
+    return profile_with_math(light, to_light, true);
+}
+
+fn profile_with_math(light: Light, to_light: vec3<f32>, draft_surface: bool) -> f32 {
+    var profile = radial_profile_with_math(light, to_light, draft_surface);
+    if (profile <= 0.0) { return 0.0; }
+    let axis = light.direction_cos_outer.xyz;
+    let cos_outer = light.direction_cos_outer.w;
     let gobo_count = select(0u, min(u32(light.gate.y), 8u), gobos_enabled());
     let prism_count = min(u32(light.gate.z), 8u);
-    let shaped = select(0.0, light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w, gobos_enabled());
+    // A physical barn door or shutter still cuts the field when gobo artwork is disabled.
+    let shaped = light.shapers.x + light.shapers.y + light.shapers.z + light.shapers.w;
     var optics_active = shaped > 0.001;
     for (var wheel = 0u; wheel < gobo_count; wheel += 1u) {
         optics_active = optics_active || light.gobo_wheels[wheel].x > 0.0;

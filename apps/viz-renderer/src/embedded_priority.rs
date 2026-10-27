@@ -1,7 +1,7 @@
-//! A best-effort CPU preference owned only by a Linux embedded renderer's lifetime.
+//! A best-effort CPU preference owned only by a Linux/macOS embedded renderer's lifetime.
 #![forbid(unsafe_code)]
 
-#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "linux", target_os = "macos")), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Refusal {
     UnknownInherited,
@@ -49,17 +49,27 @@ fn run_with_policy(
     start_helper()
 }
 
-#[cfg(any(target_os = "linux", test))]
+// Darwin resource.h/setpriority(2) permit +20, but its positive nice() increment
+// saturates at +19. Never feed an already +20 process through that wrapper.
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+const MAX_NICE: i32 = if cfg!(target_os = "macos") { 20 } else { 19 };
+
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
 fn lower_with(
+    maximum: i32,
     inherited: impl FnOnce() -> Result<i32, ()>,
     add_nice: impl FnOnce(i32) -> Result<(), ()>,
     effective: impl FnOnce() -> Result<i32, ()>,
 ) -> Result<(), Refusal> {
     let before = inherited().map_err(|_| Refusal::UnknownInherited)?;
-    if !(-20..=19).contains(&before) {
+    if !(-20..=maximum).contains(&before) {
         return Err(Refusal::UnknownInherited);
     }
-    // A positive increment can only lower priority; never set an absolute nice value that
+    if before >= 19 {
+        return Ok(());
+    }
+    // Below the verified nice() ceiling, a positive increment can only lower priority;
+    // never set an absolute nice value that
     // could raise an already-demoted child. Each replacement applies this once after exec.
     add_nice(5).map_err(|_| Refusal::Lowering)?;
     let actual = effective().map_err(|_| Refusal::Verification)?;
@@ -69,16 +79,17 @@ fn lower_with(
     Ok(())
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn lower_priority() -> Result<(), Refusal> {
     lower_with(
+        MAX_NICE,
         || rustix::process::getpriority_process(None).map_err(|_| ()),
         |increment| rustix::process::nice(increment).map(|_| ()).map_err(|_| ()),
         || rustix::process::getpriority_process(None).map_err(|_| ()),
     )
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn lower_priority() -> Result<(), Refusal> {
     Ok(())
 }

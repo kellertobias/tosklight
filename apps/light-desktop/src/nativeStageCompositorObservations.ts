@@ -1,0 +1,93 @@
+import type { StageCompositorObservation, StageGpuTimingCoverage } from "./platform/desktop/types";
+
+const timingCounters = ["elapsedMillis", "framesConsidered", "framesAdmitted", "busySkips", "cadenceSkips", "completedReadbacks", "validSamples"] as const;
+const schedulingCounters = new Set(["cleanSkips", "hiddenSkips", "busySkips", "pacedSkips", "retries"]);
+
+/** Bounded intervals, separate from the helper; samples never estimate total GPU cost. */
+export class NativeStageCompositorObservations {
+	private readonly scopes = new Map<string, { samples: number; microsSum: number; microsMax: number }>();
+	private readonly attachments = new Map<string, number>();
+	private readonly timingCoverage = new Map<string, { observedEpochMicros: number; coverage: StageGpuTimingCoverage }>();
+	private readonly totals = { drawAttempts: 0, submissions: 0, occluded: 0, timeouts: 0,
+		cleanSkips: 0, hiddenSkips: 0, busySkips: 0, pacedSkips: 0, retries: 0,
+		reconfigures: 0, errors: 0, gpuReadbackErrors: 0, gpuInvalidSamples: 0, gpuSampleOverflow: 0,
+		cpuWallMicros: 0, acquireWallMicros: 0 };
+	private unavailable = new Set<string>();
+	private overflow = 0;
+	private invalid = 0;
+	private repeated = 0;
+	private readonly unavailableCounters = { cleanSkips: 0, hiddenSkips: 0, busySkips: 0, pacedSkips: 0, retries: 0 };
+
+	record(observations: readonly StageCompositorObservation[]) {
+		for (const observation of observations) {
+			const key = JSON.stringify([observation.paneId, observation.attachmentId]);
+			if (!this.attachments.has(key)) {
+				if (this.attachments.size >= 64) { this.overflow++; continue; }
+				this.attachments.set(key, -1);
+			}
+			const measurement = observation.measurement;
+			this.recordTimingCoverage(key, observation.observedEpochMicros, measurement.timingCoverage);
+			for (const name of Object.keys(this.totals) as Array<keyof typeof this.totals>) {
+				const value = measurement[name];
+				if (value === undefined && schedulingCounters.has(name)) {
+					this.unavailableCounters[name as keyof typeof this.unavailableCounters]++;
+					continue;
+				}
+				if (typeof value === "number" && Number.isFinite(value) && value >= 0) this.totals[name] += value;
+				else this.invalid++;
+			}
+			if (measurement.gpuTimingUnavailable && this.unavailable.size < 64) this.unavailable.add(measurement.gpuTimingUnavailable.slice(0, 512));
+			for (const sample of measurement.gpuSamples) {
+				if (!Number.isSafeInteger(sample.sampleId) || sample.sampleId < 0 || !Number.isFinite(sample.gpuMicros) || sample.gpuMicros < 0) { this.invalid++; continue; }
+				if (sample.sampleId <= (this.attachments.get(key) ?? -1)) { this.repeated++; continue; }
+				this.attachments.set(key, sample.sampleId);
+				const scopeKey = JSON.stringify([observation.paneId, observation.attachmentId,
+					Math.floor(sample.submittedEpochMicros / 1_000_000), sample.scope]);
+				let row = this.scopes.get(scopeKey);
+				if (!row) {
+					if (this.scopes.size >= 20_000) { this.overflow++; continue; }
+					row = { samples: 0, microsSum: 0, microsMax: 0 };
+					this.scopes.set(scopeKey, row);
+				}
+				row.samples++;
+				row.microsSum += sample.gpuMicros;
+				row.microsMax = Math.max(row.microsMax, sample.gpuMicros);
+			}
+		}
+	}
+
+
+	private recordTimingCoverage(key: string, observedEpochMicros: number, coverage: StageGpuTimingCoverage | null | undefined) {
+		if (coverage == null) return;
+		const previous = this.timingCoverage.get(key);
+		if (!["oneHz", "full"].includes(coverage.diagnosticCadence) || typeof coverage.benchmarkOverride !== "boolean"
+			|| !Number.isSafeInteger(observedEpochMicros) || observedEpochMicros < 0
+			|| timingCounters.some((name) => !Number.isSafeInteger(coverage[name]) || coverage[name] < 0)
+			|| coverage.framesAdmitted + coverage.busySkips + coverage.cadenceSkips !== coverage.framesConsidered
+			|| coverage.completedReadbacks > coverage.framesAdmitted || coverage.validSamples > coverage.completedReadbacks
+			|| (previous && (observedEpochMicros < previous.observedEpochMicros
+				|| previous.coverage.diagnosticCadence !== coverage.diagnosticCadence || previous.coverage.benchmarkOverride !== coverage.benchmarkOverride
+				|| timingCounters.some((name) => coverage[name] < previous.coverage[name])))) {
+			this.invalid++;
+			return;
+		}
+		// Store the latest cumulative snapshot, never the sum of repeated drains. The attachment
+		// admission above bounds this map to the same 64 owners; copy only the fixed native fields.
+		const retained: StageGpuTimingCoverage = { diagnosticCadence: coverage.diagnosticCadence, benchmarkOverride: coverage.benchmarkOverride,
+			elapsedMillis: coverage.elapsedMillis, framesConsidered: coverage.framesConsidered, framesAdmitted: coverage.framesAdmitted,
+			busySkips: coverage.busySkips, cadenceSkips: coverage.cadenceSkips, completedReadbacks: coverage.completedReadbacks, validSamples: coverage.validSamples };
+		this.timingCoverage.set(key, { observedEpochMicros, coverage: retained });
+	}
+
+	report() {
+		return { totals: { ...this.totals }, overflow: this.overflow, invalid: this.invalid,
+			unavailableCounters: { ...this.unavailableCounters },
+			repeatedSamples: this.repeated, unavailable: [...this.unavailable],
+			timingCoverage: [...this.timingCoverage].map(([key, value]) => ({ attachment: JSON.parse(key), ...value })),
+			timingCoverageUnavailableAttachments: this.attachments.size - this.timingCoverage.size,
+			actualDisplayedFrames: null,
+			boundary: "Compositor render-pass samples and elapsed CPU wall time. Clean/hidden skips do not acquire, encode, submit or present; busy/paced skips retain dirty work and retries do not establish a frame. Missing historical counters are unavailable, not measured zeros. Sparse samples are not total GPU time per second; submit/completion is not display.",
+			rows: [...this.scopes].map(([key, value]) => ({ scope: JSON.parse(key), ...value,
+				microsMean: value.microsSum / value.samples })) };
+	}
+}

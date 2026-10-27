@@ -99,6 +99,7 @@ export function reduceWorkspace(
 					1,
 				),
 				stageVizQuality: "draft",
+				stageVizDetailedPeople: action.vizDetailedPeople ?? state.stageVizDetailedPeople,
 				stageVizExposure: clamp(
 					action.vizExposure ?? state.stageVizExposure,
 					0.05,

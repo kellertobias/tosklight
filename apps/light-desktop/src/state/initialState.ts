@@ -73,6 +73,7 @@ export const initialState: AppState = {
 	// Draft: the cones and nothing in them. The cheapest tier that still shows an operator where
 	// the light is going, which is what a Stage is opened for.
 	stageVizQuality: "draft",
+	stageVizDetailedPeople: false,
 	stageVizExposure: 1,
 	stageVizLaserBrightness: 1,
 	stageVizShowLabels: false,

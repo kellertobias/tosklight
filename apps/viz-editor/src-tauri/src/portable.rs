@@ -12,6 +12,10 @@ pub(crate) const MARKER: &str = "portable.txt";
 
 /// The data directory of a portable installation, or `None` when the folder is not portable.
 pub(crate) fn data_dir() -> Option<PathBuf> {
+    // main validates the whole opt-in group before Tauri creates any window.
+    if let Some(launch) = crate::capture_launch::configuration().ok().flatten() {
+        return Some(launch.data.clone());
+    }
     let executable = std::env::current_exe().ok()?;
     let directory = executable.parent()?;
     directory

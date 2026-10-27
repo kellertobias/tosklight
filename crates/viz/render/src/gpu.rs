@@ -176,10 +176,6 @@ impl Gpu {
             surface.configure(&self.device, &self.config);
         }
     }
-
-    pub fn aspect(&self) -> f32 {
-        self.config.width.max(1) as f32 / self.config.height.max(1) as f32
-    }
 }
 
 fn preferred_format(formats: &[TextureFormat]) -> TextureFormat {

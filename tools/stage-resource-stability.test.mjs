@@ -16,6 +16,8 @@ function evidence({
 	const timeline = Array.from({ length: 1_801 }, (_, index) => ({
 		recordedAt: startedAt + index * 1_000,
 		latestRender: {
+			paneId: "live",
+			recordedAt: startedAt + index * 1_000,
 			submittedAt: index * 1_000,
 			durationMs: 2,
 			calls: index >= 1_500 ? lateDrawCalls : 10,
@@ -78,7 +80,7 @@ test("rejects retained native draw-call ownership growth", () => {
 		sample.timeline,
 		sample.processMemory,
 		1_800,
-		{ renderer: "native" },
+		{ renderer: "native", stageWindow: { startedAt: 1_000_000, completedAt: 2_800_000 } },
 	);
 
 	assert.equal(result.passed, false);
@@ -113,4 +115,237 @@ test("uses each newly recorded render instead of repeated latest snapshots", () 
 	assert.equal(result.passed, true);
 	assert.equal(result.late.cpuFrameP95Ms, 3);
 	assert.ok(result.late.samples > 300);
+});
+
+const nativeWindow = { startedAt: 1_000_000, completedAt: 2_800_000 };
+
+test("native resource acceptance requires independent complete Stage window coverage", () => {
+    const sample = evidence();
+    const options = { renderer: "native", stageWindow: nativeWindow };
+    assert.equal(summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, options).passed, true);
+    // This reproduces the old collector stopping after its host-row cap. Fitting a stable
+    // partial prefix and calling that prefix's last five minutes 'late' must not pass.
+    const truncated = sample.timeline.slice(0, 961);
+    const bad = summarizeStageLongRunResources(truncated, sample.processMemory, 1800, options);
+    assert.equal(bad.passed, false);
+    assert.match(bad.failures.join("\n"), /render coverage/u);
+    const missingRss = summarizeStageLongRunResources(sample.timeline, sample.processMemory.slice(0, 961), 1800, options);
+    assert.equal(missingRss.passed, false);
+    assert.match(missingRss.failures.join("\n"), /RSS coverage/u);
+    assert.equal(summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native"}).passed, false);
+});
+
+test("late observation clocks cannot refresh stale native render timestamps", () => {
+    const sample = evidence();
+    const timeline = sample.timeline.map((entry, index) => ({...entry, newRenders: [{
+        ...entry.latestRender, benchmarkSequence: index, recordedAt: Math.min(entry.recordedAt, 1_960_000),
+    }]}));
+    const result = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, false);
+    assert.match(result.failures.join("\n"), /render coverage/u);
+});
+
+
+test("native late window stays anchored to intended Stage end but rejects sparse ending coverage", () => {
+    const sample = evidence();
+    const timeline = sample.timeline.filter((entry) => entry.recordedAt < 2_500_000 || entry.recordedAt === nativeWindow.completedAt);
+    const result = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, false);
+    assert.match(result.failures.join("\n"), /render coverage/u);
+    assert.equal(result.early.samples, 300);
+    assert.equal(result.late.samples, 1);
+    assert.equal(result.coverage.renders.lastRecordedAt, nativeWindow.completedAt);
+});
+
+test("native snapshots require actual render clocks and cannot refresh a repeated image", () => {
+    const sample = evidence();
+    const repeated = sample.timeline.map((entry) => ({...entry, latestRender: {
+        recordedAt: nativeWindow.startedAt, submittedAt: nativeWindow.startedAt,
+        benchmarkSequence: "same-image", durationMs: 2, calls: 10, geometries: 5,
+    }}));
+    const stale = summarizeStageLongRunResources(repeated, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(stale.passed, false);
+    assert.equal(stale.coverage.renders.lastRecordedAt, null);
+    assert.equal(stale.coverage.coldWarmup.firstActualRenderAt, nativeWindow.startedAt);
+    const noClock = sample.timeline.map((entry) => ({...entry, latestRender: {
+        benchmarkSequence: entry.recordedAt, durationMs: 2, calls: 10, geometries: 5,
+    }}));
+    const missing = summarizeStageLongRunResources(noClock, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(missing.passed, false);
+    assert.match(missing.failures.join("\n"), /render coverage/u);
+});
+
+test("native endpoint tolerance does not accept late startup or incomplete intended duration", () => {
+    const sample = evidence();
+    const lateStart = sample.timeline.slice(66);
+    const late = summarizeStageLongRunResources(lateStart, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(late.passed, false);
+    assert.match(late.failures.join("\n"), /render coverage/u);
+    const short = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: {...nativeWindow, completedAt: nativeWindow.completedAt - 10_000}});
+    assert.equal(short.passed, false);
+    assert.match(short.failures.join("\n"), /independent complete Stage window/u);
+});
+
+
+test("native submission epoch is accepted when recordedAt is absent and short runs stay informational", () => {
+    const sample = evidence();
+    const timeline = sample.timeline.map((entry) => {
+        const {recordedAt: unused, ...render} = entry.latestRender;
+        return {...entry, latestRender: {...render, submittedAt: entry.recordedAt}};
+    });
+    const valid = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(valid.passed, true);
+    const short = summarizeStageLongRunResources(timeline, sample.processMemory, 30, {renderer: "native"});
+    assert.equal(short.passed, null);
+    assert.equal(short.failures.length, 0);
+    assert.ok(short.late.samples > 0);
+});
+
+
+test("native independent duration tolerance is explicit and bounded to five seconds", () => {
+    const sample = evidence();
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {
+        renderer: "native", stageWindow: {...nativeWindow, completedAt: nativeWindow.completedAt - 5_000},
+    });
+    assert.equal(result.passed, true);
+    assert.equal(result.coverage.actualDurationMillis, 1_795_000);
+    assert.equal(result.coverage.requestedDurationMillis, 1_800_000);
+    assert.equal(result.coverage.durationToleranceMillis, 5_000);
+});
+
+test("enforced resource acceptance rejects unavailable late CPU p95", () => {
+    const sample = evidence();
+    const timeline = sample.timeline.map((entry) => ({...entry, latestRender: {...entry.latestRender, durationMs: null}}));
+    for (const options of [{renderer: "webgl"}, {renderer: "native", stageWindow: nativeWindow}]) {
+        const result = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, options);
+        assert.equal(result.passed, false);
+        assert.match(result.failures.join("\n"), /CPU submission p95 is unavailable/u);
+    }
+});
+
+
+test("each observed native pane must independently cover the complete animated Stage window", () => {
+    const sample = evidence();
+    const dual = sample.timeline.map((entry, index) => ({...entry, newRenders: [
+        {...entry.latestRender, benchmarkSequence: `live:${index}`},
+        ...(index <= 900 ? [{...entry.latestRender, paneId: "preload", benchmarkSequence: `preload:${index}`}] : []),
+    ]}));
+    const result = summarizeStageLongRunResources(dual, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, false);
+    assert.equal(result.coverage.renders.complete, true);
+    assert.equal(result.coverage.panes.length, 2);
+    assert.equal(result.coverage.panes.find((pane) => pane.paneId === "preload").complete, false);
+    assert.match(result.failures.join("\n"), /render coverage is incomplete for pane preload/u);
+});
+
+test("native RSS and each lane reject internal gaps above the declared tolerance", () => {
+    const sample = evidence();
+    const gapMemory = sample.processMemory.filter((entry, index) => index < 500 || index > 507);
+    const rss = summarizeStageLongRunResources(sample.timeline, gapMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(rss.passed, false);
+    assert.equal(rss.coverage.rss.maximumGapMillis, 9_000);
+    assert.match(rss.failures.join("\n"), /RSS coverage/u);
+    const dual = sample.timeline.map((entry, index) => ({...entry, newRenders: [
+        {...entry.latestRender, benchmarkSequence: `live:${index}`},
+        ...(index < 500 || index > 507 ? [{...entry.latestRender, paneId: "preload", benchmarkSequence: `preload:${index}`}] : []),
+    ]}));
+    const lane = summarizeStageLongRunResources(dual, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(lane.passed, false);
+    assert.equal(lane.coverage.renders.complete, true);
+    assert.equal(lane.coverage.panes.find((pane) => pane.paneId === "preload").maximumGapMillis, 9_000);
+    assert.match(lane.failures.join("\n"), /render coverage is incomplete for pane preload/u);
+});
+
+
+function dualResourceEvidence({preloadGrowth = false, preloadCpu = 2, sparsePreload = false} = {}) {
+    const sample = evidence();
+    sample.timeline = sample.timeline.map((entry, index) => ({...entry, newRenders: [
+        ...Array.from({length: sparsePreload ? 20 : 1}, (_, repeat) => ({
+            ...entry.latestRender, paneId: "live", benchmarkSequence: `live:${index}:${repeat}`,
+            geometries: 1000, calls: 1000,
+        })),
+        ...(!sparsePreload || index % 5 === 0 ? [{
+            ...entry.latestRender, paneId: "preload", benchmarkSequence: `preload:${index}`,
+            geometries: preloadGrowth && index >= 1500 ? 600 : 500,
+            calls: preloadGrowth && index >= 1500 ? 600 : 500,
+            durationMs: index >= 1500 ? preloadCpu : 2,
+        }] : []),
+    ]}));
+    return sample;
+}
+
+test("per-pane ownership growth cannot hide below another pane's stable pooled maximum", () => {
+    const sample = dualResourceEvidence({preloadGrowth: true});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.early.maxGeometries, 1000);
+    assert.equal(result.late.maxGeometries, 1000);
+    assert.equal(result.early.maxDrawCalls, 1000);
+    assert.equal(result.late.maxDrawCalls, 1000);
+    assert.equal(result.passed, false);
+    const preload = result.panes.find((pane) => pane.paneId === "preload");
+    assert.equal(preload.early.maxGeometries, 500);
+    assert.equal(preload.late.maxGeometries, 600);
+    assert.match(result.failures.join("\n"), /ownership grew.*pane preload/u);
+});
+
+test("each pane needs finite late CPU evidence even when another pane supplies a pooled p95", () => {
+    const sample = dualResourceEvidence({preloadCpu: null});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.late.cpuFrameP95Ms, 2);
+    assert.equal(result.passed, false);
+    assert.match(result.failures.join("\n"), /CPU submission p95 is unavailable for pane preload/u);
+    assert.equal(result.panes.find((pane) => pane.paneId === "preload").late.cpuSampleCount, 0);
+});
+
+test("a sparse lane's slow CPU p95 cannot hide inside a faster lane's larger sample population", () => {
+    const sample = dualResourceEvidence({preloadCpu: 20, sparsePreload: true});
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.coverage.panes.every((pane) => pane.complete), true);
+    assert.equal(result.late.cpuFrameP95Ms, 2);
+    assert.equal(result.passed, false);
+    assert.equal(result.panes.find((pane) => pane.paneId === "preload").late.cpuFrameP95Ms, 20);
+    assert.match(result.failures.join("\n"), /CPU submission p95 exceeded 16.7 ms for pane preload/u);
+    assert.match(result.cpuFrameMeasurement, /Source-deduplicated.*wall time.*not every 60 Hz/u);
+});
+
+test("stable native panes retain both lane and aggregate resource reports", () => {
+    const sample = dualResourceEvidence();
+    const result = summarizeStageLongRunResources(sample.timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, true);
+    assert.equal(result.panes.length, 2);
+    assert.equal(result.late.samples, 2 * result.panes[0].late.samples);
+    assert.equal(result.panes.every((pane) => pane.late.cpuFrameP95Ms === 2), true);
+});
+
+
+test("17-second cold render startup is reported without failing post-warmup coverage", () => {
+    const sample = evidence();
+    const delayed = sample.timeline.slice(17);
+    const result = summarizeStageLongRunResources(delayed, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(result.passed, true);
+    assert.deepEqual(result.coverage.stageWindow, nativeWindow);
+    assert.deepEqual(result.coverage.requiredSteadyWindow, {startedAt: 1_060_000, completedAt: 2_800_000});
+    assert.equal(result.coverage.coldWarmup.firstActualRenderAt, 1_017_000);
+    assert.equal(result.coverage.coldWarmup.firstActualRenderDelayMillis, 17_000);
+    assert.equal(result.coverage.coldWarmup.firstActualRenderWithinWarmup, true);
+    assert.equal(result.coverage.renders.firstRecordedAt, 1_060_000);
+    assert.equal(result.coverage.coldWarmup.initialRss.recordedAt, nativeWindow.startedAt);
+    assert.equal(result.early.samples, 300, "early resources still use original minute1..6");
+});
+
+test("cold-only gaps are excluded but missing steady start, end and lane intervals fail", () => {
+    const sample = evidence();
+    const coldGap = sample.timeline.filter((entry, index) => index === 0 || index >= 59);
+    const accepted = summarizeStageLongRunResources(coldGap, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+    assert.equal(accepted.passed, true);
+    for (const timeline of [sample.timeline.slice(66), sample.timeline.slice(0, -6),
+        sample.timeline.filter((entry, index) => index < 61 || index > 68)]) {
+        const failed = summarizeStageLongRunResources(timeline, sample.processMemory, 1800, {renderer: "native", stageWindow: nativeWindow});
+        assert.equal(failed.passed, false);
+        assert.match(failed.failures.join("\n"), /render coverage/u);
+    }
+    const coldRss = sample.processMemory.filter((entry, index) => index === 0 || index >= 59);
+    assert.equal(summarizeStageLongRunResources(sample.timeline, coldRss, 1800, {renderer: "native", stageWindow: nativeWindow}).passed, true);
+    const missingRss = sample.processMemory.slice(66);
+    assert.match(summarizeStageLongRunResources(sample.timeline, missingRss, 1800, {renderer: "native", stageWindow: nativeWindow}).failures.join("\n"), /RSS coverage/u);
 });

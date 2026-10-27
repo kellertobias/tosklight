@@ -2,13 +2,14 @@
 # No real launch, process signaling, network calls or runtime filesystem writes.
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/build-test-runtime.sh"
-ROOT="/fixture/acceptance-worktree"
+ROOT="/fixture/acceptance worktree"
 TARGET_DIR="$ROOT/.artifacts/build/cargo"
 FIXTURE_LIBRARY_DIR="$ROOT/assets/fixture-library"
 LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004
 LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000
 LIGHT_DESKTOP_TEST_DATA_DIR="$ROOT/.artifacts/runtime/test data"
 CALLS=()
+OPEN_ARGS=()
 PORT_OCCUPIED=0
 EMPTY_OWN=0
 TEST_PROCESS_COMMAND=""
@@ -40,7 +41,7 @@ kill() {
 }
 lsof() { [[ " $* " == *" -p 42 "* || "$PORT_OCCUPIED" == 1 ]]; }
 curl() { CALLS+=("curl $*"); }
-open() { CALLS+=("open $*"); }
+open() { CALLS+=("open $*"); OPEN_ARGS=("$@"); }
 mkdir() { CALLS+=("mkdir $*"); }
 
 light_configure_desktop_test_runtime
@@ -74,11 +75,60 @@ light_start_desktop_test_runtime
 [[ "${CALLS[*]}" == *"$TARGET_DIR/debug/light-headless --bind 127.0.0.1:5004 --osc-bind 127.0.0.1:19000 --data-dir $DATA_DIR --fixture-package-dir $FIXTURE_LIBRARY_DIR"* ]]
 printf 'PASS server submission carries explicit HTTP, OSC, data and fixture paths\n'
 
+# Start deterministically even when the test caller has benchmark controls exported.
+for name in $(compgen -A variable LIGHT_STAGE_PACKAGED_BENCH_); do unset "$name"; done
+unset LIGHT_STAGE_GPU_TIMING_CADENCE || true
 CALLS=()
 light_open_desktop_test_app
 [[ "${CALLS[*]}" == *'open -n --env LIGHT_DESKTOP_TEST_BIND=127.0.0.1:5004 --env LIGHT_DESKTOP_TEST_OSC_BIND=127.0.0.1:19000 --env LIGHT_DESKTOP_TEST_DATA_DIR='* ]]
 [[ "${CALLS[*]}" == *"$TARGET_DIR/debug/bundle/macos/ToskLight.app"* ]]
 printf 'PASS fresh exact bundle receives test endpoint and data override\n'
+[[ ${#OPEN_ARGS[@]} == 8 ]]
+[[ "${OPEN_ARGS[6]}" == "LIGHT_DESKTOP_TEST_DATA_DIR=$DATA_DIR" ]]
+[[ "${OPEN_ARGS[7]}" == "$TARGET_DIR/debug/bundle/macos/ToskLight.app" ]]
+printf 'PASS absent optional benchmark controls are not invented and spaced arguments stay intact\n'
+
+LIGHT_STAGE_PACKAGED_BENCH_REPORT="$ROOT/.artifacts/performance/report with spaces.jsonl"
+LIGHT_STAGE_PACKAGED_BENCH_DISPLAY=internal
+LIGHT_STAGE_PACKAGED_BENCH_LAYOUT=single
+LIGHT_STAGE_PACKAGED_BENCH_PREPARED=""
+LIGHT_STAGE_PACKAGED_BENCH_PROFILE=stage-500
+LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS=30
+LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS=40
+LIGHT_STAGE_PACKAGED_BENCH_STAGE=1
+LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET=0
+LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW=0
+LIGHT_STAGE_PACKAGED_BENCH_QUALITY=draft
+LIGHT_STAGE_PACKAGED_BENCH_VIEW=lines3d
+LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ=60
+LIGHT_STAGE_GPU_TIMING_CADENCE=full
+LIGHT_STAGE_PACKAGED_BENCH_UNLISTED='literal $(do-not-execute)'
+CALLS=()
+light_open_desktop_test_app
+has_open_arg() {
+  local argument
+  for argument in "${OPEN_ARGS[@]}"; do [[ "$argument" == "$1" ]] && return 0; done
+  return 1
+}
+[[ ${#OPEN_ARGS[@]} == 36 ]]
+has_open_arg "LIGHT_STAGE_PACKAGED_BENCH_REPORT=$LIGHT_STAGE_PACKAGED_BENCH_REPORT"
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_DISPLAY=internal
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_LAYOUT=single
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_PREPARED=
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_PROFILE=stage-500
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS=30
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS=40
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_STAGE=1
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_FIXTURE_SHEET=0
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW=0
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_QUALITY=draft
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_VIEW=lines3d
+has_open_arg LIGHT_STAGE_PACKAGED_BENCH_HELPER_HZ=60
+has_open_arg LIGHT_STAGE_GPU_TIMING_CADENCE=full
+LIGHT_STAGE_GPU_TIMING_CADENCE=full
+if has_open_arg "LIGHT_STAGE_PACKAGED_BENCH_UNLISTED=$LIGHT_STAGE_PACKAGED_BENCH_UNLISTED"; then exit 1; fi
+[[ "${OPEN_ARGS[35]}" == "$TARGET_DIR/debug/bundle/macos/ToskLight.app" ]]
+printf 'PASS isolated LaunchServices forwards only explicit allowlisted controls including empty values and report paths with spaces\n'
 
 CALLS=()
 PORT_OCCUPIED=1
@@ -90,3 +140,10 @@ unset LIGHT_DESKTOP_TEST_OSC_BIND
 if light_configure_desktop_test_runtime; then exit 1; fi
 [[ ${#CALLS[@]} == 0 ]]
 printf 'PASS incomplete overrides are rejected without process actions\n'
+
+# Benchmark controls alone never opt an ordinary build/open into isolated launch behavior.
+unset LIGHT_DESKTOP_TEST_BIND LIGHT_DESKTOP_TEST_DATA_DIR
+CALLS=()
+if light_desktop_test_runtime_requested; then light_open_desktop_test_app; exit 1; fi
+[[ ${#CALLS[@]} == 0 ]]
+printf 'PASS optional benchmark controls do not change ordinary launch selection\n'

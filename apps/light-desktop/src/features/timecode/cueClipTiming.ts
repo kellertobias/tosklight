@@ -22,6 +22,10 @@ export interface CueClipTimingRow {
 	/// delay waits from the handover rather than from this Cue's own start.
 	handoverFrame: number;
 	outFade: CueClipTimingRange;
+	/// Shared Out timing without a successor before this clip ends; this is not an executed tail.
+	outFadeReference?: boolean;
+	/// Only the In fade exceeds the clip end; extending the clip can repair this diagnostic.
+	clipEndOverflow?: boolean;
 	diagnostic?: string;
 	/// Set for a Cue whose start the Timecode lane owns because it waits for a manual GO.
 	/// "placed" means the operator dropped a transition point, "default" means it follows
@@ -69,7 +73,7 @@ export function cueClipTimingRows(
 		if (!current.id || visited.has(current.id)) break;
 		visited.add(current.id);
 		const currentStart = scheduled.get(current.id) ?? clip.start_frame;
-		const currentRow = { inFade: inFadeRange(current, currentStart, defaults) };
+		const completedAt = cueCompletionFrame(current, currentStart, cueList, defaults);
 		let next: Cue | undefined = range[range.indexOf(current) + 1];
 		let nextStart: number;
 		if (current.trigger.type === "link") {
@@ -90,7 +94,7 @@ export function cueClipTimingRows(
 				break;
 			}
 			nextStart =
-				currentRow.inFade.endFrame +
+				completedAt +
 				millisToTimecodeFrames(Number(current.trigger.delay_millis ?? 0));
 		} else {
 			if (!next) break;
@@ -103,7 +107,7 @@ export function cueClipTimingRows(
 			else if (next.trigger.type === "wait")
 				nextStart = currentStart + incomingDelay;
 			else if (next.trigger.type === "follow")
-				nextStart = currentRow.inFade.endFrame + incomingDelay;
+				nextStart = completedAt + incomingDelay;
 			else {
 				const manualId = next.id;
 				const placed = clip.cue_starts?.find(
@@ -112,7 +116,7 @@ export function cueClipTimingRows(
 				transitions.set(manualId ?? "", placed ? "placed" : "default");
 				nextStart = placed
 					? clip.start_frame + Math.round(placed.offset_frame)
-					: currentRow.inFade.endFrame;
+					: completedAt;
 			}
 		}
 		if (!next) break;
@@ -136,25 +140,32 @@ export function cueClipTimingRows(
 		);
 	}
 
+	const execution = [...scheduled.entries()];
 	const rows: CueClipTimingRow[] = [];
 	for (const [index, cue] of range.entries()) {
 		const startFrame = starts[index] ?? clip.start_frame;
-		// A Cue holds until the next one takes over, and the last one holds to the end of the clip.
-		const handoverFrame = Math.max(
-			startFrame,
-			starts[index + 1] ?? clip.end_frame,
-		);
+		// Links can skip Cues: handover follows the actual execution path, not a display row.
+		const executionIndex = execution.findIndex(([id]) => id === cue.id);
+		const successorStart =
+			executionIndex >= 0 ? execution[executionIndex + 1]?.[1] : undefined;
+		const handoverFrame = Math.max(startFrame, successorStart ?? clip.end_frame);
 		const row = timingRow(cue, startFrame, handoverFrame, defaults);
+		if (successorStart === undefined || handoverFrame >= clip.end_frame)
+			row.outFadeReference = true;
 		const transition = cue.id ? transitions.get(cue.id) : undefined;
 		if (transition) row.transition = transition;
 		if (!cue.id) row.diagnostic = `Cue ${cue.number} has no stable identity.`;
 		else if (diagnostics.has(cue.id)) row.diagnostic = diagnostics.get(cue.id);
 		else if (!scheduled.has(cue.id))
 			row.diagnostic = `Cue ${cue.number} is not reached by this clip's Cue order.`;
+		else if (index > 0 && startFrame < (starts[index - 1] ?? clip.start_frame))
+			row.diagnostic = `Cue ${cue.number} starts before the preceding Cue.`;
 		else if (startFrame < clip.start_frame || startFrame > clip.end_frame)
 			row.diagnostic = `Cue ${cue.number} starts outside this clip.`;
-		else if (row.inFade.endFrame > clip.end_frame)
+		else if (row.inFade.endFrame > clip.end_frame) {
+			row.clipEndOverflow = true;
 			row.diagnostic = `Cue ${cue.number} timing extends outside this clip.`;
+		}
 		rows.push(row);
 	}
 	return { rows };
@@ -180,7 +191,7 @@ export function cueWithDraggedFade(
 					? `Cue ${cue.number} timing cannot start before the Cue.`
 					: `Cue ${cue.number} release cannot start before the Cue hands over.`,
 		};
-	if (target > clip.end_frame)
+	if (target > clip.end_frame && !(kind === "out" && row.outFadeReference))
 		return { error: `Cue ${cue.number} timing must remain inside the clip.` };
 	if (edge === "start" && target > range.endFrame)
 		return { error: `Cue ${cue.number} fade start cannot cross its fade end.` };
@@ -207,6 +218,144 @@ export function cueWithDraggedFade(
 						out_fade_link: undefined,
 					},
 	};
+}
+
+export interface CueTimingFrameBounds {
+	minimum: number;
+	maximum: number;
+}
+
+/// Bounds shared by pointer preview, keyboard nudges and exact-time editors.
+export function cueFadeFrameBounds(
+	row: CueClipTimingRow,
+	clip: TimecodeCueListClip,
+	kind: CueFadeKind,
+	edge: CueFadeEdge,
+): CueTimingFrameBounds {
+	const range = kind === "in" ? row.inFade : row.outFade;
+	const anchor = kind === "in" ? row.startFrame : row.handoverFrame;
+	const limit =
+		kind === "out" && row.outFadeReference
+			? Math.floor(Number.MAX_SAFE_INTEGER / 1_000)
+			: clip.end_frame;
+	return {
+		minimum: edge === "start" ? anchor : Math.max(anchor, range.startFrame),
+		maximum: edge === "start" ? Math.min(limit, range.endFrame) : limit,
+	};
+}
+
+/// Restricts a fade gesture to the connected legal interval around its current point.
+/// Cue timing can move Follow/Link/default-manual successors, including successors
+/// behind a fixed trigger. Checking only this Cue's own geometry would miss that conflict.
+export function cueFadeEditFrameBounds(
+	clip: TimecodeCueListClip,
+	cueList: CueList,
+	defaults: CueClipTimingDefaults,
+	row: CueClipTimingRow,
+	kind: CueFadeKind,
+	edge: CueFadeEdge,
+): CueTimingFrameBounds | null {
+	const bounds = cueFadeFrameBounds(row, clip, kind, edge);
+	const source = cueList.cues.find((cue) => cue.id === row.cue.id);
+	if (!source || row.diagnostic || bounds.minimum > bounds.maximum) return null;
+	const legal = (frame: number) => {
+		const changed = cueWithDraggedFade(source, row, clip, kind, edge, frame);
+		if (!changed.cue) return false;
+		const candidate = {
+			...cueList,
+			cues: cueList.cues.map((cue) => cue.id === source.id ? changed.cue! : cue),
+		};
+		const { rows, error } = cueClipTimingRows(clip, candidate, defaults);
+		return !error && !rows.some((next) =>
+			next.diagnostic?.includes("starts before the preceding Cue"),
+		);
+	};
+	let { minimum, maximum } = bounds;
+	const range = kind === "in" ? row.inFade : row.outFade;
+	// In zero means inheritance, not a hard zero. It can be discontinuous from
+	// the adjacent one-frame fade, so never include an invalid zero in the search.
+	if (kind === "in") {
+		if (edge === "end" && minimum === range.startFrame && !legal(minimum)) minimum += 1;
+		if (edge === "start" && maximum === range.endFrame && !legal(maximum)) maximum -= 1;
+	}
+	const current = Math.max(minimum, Math.min(maximum,
+		edge === "start" ? range.startFrame : range.endFrame));
+	if (minimum > maximum || !legal(current)) return null;
+	let low = minimum;
+	let high = current;
+	while (low < high) {
+		const middle = low + Math.floor((high - low) / 2);
+		if (legal(middle)) high = middle;
+		else low = middle + 1;
+	}
+	minimum = low;
+	low = current;
+	high = maximum;
+	while (low < high) {
+		const middle = low + Math.ceil((high - low) / 2);
+		if (legal(middle)) low = middle;
+		else high = middle - 1;
+	}
+	return { minimum, maximum: low };
+}
+
+/// Manual placements may move their derived successors, but may never cross a fixed
+/// successor. Re-resolving the schedule also catches a fixed Cue further down a Follow chain.
+export function cueTransitionFrameBounds(
+	clip: TimecodeCueListClip,
+	cueList: CueList,
+	defaults: CueClipTimingDefaults,
+	cueId: string,
+): CueTimingFrameBounds | null {
+	const { rows, error } = cueClipTimingRows(clip, cueList, defaults);
+	const index = rows.findIndex((row) => row.cue.id === cueId);
+	const row = rows[index];
+	if (error || index < 1 || !row?.transition) return null;
+	const minimum = Math.max(clip.start_frame, rows[index - 1].startFrame) + 1;
+	let maximum = clip.end_frame - 1;
+	if (minimum > maximum) return null;
+	const preservesOrder = (frame: number) => {
+		const placed = {
+			...clip,
+			cue_starts: [
+				...(clip.cue_starts ?? []).filter((start) => start.cue_id !== cueId),
+				{ cue_id: cueId, offset_frame: frame - clip.start_frame },
+			],
+		};
+		const candidate = cueClipTimingRows(placed, cueList, defaults).rows;
+		return candidate.slice(index + 1).every((next, offset) => {
+			const previous = candidate[index + offset];
+			return next.startFrame > previous.startFrame;
+		});
+	};
+	if (!preservesOrder(minimum)) return null;
+	let lower = minimum;
+	while (lower < maximum) {
+		const middle = lower + Math.ceil((maximum - lower) / 2);
+		if (preservesOrder(middle)) lower = middle;
+		else maximum = middle - 1;
+	}
+	return { minimum, maximum: lower };
+}
+
+function cueCompletionFrame(
+	cue: Cue,
+	startFrame: number,
+	cueList: CueList,
+	defaults: CueClipTimingDefaults,
+): number {
+	if (cueList.disable_cue_timing) return startFrame;
+	const inFade = effectiveInFadeMillis(cue, defaults);
+	return (
+		startFrame +
+		millisToTimecodeFrames(
+			Math.max(
+				cue.delay_millis + inFade,
+				effectiveOutDelayMillis(cue, inFade) +
+					effectiveOutFadeMillis(cue, inFade, defaults),
+			),
+		)
+	);
 }
 
 function inFadeRange(

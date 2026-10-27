@@ -318,38 +318,80 @@
 }
 .timecode-timeline-overview-handle {
 	position: absolute;
-	/* Zoomed far in, the window is narrower than two edge grips, and an operator still has to be
-	   able to move it. The edges therefore own the lower half of the window and the upper half is
-	   always the pan surface, so however narrow the window gets it keeps a grip of each kind.
-	   Capping each edge at half the window keeps the two of them from covering each other. */
-	top: 50%;
+	/* A narrow window still exposes both edges; its raised center grip owns panning. */
+	top: 0;
 	bottom: -1px;
 	width: min(16px, 50%);
 	cursor: ew-resize;
 	touch-action: none;
 }
-.timecode-timeline-overview-handle::after {
-	position: absolute;
-	top: 0;
-	bottom: 0;
-	left: 7px;
-	width: 2px;
-	background: #58d4ef;
+/* The same rounded grip as a Cue boundary, clipped to its inward half. */
+.timecode-timeline-overview-handle { overflow: hidden; }
+.timecode-timeline-overview-handle::before {
 	content: "";
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 20px;
+	height: 24px;
+	border: 1px solid #58d4ef;
+	border-radius: 4px;
+	background: #242c36;
+	box-shadow: 0 1px 2px #0008;
 }
-.timecode-timeline-overview-handle.handle-start {
-	left: -1px;
+.timecode-timeline-overview-handle::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	width: 2px;
+	height: 14px;
+	border-radius: 1px;
+	background: #b8f3ff;
 }
-.timecode-timeline-overview-handle.handle-start::after {
-	left: 0;
+.timecode-timeline-overview-handle:hover::before,
+.timecode-timeline-overview:focus-visible .timecode-timeline-overview-handle::before {
+	border-color: #b8f3ff;
+	background: #39424e;
 }
-.timecode-timeline-overview-handle.handle-end {
-	right: -1px;
+.timecode-timeline-overview-handle.handle-start { left: -1px; }
+.timecode-timeline-overview-handle.handle-start::before { left: -10px; }
+.timecode-timeline-overview-handle.handle-start::after { left: 4px; }
+.timecode-timeline-overview-handle.handle-end { right: -1px; }
+.timecode-timeline-overview-handle.handle-end::before { right: -10px; }
+.timecode-timeline-overview-handle.handle-end::after { right: 4px; }
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move,
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move:hover,
+.timecode-timeline-editor .timecode-timeline-overview-visible .timecode-timeline-overview-move:active {
+	position: absolute;
+	z-index: 4;
+	top: -1px;
+	left: 50%;
+	transform: translateX(-50%);
+	width: 44px;
+	height: 22px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	cursor: grab;
+	touch-action: none;
 }
-.timecode-timeline-overview-handle.handle-end::after {
-	right: 0;
-	left: auto;
+.timecode-timeline-overview-move:active { cursor: grabbing; }
+.timecode-timeline-overview-move > span {
+	display: block;
+	width: 28px;
+	height: 14px;
+	margin: 0 auto;
+	border: 1px solid #58d4ef;
+	border-radius: 4px;
+	background: #242c36;
+	box-shadow: 0 1px 2px #0008;
 }
+.timecode-timeline-overview-move svg { display: block; width: 18px; height: 8px; margin: 2px auto; fill: #b8f3ff; }
+.timecode-timeline-overview-move:hover > span,
+.timecode-timeline-overview-move:focus-visible > span { border-color: #b8f3ff; background: #39424e; }
 .timecode-timeline-scroll {
 	flex: 1 1 12rem;
 	min-height: 0;
@@ -388,9 +430,19 @@
 	position: relative;
 	box-sizing: border-box;
 	min-height: max(20rem, 100%);
-	padding-top: 2rem;
+	padding-top: 0;
 	background: #11121a;
 	touch-action: none;
+}
+/* Reserve native classic-scrollbar space after, never inside, the time axis. */
+.timecode-timeline-canvas::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 100%;
+	width: var(--timecode-trailing-scroll-gutter, 0px);
+	height: 1px;
+	pointer-events: none;
 }
 .timecode-ruler-stripes {
 	position: absolute;
@@ -698,77 +750,7 @@
 	background: rgb(71 20 24 / 96%);
 	color: #ffb5af;
 }
-.timecode-cue-start-marker {
-	position: absolute;
-	z-index: 4;
-	top: 50%;
-	bottom: 0;
-	width: 2px;
-	border-left: 2px solid #fff;
-	color: #fff;
-	font-size: 0.62rem;
-	font-variant-numeric: tabular-nums;
-	line-height: 1;
-	pointer-events: none;
-}
-.timecode-cue-start-marker::before {
-	position: absolute;
-	top: -0.8rem;
-	left: 2px;
-	padding: 0.08rem 0.16rem;
-	background: rgb(17 18 26 / 88%);
-	content: attr(title);
-	white-space: nowrap;
-}
-/* A Cue occupies the lower two thirds of the clip, under the drag handle, as two stacked bands:
-   the out timing above the in timing. Each band is a muted delay block followed by its fade. */
-.timecode-cue-content-range,
-.timecode-cue-fade-range,
-.timecode-cue-delay-range {
-	position: absolute;
-	z-index: 3;
-	height: calc(((100% - var(--timecode-clip-handle-height)) / 2) - 4px);
-	border-radius: 2px;
-	pointer-events: none;
-}
-.timecode-cue-fade-range {
-	min-width: 2px;
-}
-.timecode-cue-fade-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	background: #f39a4a;
-}
-.timecode-cue-fade-range.in {
-	bottom: 2px;
-	background: #58d4ef;
-}
-/* A delay is a wait, so it reads as a hollow lead-in to the solid fade block it precedes. */
-.timecode-cue-delay-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	border: 1px dashed rgb(243 154 74 / 62%);
-	background: rgb(243 154 74 / 14%);
-}
-.timecode-cue-delay-range.in {
-	bottom: 2px;
-	border: 1px dashed rgb(88 212 239 / 62%);
-	background: rgb(88 212 239 / 14%);
-}
-
-/* Content is the Cue simply being held, so it reads as a flat rail joining its own timing to the
-   next Cue's rather than as a block competing with them. */
-.timecode-cue-content-range {
-	z-index: 2;
-}
-.timecode-cue-content-range.out {
-	top: calc(var(--timecode-clip-handle-height) + 2px);
-	background: rgb(243 154 74 / 22%);
-}
-.timecode-cue-content-range.in {
-	bottom: 2px;
-	background: rgb(88 212 239 / 22%);
-}
-
-/* The first third of a Cuelist clip drags the whole clip; its edges scale it. */
+/* The clip header moves the complete clip; its edges scale it. */
 .timecode-clip-handle {
 	position: absolute;
 	z-index: 6;
@@ -805,80 +787,6 @@
 	background: rgb(0 0 0 / 38%);
 	font-size: 0.62rem;
 	font-variant-numeric: tabular-nums;
-}
-.timecode-cue-fade-handle {
-	position: absolute;
-	top: 50%;
-	width: 44px;
-	height: 44px;
-	transform: translate(-50%, -50%);
-	cursor: ew-resize;
-	touch-action: none;
-	pointer-events: auto;
-}
-.timecode-cue-fade-handle::after {
-	position: absolute;
-	top: 12px;
-	bottom: 12px;
-	left: 21px;
-	width: 3px;
-	border-radius: 2px;
-	background: #fff;
-	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%);
-	content: "";
-}
-.timecode-cue-fade-handle.start {
-	left: 0;
-}
-.timecode-cue-fade-handle.end {
-	left: 100%;
-}
-.timecode-cue-fade-handle:focus-visible::after {
-	outline: 2px solid #fff;
-	outline-offset: 2px;
-}
-.timecode-cue-transition {
-	position: absolute;
-	z-index: 5;
-	top: 50%;
-	width: 44px;
-	height: 44px;
-	transform: translate(-50%, -50%);
-	cursor: ew-resize;
-	touch-action: none;
-	pointer-events: auto;
-}
-.timecode-cue-transition::after {
-	position: absolute;
-	top: 8px;
-	bottom: 8px;
-	left: 20px;
-	width: 4px;
-	border-radius: 2px;
-	background: #ffd166;
-	box-shadow: 0 0 0 1px rgb(0 0 0 / 65%);
-	content: "";
-}
-.timecode-cue-transition.default::after {
-	background: transparent;
-	box-shadow:
-		inset 0 0 0 1px #ffd166,
-		0 0 0 1px rgb(0 0 0 / 65%);
-}
-.timecode-cue-transition:focus-visible::after {
-	outline: 2px solid #fff;
-	outline-offset: 2px;
-}
-.timecode-cue-transition[aria-disabled="true"] {
-	cursor: default;
-	opacity: 0.5;
-}
-.timecode-cue-timing.unsupported .timecode-cue-start-marker {
-	border-color: #ff6a62;
-	color: #ff6a62;
-}
-.timecode-cue-timing.unsupported .timecode-cue-fade-range {
-	opacity: 0.3;
 }
 .timecode-cue-clip-diagnostic,
 .timecode-cue-diagnostic {
@@ -1008,7 +916,7 @@
 /* The playhead is the shared Button primitive reshaped into a scrub line. */
 .ui-button.timecode-editor-playhead {
 	position: absolute;
-	z-index: 3;
+	z-index: 9;
 	top: 0;
 	bottom: 0;
 	display: block;
@@ -1204,3 +1112,330 @@
 	flex: 1 1 15rem;
 	min-width: 15rem;
 }
+
+/* Cue envelopes retain one time axis as the inspector opens. The selected lane grows
+   downwards; only the selected Cue exposes its timing points. */
+.timecode-editor-body {
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+	overflow: hidden;
+}
+.timecode-editor-main {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.timecode-editor-inspector {
+	flex: 0 0 300px;
+	overflow: auto;
+	border-left: 1px solid #434754;
+	padding: 12px;
+	background: #171b24;
+}
+.timecode-editor-inspector-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.timecode-editor-inspector h3 {
+	font-size: 0.9rem;
+	margin: 8px 0 14px;
+}
+.timecode-editor-inspector label {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	font-size: 0.75rem;
+	margin-bottom: 9px;
+}
+.timecode-editor-inspector input {
+	width: 100%;
+	min-height: 36px;
+	padding: 6px 8px;
+	border: 1px solid #555c6d;
+	border-radius: 4px;
+	background: #10141d;
+	color: #eef2ff;
+	font-variant-numeric: tabular-nums;
+}
+.timecode-editor-inspector p {
+	font-size: 0.73rem;
+	line-height: 1.45;
+	color: #b1bacb;
+	margin: 7px 0 13px;
+}
+.timecode-editor-inspector fieldset {
+	border: 1px solid #414b5c;
+	border-radius: 5px;
+	margin: 12px 0;
+	padding: 9px;
+}
+.timecode-editor-inspector legend {
+	font-size: 0.74rem;
+	color: #dce7fa;
+}
+.timecode-editor-lane.lane-cue_list {
+	height: 56px;
+	min-height: 56px;
+}
+.timecode-editor-lane.cue-expanded {
+	height: 162px;
+	min-height: 162px;
+}
+.timecode-timeline-item.item-clip {
+	--timecode-clip-handle-height: 24px;
+	background: #14202b;
+	text-align: left;
+}
+.lane-cue_list .timecode-timeline-item.item-clip {
+ min-width: 0; padding: 0; border-width: 0; box-shadow: inset 0 0 0 1px #496274;
+}
+.lane-cue_list .item-clip:has(.timecode-cue-clip-contents):not(:has(.timecode-cue-clip-contents.expanded)) .timecode-clip-handle,
+.lane-cue_list .item-clip:not(:has(.timecode-cue-clip-contents.expanded)) .timecode-clip-edge { display: none; }
+.timecode-timeline-editor .timecode-cue-block.ui-button { height: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: stretch; justify-content: center; gap: 2px; padding: 3px 8px; }
+.timecode-timeline-editor .timecode-cue-name.ui-button { min-width: 0; max-width: none; box-sizing: border-box; }
+.timecode-cue-block-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.timecode-cue-block-trigger { font-size: .64rem; color: #a7bacd; font-variant-numeric: tabular-nums; }
+.timecode-cue-trigger-boundary { position: absolute; top: 3px; bottom: 6px; width: 0; border-left: 1px solid #8bb3cb; pointer-events: none; z-index: 6; }
+.expanded .timecode-cue-trigger-boundary { top: 24px; bottom: 8px; border-left-style: dashed; }
+.timecode-cue-trigger-boundary.selected { border-color: #ffdb84; }
+.timecode-cue-trigger-boundary small { position: absolute; left: 6px; top: 2px; white-space: nowrap; font-size: .63rem; color: #abc4d3; }
+.timecode-cue-clip-contents {
+	overflow: hidden;
+}
+.timecode-cue-close {
+	margin-top: 10px;
+}
+.timecode-cue-envelope {
+	position: absolute;
+	top: 24px;
+	left: 0;
+	overflow: visible;
+	pointer-events: none;
+}
+.timecode-cue-envelope polygon {
+	fill: hsl(var(--cue-hue) 40% 37% / 42%);
+	stroke: hsl(var(--cue-hue) 55% 64% / 80%);
+	stroke-width: 1.5;
+}
+.timecode-cue-timing.selected polygon {
+	fill: hsl(var(--cue-hue) 52% 47% / 55%);
+	stroke: #bce8ff;
+	stroke-width: 2;
+}
+.timecode-cue-envelope-hit {
+	position: absolute;
+	top: 24px;
+	height: 88px;
+	padding: 0;
+	background: transparent;
+	border: 0;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.timecode-cue-envelope-hit:focus-visible {
+	outline: 2px solid #fff;
+	outline-offset: -3px;
+}
+.timecode-timeline-editor .timecode-cue-name.ui-button {
+	position: absolute;
+	top: 112px;
+	z-index: 5;
+	display: block;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	height: 44px;
+	min-height: 44px;
+	padding: 4px 8px;
+	border: 0;
+	border-left: 2px solid hsl(var(--cue-hue) 55% 64%);
+	border-radius: 0;
+	background: hsl(var(--cue-hue) 25% 18%);
+	color: #dce8f5;
+	font-size: 0.75rem;
+	cursor: pointer;
+	pointer-events: auto;
+}
+.timecode-timeline-editor .timecode-cue-name.ui-button[aria-pressed="true"] {
+	background: #30506b;
+	color: white;
+}
+.timecode-timeline-editor .timecode-cue-name.ui-button { padding-inline: 0; border: 0; box-shadow: inset 2px 0 hsl(var(--cue-hue) 55% 64%); }
+.timecode-timeline-editor .timecode-cue-name.timecode-cue-block.ui-button { height: 44px; min-height: 44px; padding: 3px 0; }
+.timecode-cue-block-title, .timecode-cue-block-trigger { box-sizing: border-box; min-width: 0; width: 100%; padding-inline: 8px; }
+.timecode-cue-name b {
+	margin-right: 4px;
+	color: #8fd8f1;
+}
+.timecode-cue-end-marker {
+	position: absolute;
+	top: 29px;
+	transform: translateX(-100%);
+	z-index: 4;
+	padding: 3px 6px;
+	font-size: 0.65rem;
+	background: #151b25;
+	color: #c0cad6;
+	white-space: nowrap;
+}
+.timecode-cue-edit-points {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+.timecode-cue-trigger-label {
+	position: absolute;
+	top: 2px;
+	right: 4px;
+	margin-left: 0;
+	z-index: 7;
+	max-width: 240px;
+	padding: 2px 5px;
+	white-space: nowrap;
+	background: #2b2416;
+	color: #ffdb84;
+	font-size: 0.69rem;
+}
+.lane-cue_list .item-clip:has(.timecode-cue-clip-status) .timecode-cue-trigger-label { right: 74px; }
+.lane-cue_list .item-clip:has(.timecode-cue-clip-contents.expanded) .timecode-clip-handle { padding-right: min(50%, 150px); }
+.lane-cue_list .item-clip:has(.timecode-cue-clip-status):has(.timecode-cue-clip-contents.expanded) .timecode-clip-handle { padding-right: min(70%, 220px); }
+.timecode-cue-point-caption { max-width: 46px; overflow: hidden; text-overflow: ellipsis; }
+.timecode-cue-point {
+	position: absolute;
+	width: 44px;
+	height: 44px;
+	transform: translate(-50%, -50%);
+	z-index: 9;
+	pointer-events: auto;
+	touch-action: none;
+	cursor: ew-resize;
+}
+.timecode-cue-point > span {
+	position: absolute;
+	width: 12px;
+	height: 12px;
+	top: 16px;
+	left: 16px;
+	border: 2px solid #dcf8ff;
+	border-radius: 50%;
+	background: #2b85a1;
+	box-shadow: 0 0 0 2px #101820;
+}
+.timecode-cue-point.out > span {
+	background: #aa602c;
+	border-color: #ffd7a6;
+}
+.timecode-cue-point.trigger > span {
+	background: #d9a62c;
+	border-color: #ffdf83;
+	border-radius: 2px;
+	transform: rotate(45deg);
+}
+.timecode-cue-point[aria-disabled="true"] {
+	opacity: 0.45;
+	cursor: default;
+}
+.timecode-cue-point:focus-visible {
+	outline: 2px solid #fff;
+	border-radius: 5px;
+}
+.timecode-cue-edit-rail {
+ position: absolute; inset: 0; pointer-events: none;
+}
+.timecode-cue-edit-rail:not(.reference) small:not(.timecode-cue-point-caption),
+.timecode-cue-edit-rail:not(.reference) .timecode-cue-edit-line { display: none; }
+.timecode-cue-edit-rail.reference {
+ top: 24px; bottom: auto; left: 50%; min-width: 220px; height: 88px; border-top: 1px dashed #6f5b46;
+ background: #57402b22; pointer-events: auto; overflow-x: auto; overflow-y: hidden;
+}
+.timecode-cue-edit-rail.reference small:not(.timecode-cue-point-caption) { position: sticky; left: 8px; top: 0; color: #edbb88; font-size: .65rem; }
+.timecode-cue-edit-rail.reference .timecode-cue-edit-line { position: absolute; top: 28px; height: 1px; background: #d49c65; }
+.timecode-cue-fade-guide { fill: none; stroke: #a9e3f0; stroke-width: 2; }
+.timecode-cue-fade-guide.out { stroke: #edbb88; }
+.timecode-cue-point-caption { position: absolute; bottom: 42px; left: 50%; transform: translateX(-50%); color: #c3dfe7; font-size: .65rem; white-space: nowrap; pointer-events: none; }
+.timecode-cue-point-leader { position: absolute; overflow: visible; pointer-events: none; }
+.timecode-cue-point-leader line { stroke: #8bb5c4; stroke-width: 1; }
+.timecode-cue-point.out .timecode-cue-point-leader line { stroke: #d49c65; }
+.timecode-cue-point.displaced .timecode-cue-point-caption { left: 50%; transform: translateX(-50%); }
+.timecode-cue-point.in.end .timecode-cue-point-caption, .timecode-cue-point.out.start .timecode-cue-point-caption { top: 30px; bottom: auto; }
+.timecode-cue-point.in.start .timecode-cue-point-caption, .timecode-cue-point.out.end .timecode-cue-point-caption { bottom: 30px; top: auto; }
+.lane-cue_list .item-clip:has(.timecode-cue-clip-contents.expanded), .timecode-cue-clip-contents.expanded { overflow: visible; }
+.timecode-cue-envelope { overflow: hidden; }
+.timecode-cue-point.out .timecode-cue-point-caption { color: #edbb88; }
+.timecode-cue-point.trigger .timecode-cue-point-caption { display: none; }
+.timecode-cue-point.cue-divider-grip { z-index: 12; }
+.timecode-cue-point.cue-divider-grip > span { background: transparent; border: 0; box-shadow: none; width: 16px; height: 18px; top: 13px; left: 14px; border-radius: 0; }
+.timecode-cue-point.cue-divider-grip > span::before, .timecode-cue-point.cue-divider-grip > span::after { content: ""; position: absolute; width: 2px; height: 18px; top: 0; background: #ffdb84; border-radius: 1px; }
+.timecode-cue-point.cue-divider-grip > span::before { left: 1px; }
+.timecode-cue-point.cue-divider-grip > span::after { right: 1px; }
+.timecode-cue-point.cue-divider-grip[aria-disabled="true"] { pointer-events: none; }
+.timecode-cue-point.trigger::after { content: ""; position: absolute; top: 28px; left: 21px; height: 58px; border-left: 1px dashed #d9a62c; pointer-events: none; }
+.timecode-cue-clip-contents.expanded .timecode-cue-timing:not(.selected) .timecode-cue-envelope { opacity: .35; }
+.timecode-editor-lane.cue-expanded:has(.has-out-reference) { height: 162px; min-height: 162px; }
+.timecode-cue-edit-rail.reference .timecode-cue-point-caption { bottom: auto; top: 12px; left: 42px; transform: none; }
+@media (max-width: 700px) {
+	.timecode-editor-inspector {
+		flex-basis: 230px;
+	}
+}
+
+.timecode-cue-edit-rail.reference { overflow-x: auto; overflow-y: hidden; pointer-events: auto; }
+.timecode-cue-reference-axis { display: block; position: relative; height: 100%; }
+.timecode-editor-lane.cue-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
+.timecode-editor-lane-label .timecode-cue-close { width: calc(100% - 16px); height: 36px; min-height: 36px; margin: 0 8px; align-self: center; }
+
+/* The ruler and main audio remain visible as the other timeline lanes scroll.
+   Both belong to the same canvas, so horizontal panning keeps exact alignment. */
+.timecode-timeline-heading { position: sticky; top: 0; z-index: 8; height: 2rem; background: #171823; pointer-events: none; }
+.timecode-editor-lane.main-audio { position: sticky; top: 2rem; z-index: 7; background: #1d2030; box-shadow: 0 2px 0 #50586b; }
+.timecode-lane-select.main-audio-label.ui-button { cursor: default; }
+
+/* Grouped timeline navigation retains the same time axis at every level. */
+.timecode-section-row { position: relative; min-height: 40px; border-bottom: 1px solid #393b49; background: #171c25; }
+.timecode-section-row > .timecode-editor-lane-label { position: sticky; min-height: 40px; z-index: 5; }
+.timecode-section-toggle.ui-button { display: flex; gap: 7px; width: 100%; min-height: 40px; height: 100%; justify-content: flex-start; border: 0; border-radius: 0; padding: 8px; background: transparent; text-align: left; }
+.timecode-section-toggle strong { font-weight: 600; }
+.timecode-section-toggle small { margin-left: auto; color: #9ca4b4; }
+.timecode-section-row.collapsed { display: flex; align-items: stretch; }
+.timecode-section-row.collapsed > .timecode-editor-lane-label { flex: 0 0 var(--timecode-lane-header-width); height: auto; }
+.timecode-section-title { display: grid; gap: 1px; }
+.timecode-section-title .timecode-section-hint { color: #a8becb; font-size: .65rem; }
+.timecode-section-row.collapsed { height: 44px; min-height: 44px; max-height: 44px; box-sizing: border-box; }
+.timecode-section-summary.ui-button { position: relative; display: block; flex: 1; min-width: 0; min-height: 0; height: 100%; padding: 0; margin: 0; border: 0; border-radius: 0; background: transparent; overflow: hidden; }
+.timecode-section-summary.ui-button:hover { background: rgb(88 212 239 / 8%); }
+.timecode-section-miniatures { position: absolute; inset: 3px 0; display: grid; pointer-events: none; }
+.timecode-section-miniature { position: relative; display: block; min-height: 0; overflow: hidden; }
+.timecode-section-miniature svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.timecode-section-miniature polyline { fill: none; stroke: #d4ac58; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.timecode-section-miniature polygon, .timecode-section-miniature rect { fill: rgb(88 180 210 / 20%); stroke: #78bbce; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.timecode-section-preview-hint { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); padding: 2px 6px; border: 1px solid #607585; border-radius: 3px; background: #19232d; color: #c7e5ed; font-size: .72rem; }
+.timecode-editor-lane.lane-speed_group.lane-expanded { height: 170px; min-height: 170px; max-height: 170px; }
+.timecode-editor-lane.lane-speed_group:not(.lane-expanded) .timecode-timeline-item { visibility: hidden; }
+.timecode-editor-lane.lane-expanded .timecode-editor-lane-label { grid-template-rows: 1fr 44px; padding-bottom: 8px; }
+
+/* Section visibility and the actively edited lane are separate operator states. */
+.timecode-speed-section.section-expanded > .timecode-section-row { background: #213b48; box-shadow: inset 0 1px #527687, inset 0 -1px #527687; }
+.timecode-speed-section.section-expanded .timecode-section-toggle { color: #c4e6f1; }
+.timecode-speed-section.section-expanded .lane-speed_group { background: #1b303b; }
+.timecode-speed-section.section-expanded .lane-speed_group .timecode-editor-lane-label { background: #1e3541; color: #c4dbe7; }
+.timecode-editor-lane.selected { background: #244653; box-shadow: inset 0 0 0 1px #69cfe6; }
+.timecode-speed-section.section-expanded .lane-speed_group.selected { background: #244653; box-shadow: inset 0 0 0 1px #69cfe6; }
+.timecode-speed-section.section-expanded .lane-speed_group.selected .timecode-editor-lane-label { background: #285263; color: #dcf7ff; }
+.cue-focus .timecode-speed-section, .cue-focus .lane-cue_list:not(.cue-expanded):not(.cue-focus-active) { opacity: .35; }
+.cue-focus .main-audio, .cue-focus .lane-cue_list.cue-expanded, .cue-focus .lane-cue_list.cue-focus-active { opacity: 1; }
+
+/* Clip ending has its own persistent grip; it extends duration without scaling Cues. */
+.lane-cue_list .timecode-timeline-item.item-clip { overflow: visible; }
+.timecode-cue-point.timecode-clip-end-grab { z-index: 13; color: #ffdb84; }
+.timecode-cue-point.timecode-clip-end-grab::after { content: ""; position: absolute; left: 43px; top: 0; height: 44px; border-left: 2px solid #ffdb84; pointer-events: none; }
+.timecode-cue-point.timecode-clip-end-grab.expanded::after { top: -88px; height: 132px; }
+.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-caption { top: 28px; bottom: auto; left: 10px; transform: translateX(-100%); color: #ffdb84; }
+
+.timecode-cue-point.timecode-clip-end-grab[aria-disabled="true"] { pointer-events: none; }
+.timecode-cue-point.timecode-clip-end-grab .timecode-cue-point-leader line { stroke: #ffdb84; }

@@ -77,6 +77,7 @@ impl PlaybackEngine {
     ) {
         self.active.clear();
         self.timeline_controlled.clear();
+        self.timeline_transitions.clear();
         self.temporary.clear();
         self.cuelist_flash_states.clear();
         self.cuelist_swap_states.clear();
@@ -86,6 +87,7 @@ impl PlaybackEngine {
     }
 
     pub fn restore_active(&mut self, playbacks: impl IntoIterator<Item = ActivePlayback>) {
+        self.timeline_transitions.clear();
         self.control_states.clear();
         for mut playback in playbacks {
             let addressed_identity = playback.playback_address;
@@ -379,6 +381,7 @@ impl PlaybackEngine {
                     temporary: HashMap::new(),
                     swap_held: HashSet::new(),
                     timeline_controlled: self.timeline_controlled.clone(),
+                    timeline_transitions: HashMap::new(),
                     dynamics_paused_at: None,
                     speed_groups_bpm: self.speed_groups_bpm,
                     speed_groups_paused: self.speed_groups_paused,

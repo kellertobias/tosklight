@@ -16,8 +16,10 @@ mod fixture_appearance;
 mod floor_grid;
 mod frame_style;
 mod optical_wheels;
+mod technical_lines;
 
 pub use frame_style::{FrameStyle, MediaAppearance};
+pub use technical_lines::TechnicalLinesInstances;
 
 pub const MAX_OPTICAL_WHEELS: usize = 8;
 
@@ -36,6 +38,9 @@ pub enum MeshKind {
     CrowdPerson,
     /// Contrasting authored contours drawn just in front of and behind the crowd silhouette.
     CrowdPersonOutline,
+    DetailedPeopleSkin(bool),
+    DetailedPeopleTop(bool),
+    DetailedPeopleBottom(bool),
     /// One part of a fixture model read from the library: `(model index, part index)`.
     ///
     /// A part is its own mesh because pan and tilt move the yoke and the head but not the base,
@@ -139,10 +144,14 @@ pub struct GpuLight {
     pub tangent_frost: [f32; 4],
     /// `x` gobo slot, `y` gobo rotation in radians, `z` prism facets, `w` prism rotation.
     pub optics: [f32; 4],
-    /// Framing-shutter blade insertions, `0` open, in the beam's own frame after its rotation.
+    /// Blade insertions in the rotated beam gate: live DMX retains `0..=1` (centre at 1),
+    /// while full-stroke installed manual doors use `0..=2` (opposite field edge at 2).
     pub shapers: [f32; 4],
     /// Framing-shutter blade angles in radians, one per explicitly supported canonical role.
     pub shaper_angles: [f32; 4],
+    /// x: installed manual cut softness in normalised gate units; 0 preserves dynamic
+    /// feather+frost. yzw are reserved and must remain zero. Independent of radial softness.
+    pub shaper_params: [f32; 4],
     /// `x` the artwork layer this slot projects, or `-1` for a slot with none — which is every
     /// slot of a profile that declares no wheel, and is what selects the drawn patterns instead.
     /// `yz` spare; `w` packed curtain-blocker header offset, or -1 for none.
@@ -370,16 +379,8 @@ pub fn build(scene: &Scene, values: &SceneValues, style: &FrameStyle) -> FrameIn
     scenery::push_scenery(&mut frame, scene, values, style);
     crowd::push_crowds(&mut frame, scene, style);
     media::push_media(&mut frame, scene, style);
-    push_bodies(
-        &mut frame,
-        scene,
-        &head_angles,
-        values,
-        style,
-        &values.selected_fixtures,
-        &values.position_points,
-    );
-    push_emitters(&mut frame, scene, values, &head_angles, style);
+    push_bodies(&mut frame, scene, &head_angles, values, style);
+    push_emitters(&mut frame, scene, values, &head_angles, style, None);
     effects::push_effects(&mut frame, scene, values, style);
     frame
 }
@@ -422,21 +423,11 @@ fn push_model(
     fixture_index: usize,
     model_index: u32,
     model: &viz_scene::FixtureModel,
-    head_angles: &[(f32, f32)],
+    (pan, tilt): (f32, f32),
     values: &SceneValues,
     points: &[viz_scene::PointPose],
+    emitter_value: Option<&EmitterValues>,
 ) {
-    let (pan, tilt) = scene
-        .emitters
-        .iter()
-        .position(|emitter| emitter.fixture_index == fixture_index as u32)
-        .and_then(|index| head_angles.get(index).copied())
-        .unwrap_or((0.0, 0.0));
-    let emitter_value = scene
-        .emitters
-        .iter()
-        .position(|emitter| emitter.fixture_index == fixture_index as u32)
-        .and_then(|index| values.emitters.get(index));
     let pan_rotation = Quat::from_rotation_y(pan.to_radians());
     let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
     // A model authored at another size is scaled to the profile's physical dimensions, so a rig
@@ -548,141 +539,184 @@ fn push_bodies(
     head_angles: &[(f32, f32)],
     values: &SceneValues,
     style: &FrameStyle,
-    selection: &std::collections::HashSet<viz_scene::uuid::Uuid>,
-    points: &[viz_scene::PointPose],
 ) {
-    let grouped = grouped_selection(scene, selection);
-    for (fixture_index, fixture) in scene.fixtures.iter().enumerate() {
-        // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
-        // has none at all.
-        if fixture.drawn_as_scenery || fixture.invisible {
-            continue;
+    let grouped = grouped_selection(scene, &values.selected_fixtures);
+    let first = first_emitter_indices(scene);
+    for (fixture_index, first_emitter) in first.into_iter().enumerate() {
+        push_body(
+            frame,
+            scene,
+            head_angles,
+            values,
+            style,
+            fixture_index,
+            &grouped,
+            first_emitter,
+        );
+    }
+}
+
+/// One already-indexed fixture. Incremental callers never scan unrelated fixtures or emitters.
+#[allow(clippy::too_many_arguments)]
+fn push_body(
+    frame: &mut FrameInstances,
+    scene: &Scene,
+    head_angles: &[(f32, f32)],
+    values: &SceneValues,
+    style: &FrameStyle,
+    fixture_index: usize,
+    grouped: &std::collections::HashSet<viz_scene::uuid::Uuid>,
+    first_emitter: Option<usize>,
+) {
+    let fixture = &scene.fixtures[fixture_index];
+    let selection = &values.selected_fixtures;
+    let points = &values.position_points;
+    // Built at the size it was placed by the scenery pass, so it has no body here; a 3D Point
+    // has none at all.
+    if fixture.drawn_as_scenery || fixture.invisible {
+        return;
+    }
+    let (fixture_position, fixture_orientation) = fixture.placed_by(points);
+    let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
+    let size = fixture.body.size;
+    let selected = selection.contains(&fixture.fixture_id);
+    let selected_ink = selection_ink(style, grouped, fixture.fixture_id);
+    // A view that draws no models draws the outline of a box the size of the fixture, standing
+    // and turned where the fixture does. Outline rather than a solid: this view simulates no
+    // light, so a solid box has nothing to reveal it and would be a black shape in a black
+    // room. It is the fixture's own footprint rather than a token, because an operator judging
+    // whether two heads will foul each other needs the box to be the size of the thing.
+    if !style.fixture_models {
+        let (ink, opacity) = if selected {
+            (selected_ink, 1.0)
+        } else {
+            (style.symbol_ink, 0.75)
+        };
+        push_box_outline(frame, base * Mat4::from_scale(size), ink, opacity);
+        return;
+    }
+    let angles = first_emitter
+        .and_then(|index| head_angles.get(index).copied())
+        .unwrap_or((0.0, 0.0));
+    // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
+    // are what a fixture gets when its library entry has no geometry to offer.
+    if let Some(model_index) = fixture.model
+        && let Some(model) = scene.models.get(model_index as usize)
+    {
+        push_model(
+            frame,
+            scene,
+            fixture,
+            fixture_index,
+            model_index,
+            model,
+            angles,
+            values,
+            points,
+            first_emitter.and_then(|index| values.emitters.get(index)),
+        );
+        if selected {
+            push_selection_cage(frame, base, size, selected_ink);
         }
-        let (fixture_position, fixture_orientation) = fixture.placed_by(points);
-        let base = Mat4::from_rotation_translation(fixture_orientation, fixture_position);
-        let size = fixture.body.size;
-        let selected = selection.contains(&fixture.fixture_id);
-        let selected_ink = selection_ink(style, &grouped, fixture.fixture_id);
-        // A view that draws no models draws the outline of a box the size of the fixture, standing
-        // and turned where the fixture does. Outline rather than a solid: this view simulates no
-        // light, so a solid box has nothing to reveal it and would be a black shape in a black
-        // room. It is the fixture's own footprint rather than a token, because an operator judging
-        // whether two heads will foul each other needs the box to be the size of the thing.
-        if !style.fixture_models {
-            let (ink, opacity) = if selected {
-                (selected_ink, 1.0)
-            } else {
-                (style.symbol_ink, 0.75)
-            };
-            push_box_outline(frame, base * Mat4::from_scale(size), ink, opacity);
-            continue;
-        }
-        // A fixture whose profile carries a model is drawn as that model. The proxy shapes below
-        // are what a fixture gets when its library entry has no geometry to offer.
-        if let Some(model_index) = fixture.model
-            && let Some(model) = scene.models.get(model_index as usize)
-        {
-            push_model(
-                frame,
-                scene,
-                fixture,
-                fixture_index,
-                model_index,
-                model,
-                head_angles,
-                values,
-                points,
-            );
-            if selected {
-                push_selection_cage(frame, base, size, selected_ink);
-            }
-            continue;
-        }
-        match fixture.body.kind {
-            BodyKind::MovingHead => {
-                let (pan, tilt) = scene
-                    .emitters
-                    .iter()
-                    .position(|emitter| emitter.fixture_index == fixture_index as u32)
-                    .and_then(|index| head_angles.get(index).copied())
-                    .unwrap_or((0.0, 0.0));
-                let pan_rotation = Quat::from_rotation_y(pan.to_radians());
-                let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
-                // Base plate hangs from the rig point.
+        return;
+    }
+    match fixture.body.kind {
+        BodyKind::MovingHead => {
+            let (pan, tilt) = angles;
+            let pan_rotation = Quat::from_rotation_y(pan.to_radians());
+            let tilt_rotation = Quat::from_rotation_x(tilt.to_radians());
+            // Base plate hangs from the rig point.
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale_rotation_translation(
+                    Vec3::new(size.x, size.y * 0.28, size.z),
+                    Quat::IDENTITY,
+                    Vec3::new(0.0, size.y * 0.36, 0.0),
+                ),
+                BODY_COLOUR,
+                0.55,
+                Vec3::ZERO,
+                0.35,
+            ));
+            let yoke = base * Mat4::from_quat(pan_rotation);
+            for side in [-1.0_f32, 1.0] {
                 frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale_rotation_translation(
-                        Vec3::new(size.x, size.y * 0.28, size.z),
+                    yoke * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x * 0.14, size.y * 0.5, size.z * 0.3),
                         Quat::IDENTITY,
-                        Vec3::new(0.0, size.y * 0.36, 0.0),
+                        Vec3::new(side * size.x * 0.42, 0.0, 0.0),
                     ),
-                    BODY_COLOUR,
-                    0.55,
-                    Vec3::ZERO,
-                    0.35,
-                ));
-                let yoke = base * Mat4::from_quat(pan_rotation);
-                for side in [-1.0_f32, 1.0] {
-                    frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                        yoke * Mat4::from_scale_rotation_translation(
-                            Vec3::new(size.x * 0.14, size.y * 0.5, size.z * 0.3),
-                            Quat::IDENTITY,
-                            Vec3::new(side * size.x * 0.42, 0.0, 0.0),
-                        ),
-                        YOKE_COLOUR,
-                        0.5,
-                        Vec3::ZERO,
-                        0.4,
-                    ));
-                }
-                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-                    yoke * Mat4::from_quat(tilt_rotation)
-                        * Mat4::from_scale_rotation_translation(
-                            Vec3::new(size.x * 0.66, size.y * 0.62, size.z * 0.66),
-                            Quat::IDENTITY,
-                            Vec3::ZERO,
-                        ),
-                    BODY_COLOUR,
-                    0.45,
-                    Vec3::ZERO,
-                    0.5,
-                ));
-            }
-            BodyKind::Bar | BodyKind::Matrix => {
-                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale(size),
-                    BODY_COLOUR,
-                    0.6,
-                    Vec3::ZERO,
-                    0.2,
-                ));
-            }
-            BodyKind::Lantern => {
-                frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
-                    base * Mat4::from_scale_rotation_translation(
-                        Vec3::new(size.x, size.z, size.y),
-                        Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-                        Vec3::ZERO,
-                    ),
-                    BODY_COLOUR,
+                    YOKE_COLOUR,
                     0.5,
                     Vec3::ZERO,
                     0.4,
                 ));
             }
-            BodyKind::Machine | BodyKind::Generic => {
-                frame.mesh(MeshKind::Cube).push(MeshInstance::new(
-                    base * Mat4::from_scale(size),
-                    BODY_COLOUR,
-                    0.65,
-                    Vec3::ZERO,
-                    0.15,
-                ));
-            }
+            frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                yoke * Mat4::from_quat(tilt_rotation)
+                    * Mat4::from_scale_rotation_translation(
+                        Vec3::new(size.x * 0.66, size.y * 0.62, size.z * 0.66),
+                        Quat::IDENTITY,
+                        Vec3::ZERO,
+                    ),
+                BODY_COLOUR,
+                0.45,
+                Vec3::ZERO,
+                0.5,
+            ));
         }
-        if selected {
-            push_selection_cage(frame, base, size, selected_ink);
+        BodyKind::Bar | BodyKind::Matrix => {
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale(size),
+                BODY_COLOUR,
+                0.6,
+                Vec3::ZERO,
+                0.2,
+            ));
+        }
+        BodyKind::Lantern => {
+            frame.mesh(MeshKind::Cylinder).push(MeshInstance::new(
+                base * Mat4::from_scale_rotation_translation(
+                    Vec3::new(size.x, size.z, size.y),
+                    Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+                    Vec3::ZERO,
+                ),
+                BODY_COLOUR,
+                0.5,
+                Vec3::ZERO,
+                0.4,
+            ));
+        }
+        BodyKind::Machine | BodyKind::Generic => {
+            frame.mesh(MeshKind::Cube).push(MeshInstance::new(
+                base * Mat4::from_scale(size),
+                BODY_COLOUR,
+                0.65,
+                Vec3::ZERO,
+                0.15,
+            ));
         }
     }
+    if selected {
+        push_selection_cage(frame, base, size, selected_ink);
+    }
+}
+
+fn first_emitter_indices(scene: &Scene) -> Vec<Option<usize>> {
+    let mut first = vec![None; scene.fixtures.len()];
+    for (index, emitter) in scene.emitters.iter().enumerate() {
+        if let Some(slot) = first.get_mut(emitter.fixture_index as usize) {
+            slot.get_or_insert(index);
+        }
+    }
+    first
+}
+
+fn selected_items<T>(items: &[T], only: Option<usize>) -> impl Iterator<Item = (usize, &T)> {
+    items
+        .iter()
+        .enumerate()
+        .skip(only.unwrap_or(0))
+        .take(only.map_or(items.len(), |_| 1))
 }
 
 /// Resolve one emitter's world pose from its fixture, pan, and tilt.
@@ -826,9 +860,10 @@ fn push_emitters(
     values: &SceneValues,
     head_angles: &[(f32, f32)],
     style: &FrameStyle,
+    only_emitter: Option<usize>,
 ) {
     let fallback = EmitterValues::default();
-    for (index, emitter) in scene.emitters.iter().enumerate() {
+    for (index, emitter) in selected_items(&scene.emitters, only_emitter) {
         let Some(fixture) = scene.fixtures.get(emitter.fixture_index as usize) else {
             continue;
         };
@@ -838,50 +873,34 @@ fn push_emitters(
         } else {
             Vec3::from(fixture.installed_colour)
         };
-        let (pan, tilt) = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
+        let angles = head_angles.get(index).copied().unwrap_or((0.0, 0.0));
         let optics = resolve_optics(emitter, value);
-        let Some(mut pose) = resolved_emitter_pose(
+        let Some(pose) = drawing_emitter_pose(
             scene,
             fixture,
             emitter,
             value,
-            pan,
-            tilt,
+            angles,
             &values.position_points,
+            optics.half_angle,
         ) else {
             continue;
         };
         let model = fixture
             .model
             .and_then(|index| scene.models.get(index as usize));
-        if value.physical_pose.is_none()
-            && let Some(scanner_pose) = model.and_then(|model| {
-                fixture_appearance::scanner_emitter_pose(
-                    model,
-                    fixture,
-                    emitter,
-                    pan,
-                    tilt,
-                    value.zoom,
-                    &values.position_points,
-                )
-            })
-        {
-            pose = scanner_pose;
-        }
-        pose.half_angle = optics.half_angle;
         // What an observer still has, not what the desk is sending this instant. For most heads
         // the two agree; for a strobe or a laser they are the whole point of the difference.
         let intensity = value.retained_visible_intensity();
         if emitter.kind == EmitterKind::Laser {
-            push_laser_emitter(
+            push_laser_view(
                 frame,
                 emitter,
                 value,
                 values.laser_scans.get(index),
                 pose,
-                intensity,
                 installed_colour,
+                style,
             );
             continue;
         }
@@ -897,7 +916,7 @@ fn push_emitters(
             let (cell_intensity, cell_colour) = cells
                 .get(cell_index)
                 .copied()
-                .unwrap_or((intensity, Vec3::from(value.colour)));
+                .unwrap_or((intensity, Vec3::from(value.resolved_source_colour())));
             let origin = pose.origin + pose.orientation * *offset;
             /*
              * The lit face is a surface, so it belongs to the views that draw surfaces. An outline
@@ -937,34 +956,100 @@ fn push_emitters(
             if !lit {
                 continue;
             }
-            let light_index = push_gpu_light(
-                frame,
-                fixture,
-                emitter,
-                value,
-                pose,
-                origin,
-                cell_intensity,
-                cell_colour,
-                optics,
-                apex_offset,
-            );
-            if style.draw_beams {
-                push_beam(
+            if style.emitter_apertures || style.draw_beams {
+                let light_index = push_gpu_light(
                     frame,
-                    origin,
+                    fixture,
+                    emitter,
+                    value,
                     pose,
-                    light_index,
+                    origin,
                     cell_intensity,
                     cell_colour,
+                    optics,
                     apex_offset,
                 );
+                if style.draw_beams {
+                    push_beam(
+                        frame,
+                        origin,
+                        pose,
+                        light_index,
+                        cell_intensity,
+                        cell_colour,
+                        apex_offset,
+                    );
+                }
             }
             if style.draw_aim_lines {
                 push_aim_line(frame, origin, pose, cell_intensity, cell_colour);
             }
         }
         frame.poses.push(pose);
+    }
+}
+
+/// Physical hierarchy owns a declared lens pose; a legacy scanner instead aims from its mirror.
+fn drawing_emitter_pose(
+    scene: &Scene,
+    fixture: &FixtureInstance,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    (pan, tilt): (f32, f32),
+    points: &[viz_scene::PointPose],
+    half_angle: f32,
+) -> Option<EmitterPose> {
+    let mut pose = resolved_emitter_pose(scene, fixture, emitter, value, pan, tilt, points)?;
+    let model = fixture
+        .model
+        .and_then(|index| scene.models.get(index as usize));
+    if value.physical_pose.is_none()
+        && let Some(scanner_pose) = model.and_then(|model| {
+            fixture_appearance::scanner_emitter_pose(
+                model, fixture, emitter, pan, tilt, value.zoom, points,
+            )
+        })
+    {
+        pose = scanner_pose;
+    }
+    pose.half_angle = half_angle;
+    Some(pose)
+}
+
+/// Technical views retain the projector pose and a single aim, without its scan/aperture work.
+fn push_laser_view(
+    frame: &mut FrameInstances,
+    emitter: &EmitterInstance,
+    value: &EmitterValues,
+    scan: Option<&viz_scene::LaserScan>,
+    pose: EmitterPose,
+    installed_colour: Vec3,
+    style: &FrameStyle,
+) {
+    let intensity = value.retained_visible_intensity();
+    if style.emitter_apertures || style.draw_beams {
+        push_laser_emitter(
+            frame,
+            emitter,
+            value,
+            scan,
+            pose,
+            intensity,
+            installed_colour,
+        );
+    } else {
+        frame.poses.push(pose);
+        if style.draw_aim_lines && intensity > 0.002 {
+            push_aim_line(
+                frame,
+                pose.origin,
+                pose,
+                intensity,
+                Vec3::from(value.resolved_source_colour()) * installed_colour,
+            );
+        } else if style.aim_guides {
+            push_aim_guide(frame, pose.origin, pose, style.faint_ink);
+        }
     }
 }
 
@@ -985,25 +1070,7 @@ fn push_gpu_light(
     let wheels = optical_wheels::pack(emitter, value, pose.half_angle);
     // The beam's own right axis: every pattern the head projects turns with the head.
     let tangent = (pose.orientation * Vec3::X).normalize_or(Vec3::X);
-    // Where the blades sit is either the installed module pose or the desk's live pose.
-    // A live canonical role owns that physical component completely; the two values are
-    // never added into a competing second authority.
-    let shaper_turn = if emitter.live_shaper_rotation_role {
-        value.shaper_rotation_degrees.to_radians()
-    } else if emitter.shaper_roles.iter().any(|supported| *supported) {
-        fixture.shaper_degrees.unwrap_or(0.0).to_radians()
-    } else {
-        0.0
-    };
-    let shaper_angles = std::array::from_fn(|index| {
-        if emitter.live_shaper_angle_roles[index] {
-            value.shaper_blade_angles_degrees[index].to_radians()
-        } else if emitter.shaper_roles[index] {
-            fixture.installed_shaper_angles_degrees[index].to_radians()
-        } else {
-            0.0
-        }
-    });
+    let shapers = manual_optics::resolve(fixture, emitter, value);
     frame.lights.push(GpuLight {
         position_range: origin
             .extend(beam_reach(origin, pose.direction, pose.half_angle).max(2.0))
@@ -1018,7 +1085,7 @@ fn push_gpu_light(
             optics.uniformity,
             apex_offset,
         ],
-        tangent_frost: rotate_about(tangent, pose.direction, shaper_turn)
+        tangent_frost: rotate_about(tangent, pose.direction, shapers.turn)
             .extend(value.frost.clamp(0.0, 1.0))
             .to_array(),
         optics: [
@@ -1027,8 +1094,9 @@ fn push_gpu_light(
             wheels.prisms[0][0],
             wheels.prisms[0][1],
         ],
-        shapers: value.shaper_blades,
-        shaper_angles,
+        shapers: shapers.blades,
+        shaper_angles: shapers.angles,
+        shaper_params: shapers.params,
         gate: [
             wheels.gobos[0][2],
             wheels.gobo_count as f32,
@@ -1044,6 +1112,7 @@ fn push_gpu_light(
 }
 
 mod emitter_geometry;
+mod manual_optics;
 mod media;
 pub use emitter_geometry::{SemanticLight, semantic_lights};
 use emitter_geometry::{aperture_size, cell_states, push_beam, push_laser_emitter};

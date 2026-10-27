@@ -823,6 +823,7 @@ mod tests {
         };
         let mut scene = Scene::default();
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             position: Vec3::new(0.0, 1.0, 0.0),
             installed_colour: [1.0; 3],
             patched: true,
@@ -851,6 +852,7 @@ mod tests {
         scene.recompute_bounds();
         let mut values = SceneValues {
             emitters: vec![EmitterValues {
+                lamp_response: None,
                 intensity: 1.0,
                 colour: [1.0; 3],
                 ..Default::default()

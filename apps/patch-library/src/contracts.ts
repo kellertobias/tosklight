@@ -67,12 +67,18 @@ export type PatchGelAssignment =
 			note: string | null;
 	  };
 
+export interface PatchManualOptics {
+	zoomDegrees: number | null;
+	shaperBlades: [number, number, number, number];
+}
+
 export interface PatchInstalledFixtureAppearance {
 	lightSource: PatchInstalledLightSource;
 	colorTemperatureKelvin: number | null;
 	luminousOutputLumens: number | null;
 	gel: PatchGelAssignment;
 	shaperAnglesDegrees: [number, number, number, number];
+	manualOptics?: PatchManualOptics | null;
 }
 
 export interface PatchMultiPatch {

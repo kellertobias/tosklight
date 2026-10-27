@@ -38,26 +38,23 @@ struct Counter {
 }
 impl Counter {
     fn read() -> Self {
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         {
             let started = Instant::now();
-            let value = rustix::time::clock_gettime(rustix::time::ClockId::ThreadCPUTime);
-            let value = u64::try_from(value.tv_sec)
-                .ok()
-                .and_then(|seconds| seconds.checked_mul(1_000_000_000))
-                .zip(
-                    u64::try_from(value.tv_nsec)
-                        .ok()
-                        .filter(|n| *n < 1_000_000_000),
-                )
-                .and_then(|(seconds, nanos)| seconds.checked_add(nanos));
+            // A failed diagnostic must not panic or alter output. This clock belongs to the
+            // calling OS thread on both platforms; no Mach port or unsafe code is required.
+            let value = rustix::time::clock_gettime_dynamic(rustix::time::DynamicClockId::Known(
+                rustix::time::ClockId::ThreadCPUTime,
+            ))
+            .ok()
+            .and_then(|value| checked_cpu_nanos(value.tv_sec, value.tv_nsec));
             Self {
                 value,
                 supported: true,
                 read_nanos: ns(started.elapsed()),
             }
         }
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             Self {
                 value: None,
@@ -66,6 +63,13 @@ impl Counter {
             }
         }
     }
+}
+#[cfg(any(target_os = "linux", target_os = "macos", test))]
+fn checked_cpu_nanos(seconds: i64, nanos: i64) -> Option<u64> {
+    u64::try_from(seconds)
+        .ok()?
+        .checked_mul(1_000_000_000)?
+        .checked_add(u64::try_from(nanos).ok().filter(|n| *n < 1_000_000_000)?)
 }
 /// !Send: both CPU observations must stay on one OS thread; never hold this across an await.
 pub struct CpuTimer {
@@ -555,14 +559,75 @@ mod tests {
     #[test]
     fn cpu_observations_are_monotonic_or_explicitly_unavailable() {
         let sample = CpuTimer::start_if(true).unwrap().finish();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         assert_eq!(sample.cpu_status, 1);
-        #[cfg(not(target_os = "linux"))]
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         {
             assert_eq!(sample.cpu_status, 0);
             assert_eq!(sample.thread_cpu_nanos, 0);
             assert_eq!(sample.counter_read_nanos, 0);
         }
+    }
+    #[test]
+    fn cpu_timestamp_units_and_failures_are_checked() {
+        assert_eq!(checked_cpu_nanos(2, 123), Some(2_000_000_123));
+        for (seconds, nanos) in [(-1, 0), (0, -1), (0, 1_000_000_000), (i64::MAX, 0)] {
+            assert_eq!(checked_cpu_nanos(seconds, nanos), None);
+        }
+        let invalid = observation(
+            Counter {
+                value: None,
+                supported: true,
+                read_nanos: 4,
+            },
+            Counter {
+                value: Some(123),
+                supported: true,
+                read_nanos: 5,
+            },
+            20,
+        );
+        assert_eq!(
+            (
+                invalid.cpu_status,
+                invalid.thread_cpu_nanos,
+                invalid.counter_read_nanos
+            ),
+            (2, 0, 9)
+        );
+    }
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[test]
+    fn thread_cpu_distinguishes_owned_busy_work_from_parked_wall_time() {
+        std::thread::spawn(|| {
+            let busy = CpuTimer::start_if(true).unwrap();
+            let baseline = Counter::read().value.expect("thread CPU clock available");
+            let deadline = Instant::now() + std::time::Duration::from_secs(3);
+            loop {
+                let mut value = 1u64;
+                for index in 0..4096u64 {
+                    value = std::hint::black_box(value.wrapping_mul(31).wrapping_add(index));
+                }
+                std::hint::black_box(value);
+                let consumed = Counter::read().value.unwrap().saturating_sub(baseline);
+                if consumed >= 30_000_000 || Instant::now() >= deadline {
+                    break;
+                }
+            }
+            let busy = busy.finish();
+            let parked = CpuTimer::start_if(true).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let parked = parked.finish();
+            assert_eq!((busy.cpu_status, parked.cpu_status), (1, 1));
+            assert!(busy.thread_cpu_nanos >= 20_000_000, "busy: {busy:?}");
+            assert!(parked.wall_nanos >= 80_000_000, "parked: {parked:?}");
+            assert!(
+                parked.thread_cpu_nanos < busy.thread_cpu_nanos / 3 + 1_000_000,
+                "thread CPU must exclude sleep: busy={busy:?}, parked={parked:?}"
+            );
+        })
+        .join()
+        .expect("owned CPU measurement thread");
     }
     #[test]
     fn ordered_work_is_transparent_and_cpu_coverage_restores_after_nested_scopes() {

@@ -1,3 +1,4 @@
+import { manualOpticsFromWire, manualOpticsToWire } from "../../api/manualOptics";
 import type {
 	FixtureDefinition,
 	FixtureProfile,
@@ -424,6 +425,7 @@ function patchAppearance(
 						}
 					: { type: "open_white" },
 		shaperAnglesDegrees: [...resolved.shaper_angles_degrees],
+        ...manualOpticsFromWire(resolved),
 	};
 }
 
@@ -457,6 +459,7 @@ function fixtureAppearance(
 						}
 					: { type: "open_white" },
 		shaper_angles_degrees: [...resolved.shaperAnglesDegrees],
+        ...manualOpticsToWire(resolved),
 	};
 }
 

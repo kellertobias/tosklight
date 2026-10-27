@@ -1,3 +1,6 @@
+import { audioVolumeLinePoints } from "./audioLaneGeometry";
+import { speedGroupLinePoints } from "./speedLaneGeometry";
+import { AudioLaneFileName } from "./timecodeEditorShared";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useMemo } from "react";
 import type { TimecodeLane } from "../../api/types/timecode";
@@ -58,25 +61,40 @@ export function LaneLabel({
 	startLaneDrag,
 	consumeLaneDragClick,
 	onSelectLane,
+	expanded = false,
+	onCloseCue,
+	pinned = false,
 }: {
 	lane: TimecodeLane;
 	audioFileName?: string | null;
 	startLaneDrag(event: ReactPointerEvent, laneId: string): void;
 	consumeLaneDragClick(laneId: string): boolean;
 	onSelectLane(laneId: string): void;
+	expanded?: boolean;
+	onCloseCue?(): void;
+	pinned?: boolean;
 }) {
-	const kind = lane.content.kind.replaceAll("_", " ");
+	const kind =
+		lane.content.kind === "speed_group"
+			? `Speed Group ${lane.content.group}`
+			: lane.content.kind === "cue_list"
+				? "Cuelist"
+				: lane.content.kind === "audio_player"
+					? "Audio Player"
+					: "Audio volume";
 	return (
 		<div className="timecode-editor-lane-label">
 			<Button
-				className="timecode-lane-select"
-				aria-label={`${lane.name} · ${kind}. Drag to reorder lane`}
-				onPointerDown={(event) => startLaneDrag(event, lane.id)}
+				className={`timecode-lane-select ${pinned ? "main-audio-label" : ""}`}
+				aria-label={`${lane.name} · ${kind}. ${pinned ? "Pinned main audio" : "Drag to reorder lane"}`}
+				onPointerDown={(event) => {
+					if (!pinned) startLaneDrag(event, lane.id);
+				}}
 				onClick={() => {
 					if (!consumeLaneDragClick(lane.id)) onSelectLane(lane.id);
 				}}
 			>
-				<strong>{lane.name}</strong>
+				<strong>{lane.name}{lane.content.kind === "speed_group" && <svg className="timecode-lane-edit-hint" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15Z" strokeLinejoin="round" /></svg>}</strong>
 				{/* The audio lane's subtitle is the track it is showing, which is what an operator
 				    needs to identify it; every other lane says what kind it is. */}
 				{lane.content.kind === "audio_volume" && audioFileName ? (
@@ -85,6 +103,106 @@ export function LaneLabel({
 					<span>{kind}</span>
 				)}
 			</Button>
+			{expanded && (
+				<Button
+					className="timecode-cue-close"
+					size="compact"
+					onPointerDown={(event) => event.stopPropagation()}
+					onClick={onCloseCue}
+					aria-label={
+						lane.content.kind === "speed_group"
+							? "Close speed group editor"
+							: "Close cue editor"
+					}
+				>
+					Close
+				</Button>
+			)}
 		</div>
 	);
+}
+
+/** Audio geometry stays behind the editable items and follows the same time scale. */
+export function AudioVolumeLaneBackground({
+	content,
+	duration,
+	pixelsPerFrame,
+	fileName,
+	waveformPeaks,
+}: {
+	content: Extract<TimecodeLane["content"], { kind: "audio_volume" }>;
+	duration: number;
+	pixelsPerFrame: number;
+	fileName?: string | null;
+	waveformPeaks?: readonly number[];
+}) {
+	return (
+		<div
+			className="timecode-audio-lane-content"
+			style={{ width: Math.max(1, duration) * pixelsPerFrame }}
+			role="img"
+			aria-label="Linked audio waveform"
+		>
+			<AudioLaneFileName name={fileName} />
+			{waveformPeaks?.length ? (
+				<Waveform peaks={waveformPeaks} />
+			) : (
+				<span>Waveform loads after the managed audio is saved.</span>
+			)}
+			<svg
+				className="timecode-audio-keyframe-curve"
+				viewBox="0 0 100 100"
+				preserveAspectRatio="none"
+				aria-hidden="true"
+			>
+				<polyline
+					points={audioVolumeLinePoints(content.keyframes, duration)}
+				/>
+			</svg>
+		</div>
+	);
+}
+
+/** The whole Speed Group lane shares one curve under its editable keyframes. */
+export function SpeedGroupLaneBackground({
+	name,
+	content,
+	duration,
+	pixelsPerFrame,
+}: {
+	name: string;
+	content: Extract<TimecodeLane["content"], { kind: "speed_group" }>;
+	duration: number;
+	pixelsPerFrame: number;
+}) {
+	if (!content.keyframes.length) return null;
+	return (
+		<svg
+			className="timecode-speed-keyframe-curve"
+			style={{ width: Math.max(1, duration) * pixelsPerFrame }}
+			viewBox="0 0 100 100"
+			preserveAspectRatio="none"
+			role="img"
+			aria-label={`${name} value line`}
+		>
+			<polyline points={speedGroupLinePoints(content.keyframes, duration)} />
+		</svg>
+	);
+}
+
+/** Empty lane space selects its lane; item and label controls retain their own gestures. */
+export function lanePointerSelection(
+	onSelectLane: (id: string) => void,
+	laneId: string,
+) {
+	return (event: ReactPointerEvent<HTMLDivElement>) => {
+		const target = event.target as Element;
+		if (
+			target.closest(
+				".timecode-timeline-item, .timecode-editor-lane-label button",
+			)
+		)
+			return;
+		onSelectLane(laneId);
+	};
 }

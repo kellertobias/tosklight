@@ -36,6 +36,8 @@ pub struct Session {
     last_value_instant: Option<Instant>,
     dmx_intervals: VecDeque<f32>,
     awaiting_snapshot: bool,
+    lamp_clock: Instant,
+    lamp_dirty: bool,
     pending_renderer_settings: Option<viz_scene::RendererSettingsUpdate>,
 }
 
@@ -74,6 +76,8 @@ impl Session {
             last_value_instant: None,
             dmx_intervals: VecDeque::with_capacity(LATENCY_SAMPLES),
             awaiting_snapshot: true,
+            lamp_clock: epoch,
+            lamp_dirty: false,
             pending_renderer_settings: None,
         }
     }
@@ -88,6 +92,7 @@ impl Session {
         self.kind = kind;
         // Values, diagnostics, and revisions belong to the previous provider and are dropped.
         self.values = SceneValues::default();
+        self.lamp_dirty = false;
         self.diagnostics = ProviderDiagnostics::default();
         self.latency.clear();
         self.last_presented_input_micros = 0;
@@ -117,8 +122,26 @@ impl Session {
         self.pending_renderer_settings.take()
     }
 
+    /// A visible CPU lamp change stays owed even when it settles before the next drawable.
+    pub(crate) fn lamp_picture_dirty(&self) -> bool {
+        self.lamp_dirty
+    }
+
+    /// A skipped/failed admission cannot acknowledge the corrected picture. This is submission
+    /// bookkeeping, not evidence of compositor completion or actual display presentation.
+    pub(crate) fn observe_lamp_submission(&mut self, successful: bool) {
+        if successful {
+            self.lamp_dirty = false;
+        }
+    }
+
     /// Drain the provider and fold its events into the displayed state.
     pub fn pump(&mut self, now: Instant) {
+        self.lamp_dirty |= self.values.advance_lamp_response(
+            &self.scene,
+            now.saturating_duration_since(self.lamp_clock).as_secs_f64(),
+        );
+        self.lamp_clock = now;
         for event in self.provider.poll() {
             match event {
                 ProviderEvent::Connection(state) => self.connection = state,
@@ -237,6 +260,7 @@ impl Session {
     fn accept_values(&mut self, mut values: SceneValues, now: Instant) {
         values.resize(self.scene.emitters.len());
         values.retain_visual_motion_runtime_from(&self.values);
+        self.lamp_dirty |= values.advance_lamp_response(&self.scene, 0.0);
         values.take_calibrated_runtime_from(&mut self.values);
         values.retain_physics_runtime_from(&self.values, self.scene.physics_scenery.len());
         if values.frame > self.last_value_frame {
@@ -319,6 +343,7 @@ impl Session {
         view.exposure = preferences.exposure;
         view.laser_brightness = preferences.laser_brightness;
         view.fog_variation = preferences.fog_variation;
+        view.detailed_people = preferences.detailed_people;
         view.show_labels = preferences.show_labels;
         if let Some(floor_grid) = preferences.floor_grid {
             view.floor_grid = floor_grid;
@@ -357,11 +382,30 @@ fn validate(scene: &Scene) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "session/lamp_dirty_tests.rs"]
+mod lamp_dirty_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::demo::DemoProvider;
     use std::time::Duration;
     use viz_scene::{EmitterInstance, EmitterKind, EmitterLayoutCells, MotionAxis};
+
+    #[test]
+    fn effective_detailed_people_remains_raw_for_capture_from_draft_lines() {
+        let mut session = session();
+        session.source_view.quality = viz_scene::RenderQuality::Draft;
+        session.source_view.mode = viz_scene::ViewMode::Lines3d;
+        let mut preferences = Preferences::from_options(&crate::settings::Options::default());
+        preferences.detailed_people = true;
+        let view = session.effective_view(&preferences);
+        assert!(view.detailed_people);
+        assert_eq!(view.quality, viz_scene::RenderQuality::Draft);
+        assert_eq!(view.mode, viz_scene::ViewMode::Lines3d);
+        preferences.detailed_people = false;
+        assert!(!session.effective_view(&preferences).detailed_people);
+    }
 
     fn session() -> Session {
         Session::new(
@@ -523,6 +567,7 @@ mod tests {
         let mut scene = Scene::default();
         for (index, id) in ids.iter().enumerate() {
             scene.fixtures.push(viz_scene::FixtureInstance {
+                lamp_response: Default::default(),
                 drawn_as_scenery: false,
                 invisible: false,
                 instance_id: viz_scene::uuid::Uuid::from_u128(*id),
@@ -537,6 +582,7 @@ mod tests {
                 shaper_degrees: None,
                 installed_colour: [1.0; 3],
                 installed_shaper_angles_degrees: [0.0; 4],
+                installed_shaper_blades: [0.0; 4],
                 body: viz_scene::FixtureBody {
                     size: viz_scene::glam::Vec3::splat(0.3),
                     kind: viz_scene::BodyKind::Lantern,

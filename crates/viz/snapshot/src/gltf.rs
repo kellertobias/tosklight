@@ -7,6 +7,10 @@
 //! the snapshot document beside this file, where they can be described as optics rather than as
 //! whatever a punctual-light extension happens to support.
 
+mod affine;
+#[cfg(test)]
+mod affine_tests;
+
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use viz_render::SceneGeometry;
@@ -165,6 +169,15 @@ fn material(instance: &viz_render::GeometryInstance) -> Value {
 
 /// Write `geometry` as a self-contained GLB.
 pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
+    write_glb_with_names(geometry, generator, &HashMap::new())
+}
+
+/// Capture-only stable placement names, without changing legacy export names or geometry.
+pub(crate) fn write_glb_with_names(
+    geometry: &SceneGeometry,
+    generator: &str,
+    names: &HashMap<usize, String>,
+) -> Vec<u8> {
     let mut binary = Binary::default();
     let mut materials: Vec<Value> = Vec::new();
     let mut material_indices: HashMap<SurfaceKey, usize> = HashMap::new();
@@ -192,7 +205,7 @@ pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
         primitives.push(Some((position, normal, indices)));
     }
 
-    for instance in &geometry.instances {
+    for (placement_index, instance) in geometry.instances.iter().enumerate() {
         let Some(Some((position, normal, indices))) =
             primitives.get(instance.mesh as usize).copied()
         else {
@@ -208,32 +221,47 @@ pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
                 index
             }
         };
-        let mesh_index = match mesh_indices.get(&(instance.mesh, material_index)) {
-            Some(index) => *index,
-            None => {
-                let name = geometry
-                    .meshes
-                    .get(instance.mesh as usize)
-                    .map(|mesh| mesh.name.clone())
-                    .unwrap_or_default();
-                meshes.push(json!({
-                    "name": name,
-                    "primitives": [{
-                        "attributes": { "POSITION": position, "NORMAL": normal },
-                        "indices": indices,
-                        "material": material_index,
-                        "mode": TRIANGLES,
-                    }],
-                }));
-                let index = meshes.len() - 1;
-                mesh_indices.insert((instance.mesh, material_index), index);
-                index
-            }
+        let source_mesh = &geometry.meshes[instance.mesh as usize];
+        let baked = affine::bake_shear(source_mesh, instance.transform);
+        let (mesh_index, transform) = if let Some(mesh) = baked {
+            let position = binary.vec3(&mesh.positions, true);
+            let normal = if mesh.normals.len() == mesh.positions.len() {
+                binary.vec3(&mesh.normals, false)
+            } else {
+                position
+            };
+            let indices = binary.indices(&mesh.indices);
+            let index = push_mesh(
+                &mut meshes,
+                &mesh.name,
+                (position, normal, indices),
+                material_index,
+            );
+            (index, glam::Mat4::IDENTITY.to_cols_array_2d())
+        } else {
+            let index = match mesh_indices.get(&(instance.mesh, material_index)) {
+                Some(index) => *index,
+                None => {
+                    let index = push_mesh(
+                        &mut meshes,
+                        &source_mesh.name,
+                        (position, normal, indices),
+                        material_index,
+                    );
+                    mesh_indices.insert((instance.mesh, material_index), index);
+                    index
+                }
+            };
+            (index, instance.transform)
         };
-        nodes.push(json!({
+        let mut node = json!({
             "mesh": mesh_index,
-            "matrix": flatten(instance.transform),
-        }));
+            "matrix": flatten(transform),
+        });
+        if let Some(name) = names.get(&placement_index) {
+            node["name"] = json!(name);
+        }
+        nodes.push(node);
     }
 
     let roots: Vec<usize> = (0..nodes.len()).collect();
@@ -256,6 +284,21 @@ pub fn write_glb(geometry: &SceneGeometry, generator: &str) -> Vec<u8> {
     }
 
     container(&document.to_string(), &binary.bytes)
+}
+
+fn push_mesh(
+    meshes: &mut Vec<Value>,
+    name: &str,
+    attributes: (usize, usize, usize),
+    material: usize,
+) -> usize {
+    let (position, normal, indices) = attributes;
+    let index = meshes.len();
+    meshes.push(json!({"name":name,"primitives":[{
+        "attributes":{"POSITION":position,"NORMAL":normal},
+        "indices":indices,"material":material,"mode":TRIANGLES,
+    }]}));
+    index
 }
 
 fn flatten(matrix: [[f32; 4]; 4]) -> Vec<f32> {

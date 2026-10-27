@@ -6,6 +6,7 @@
 //! failure cannot affect the desk's server, output engine, or user interface.
 
 mod app;
+mod capture_display;
 #[cfg(test)]
 mod demo;
 mod effects;
@@ -27,6 +28,7 @@ mod session;
 mod settings;
 mod showfile;
 mod snapshots;
+mod stills;
 mod ui;
 
 use settings::Options;

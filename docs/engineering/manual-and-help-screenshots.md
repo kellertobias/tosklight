@@ -75,3 +75,12 @@ manual image hashes. CI also retains the `operator-manual-current` artifact for 
 See [Build and test commands](build-and-test-commands.md) for individual capture commands and
 canonical output paths. Neither gallery is a visual-regression baseline: checks reject blank,
 mis-sized and error-producing renders, followed by human visual review.
+
+## Website image delivery
+
+Reviewed PNG captures remain the source artifacts. The Pages build generates progressive JPEGs
+at quality 76, capped at 1600 pixels wide, with 640- and 960-pixel variants when the source allows.
+Homepage heroes, product galleries and enlarged views all use these web derivatives. Responsive
+`srcset` lets the browser select a smaller transfer on mobile screens. Source 4K PNGs are not copied
+to the public marketing screenshot directory; reused Pages artifacts have those PNGs removed.
+`/screenshots/web-images.json` records source dimensions and each JPEG's dimensions and byte size.

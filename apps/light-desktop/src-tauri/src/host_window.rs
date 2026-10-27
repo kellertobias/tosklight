@@ -30,8 +30,19 @@ const LABEL: &str = "main";
 /// The webview keeps the label the rest of the application already uses, so every existing
 /// `get_webview_window("main")` continues to find it.
 pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
+    crate::packaged_benchmark::validate_local_capture().map_err(std::io::Error::other)?;
     let window = tauri::window::WindowBuilder::new(app, LABEL)
         .title(TITLE)
+        // Benchmark windows are positioned on the chosen internal display before first show.
+        .visible(
+            std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_none()
+                && !crate::packaged_benchmark::local_capture_requested(),
+        )
+        // Fixed measurements must not take keyboard focus from an operator on another screen.
+        .focusable(
+            !(std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_some()
+                && std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_LAYOUT").is_some()),
+        )
         .inner_size(1440.0, 900.0)
         .min_inner_size(1024.0, 640.0)
         .decorations(false)
@@ -56,6 +67,12 @@ pub(crate) fn install(app: &mut tauri::App) -> tauri::Result<()> {
     let webview = window.add_child(
         crate::portable::place_webview(
             tauri::webview::WebviewBuilder::new(LABEL, WebviewUrl::default())
+                // A non-focusable measurement window still accepts the operator's camera drag.
+                // Ordinary desks keep their established first-click behavior.
+                .accept_first_mouse(
+                    std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").is_some()
+                        && std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_LAYOUT").is_some(),
+                )
                 .transparent(true)
                 .auto_resize(),
         ),

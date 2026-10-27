@@ -403,6 +403,10 @@ mod tests {
         let settings = RendererSettings::from_file(source);
         settings.validate().unwrap();
         assert_eq!(RendererSettings::from_file(&settings.to_file()), settings);
+        assert!(
+            !settings.to_file().contains("blender"),
+            "legacy tool preference is discarded"
+        );
     }
 
     #[test]

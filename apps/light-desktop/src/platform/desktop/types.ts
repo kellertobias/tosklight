@@ -28,6 +28,13 @@ export interface ConsoleScreenWindow {
 }
 
 export interface PackagedStageBenchmarkConfig {
+	/** Fixed physical drawable budget; absent retains the lifecycle benchmark. */
+	baselineLayout?: "single" | "dual" | null;
+	baselineQuality?: "draft" | "standard" | "high" | "ultra";
+	baselineView?: "full_3d" | "lines_3d";
+	baselinePhases?: "static-camera-hidden" | "animated-camera-hidden" | null;
+	/** Explicit isolated verification; never a performance acceptance run. */
+	captureExercise?: "live-ultra";
 	durationSeconds: number;
 	controlDurationSeconds: number;
 	profile: string;
@@ -79,6 +86,8 @@ export interface StagePanePicture {
 	lampFogTurbulence: number;
 	laserFogCloudiness: number;
 	laserFogTurbulence: number;
+	/** Frozen Ultra captures may use detailed bodies while live Control remains lightweight. */
+	detailedPeople?: boolean;
 	showLabels: boolean;
 	/** Lay the reference grid on the ground plane. */
 	floorGrid: boolean;
@@ -103,6 +112,10 @@ export interface StagePaneBenchmarkSample {
 	cpuMicros: number;
 	acquireMicros: number;
 	gpuMicros: number | null;
+	/** Completed GPU sample identity; absent in historical reports. */
+	gpuSampleId?: number | null;
+	gpuSampleMatchesFrame?: boolean;
+	transport?: "shared" | "copy";
 	instances: number;
 	drawCalls: number;
 	degraded: boolean;
@@ -134,12 +147,67 @@ export interface StagePaneBenchmarkHeartbeat {
 	visible: boolean;
 }
 
+/** Cumulative owner-lifetime timing admission; these are not displayed-frame counters. */
+export interface StageGpuTimingCoverage {
+	diagnosticCadence: "oneHz" | "full";
+	benchmarkOverride: boolean;
+	elapsedMillis: number;
+	framesConsidered: number;
+	framesAdmitted: number;
+	busySkips: number;
+	cadenceSkips: number;
+	completedReadbacks: number;
+	validSamples: number;
+}
+
+export interface StageCompositorObservation {
+	paneId: string;
+	attachmentId: string;
+	observedEpochMicros: number;
+	measurement: {
+		drawAttempts: number; submissions: number; occluded: number; timeouts: number;
+		/** Absent in reports recorded before change-driven compositor scheduling. */
+		cleanSkips?: number; hiddenSkips?: number; busySkips?: number; pacedSkips?: number; retries?: number;
+		reconfigures: number; errors: number; gpuReadbackErrors: number; gpuInvalidSamples: number; gpuSampleOverflow: number;
+		cpuWallMicros: number; acquireWallMicros: number;
+		gpuTimingUnavailable: string | null; actualDisplayedFrames: null;
+		/** Absent in historical native reports; never infer zero or an effective policy. */
+		timingCoverage?: StageGpuTimingCoverage | null;
+		measurementBoundary: string;
+		gpuSamples: Array<{
+			sampleId: number; submissionId: number; submittedEpochMicros: number; gpuMicros: number;
+			scope: { generation: number; surfaceWidth: number; surfaceHeight: number;
+				pane: number[] | null; sourceSize: number[] | null; transport: string | null };
+		}>;
+	};
+}
+
 export interface StagePaneBenchmarkObservations {
+	compositors?: StageCompositorObservation[];
 	frames: StagePaneBenchmarkSample[];
 	heartbeats: StagePaneBenchmarkHeartbeat[];
 }
 
+/** The native still-job contract; live Stage settings are never changed by these commands. */
+export type StageStillEngine = "ultra";
+export type StageStillPhase = "queued" | "writing" | "cancelled"
+	| { rendering: { detail: string } } | { cancelling: { detail: string } }
+	| { saved: { path: string } } | { failed: { detail: string } };
+export interface StageStillStatus {
+	jobId: string; requestId: string | null; paneId: string; followPreload: boolean;
+	sceneRevision: number; valuesFrame: number; timeSeconds: number;
+	width: number; height: number; framing: string;
+	engine: StageStillEngine | null; notice: string | null; phase: StageStillPhase;
+}
+export interface StageStillEvent {
+	paneId: string; requestId: string; status: StageStillStatus | null; error: string | null;
+}
+
 export interface DesktopBridge {
+	startStagePaneCapture?(paneId: string, requestId: string, picture: StagePanePicture): Promise<void>;
+	openStagePaneCapture?(paneId: string, reveal: boolean): Promise<void>;
+	cancelStagePaneCapture?(paneId: string, jobId: string): Promise<void>;
+	onStageStill?(handler: (event: StageStillEvent) => void): Promise<DesktopUnsubscribe>;
 	readonly available: boolean;
 	/** Choose one machine-local folder without exposing native APIs to feature code. */
 	selectFolder(): Promise<string | null>;
@@ -169,6 +237,8 @@ export interface DesktopBridge {
 		geometry: StagePaneGeometry,
 	): Promise<void>;
 	setStagePane(paneId: string, geometry: StagePaneGeometry): Promise<void>;
+	/** Suspend the resident picture without closing its helper or discarding current scene state. */
+	setStagePaneVisibility(paneId: string, visible: boolean): Promise<void>;
 	closeStagePane(paneId: string): Promise<void>;
 	sendStagePaneInput(
 		gesture: StagePaneGesture,
@@ -196,6 +266,14 @@ export interface DesktopBridge {
 	placeStagePaneCamera(place: Partial<StagePaneCameraPlacement>): Promise<void>;
 	packagedStageBenchmarkConfig(): Promise<PackagedStageBenchmarkConfig | null>;
 	packagedStageBenchmarkPrepared(): Promise<boolean>;
+	/** Private opt-in resident-window hide/reveal; absent in browser transports. */
+	exercisePackagedStageBenchmarkVisibility?(): Promise<{
+		hiddenEpochMicros: number;
+		revealedEpochMicros: number;
+		hiddenVerified: boolean;
+		revealedVerified: boolean;
+		observations: Array<{ observedEpochMicros: number; windowVisible: false; samples: StagePaneBenchmarkObservations }>;
+	}>;
 	focusPackagedStageBenchmarkWindow(): Promise<void>;
 	appendPackagedStageBenchmarkSample(sample: unknown): Promise<void>;
 	currentWindowState(): Promise<DesktopWindowState>;

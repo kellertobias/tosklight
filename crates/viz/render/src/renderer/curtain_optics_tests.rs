@@ -37,6 +37,7 @@ fn rig(front_light: bool, turn: f32) -> (Scene, SceneValues, ViewConfiguration, 
         };
         let (x, y, z) = Quat::from_rotation_arc(Vec3::NEG_Y, direction).to_euler(EulerRot::XYZ);
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             position: source,
             installed_colour: [1.0; 3],
             body: FixtureBody {
@@ -70,6 +71,7 @@ fn rig(front_light: bool, turn: f32) -> (Scene, SceneValues, ViewConfiguration, 
             live_shaper_rotation_role: false,
         });
         values.emitters.push(EmitterValues {
+            lamp_response: None,
             intensity: if index == 11 { 0.5 } else { 1.0 },
             colour: [1.0; 3],
             ..Default::default()
@@ -120,7 +122,7 @@ fn floor_level(
         .capture(scene, values, view, &crate::Overlay::default(), 0.0)
         .expect("curtain regression capture");
     assert!(
-        renderer.frame.lights.last().unwrap().shadow[0] < 0.0,
+        renderer.shaded_frame().lights.last().unwrap().shadow[0] < 0.0,
         "the measured lamp must remain outside the shadow-map budget"
     );
     if let Some(directory) = std::env::var_os("VIZ_OPTICS_CAPTURE_DIR") {
@@ -288,7 +290,7 @@ fn off_axis_rear_lamp_cannot_illuminate_the_front_of_opaque_folds() {
             let image = renderer
                 .capture(&scene, &values, &view, &crate::Overlay::default(), 0.0)
                 .unwrap();
-            assert!(renderer.frame.lights.last().unwrap().shadow[0] < 0.0);
+            assert!(renderer.shaded_frame().lights.last().unwrap().shadow[0] < 0.0);
             let camera = crate::ResolvedCamera::resolve(
                 &view.camera,
                 view.mode,

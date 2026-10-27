@@ -32,9 +32,9 @@ export function useStagePaneSelection(
 
 	useEffect(() => {
 		if (!active) return;
-		void bridge.setStagePaneSelection(
+		void Promise.resolve(bridge.setStagePaneSelection(
 			pane.id,
 			visibleFixtures ? visibleFixtures.split(",") : [],
-		);
-	}, [active, bridge, visibleFixtures, pane.id]);
+		)).catch((error) => pane.reportError?.(error));
+	}, [active, bridge, visibleFixtures, pane.id, pane.reportError]);
 }

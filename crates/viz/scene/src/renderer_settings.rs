@@ -20,12 +20,14 @@ pub struct RendererSettings {
     pub laser_fog_cloudiness: f32,
     pub laser_fog_turbulence: f32,
     pub crowd_amount: f32,
+    /// Optional Ultra/capture audience geometry; absent older settings keep silhouettes.
+    #[serde(default)]
+    pub detailed_people: bool,
     pub theme: String,
     pub background: Option<[f32; 3]>,
     pub show_labels: bool,
     pub show_selection: bool,
     pub floor_grid: Option<bool>,
-    pub blender: String,
     pub input_overrides: Vec<RendererInputOverride>,
     /// The network interface Art-Net is received on, by its system name; `None` is every one.
     #[serde(default)]
@@ -79,12 +81,12 @@ pub enum RendererSettingChange {
     LaserFogCloudiness(f32),
     LaserFogTurbulence(f32),
     CrowdAmount(f32),
+    DetailedPeople(bool),
     Theme(String),
     Background(Option<[f32; 3]>),
     ShowLabels(bool),
     ShowSelection(bool),
     FloorGrid(Option<bool>),
-    Blender(String),
     InputOverrides(Vec<RendererInputOverride>),
     ArtNetInterface(Option<String>),
     SacnInterface(Option<String>),
@@ -108,12 +110,12 @@ impl Default for RendererSettings {
             laser_fog_cloudiness: 0.0,
             laser_fog_turbulence: 0.0,
             crowd_amount: 1.0,
+            detailed_people: false,
             theme: "light_on_dark".into(),
             background: None,
             show_labels: true,
             show_selection: true,
             floor_grid: None,
-            blender: String::new(),
             input_overrides: Vec::new(),
             art_net_interface: None,
             sacn_interface: None,
@@ -150,6 +152,11 @@ impl RendererSettings {
                 "laser_fog_cloudiness" => adopt_f32(value, &mut settings.laser_fog_cloudiness),
                 "laser_fog_turbulence" => adopt_f32(value, &mut settings.laser_fog_turbulence),
                 "crowd_amount" => adopt_f32(value, &mut settings.crowd_amount),
+                "detailed_people" => {
+                    if let Ok(enabled) = value.parse::<bool>() {
+                        settings.detailed_people = enabled;
+                    }
+                }
                 "theme" if matches!(value, "light_on_dark" | "dark_on_light") => {
                     settings.theme = value.into()
                 }
@@ -157,7 +164,6 @@ impl RendererSettings {
                 "labels" => settings.show_labels = value != "false",
                 "show_selection" => settings.show_selection = value != "false",
                 "floor_grid" => settings.floor_grid = parse_optional_bool(value),
-                "blender" => settings.blender = value.into(),
                 "input" => {
                     if let Some((universe, protocol)) = value.split_once(char::is_whitespace)
                         && let Ok(universe) = universe.parse::<u16>()
@@ -231,6 +237,7 @@ impl RendererSettings {
         line!("laser_fog_cloudiness", self.laser_fog_cloudiness);
         line!("laser_fog_turbulence", self.laser_fog_turbulence);
         line!("crowd_amount", self.crowd_amount);
+        line!("detailed_people", self.detailed_people);
         line!("theme", self.theme);
         match self.background {
             Some([red, green, blue]) => line!("background", format!("{red},{green},{blue}")),
@@ -244,9 +251,6 @@ impl RendererSettings {
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "follow".into())
         );
-        if !self.blender.trim().is_empty() {
-            line!("blender", self.blender.trim());
-        }
         for input in &self.input_overrides {
             line!("input", format!("{} {}", input.universe, input.protocol));
         }
@@ -280,12 +284,12 @@ impl RendererSettings {
         field!(laser_fog_cloudiness, LaserFogCloudiness);
         field!(laser_fog_turbulence, LaserFogTurbulence);
         field!(crowd_amount, CrowdAmount);
+        field!(detailed_people, DetailedPeople);
         field!(theme, Theme);
         field!(background, Background);
         field!(show_labels, ShowLabels);
         field!(show_selection, ShowSelection);
         field!(floor_grid, FloorGrid);
-        field!(blender, Blender);
         field!(input_overrides, InputOverrides);
         field!(art_net_interface, ArtNetInterface);
         field!(sacn_interface, SacnInterface);
@@ -320,12 +324,12 @@ impl RendererSettings {
                     self.laser_fog_turbulence = *value
                 }
                 RendererSettingChange::CrowdAmount(value) => self.crowd_amount = *value,
+                RendererSettingChange::DetailedPeople(value) => self.detailed_people = *value,
                 RendererSettingChange::Theme(value) => self.theme = value.clone(),
                 RendererSettingChange::Background(value) => self.background = *value,
                 RendererSettingChange::ShowLabels(value) => self.show_labels = *value,
                 RendererSettingChange::ShowSelection(value) => self.show_selection = *value,
                 RendererSettingChange::FloorGrid(value) => self.floor_grid = *value,
-                RendererSettingChange::Blender(value) => self.blender = value.clone(),
                 RendererSettingChange::InputOverrides(value) => {
                     self.input_overrides = value.clone()
                 }
@@ -356,12 +360,12 @@ impl RendererSettingChange {
             Self::LaserFogCloudiness(_) => "laserFogCloudiness",
             Self::LaserFogTurbulence(_) => "laserFogTurbulence",
             Self::CrowdAmount(_) => "crowdAmount",
+            Self::DetailedPeople(_) => "detailedPeople",
             Self::Theme(_) => "theme",
             Self::Background(_) => "background",
             Self::ShowLabels(_) => "showLabels",
             Self::ShowSelection(_) => "showSelection",
             Self::FloorGrid(_) => "floorGrid",
-            Self::Blender(_) => "blender",
             Self::InputOverrides(_) => "inputOverrides",
             Self::ArtNetInterface(_) => "artNetInterface",
             Self::SacnInterface(_) => "sacnInterface",
@@ -427,6 +431,25 @@ quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\n
     }
 
     #[test]
+    fn obsolete_tool_keys_are_ignored_and_never_written_back() {
+        let settings =
+            RendererSettings::from_file("blender /old/missing/tool\nquality draft\nexposure 1.2\n");
+        assert_eq!(settings.quality.as_deref(), Some("draft"));
+        assert_eq!(settings.exposure, 1.2);
+        assert!(!settings.to_file().contains("blender"));
+        let mut legacy = serde_json::to_value(&settings).unwrap();
+        legacy["blender"] = serde_json::json!("/old/missing/tool");
+        let loaded: RendererSettings = serde_json::from_value(legacy).unwrap();
+        assert_eq!(loaded, settings);
+        assert!(
+            serde_json::to_value(loaded)
+                .unwrap()
+                .get("blender")
+                .is_none()
+        );
+    }
+
+    #[test]
     fn every_interface_is_written_down_so_clearing_a_choice_reaches_readers() {
         let text = RendererSettings::default().to_file();
         assert!(text.contains("art_net_interface all\n"));
@@ -467,3 +490,6 @@ quality ultra\nfog 0.08\npersistence 0.12\npersistence_falloff 4\nambient 0.09\n
         );
     }
 }
+
+#[cfg(test)]
+mod detailed_people_tests;

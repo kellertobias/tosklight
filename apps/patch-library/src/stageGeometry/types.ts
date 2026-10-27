@@ -69,6 +69,7 @@ export interface InstalledFixtureAppearance {
 	luminous_output_lumens: number | null;
 	gel: GelAssignment;
 	shaper_angles_degrees: [number, number, number, number];
+	manual_optics?: { zoom_degrees: number | null; shaper_blades: [number, number, number, number] };
 }
 
 /** The parts of a patched fixture that drawing its profile geometry reads. */

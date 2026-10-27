@@ -8,6 +8,7 @@ use glam::Vec3;
 #[test]
 fn physical_uv_only_has_no_visible_persistence_without_changing_native_drive() {
     let mut value = EmitterValues {
+        lamp_response: None,
         intensity: 1.0,
         shutter: 1.0,
         held_intensity: 1.0,
@@ -42,6 +43,7 @@ fn physical_uv_only_has_no_visible_persistence_without_changing_native_drive() {
 
 fn fixture(instance_id: Uuid, name: &str) -> FixtureInstance {
     FixtureInstance {
+        lamp_response: Default::default(),
         instance_id,
         fixture_id: instance_id,
         name: name.into(),
@@ -54,6 +56,7 @@ fn fixture(instance_id: Uuid, name: &str) -> FixtureInstance {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         drawn_as_scenery: false,
         invisible: false,
         body: FixtureBody {

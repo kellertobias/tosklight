@@ -89,6 +89,18 @@ pub struct RuntimeShowEntry {
     pub revision_copy: Option<RuntimeRevisionCopySource>,
 }
 
+/// Optional schema-1 inclusive-upper-bound histogram. The final bucket includes overflow.
+#[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
+pub struct OutputTickDurationHistogram {
+    pub schema_version: u8,
+    #[ts(type = "number[]")]
+    pub bounds_micros: Vec<u64>,
+    #[ts(type = "number[]")]
+    pub counts: Vec<u64>,
+    #[ts(type = "number")]
+    pub sample_count: u64,
+}
+
 #[derive(Clone, Debug, JsonSchema, PartialEq, Serialize, TS)]
 pub struct RuntimeOutputHealth {
     #[ts(type = "number")]
@@ -110,6 +122,9 @@ pub struct RuntimeOutputHealth {
     pub tick_duration_bucket_bounds_micros: Vec<u64>,
     #[ts(type = "number[]")]
     pub tick_duration_bucket_counts: Vec<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub tick_duration_fine_histogram: Option<OutputTickDurationHistogram>,
     pub scheduler_utilization: f32,
     pub recent_window_seconds: u32,
     pub recent_frame_hz_minimum: f32,

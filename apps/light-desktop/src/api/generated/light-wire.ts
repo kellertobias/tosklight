@@ -1084,7 +1084,8 @@ export type PatchStairHandrails = "none" | "left" | "right" | "both";
 export type PatchInstalledLightSource = { "type": "profile_default" } | { "type": "tungsten" } | { "type": "halogen" } | { "type": "discharge" } | { "type": "led" } | { "type": "fluorescent" } | { "type": "arc" } | { "type": "other", label: string, };
 export type PatchGelDefinitionSnapshot = { number: string, name: string, display_srgb: string, visualizer_srgb: string, };
 export type PatchGelAssignment = { "type": "open_white" } | { "type": "built_in", catalog_id: string, entry_id: string, embedded_fallback: PatchGelDefinitionSnapshot, } | { "type": "custom", name: string, color_srgb: string, note: string | null, };
-export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, luminous_output_lumens: number | null, gel: PatchGelAssignment, shaper_angles_degrees: [number, number, number, number], };
+export type PatchInstalledManualOptics = { zoom_degrees: number | null, shaper_blades: [number, number, number, number], };
+export type PatchInstalledFixtureAppearance = { light_source: PatchInstalledLightSource, color_temperature_kelvin: number | null, luminous_output_lumens: number | null, gel: PatchGelAssignment, manual_optics?: PatchInstalledManualOptics | null, shaper_angles_degrees: [number, number, number, number], };
 export type PatchCalibrationQuality = "unknown" | "estimated" | "manufacturer" | "measured";
 export type PatchPositionCalibration = { revision: number, quality: PatchCalibrationQuality, source?: string | null, pan_zero_degrees: number, tilt_zero_degrees: number, axis_overrides?: PatchAxisOverrides | null, };
 export type PatchAxisOverrides = { version: number, source_identity: PatchPositionCalibrationIdentity, axes: Array<PatchAxisCalibration>, };
@@ -1464,7 +1465,7 @@ export type RuntimeControlDesk = { show_compact_encoders: boolean, hardware_led_
 export type RuntimeSessionResponse = { role: RuntimeSessionRole, session_id: string, client_id: string, token: string, desk: RuntimeControlDesk, };
 export type RuntimeRevisionCopySource = { show_id: string, show_name: string, revision: number, revision_name: string, copied_at: string, };
 export type RuntimeShowEntry = { is_base_show: boolean, id: string, name: string, path: string, revision: number, updated_at: string, created_at: string | null, last_loaded_at: string | null, revision_copy: RuntimeRevisionCopySource | null, };
-export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
+export type RuntimeOutputHealth = { frames_sent: number, packets_sent: number, send_errors: number, deadline_misses: number, maximum_lateness_micros: number, frame_hz: number, last_tick_micros: number, maximum_tick_micros: number, tick_duration_bucket_bounds_micros: number[], tick_duration_bucket_counts: number[], tick_duration_fine_histogram?: OutputTickDurationHistogram, scheduler_utilization: number, recent_window_seconds: number, recent_frame_hz_minimum: number, recent_frame_hz_maximum: number, recent_frame_hz_average: number, recent_frame_rate_bucket_bounds_hz: Array<number>, recent_frame_rate_bucket_counts: number[], recent_send_errors: number,
 /**
  * Inclusive upper bounds, in hertz, of the frame-rate bands below.
  */
@@ -1477,6 +1478,7 @@ frame_rate_band_counts: number[],
  * TL-659: how long started Cues and Dynamics take to reach the wire.
  */
 change_lead: RuntimeChangeLeadTime, };
+export type OutputTickDurationHistogram = { schema_version: number, bounds_micros: number[], counts: number[], sample_count: number, };
 export type RuntimeChangeLeadTime = {
 /**
  * Longest lead since the desk started, the show opened, or the operator reset it; `null`

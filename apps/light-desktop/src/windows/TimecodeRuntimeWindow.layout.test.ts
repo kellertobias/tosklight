@@ -49,11 +49,10 @@ describe("Timecode timeline layout", () => {
 		);
 	});
 
-	it("splits the overview window between panning above and resizing below", () => {
-		// However far the timeline is zoomed in, the window keeps a surface of each kind: the
-		// upper half always pans it and the lower half always resizes its start and end.
+	it("centers overview resize grips and reserves a distinct top-center move target", () => {
+		// The top-center move target leaves both vertically centered edge grips reachable.
 		expect(css).toMatch(
-			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?top:\s*50%;[\s\S]*?bottom:\s*-1px;[\s\S]*?width:\s*min\(16px, 50%\);/,
+			/\.timecode-timeline-overview-handle\s*\{[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*-1px;[\s\S]*?width:\s*min\(16px, 50%\);/,
 		);
 		expect(css).toMatch(
 			/\.timecode-timeline-overview-handle\.handle-start\s*\{[\s\S]*?left:\s*-1px;/,
@@ -133,7 +132,7 @@ describe("Timecode timeline layout", () => {
 
 	it("keeps the playhead label at its top and has only the exact ruler grid", () => {
 		expect(css).toMatch(
-			/\.ui-button\.timecode-editor-playhead\s*\{[\s\S]*?z-index:\s*3;/,
+			/\.ui-button\.timecode-editor-playhead\s*\{[\s\S]*?z-index:\s*9;/,
 		);
 		expect(css).toMatch(
 			/\.timecode-editor-playhead span\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/,

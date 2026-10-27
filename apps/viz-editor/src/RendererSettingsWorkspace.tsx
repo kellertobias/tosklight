@@ -80,6 +80,13 @@ export function RendererSettingsWorkspace({
 						Its source is the current document; live values still arrive through
 						the inputs on the DMX settings page’s Network tab.
 					</p>
+					<p>
+						For a 4K image, choose <strong>Open Viz</strong>, then use{" "}
+						<strong>File &gt; Render 4K Image</strong> in the native 3D window,
+						or press Cmd+Shift+R on macOS / Ctrl+Shift+R on Windows and Linux.
+						Render a full-quality native Ultra image; rendering
+						keeps the live window’s quality unchanged.
+					</p>
 				</header>
 				{/* One page of boxes filling the width, two to four to a row: the atmosphere boxes first,
 				    then what the picture is made of. */}
@@ -224,14 +231,18 @@ function FeaturesSettings({
 				onChange={(crowdAmount) => update({ crowdAmount })}
 				format={percent}
 			/>
-			<label>
-				<span>Blender path</span>
-				<input
-					value={draft.blender}
-					placeholder="Find automatically"
-					onChange={(event) => update({ blender: event.target.value })}
-				/>
-			</label>
+			<SwitchField
+				label="Detailed people"
+				checked={draft.detailedPeople ?? false}
+				offLabel={null}
+				onLabel={null}
+				aria-describedby="detailed-people-help"
+				onChange={(event) => update({ detailedPeople: event.target.checked })}
+			/>
+			<p id="detailed-people-help">
+				Rounded 3D people in Ultra and 4K images. You can choose this while
+				previewing in Draft or 3D Lines; those live views stay lightweight.
+			</p>
 		</SettingsGroup>
 	);
 }

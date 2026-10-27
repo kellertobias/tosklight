@@ -284,6 +284,7 @@ mod tests {
         for rotation in [[0.0, 0.0, 0.0], [0.0, 0.0, 90.0], [-20.0, 0.0, -135.0]] {
             let (offset, direction) = frame.aimed(rotation, 45.0);
             let fixture = viz_scene::FixtureInstance {
+                lamp_response: Default::default(),
                 // Change the desk basis exactly once.
                 rotation_degrees: viz_scene::desk_rotation_to_world(rotation),
                 bracket_degrees: 45.0,

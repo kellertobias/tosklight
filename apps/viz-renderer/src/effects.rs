@@ -62,6 +62,14 @@ impl Effects {
                 frame.fault = Some("this Effect fixture's profile ships no effect script".into());
                 continue;
             };
+            // Before the first decoded control window, dmx[n] would be undefined rather than
+            // a real zero byte. Defer execution, not valid OFF frames: scripts must still see
+            // zero/stale windows so their stateful stop/release behavior and tails can run.
+            if frame.slots.is_empty() {
+                frame.emitters.clear();
+                frame.fault = None;
+                continue;
+            }
             let fixture = scene.fixtures.get(emitter.fixture_index as usize);
             let fixture_id = fixture
                 .map(|fixture| fixture.instance_id)
@@ -131,3 +139,6 @@ impl Effects {
         })
     }
 }
+
+#[cfg(test)]
+mod tests;

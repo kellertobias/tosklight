@@ -1,8 +1,18 @@
-//! What the GPU itself spent on a frame, split by named render pass.
+//! Observed GPU query interval coverage for one sampled frame.
+//! Logical pass intervals can overlap; the total unions them rather than summing them.
 //!
 //! Timestamp results are copied to a mapping buffer and collected on a later frame. Nothing in
 //! the presentation path waits for the GPU; while one readback is in flight, frames simply run
 //! without timing queries and keep the most recent completed measurement.
+
+#[cfg(test)]
+mod coverage_tests;
+mod intervals;
+#[cfg(test)]
+mod native_tests;
+mod provenance;
+use provenance::ReadbackOwnership;
+pub(crate) use provenance::TimingContext;
 
 use std::cell::Cell;
 use std::sync::Arc;
@@ -59,22 +69,17 @@ pub struct GpuPassTimings {
     pub bloom_micros: Option<u64>,
     pub composite_micros: Option<u64>,
     pub overlay_micros: Option<u64>,
+    /// Union of all valid raw query intervals in this completed sample, converted once.
+    /// This is observed interval coverage, not occupancy, percent usage or an exclusive pass sum.
+    pub interval_union_micros: Option<u64>,
+    /// Logical pass query intervals overlap; their durations cannot rank exclusive pass costs.
+    pub overlapping_passes: bool,
 }
 
 impl GpuPassTimings {
-    /// Sum of the passes that actually ran. Skipped passes remain absent rather than looking free.
+    /// Observed GPU interval coverage for this sample. Missing/invalid pairs remain unavailable.
     pub fn total_micros(self) -> Option<u64> {
-        let values = [
-            self.cull_micros,
-            self.shadow_micros,
-            self.opaque_micros,
-            self.beams_micros,
-            self.lasers_micros,
-            self.bloom_micros,
-            self.composite_micros,
-            self.overlay_micros,
-        ];
-        values.into_iter().flatten().reduce(u64::saturating_add)
+        self.interval_union_micros
     }
 
     /// Stable pass order for benchmark columns and diagnostics serialization.
@@ -105,27 +110,51 @@ impl GpuPassTimings {
     }
 }
 
+/// Test-only evidence copied from the exact completed mapping, never a second GPU readback.
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub(crate) struct RawTimestampSnapshot {
+    pub sample_id: u64,
+    pub mask: u8,
+    pub period_nanos: f32,
+    pub bytes: [u8; TIMESTAMP_BYTES as usize],
+}
+
 /// Timestamp queries for one sampled frame, and the asynchronous readback that follows.
 pub struct GpuTimer {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    frame_done: Arc<AtomicBool>,
+    completion_requested: bool,
     queries: wgpu::QuerySet,
     resolved: wgpu::Buffer,
     readback: wgpu::Buffer,
     period_nanos: f32,
     ready: Arc<AtomicBool>,
     broken: Arc<AtomicBool>,
-    in_flight: bool,
+    ownership: ReadbackOwnership,
     /// Passes written into the command encoder currently being built.
     active_mask: Cell<u8>,
     /// Passes in the mapping currently in flight.
     readback_mask: u8,
     last: GpuPassTimings,
     sample_id: u64,
+    valid_samples: u64,
+    admission: viz_scene::gpu_timing::TimingAdmission,
+    frame_admitted: bool,
+    #[cfg(test)]
+    raw_snapshot: Option<RawTimestampSnapshot>,
 }
 
 impl GpuTimer {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, supported: bool) -> Option<Self> {
+    pub fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        supported: bool,
+    ) -> Result<Option<Self>, String> {
+        let admission = viz_scene::gpu_timing::TimingAdmission::from_environment("helper")?;
         if !supported {
-            return None;
+            return Ok(None);
         }
         let queries = device.create_query_set(&wgpu::QuerySetDescriptor {
             label: Some("viz pass timestamps"),
@@ -147,19 +176,50 @@ impl GpuTimer {
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
             mapped_at_creation: false,
         });
-        Some(Self {
+        Ok(Some(Self {
+            device: device.clone(),
+            queue: queue.clone(),
+            frame_done: Arc::new(AtomicBool::new(false)),
+            completion_requested: false,
             queries,
             resolved,
             readback,
             period_nanos: queue.get_timestamp_period(),
             ready: Arc::new(AtomicBool::new(false)),
             broken: Arc::new(AtomicBool::new(false)),
-            in_flight: false,
+            ownership: ReadbackOwnership::default(),
             active_mask: Cell::new(0),
             readback_mask: 0,
             last: GpuPassTimings::default(),
             sample_id: 0,
-        })
+            valid_samples: 0,
+            admission,
+            frame_admitted: false,
+            #[cfg(test)]
+            raw_snapshot: None,
+        }))
+    }
+
+    pub(crate) fn begin_frame(
+        &mut self,
+        mode: viz_scene::ViewMode,
+        quality: viz_scene::RenderQuality,
+    ) {
+        self.active_mask.set(0);
+        let diagnostic =
+            mode == viz_scene::ViewMode::Lines3d || quality == viz_scene::RenderQuality::Draft;
+        self.frame_admitted = self
+            .admission
+            .begin_frame(diagnostic, self.ownership.in_flight() || self.is_broken());
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_test_cadence(&mut self, cadence: viz_scene::gpu_timing::TimingCadence) {
+        self.admission = viz_scene::gpu_timing::TimingAdmission::new(cadence, true);
+    }
+
+    pub fn coverage(&self) -> viz_scene::gpu_timing::TimingCoverage {
+        self.admission.coverage(self.sample_id, self.valid_samples)
     }
 
     pub fn render_writes(&self, pass: GpuPass) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
@@ -180,7 +240,7 @@ impl GpuTimer {
         beginning: bool,
         end: bool,
     ) -> Option<wgpu::RenderPassTimestampWrites<'_>> {
-        if self.in_flight || self.is_broken() {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -194,7 +254,7 @@ impl GpuTimer {
     }
 
     pub fn compute_writes(&self, pass: GpuPass) -> Option<wgpu::ComputePassTimestampWrites<'_>> {
-        if self.in_flight || self.is_broken() {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return None;
         }
         self.active_mask
@@ -207,17 +267,44 @@ impl GpuTimer {
         })
     }
 
-    /// Resolve only query pairs that were written. This is required for optional passes.
-    pub fn resolve(&mut self, encoder: &mut wgpu::CommandEncoder) {
-        if self.in_flight || self.is_broken() {
+    /// Capture ownership now; resolve only after the render submission has completed.
+    /// Metal can otherwise expose a previous frame's end counter alongside the current start.
+    pub(crate) fn resolve(&mut self, _encoder: &mut wgpu::CommandEncoder, context: TimingContext) {
+        if !self.frame_admitted || self.ownership.in_flight() || self.is_broken() {
             return;
         }
         let mask = self.active_mask.replace(0);
         if mask == 0 {
             return;
         }
+        self.readback_mask = mask;
+        self.frame_done.store(false, Ordering::Release);
+        self.completion_requested = false;
+        self.ownership.submitted(context);
+    }
+
+    /// Called after the frame submit. Register exactly one asynchronous completion notification.
+    pub fn request_readback(&mut self) {
+        if !self.ownership.in_flight() || self.completion_requested || self.is_broken() {
+            return;
+        }
+        self.completion_requested = true;
+        let done = self.frame_done.clone();
+        self.queue
+            .on_submitted_work_done(move || done.store(true, Ordering::Release));
+    }
+
+    fn resolve_completed_frame(&mut self) {
+        if !self.frame_done.swap(false, Ordering::Acquire) || !self.ownership.request_mapping() {
+            return;
+        }
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("completed viz timestamp resolve"),
+            });
         for pass in GpuPass::ALL {
-            if mask & (1 << pass.index()) == 0 {
+            if self.readback_mask & (1 << pass.index()) == 0 {
                 continue;
             }
             let (beginning, end) = pass.queries();
@@ -237,14 +324,7 @@ impl GpuTimer {
                 16,
             );
         }
-        self.readback_mask = mask;
-        self.in_flight = true;
-    }
-
-    pub fn request_readback(&self) {
-        if !self.in_flight {
-            return;
-        }
+        self.queue.submit(Some(encoder.finish()));
         let ready = self.ready.clone();
         let broken = self.broken.clone();
         self.readback
@@ -258,11 +338,12 @@ impl GpuTimer {
     /// Take a completed measurement without waiting for it.
     pub fn collect(&mut self) {
         if self.is_broken() {
-            self.in_flight = false;
+            self.ownership.failed();
             self.last = GpuPassTimings::default();
             return;
         }
-        if !self.in_flight || !self.ready.swap(false, Ordering::Acquire) {
+        self.resolve_completed_frame();
+        if !self.ownership.in_flight() || !self.ready.swap(false, Ordering::Acquire) {
             return;
         }
         {
@@ -270,15 +351,42 @@ impl GpuTimer {
             if let Ok(mapped) = slice.get_mapped_range() {
                 self.last = decode_timings(&mapped, self.readback_mask, self.period_nanos);
                 self.sample_id = self.sample_id.wrapping_add(1);
+                #[cfg(test)]
+                {
+                    self.raw_snapshot = self.last.total_micros().and_then(|_| {
+                        Some(RawTimestampSnapshot {
+                            sample_id: self.sample_id,
+                            mask: self.readback_mask,
+                            period_nanos: self.period_nanos,
+                            bytes: mapped.as_ref().try_into().ok()?,
+                        })
+                    });
+                }
+                if self.last.total_micros().is_some() {
+                    self.valid_samples = self.valid_samples.saturating_add(1);
+                }
+                self.ownership.completed();
+            } else {
+                self.ownership.failed();
+                self.last = GpuPassTimings::default();
+                self.broken.store(true, Ordering::Release);
             }
         }
         self.readback.unmap();
-        self.in_flight = false;
         self.readback_mask = 0;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn raw_snapshot_for_test(&self) -> Option<RawTimestampSnapshot> {
+        (!self.is_broken()).then_some(self.raw_snapshot).flatten()
     }
 
     pub fn timings(&self) -> GpuPassTimings {
         self.last
+    }
+
+    pub(crate) fn sample_matches(&self, context: TimingContext) -> bool {
+        self.ownership.sample_matches(context)
     }
 
     pub fn sample_id(&self) -> u64 {
@@ -292,18 +400,52 @@ impl GpuTimer {
 
 fn decode_timings(bytes: &[u8], mask: u8, period_nanos: f32) -> GpuPassTimings {
     let mut timings = GpuPassTimings::default();
+    if !period_nanos.is_finite() || period_nanos <= 0.0 {
+        return timings;
+    }
+    let mut intervals = [(0_u64, 0_u64); PASS_COUNT];
+    let mut count = 0;
     for pass in GpuPass::ALL {
         if mask & (1 << pass.index()) == 0 {
             continue;
         }
         let (beginning, end) = pass.queries();
-        let tick = |index: u32| {
+        let tick = |index: u32| -> Option<u64> {
             let start = index as usize * 8;
-            u64::from_le_bytes(bytes[start..start + 8].try_into().expect("timestamp bytes"))
+            Some(u64::from_le_bytes(
+                bytes.get(start..start + 8)?.try_into().ok()?,
+            ))
         };
-        let nanos = tick(end).saturating_sub(tick(beginning)) as f32 * period_nanos;
-        timings.set(pass, (nanos / 1000.0) as u64);
+        #[cfg(test)]
+        if std::env::var_os("TOSKLIGHT_GPU_TIMING_DIAGNOSTIC").is_some() {
+            eprintln!(
+                "raw timestamp mask={mask} pair=({beginning},{end}) start={:?} end={:?}",
+                tick(beginning),
+                tick(end)
+            );
+        }
+        let Some((start, finish)) = tick(beginning)
+            .zip(tick(end))
+            .filter(|(start, end)| *end != u64::MAX && *start != u64::MAX && end >= start)
+        else {
+            // A partial/invalid pair cannot become a cheap zero or incomplete frame total.
+            return GpuPassTimings::default();
+        };
+        let Some(micros) = intervals::micros(finish - start, period_nanos) else {
+            return GpuPassTimings::default();
+        };
+        timings.set(pass, micros);
+        intervals[count] = (start, finish);
+        count += 1;
     }
+    let Some((ticks, overlap)) = intervals::union(&mut intervals[..count]) else {
+        return GpuPassTimings::default();
+    };
+    let Some(total) = intervals::micros(ticks, period_nanos) else {
+        return GpuPassTimings::default();
+    };
+    timings.interval_union_micros = Some(total);
+    timings.overlapping_passes = overlap;
     timings
 }
 
@@ -312,7 +454,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decodes_only_passes_that_ran_and_sums_them() {
+    fn malformed_or_reversed_pairs_are_unavailable_instead_of_zero() {
+        let unavailable = [u64::MAX.to_le_bytes(), u64::MAX.to_le_bytes()].concat();
+        assert_eq!(decode_timings(&unavailable, 1, 1.0).total_micros(), None);
+        let reversed = [350_u64.to_le_bytes(), 100_u64.to_le_bytes()].concat();
+        assert_eq!(decode_timings(&reversed, 1, 1.0).total_micros(), None);
+        assert_eq!(decode_timings(&reversed[..8], 1, 1.0).total_micros(), None);
+        assert_eq!(decode_timings(&reversed, 1, 0.0).total_micros(), None);
+    }
+
+    #[test]
+    fn decodes_only_passes_that_ran_and_unions_their_intervals() {
         let mut bytes = [0_u8; TIMESTAMP_BYTES as usize];
         for (query, ticks) in [(4_u32, 100_u64), (5, 350), (12, 500), (13, 650)] {
             let offset = query as usize * 8;

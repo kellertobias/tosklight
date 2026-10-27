@@ -1,3 +1,5 @@
+import { type ManualOpticsDraft, manualOpticsDraft, normalizeManualOptics } from "./manualOpticsDraft";
+import { manualOpticsFromWire } from "../../../api/manualOptics";
 import type {
 	GelCatalog,
 	GelCatalogImportPreview,
@@ -36,7 +38,7 @@ export const DEFAULT_APPEARANCE: InstalledFixtureAppearance = {
 	shaper_angles_degrees: [0, 0, 0, 0],
 };
 
-export type AppearanceDraft = {
+export type AppearanceDraft = ManualOpticsDraft & {
 	sourceType: InstalledLightSource["type"];
 	otherLabel: string;
 	colorTemperature: string;
@@ -52,6 +54,7 @@ export function appearanceDraft(
 	appearance: InstalledFixtureAppearance,
 ): AppearanceDraft {
 	return {
+        ...manualOpticsDraft(appearance),
 		sourceType: appearance.light_source.type,
 		otherLabel:
 			appearance.light_source.type === "other"
@@ -119,6 +122,8 @@ export function normalizeAppearanceDraft(
 				"An explicit light source requires a color temperature because this profile has no default CCT.",
 		};
 
+    const manual = normalizeManualOptics(draft, baseline);
+    if ("error" in manual) return manual;
 	const gelResult = normalizeGel(draft);
 	if ("error" in gelResult) return gelResult;
 	return {
@@ -127,6 +132,7 @@ export function normalizeAppearanceDraft(
 			colorTemperatureKelvin,
 			luminousOutputLumens,
 			gel: gelResult.gel,
+            ...manual.fields,
 			shaperAnglesDegrees: [...baseline.shaper_angles_degrees] as [
 				number,
 				number,
@@ -205,6 +211,7 @@ export function toPatchAppearance(
 		colorTemperatureKelvin: appearance.color_temperature_kelvin,
 		luminousOutputLumens: appearance.luminous_output_lumens,
 		gel,
+        ...manualOpticsFromWire(appearance),
 		shaperAnglesDegrees: [...appearance.shaper_angles_degrees] as [
 			number,
 			number,

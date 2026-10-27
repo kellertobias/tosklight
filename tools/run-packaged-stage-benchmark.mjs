@@ -1,8 +1,11 @@
+import { queueStageOutputSample } from "./stage-output-sampling.mjs";
+import { captureRequested, evaluateCapture } from "./packaged-stage-capture.mjs";
+import { readNativeBaselineConfig, evaluateNativeBaseline } from "./native-stage-baseline.mjs";
 import { controlStageFrameFailures } from "./control-stage-frame-admission.mjs";
 import { execFile, spawn } from "node:child_process";
 import dgram from "node:dgram";
 import { openSync } from "node:fs";
-import { mkdir, open, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -10,7 +13,7 @@ import { promisify } from "node:util";
 import { artifactPaths, repositoryRoot } from "./artifact-paths.mjs";
 import {
 	createOutputWindowAccumulator,
-	histogramPercentileMicros,
+	compareOutputWindows,
 	outputWindow,
 } from "./output-histogram.mjs";
 import {
@@ -42,8 +45,11 @@ import {
 	LARGE_STAGE_FIXTURE_RECORDS,
 } from "./stage-large-scene.mjs";
 import { summarizeStageLongRunResources } from "./stage-resource-stability.mjs";
+import { startPackagedIsolatedServer, stopOwnedBenchmarkChild } from "./owned-benchmark-server.mjs";
+import { prepareStageDiagnosticReport, readStageDiagnosticLabel } from "./packaged-stage-diagnostic.mjs";
 
 const execFileAsync = promisify(execFile);
+const diagnosticLabel = readStageDiagnosticLabel();
 
 const durationSeconds = positiveInteger(
 	process.argv[2] ?? "30",
@@ -51,6 +57,9 @@ const durationSeconds = positiveInteger(
 );
 const profile = process.argv[3] ?? "default-stage";
 const profileDefinition = packagedStageProfile(profile);
+const fixedBaseline = readNativeBaselineConfig(process.env);
+if (fixedBaseline?.phases && (profile !== "stage-500" || durationSeconds < 40))
+	throw new Error("Baseline phases require Stage-500 and at least 40 seconds");
 const controlDurationSeconds =
 	packagedStageControlDurationSeconds(durationSeconds);
 // LIGHT_PACKAGED_STAGE_PORT runs the benchmark beside a desk that already owns 127.0.0.1:5000
@@ -60,6 +69,7 @@ const isolatedPort = optionalPort(
 	process.env.LIGHT_PACKAGED_STAGE_PORT,
 	"LIGHT_PACKAGED_STAGE_PORT",
 );
+const captureExercise = captureRequested(process.env, fixedBaseline, isolatedPort, profile);
 const serverOrigin = `http://127.0.0.1:${isolatedPort ?? 5000}`;
 const oscPort =
 	isolatedPort === null
@@ -100,11 +110,14 @@ const dataPath = path.join(
 	`packaged-tauri-${stamp}-data`,
 );
 const preparedPath = path.join(dataPath, "stage-profile-prepared");
+const captureOutput = path.join(dataPath, "capture-images");
+if (captureExercise) await mkdir(captureOutput, { recursive: true });
 await unlink(samplesPath).catch(() => undefined);
 await unlink(preparedPath).catch(() => undefined);
 if (isolatedPort === null) await stopExistingDevelopmentDesk();
 
 const benchmarkEnvironment = {
+	...(captureExercise ? { TOSKLIGHT_VIZ_IMAGE_DIR: captureOutput } : {}),
 	LIGHT_STAGE_PACKAGED_BENCH_REPORT: samplesPath,
 	LIGHT_STAGE_PACKAGED_BENCH_DURATION_SECONDS: String(durationSeconds),
 	LIGHT_STAGE_PACKAGED_BENCH_CONTROL_DURATION_SECONDS: String(
@@ -112,7 +125,7 @@ const benchmarkEnvironment = {
 	),
 	LIGHT_STAGE_PACKAGED_BENCH_PROFILE: profile,
 	LIGHT_STAGE_PACKAGED_BENCH_ADDITIONAL_STAGE_WINDOW:
-		profile === "supported-scale" ? "0" : "1",
+		profile === "supported-scale" || fixedBaseline ? "0" : "1",
 	LIGHT_STAGE_PACKAGED_BENCH_PREPARED: preparedPath,
 	LIGHT_DESKTOP_TEST_DATA_DIR: dataPath,
 	...(isolatedPort === null
@@ -122,8 +135,18 @@ const benchmarkEnvironment = {
 const isolatedServer =
 	isolatedPort === null
 		? null
-		: await startIsolatedServer(application, dataPath, isolatedPort, oscPort);
-const app = launchPackagedApplication(application, benchmarkEnvironment);
+		: await startPackagedIsolatedServer(application, dataPath, isolatedPort, oscPort, repositoryRoot);
+let app;
+try {
+	app = launchPackagedApplication(application, benchmarkEnvironment);
+	if (isolatedServer) await new Promise((resolve, reject) => {
+		app.once("spawn", resolve);
+		app.once("error", reject);
+	});
+} catch (error) {
+	if (isolatedServer) await stopOwnedBenchmarkChild(isolatedServer.child);
+	throw error;
+}
 
 let records;
 let scene;
@@ -158,30 +181,32 @@ const collectMemory = async () => {
 const memorySampler = setInterval(() => void collectMemory(), 1_000);
 // Show switches restart the output scheduler's cumulative counters, so the paired windows are
 // accumulated from one-second observations instead of subtracting their end snapshots.
+// The saved TL-852 CPU sample showed full diagnostics serializing programmer definitions.
+// Counter-only observations use the existing performance endpoint; full before/after diagnostic
+// snapshots stay below. This reduces observer overhead, not a proven Stage cost or an old failure.
 let outputAccumulator;
 let outputSampler;
 let outputSampling = Promise.resolve();
 const sampleOutputCounters = (session) => {
-	outputSampling = outputSampling
-		.then(async () => {
-			const diagnostics = await runtimeDiagnostics(session);
-			outputAccumulator.observe(diagnostics.output);
-		})
-		.catch(() => undefined);
+	outputSampling = queueStageOutputSample(
+		outputSampling, requestJson, session,
+		(output) => outputAccumulator.observe(output),
+	).catch(() => { outputAccumulator.observationFailed(); });
 	return outputSampling;
 };
 // The window closes on a snapshot read in the same queue as the observations: a snapshot read
 // before an observation still in flight is older than it and would look like a counter reset.
 const takeOutputWindow = async (session) => {
-	const taken = outputSampling.then(async () => {
-		const diagnostics = await runtimeDiagnostics(session);
-		return outputAccumulator.take(diagnostics.output);
-	});
+	const taken = queueStageOutputSample(
+		outputSampling, requestJson, session,
+		(output) => outputAccumulator.take(output),
+	);
 	outputSampling = taken.catch(() => undefined);
 	return taken;
 };
 try {
 	await requireReadiness(app, dataPath);
+	if (isolatedServer) await isolatedServer.verify();
 	await collectMemory();
 	benchmarkPhase = "scene-preparation";
 	const prepared = await prepareScene(profile);
@@ -226,7 +251,10 @@ try {
 	}
 	benchmarkPhase = "control-window";
 	const before = await runtimeDiagnostics(prepared.session);
-	outputAccumulator = createOutputWindowAccumulator(before.output);
+	outputAccumulator = createOutputWindowAccumulator(before.output, {
+		diagnosticWindows: true,
+		observedAt: Date.now(),
+	});
 	outputSampler = setInterval(
 		() => void sampleOutputCounters(prepared.session),
 		1_000,
@@ -244,7 +272,19 @@ try {
 					networkCapture,
 				)
 			: null;
-	if (profile === "improved-beam-spike") {
+    if (captureExercise) {
+        benchmarkPhase = "capture-ui";
+        await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
+        await waitForRecord(samplesPath, (record) => record.kind === "stage-started", (controlDurationSeconds + 30) * 1_000);
+        const afterNoStage = await runtimeDiagnostics(prepared.session);
+        const noStageOutputWindow = await takeOutputWindow(prepared.session);
+        const networkAfterNoStage = networkCapture?.snapshot() ?? null;
+        memoryPhase = "capture";
+        records = await waitForRecord(samplesPath, (record) => record.kind === "packaged-stage-capture-complete", 240_000);
+        runtime = { before, afterNoStage, after: await runtimeDiagnostics(prepared.session),
+            outputWindows: { noStage: noStageOutputWindow, capture: await takeOutputWindow(prepared.session) },
+            networkCapture: { before: networkBefore, afterNoStage: networkAfterNoStage, after: networkCapture?.snapshot() ?? null } };
+    } else if (profile === "improved-beam-spike") {
 		memoryPhase = "improved-beam-spike";
 		await writeFile(preparedPath, `${JSON.stringify(scene)}\n`);
 		records = await waitForComplete(samplesPath, 120_000);
@@ -285,7 +325,7 @@ try {
 				prepared.session.token,
 			);
 		const showSwitch =
-			profile === "supported-scale"
+			profile === "supported-scale" || fixedBaseline
 				? Promise.resolve({ attempted: false, completed: 0, intervals: [] })
 				: exerciseShowSwitches(
 						prepared.session,
@@ -293,7 +333,7 @@ try {
 						durationSeconds,
 					);
 		const applicationSuspend =
-			profile === "supported-scale"
+			profile === "supported-scale" || fixedBaseline
 				? Promise.resolve({ attempted: false, completed: false })
 				: exerciseApplicationSuspend(application, app, durationSeconds);
 		records = await waitForComplete(
@@ -329,6 +369,14 @@ try {
 	benchmarkFailure = reason;
 	console.error(reason instanceof Error ? reason.stack : reason);
 } finally {
+	if (isolatedServer) {
+		try {
+			isolatedServer.identity.end = await isolatedServer.verify();
+		} catch (error) {
+			isolatedServer.identity.endError = error.message;
+			benchmarkFailure ??= error;
+		}
+	}
 	clearInterval(memorySampler);
 	clearInterval(outputSampler);
 	await collectMemory();
@@ -336,7 +384,7 @@ try {
 	await networkCapture?.close();
 	await oscHardware?.close();
 	app.kill("SIGTERM");
-	if (isolatedServer) await stopIsolatedDesktop(app, isolatedServer);
+	if (isolatedServer) await stopIsolatedDesktop(app, isolatedServer.child);
 	else await stopPackagedDesktop();
 }
 
@@ -350,6 +398,10 @@ if (benchmarkFailure) {
 		scene,
 		processMemory,
 	);
+	if (captureExercise) result = { ...result, kind: "packaged-stage-capture-verification", captureVerified: false, acceptanceGateEnforced: false, baselineMeasurementReady: false };
+} else if (captureExercise) {
+    result = await evaluateCapture(records.findLast((record) => record.kind === "packaged-stage-capture-complete"), captureOutput,
+        { samplesPath, profile, scene, runtime, processMemory });
 } else {
 	const terminalError = records.findLast((record) => record.kind === "error");
 	if (terminalError)
@@ -378,11 +430,16 @@ if (benchmarkFailure) {
 					processMemory,
 				);
 }
+if (isolatedServer) result.isolatedServerIdentity = isolatedServer.identity;
+const reportDisposition = prepareStageDiagnosticReport(result, {
+	label: diagnosticLabel, captureExercise, fixedBaseline, benchmarkFailure: Boolean(benchmarkFailure),
+});
+result = reportDisposition.report;
 await writeFile(reportPath, `${JSON.stringify(result, null, 2)}\n`);
-await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
+if (reportDisposition.writeCanonical) await writeFile(canonicalReportPath, `${JSON.stringify(result, null, 2)}\n`);
 console.log(`Created ${reportPath}`);
-console.log(`Updated ${canonicalReportPath}`);
-if (!result.acceptanceGateEnforced) {
+if (reportDisposition.writeCanonical) console.log(`Updated ${canonicalReportPath}`);
+if (!reportDisposition.exitSuccessful) {
 	for (const failure of result.failures)
 		console.error(`Stage gate: ${failure}`);
 	process.exitCode = 1;
@@ -1875,38 +1932,6 @@ async function firstPatchedDmxAddress(session, showId) {
 	throw new Error("network capture found no patched fixture");
 }
 
-async function startIsolatedServer(application, dataDirectory, port, osc) {
-	const contents = application.bundle
-		? path.join(application.bundle, "Contents")
-		: null;
-	const server = contents
-		? path.join(contents, "MacOS", "light-headless")
-		: path.join(
-				path.dirname(application.executable),
-				process.platform === "win32" ? "light-headless.exe" : "light-headless",
-			);
-	const fixtureLibrary = contents
-		? path.join(contents, "Resources", "fixture-library")
-		: path.join(repositoryRoot, "assets", "fixture-library");
-	await mkdir(dataDirectory, { recursive: true });
-	const log = await open(path.join(dataDirectory, "light-headless.log"), "w");
-	const child = spawn(
-		server,
-		[
-			"--data-dir",
-			dataDirectory,
-			"--fixture-package-dir",
-			fixtureLibrary,
-			"--bind",
-			`127.0.0.1:${port}`,
-			"--osc-bind",
-			`127.0.0.1:${osc}`,
-		],
-		{ cwd: repositoryRoot, stdio: ["ignore", log.fd, log.fd] },
-	);
-	child.once("exit", () => void log.close().catch(() => undefined));
-	return child;
-}
 
 async function stopIsolatedDesktop(launched, server) {
 	await waitForExit(launched, 5_000);
@@ -2004,7 +2029,12 @@ function launchPackagedApplication(application, environment) {
 					"w",
 				)
 			: "ignore";
-	return spawn(application.executable, [], {
+	// Process-local NSArgumentDomain flags avoid a macOS crash-restoration modal for a
+	// directly launched isolated bundle. Do not change the user's persistent defaults.
+	const launchArguments = process.platform === "darwin" && application.direct
+		? ["-ApplePersistenceIgnoreState", "YES", "-NSQuitAlwaysKeepsWindows", "NO"]
+		: [];
+	return spawn(application.executable, launchArguments, {
 		cwd: repositoryRoot,
 		env: { ...process.env, ...environment },
 		stdio: output === "ignore" ? "ignore" : ["ignore", output, output],
@@ -2467,6 +2497,13 @@ function evaluate(
 	};
 }
 
+function nativeStageMeasurementWindow(complete) {
+	return {
+		startedAt: complete.nativeStage?.stageStartedEpochMillis,
+		completedAt: complete.nativeStage?.stageCompletedEpochMillis,
+	};
+}
+
 function evaluateNativeStage(
 	complete,
 	duration,
@@ -2476,6 +2513,20 @@ function evaluateNativeStage(
 	runtime,
 	processMemory,
 ) {
+	if (fixedBaseline) return evaluateNativeBaseline(complete, {
+		configuration: fixedBaseline, profile, scene, runtime, durationSeconds: duration,
+		outputComparison: summarizeOutputComparison(runtime),
+		resources: {
+			processMemory: {
+				measurement: `${process.platform} light-desktop main-process resident set; excludes separate WebView and driver allocations`,
+				samples: processMemory,
+			},
+			longRun: summarizeStageLongRunResources(complete.timeline ?? [], processMemory, duration, {
+				renderer: "native", stageWindow: nativeStageMeasurementWindow(complete),
+			}),
+		},
+		samplesFile, applicationIdentity: packagedApplicationIdentity(application), host: hostHardware(),
+	});
 	const frames = Array.isArray(complete.nativeStage?.frames)
 		? complete.nativeStage.frames
 		: [];
@@ -2598,19 +2649,17 @@ function evaluateNativeStage(
 		timeline,
 		processMemory,
 		duration,
-		{ renderer: "native" },
+		{ renderer: "native", stageWindow: nativeStageMeasurementWindow(complete) },
 	);
 	for (const failure of longRun.failures) failures.push(failure);
-	const gpuSamples = frames
-		.map((frame) => frame.gpuMicros)
-		.filter(Number.isFinite)
-		.sort((left, right) => left - right);
 	const cpuSamples = frames
 		.map((frame) => frame.cpuMicros / 1_000)
 		.filter(Number.isFinite)
 		.sort((left, right) => left - right);
 	return {
-		schemaVersion: 3,
+		schemaVersion: 4,
+		measurementBoundaries: complete.nativeStage?.measurementBoundaries ?? null,
+		gpuObservations: complete.nativeStage?.gpuObservations ?? null,
 		tier: profileDefinition.tier,
 		measurementSurface: "packaged-tauri-native-stage",
 		applicationIdentity: packagedApplicationIdentity(application),
@@ -2648,10 +2697,10 @@ function evaluateNativeStage(
 			rendererRestarts,
 			nativeSurfaceSizes: [...liveSizes],
 			cpuFrameP95Ms: percentile(cpuSamples, 95),
-			gpuFrameP95Ms:
-				percentile(gpuSamples, 95) === null
-					? null
-					: percentile(gpuSamples, 95) / 1_000,
+			// Historical source-deduplicated rows cannot estimate GPU-frame percentiles.
+			gpuFrameP95Ms: null,
+			gpuFrameP95Status: "unavailable; use unique scoped gpuObservations sample statistics",
+			cpuFrameTimingKind: "elapsed wall; source-deduplicated latency observations",
 			degradedFrames: frames.filter((frame) => frame.degraded).length,
 			maximumInstances: maximum(frames.map((frame) => frame.instances ?? 0)),
 			maximumDrawCalls: maximum(frames.map((frame) => frame.drawCalls ?? 0)),
@@ -2974,27 +3023,10 @@ function summarizeOutputComparison(runtime) {
 	const stage =
 		runtime.outputWindows?.stage ??
 		outputWindow(runtime.afterNoStage.output, runtime.after.output);
-	const noStageP99TickMicros = histogramPercentileMicros(noStage, 99);
-	const stageP99TickMicros = histogramPercentileMicros(stage, 99);
-	const allowedP99RegressionMicros =
-		noStageP99TickMicros === null
-			? null
-			: Math.max(1_000, noStageP99TickMicros * 0.05);
-	const p99RegressionMicros =
-		noStageP99TickMicros === null || stageP99TickMicros === null
-			? null
-			: stageP99TickMicros - noStageP99TickMicros;
 	return {
-		noStage,
-		stage,
-		noStageP99TickMicros,
-		stageP99TickMicros,
-		allowedP99RegressionMicros,
-		p99RegressionMicros,
-		boundedWindowGatePassed:
-			p99RegressionMicros !== null &&
-			allowedP99RegressionMicros !== null &&
-			p99RegressionMicros <= allowedP99RegressionMicros,
+        noStage,
+        stage,
+        ...compareOutputWindows(noStage,stage),
 		stageWindowDeadlineMisses: stage.deadline_misses,
 		stageWindowSendErrors: stage.send_errors,
 		releaseGateEnforced: true,

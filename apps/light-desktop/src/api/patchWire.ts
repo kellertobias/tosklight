@@ -1,3 +1,4 @@
+import { manualOpticsFromWire } from "./manualOptics";
 import type {
 	PatchDirectControlEndpoint as FeatureDirectControlEndpoint,
 	PatchFixtureProjection as FeatureFixtureProjection,
@@ -218,6 +219,7 @@ function mapInstalledAppearance(
 						}
 					: { type: "open_white" },
 		shaperAnglesDegrees: [...appearance.shaper_angles_degrees],
+        ...manualOpticsFromWire(appearance),
 	};
 }
 

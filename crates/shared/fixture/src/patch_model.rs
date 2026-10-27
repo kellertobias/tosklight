@@ -26,6 +26,10 @@ pub struct InstalledFixtureAppearance {
     pub luminous_output_lumens: Option<f32>,
     #[serde(default)]
     pub gel: GelAssignment,
+    /// Optional manual lens and barn-door settings of this physical installation.
+    /// Live canonical controls retain authority where the profile exposes them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manual_optics: Option<InstalledManualOptics>,
     /// Installed static shutter or barn-door element angles, in element order one through four.
     #[serde(default)]
     pub shaper_angles_degrees: [f32; 4],
@@ -38,6 +42,7 @@ impl Default for InstalledFixtureAppearance {
             color_temperature_kelvin: None,
             luminous_output_lumens: None,
             gel: GelAssignment::OpenWhite,
+            manual_optics: None,
             shaper_angles_degrees: [0.0; 4],
         }
     }
@@ -59,12 +64,45 @@ impl InstalledFixtureAppearance {
             return Err("installed luminous output must be a positive finite lumen value".into());
         }
         self.gel.validate()?;
+        if let Some(optics) = &self.manual_optics {
+            optics.validate()?;
+        }
         if self
             .shaper_angles_degrees
             .iter()
             .any(|angle| !angle.is_finite() || !(-180.0..180.0).contains(angle))
         {
             return Err("installed shaper angles must be finite degrees within [-180, 180)".into());
+        }
+        Ok(())
+    }
+}
+
+/// Physical settings on a manually focused lantern, separate from DMX programming.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct InstalledManualOptics {
+    /// Full cone opening in degrees; absent inherits the profile's normal lens setting.
+    #[serde(default)]
+    pub zoom_degrees: Option<f32>,
+    /// Four barn-door insertions: zero open, one crossing the gate.
+    #[serde(default)]
+    pub shaper_blades: [f32; 4],
+}
+
+impl InstalledManualOptics {
+    pub fn validate(&self) -> Result<(), String> {
+        if self
+            .zoom_degrees
+            .is_some_and(|angle| !angle.is_finite() || !(1.0..=170.0).contains(&angle))
+        {
+            return Err("manual zoom must be finite full-opening degrees within 1-170".into());
+        }
+        if self
+            .shaper_blades
+            .iter()
+            .any(|value| !value.is_finite() || !(0.0..=1.0).contains(value))
+        {
+            return Err("manual barn-door insertions must be finite fractions within 0-1".into());
         }
         Ok(())
     }

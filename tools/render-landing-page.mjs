@@ -6,6 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { artifactPaths } from "./artifact-paths.mjs";
+import { marketingWebImages, responsiveScreenshot } from "./marketing-web-images.mjs";
 import {
 	normalizePublicPerformanceStatus,
 	renderPerformancePage,
@@ -34,25 +35,25 @@ if (marketingManifest.version !== 1 || !Array.isArray(marketingManifest.entries)
 const GALLERY = marketingManifest.entries;
 
 const PRODUCT_GALLERIES = {
-	control: ["application-overview.png", "tracked-programming.png", "dynamics.png"],
-	architect: ["architect-renderer-white-ultra.png", "architect-cad.png", "architect-patch.png"],
+	control: ["application-overview-icons.png", "tracked-programming.png", "dynamics.png"],
+	architect: ["architect-native-export-4k.png", "architect-cad.png", "architect-patch.png"],
 	pixel: ["pixel-eight-layer-composite.png", "media-server-library.png", "media-server-playback.png"],
 };
 // Homepage cards explain product capabilities; detail figures retain their capture-specific captions.
 const HOMEPAGE_SHOT_COPY = {
-	"application-overview.png": { title: "Dynamic Screen Layouts", caption: "Arrange your workspace around the way you program and run the show." },
+	"application-overview-icons.png": { title: "Dynamic Screen Layouts", caption: "Arrange your workspace around the way you program and run the show." },
 	"dynamics.png": { title: "Desk-style Effect Engine", caption: "Shape functions and keyframes, distribute effects across the rig, and keep them on the beat." },
 	"pixel-eight-layer-composite.png": { title: "Up to Eight Layers", caption: "Combine video, transparent images, visualizers, and text into one live output." },
 	"media-server-library.png": { title: "Library Management Built In", caption: "Prepare and organize the visual assets you need for the show." },
 	"media-server-playback.png": { title: "Control via DMX or in the Browser", caption: "Run Pixel from a lighting desk over Art-Net or sACN, or operate its live controls in your browser." },
-	"architect-renderer-white-ultra.png": { title: "Live 3D Visualizer", caption: "Preview the rig with real fixture models, beams, gobos, and haze." },
+	"architect-native-export-4k.png": { title: "Live 3D Visualizer", caption: "Preview your show live, then create a full-venue Ultra 4K image for your customer." },
 	"architect-cad.png": { title: "Generate Your Venue Plans", caption: "Build the venue and rig, then export measured PDF plans for the crew." },
 	"architect-patch.png": { title: "Patch Your Fixtures", caption: "Prepare fixture types, modes, universes, and addresses in the same Show." },
 };
 const DETAIL_GALLERIES = {
-	control: ["application-overview.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
+	control: ["application-overview-icons.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-timecode.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
 	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
-	architect: ["architect-renderer-warm-ultra.png", "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null],
+	architect: [["architect-native-export-4k.png", "architect-wireframe-native.png", "architect-renderer-draft.png", "architect-renderer-standard.png", "architect-renderer-ultra-live.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null, ["architect-media-surface-config.png", "architect-media-crop-config.png", "architect-media-output-config.png"]],
 };
 
 const galleryByFile = new Map(GALLERY.map((entry) => [entry.file, entry]));
@@ -135,39 +136,16 @@ if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/u.test(version)) 
 const escapeHtml = (value) =>
   value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-// Reserve each screenshot's real aspect ratio before lazy loading completes. Otherwise
-// scrolling to a later section can move the link under the pointer while images arrive.
-const screenshotDimensions = new Map();
-function screenshotSize(file) {
-  if (screenshotDimensions.has(file)) return screenshotDimensions.get(file);
-  const bytes = readFileSync(resolve(SCREENSHOTS, file));
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(signature) ||
-      bytes.readUInt32BE(8) !== 13 || bytes.toString("ascii", 12, 16) !== "IHDR") {
-    throw new Error(`Invalid PNG header for marketing screenshot ${file}`);
-  }
-  const width = bytes.readUInt32BE(16);
-  const height = bytes.readUInt32BE(20);
-  if (!width || !height || width > 0x7fffffff || height > 0x7fffffff) {
-    throw new Error(`Invalid PNG dimensions for marketing screenshot ${file}`);
-  }
-  const dimensions = { width, height };
-  screenshotDimensions.set(file, dimensions);
-  return dimensions;
-}
-
-mkdirSync(resolve(siteRoot, "screenshots"), { recursive: true });
+// Generate bounded web derivatives from the reviewed captures.
+const webImages = await marketingWebImages(GALLERY, SCREENSHOTS, resolve(siteRoot, "screenshots"));
 const renderFigure = ({ file, title, caption, wide }) => {
   // Native inputs are restored and reviewed by the capture job. Pages must consume its artifact,
   // never replace it with an older tracked still from this checkout.
-  const source = resolve(SCREENSHOTS, file);
-  const name = file.replace(/\//g, "-");
-  const { width, height } = screenshotSize(file);
-  copyFileSync(source, resolve(siteRoot, "screenshots", name));
+  const webImage = webImages.get(file);
   return (
     `<figure class="shot${wide ? " shot-wide" : ""}">` +
     `<button class="shot-image" type="button" aria-label="Enlarge ${escapeHtml(title)}">` +
-			`<img src="screenshots/${escapeHtml(name)}" width="${width}" height="${height}" alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
+			`<img ${responsiveScreenshot(webImage)} alt="${escapeHtml(title)}: ${escapeHtml(caption)}" loading="lazy" decoding="async"></button>` +
     `<figcaption><strong>${escapeHtml(title)}</strong> ${escapeHtml(caption)}</figcaption>` +
     `</figure>`
   );
@@ -287,12 +265,13 @@ const productPages = [
 			["The programmer", "A programmer that works the way desks work.", "Intensity, colour, position, beam, shapers, focus, control and media sit in familiar attribute banks. Everything is reachable through the touch surface or typed on the command line, which becomes the faster path once it is in your fingers.", "Values stay in the Programmer until they are recorded. Blind, preview and highlight let you build the next look while the current one remains live."],
 			["Referencing", "Cues point at groups and presets, not at numbers.", "Groups collect the fixtures you actually talk about during a show and presets hold the looks those groups take. Cues reference those objects instead of storing a fixed value on every fixture.", "Change the house warm preset once and every cue that used it follows. Repatch a group after a fixture fails and the cues keep working."],
 			["Tracking", "Full tracking, so a cue only stores what it changes.", "Each cue stores only what it changes and everything else tracks through from the cues before it. A cue list reads as a sequence of intentions rather than a series of complete stage states.", "That saves the afternoon when a lamp is missing from a look: add it once and it stays in every cue that follows, instead of being pasted into each of them."],
+			["Timecode · In development", "Build a show against a shared timeline.", "Place Cue triggers, edit Cue fade points, and arrange audio and Speed Groups on the timeline. The overview keeps navigation close while you work on an individual Cue.", "Still in development — use with caution. Test your show thoroughly before relying on Timecode for a live performance."],
 			["Output", "Connect over the network or USB.", "Send DMX through Art-Net, sACN, or supported USB DMX interfaces. Explicit output routes keep the show independent of the network or adapter used at tonight’s venue.", "Frames go out on a fixed schedule, keeping the output rate consistent while you program and run the show."],
 			["Dynamics", "Shape movement. Keep it on the beat.", "Build effects for intensity, color, position, and other supported parameters using functions or editable keyframes. Distribute them across the rig in 3D, then shape their ordering and phase to create coordinated movement.", "Like working the sync controls on a DJ desk, five Speed Groups keep chases and Dynamics on a shared beat: tap the tempo, enter BPM, or follow the music through Sound to Light. Choose whether a Dynamic starts immediately, joins the running sync phase, or waits for the next beat or four-beat bar."],
 			["Media Server", "Keep your media server close to the desk.", "Browse media and control layers from a compatible media server in your Control workspace. CITP/MSEX supplies names, thumbnails, and previews where supported.", "Use Pixel or another compatible server, and arrange the Media pane alongside your fixtures, presets, and playbacks."],
 			["Hardware", "Choose the controls that suit your show.", "Run the desk from its software playbacks or connect an OSC control surface. The attached surface shares Control’s Programmer, command line, and playback pages.", "Custom hardware bridges can use the documented OSC controls and feedback. The UI adapts when hardware connects: a compact playback view frees room when the controller supplies buttons and faders you no longer need at full touchscreen size."],
 		],
-		coming: [["Position / PSN support", "Public beta"], ["Timecode and timeline editor", "In development · public beta"], ["Plugin support", "In planning"]],
+		coming: [["Position / PSN support", "Public beta"], ["Timecode and timeline editor", "In development · use with caution"], ["Plugin support", "In planning"]],
 	},
 	{
 		path: "pixel",
@@ -342,6 +321,7 @@ const productPages = [
 			["Moving scenes", "Make the scene move with the fixture.", "Store fixture and scene positions relative to a shared 3D point. When that point is controlled through PSN or DMX, its connected elements follow the movement while retaining their relative placement.", "Position references travel in the same portable Show between Control and Architect. The Control Patch sheet shown here exposes those references for the rig that Architect visualizes."],
 			["Lasers", "Simulate the path, not just the beam.", "Architect can simulate lasers from a scan path produced by a JavaScript function supplied by the user. The function receives DMX input and returns the path that the renderer draws.", "That gives the designer control over the laser's shape, brightness, scan speed, and position, and leaves room to build a laser effect that matches the specific production."],
 			["Early prototypes", "See the right trigger, with more to come.", "Architect includes early prototypes for physical elements such as falling curtains and pyro elements such as flame jets and sparklers. They are intentionally rudimentary today.", "They are useful for confirming that the intended DMX channel was triggered, not yet for final visual realism. These elements may become more detailed as the application grows."],
+			["Media integration", "Bring live video into the venue.", "Pixel's LED Triptych output at 1536 × 512 supplies advertised source 514 to three contiguous mapped LED panels in Architect.", "Configure the source, physical LED panels and normalized crops in Architect. Each panel displays its mapped third of the live video alongside the lighting rig; Pixel supplies the output shown in the final configuration screenshot."],
 		],
 		coming: [["Media server integration", "Being tested"], ["Paperwork rendering", "Mostly complete, with further improvements in progress."], ["Crowd simulation", "Being improved."]],
 	},
@@ -363,13 +343,15 @@ for (const product of productPages) {
 		const files = Array.isArray(sectionImages) ? sectionImages : sectionImages ? [sectionImages] : [];
 		const figures = files.map((file) => {
 			const entry = galleryByFile.get(file);
-			const image = file.replace(/\//g, "-");
+			const image = webImages.get(file).file;
 			const url = `../screenshots/${escapeHtml(image)}`;
-			const { width, height } = screenshotSize(file);
-			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img src="${url}" width="${width}" height="${height}" alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
-		}).join("");
-		const galleryColumns = label === "Hardware" ? 1 : files.length;
-		const figure = files.length > 1 ? `<div class="product-detail-section-gallery" style="--gallery-columns:${galleryColumns}" aria-label="${escapeHtml(label)} screenshots">${figures}</div>` : figures;
+			const webImage = webImages.get(file);
+			return `<figure class="shot"><a class="shot-image" href="${url}" aria-label="Open ${escapeHtml(entry.title)} at full size"><img ${responsiveScreenshot(webImage, "../screenshots/")} alt="${escapeHtml(entry.title)}" loading="lazy"></a><figcaption><strong>${escapeHtml(entry.title)}</strong> ${escapeHtml(entry.caption)}</figcaption></figure>`;
+		});
+		const leadingImage = product.path === "architect" && label === "Visualization" && files.length > 1;
+		const galleryColumns = label === "Hardware" ? 1 : leadingImage ? 2 : files.length;
+		const gallery = (items) => `<div class="product-detail-section-gallery" style="--gallery-columns:${galleryColumns}" aria-label="${escapeHtml(label)} screenshots">${items.join("")}</div>`;
+		const figure = leadingImage ? figures[0] + gallery(figures.slice(1)) : files.length > 1 ? gallery(figures) : figures.join("");
 		return `<article><div class="product-detail-copy"><p class="eyebrow">${escapeHtml(label)}</p><h2>${escapeHtml(title)}</h2></div><div class="product-detail-text"><p>${escapeHtml(first)}</p><p>${escapeHtml(second)}</p></div>${figure}</article>`;
 	}).join("")}</section>`;
 	const coming = product.coming ? `<section class="product-detail-coming shell"><p class="eyebrow">What is coming</p><h2>Still moving forward.</h2><div>${product.coming.map(([title, status]) => `<article><strong>${escapeHtml(title)}</strong><p>${escapeHtml(status)}</p></article>`).join("")}</div></section>` : "";
@@ -458,10 +440,10 @@ for (const [placeholder, replacement] of [
   page = page.replaceAll(placeholder, replacement);
 }
 // The hero is authored directly in the landing-page template rather than renderFigure.
-page = page.replace(/<img\b(?=[^>]*\bsrc="screenshots\/([^"]+)")[^>]*>/gu, (image, file) => {
-  if (/\bwidth=/u.test(image) && /\bheight=/u.test(image)) return image;
-  const { width, height } = screenshotSize(file);
-  return image.replace("<img", `<img width="${width}" height="${height}"`);
+page = page.replace(/<img\b(?=[^>]*\bsrc="screenshots\/([^" ]+\.png)")[^>]*>/gu, (image, file) => {
+  const webImage = webImages.get(file);
+  if (!webImage) throw new Error(`Unknown hero screenshot ${file}`);
+  return image.replace(/src="[^"]+"/u, responsiveScreenshot(webImage));
 });
 writeFileSync(target, page);
 const assetCount =

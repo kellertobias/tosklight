@@ -17,11 +17,14 @@ mod mesh;
 pub mod overlay;
 mod pick;
 mod renderer;
+pub mod still;
 mod targets;
 mod timing;
 
 pub use camera::{CameraControl, Ray, ResolvedCamera};
-pub use export::{GeometryInstance, GeometryMesh, SceneGeometry, scene_geometry};
+pub use export::{
+    GeometryInstance, GeometryMesh, SceneGeometry, scene_geometry, scene_geometry_with_style,
+};
 pub use gpu::PresentationSurface;
 pub use instances::{
     EmitterPose, FrameInstances, FrameStyle, GOBO_SLOTS, SemanticLight, build as build_instances,
@@ -29,7 +32,9 @@ pub use instances::{
 };
 pub use overlay::{Overlay, OverlayQuad};
 pub use pick::{Pick, PickedElement, pick};
-pub use renderer::{CapturedImage, FrameStats, QualityReduction, RenderError, Renderer};
+pub use renderer::{
+    CapturedImage, FrameStats, PendingCapture, QualityReduction, RenderError, Renderer,
+};
 pub use targets::{MAX_LIGHTS_PER_TILE, TILE_SIZE};
 pub use timing::GpuPassTimings;
 pub use wgpu;

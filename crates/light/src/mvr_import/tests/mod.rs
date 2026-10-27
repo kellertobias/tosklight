@@ -198,6 +198,7 @@ fn replace_and_reimport_preserve_reference_only_patch_settings_and_physical_copi
             color_srgb: "#FFAA44".into(),
             note: Some("Installed at the rig".into()),
         },
+        manual_optics: None,
         shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
     };
     retained_fixture.multipatch.push(MultiPatchInstance {

@@ -399,6 +399,12 @@ function patchAppearance(
 						}
 					: { type: "open_white" },
 		shaperAnglesDegrees: [...resolved.shaper_angles_degrees],
+		...(resolved.manual_optics === undefined ? {} : {
+			manualOptics: resolved.manual_optics === null ? null : {
+				zoomDegrees: resolved.manual_optics.zoom_degrees,
+				shaperBlades: [...resolved.manual_optics.shaper_blades] as [number, number, number, number],
+			},
+		}),
 	};
 }
 
@@ -432,6 +438,12 @@ function fixtureAppearance(
 						}
 					: { type: "open_white" },
 		shaper_angles_degrees: [...resolved.shaperAnglesDegrees],
+		...(resolved.manualOptics === undefined ? {} : {
+			manual_optics: resolved.manualOptics === null ? null : {
+				zoom_degrees: resolved.manualOptics.zoomDegrees,
+				shaper_blades: [...resolved.manualOptics.shaperBlades] as [number, number, number, number],
+			},
+		}),
 	};
 }
 

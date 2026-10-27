@@ -12,7 +12,10 @@ export type OutputWindow = Pick<
 	| "scheduler_utilization"
 	| "tick_duration_bucket_bounds_micros"
 	| "tick_duration_bucket_counts"
->;
+> & {
+    tick_duration_fine_histogram?: FineOutputHistogram;
+    fine_histogram_coverage?: { status: "complete" | "unavailable" | "invalid"; reasons: string[] };
+};
 
 export function outputWindow(
 	before: RuntimeOutputHealth,
@@ -26,10 +29,14 @@ export function histogramPercentileMicros(
 
 export interface OutputWindowAccumulator {
 	observe(snapshot: RuntimeOutputHealth, observedAt?: number): void;
-	take(snapshot: RuntimeOutputHealth): OutputWindow & {
+	/** Diagnostic request failure only; aggregate counter deltas and gate remain unchanged. */
+	observationFailed(): void;
+	take(snapshot: RuntimeOutputHealth, observedAt?: number): OutputWindow & {
+		diagnostic_windows?: OutputDiagnosticWindows;
 		counter_resets: number;
 		late_intervals: Array<{
-			observedAt: string;
+			observedAt: string | null;
+			clockAvailability?: "unavailable";
 			deadline_misses: number;
 			send_errors: number;
 			counter_reset: boolean;
@@ -39,4 +46,69 @@ export interface OutputWindowAccumulator {
 
 export function createOutputWindowAccumulator(
 	start: RuntimeOutputHealth,
+	options?: { diagnosticWindows?: boolean; observedAt?: number; maximumDiagnosticWindows?: number },
 ): OutputWindowAccumulator;
+
+export interface OutputDiagnosticWindows {
+	schemaVersion: 1;
+	diagnosticOnly: true;
+	targetWindowMillis: 60000;
+	maximumWindows: number;
+	overflowWindows: number;
+	firstOverflowEpochMillis: number | null;
+	coverageComplete: boolean;
+	clock: string;
+	partition: string;
+	windows: Array<{
+		startedAtEpochMillis: number | null;
+		endedAtEpochMillis: number | null;
+		durationMillis: number | null;
+		finalPartial: boolean;
+		sampleIntervals: number;
+		observationCount: number;
+		counterResets: number;
+		samplingErrors: number;
+		invalidClockIntervals: number;
+		coarseGeometryDriftIntervals: number;
+		maximumObservationGapMillis: number;
+		gapsAboveFiveSeconds: number;
+		coverage: { status: "complete" | "unavailable"; reasons: string[] };
+		framesSent: number;
+		packetsSent: number;
+		deadlineMisses: number;
+		sendErrors: number;
+		fineHistogramCoverage: OutputWindow["fine_histogram_coverage"];
+		fineHistogram?: FineOutputHistogram;
+		coarseBoundsMicros: number[];
+		coarseCounts: number[];
+	}>;
+}
+
+export interface FineOutputHistogram {
+    schema_version: 1;
+    bounds_micros: number[];
+    counts: number[];
+    sample_count: number;
+}
+export interface OutputComparison {
+    /** Historical coarse upper-bound metrics, retained even when fine timing selects the gate. */
+    noStageP99TickMicros: number | null;
+    stageP99TickMicros: number | null;
+    allowedP99RegressionMicros: number | null;
+    p99RegressionMicros: number | null;
+    coarseBoundedWindowGatePassed: boolean;
+    boundedWindowGatePassed: boolean;
+    p99ComparisonSource: "coarse_histogram_fallback" | "fine_histogram_v1" | "fine_histogram_rejected";
+    fineP99Comparison: {
+        status: "complete" | "unavailable" | "invalid";
+        decision: "pass" | "fail" | "indeterminate" | "unavailable";
+        reasons: string[];
+        noStageIntervalMicros: [number,number|null] | null;
+        stageIntervalMicros: [number,number|null] | null;
+        regressionIntervalMicros: [number,number] | null;
+        allowedRegressionIntervalMicros: [number,number] | null;
+        nominalFineBucketMicros: 250;
+        intervalConvention: string;
+    };
+}
+export function compareOutputWindows(noStage: OutputWindow, stage: OutputWindow): OutputComparison;

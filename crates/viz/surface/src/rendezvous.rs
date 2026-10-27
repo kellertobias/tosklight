@@ -25,7 +25,9 @@
 
 use mach2::bootstrap::{bootstrap_look_up, bootstrap_port, bootstrap_register};
 use mach2::kern_return::KERN_SUCCESS;
-use mach2::mach_port::{mach_port_allocate, mach_port_deallocate, mach_port_insert_right};
+use mach2::mach_port::{
+    mach_port_allocate, mach_port_deallocate, mach_port_destroy, mach_port_insert_right,
+};
 use mach2::message::{
     MACH_MSG_PORT_DESCRIPTOR, MACH_MSG_SUCCESS, MACH_MSG_TIMEOUT_NONE, MACH_MSG_TYPE_COPY_SEND,
     MACH_MSG_TYPE_MAKE_SEND, MACH_MSG_TYPE_MOVE_SEND, MACH_RCV_MSG, MACH_RCV_TIMEOUT,
@@ -34,6 +36,30 @@ use mach2::message::{
 };
 use mach2::port::{MACH_PORT_NULL, MACH_PORT_RIGHT_RECEIVE, mach_port_t};
 use mach2::traps::mach_task_self;
+
+/// One owned Mach send-right reference, received in a message or created for an IOSurface.
+/// It is intentionally neither Copy nor Clone: import/send/discard all consume the same credit.
+#[derive(Debug)]
+pub struct OwnedSurfacePort(mach_port_t);
+
+impl OwnedSurfacePort {
+    pub(crate) fn new(port: mach_port_t) -> Self {
+        Self(port)
+    }
+    pub(crate) fn raw(&self) -> mach_port_t {
+        self.0
+    }
+}
+
+impl Drop for OwnedSurfacePort {
+    fn drop(&mut self) {
+        if self.0 != MACH_PORT_NULL {
+            // SAFETY: construction is confined to this crate's successful create/receive/lookup
+            // calls. This guard owns exactly one send-right reference, never the receive right.
+            unsafe { mach_port_deallocate(mach_task_self(), self.0) };
+        }
+    }
+}
 
 /// `MACH_MSGH_BITS_COMPLEX`, which says the message carries descriptors rather than only bytes.
 const COMPLEX: u32 = 0x8000_0000;
@@ -68,6 +94,7 @@ impl Rendezvous {
     /// bootstrap name is visible to the whole session and two desks must never collide.
     pub fn open(unique: &str) -> Result<Self, String> {
         let name = format!("de.tokenet.tosklight.stage-pane.{unique}");
+        let service = std::ffi::CString::new(name.clone()).map_err(|error| error.to_string())?;
         let task = unsafe { mach_task_self() };
         let mut port: mach_port_t = MACH_PORT_NULL;
         // SAFETY: `task` is this task's own port and `port` is a live out-parameter.
@@ -80,18 +107,17 @@ impl Rendezvous {
         let inserted = unsafe { mach_port_insert_right(task, port, port, MACH_MSG_TYPE_MAKE_SEND) };
         if inserted != KERN_SUCCESS {
             // SAFETY: deallocating a right this function allocated and nothing else holds.
-            unsafe { mach_port_deallocate(task, port) };
+            unsafe { mach_port_destroy(task, port) };
             return Err(format!("could not make a send right: {inserted}"));
         }
 
-        let service = std::ffi::CString::new(name.clone()).map_err(|error| error.to_string())?;
         // SAFETY: the name is a NUL-terminated C string that outlives the call, and `port` carries
         // the send right the name is being registered for.
         let registered =
             unsafe { bootstrap_register(bootstrap_port, service.as_ptr().cast_mut(), port) };
         if registered != KERN_SUCCESS {
             // SAFETY: as above — nothing else refers to this port.
-            unsafe { mach_port_deallocate(task, port) };
+            unsafe { mach_port_destroy(task, port) };
             // The common reason, and the one worth naming: a restricted process may not register.
             return Err(format!(
                 "this process may not register a name to hand surfaces over ({registered})"
@@ -109,7 +135,10 @@ impl Rendezvous {
     ///
     /// Returns `Ok(None)` when nothing arrived inside the timeout, which is not a failure: the
     /// renderer sends one per surface, and a surface is created only when the pane's size changes.
-    pub fn receive(&self, timeout: std::time::Duration) -> Result<Option<mach_port_t>, String> {
+    pub fn receive(
+        &self,
+        timeout: std::time::Duration,
+    ) -> Result<Option<OwnedSurfacePort>, String> {
         let mut message = std::mem::MaybeUninit::<ReceivedPortMessage>::zeroed();
         let size = u32::try_from(size_of::<ReceivedPortMessage>()).map_err(|_| "message size")?;
         let milliseconds = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
@@ -135,19 +164,23 @@ impl Rendezvous {
         if message.body.msgh_descriptor_count != 1 {
             return Err("the renderer sent a message with no surface in it".to_owned());
         }
-        Ok(Some(message.port.name))
+        Ok(Some(OwnedSurfacePort::new(message.port.name)))
     }
 }
 
 impl Drop for Rendezvous {
     fn drop(&mut self) {
         // SAFETY: the rendezvous owns this port and is being dropped, so nothing else refers to it.
-        unsafe { mach_port_deallocate(mach_task_self(), self.port) };
+        unsafe { mach_port_destroy(mach_task_self(), self.port) };
     }
 }
 
-/// The renderer's end: find the desk's port and send it a surface's right.
-pub fn send_port(service_name: &str, surface_port: mach_port_t) -> Result<(), String> {
+/// Find the desk and copy one surface right into its queue, consuming our temporary reference.
+/// The temporary is deallocated on success and every failure path.
+pub fn send_port(service_name: &str, surface_port: OwnedSurfacePort) -> Result<(), String> {
+    if surface_port.raw() == MACH_PORT_NULL {
+        return Err("the surface has no Mach send right".into());
+    }
     let service = std::ffi::CString::new(service_name).map_err(|error| error.to_string())?;
     let mut desk: mach_port_t = MACH_PORT_NULL;
     // SAFETY: the name is NUL-terminated and outlives the call; `desk` is a live out-parameter.
@@ -159,13 +192,14 @@ pub fn send_port(service_name: &str, surface_port: mach_port_t) -> Result<(), St
         ));
     }
 
+    let desk = OwnedSurfacePort::new(desk);
     let mut message = PortMessage {
         header: mach_msg_header_t {
-            // A complex message — it carries a descriptor — sent to a right this process copies
-            // rather than gives away, so the name stays usable for the next surface.
+            // A complex message carries a descriptor. COPY_SEND leaves our temporary references
+            // valid until mach_msg returns; the owned guards then release both references.
             msgh_bits: MACH_MSG_TYPE_COPY_SEND | COMPLEX,
             msgh_size: u32::try_from(size_of::<PortMessage>()).map_err(|_| "message size")?,
-            msgh_remote_port: desk,
+            msgh_remote_port: desk.raw(),
             msgh_local_port: MACH_PORT_NULL,
             msgh_voucher_port: MACH_PORT_NULL,
             msgh_id: 0,
@@ -173,7 +207,7 @@ pub fn send_port(service_name: &str, surface_port: mach_port_t) -> Result<(), St
         body: mach_msg_body_t {
             msgh_descriptor_count: 1,
         },
-        port: mach_msg_port_descriptor_t::new(surface_port, MACH_MSG_TYPE_COPY_SEND),
+        port: mach_msg_port_descriptor_t::new(surface_port.raw(), MACH_MSG_TYPE_COPY_SEND),
     };
     // SAFETY: the header describes exactly the struct being sent, and the descriptor names a send
     // right this process holds.
@@ -188,8 +222,8 @@ pub fn send_port(service_name: &str, surface_port: mach_port_t) -> Result<(), St
             MACH_PORT_NULL,
         )
     };
-    // SAFETY: the looked-up right is this process's to release once the message has gone.
-    unsafe { mach_port_deallocate(mach_task_self(), desk) };
+    // COPY_SEND copied the surface right into the message. Both our temporary surface right and
+    // bootstrap lookup right now fall out of scope on success or any error; neither is leaked.
     if sent != MACH_MSG_SUCCESS {
         return Err(format!(
             "the surface could not be sent to the desk ({sent})"
@@ -205,6 +239,34 @@ const _: u32 = MACH_MSG_PORT_DESCRIPTOR;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_send_releases_the_temporary_surface_right_without_a_bootstrap_service() {
+        let task = unsafe { mach_task_self() };
+        let mut port = MACH_PORT_NULL;
+        assert_eq!(
+            unsafe { mach_port_allocate(task, MACH_PORT_RIGHT_RECEIVE, &raw mut port) },
+            KERN_SUCCESS
+        );
+        assert_eq!(
+            unsafe { mach_port_insert_right(task, port, port, MACH_MSG_TYPE_MAKE_SEND) },
+            KERN_SUCCESS
+        );
+        assert!(send_port("invalid\0service", OwnedSurfacePort::new(port)).is_err());
+        assert_ne!(
+            unsafe {
+                mach2::mach_port::mach_port_mod_refs(
+                    task,
+                    port,
+                    mach2::port::MACH_PORT_RIGHT_SEND,
+                    -1,
+                )
+            },
+            KERN_SUCCESS,
+            "a failed send leaked its temporary right"
+        );
+        assert_eq!(unsafe { mach_port_destroy(task, port) }, KERN_SUCCESS);
+    }
 
     /// Whether this process may register a name at all. Everything else depends on it, and a
     /// machine that refuses is a machine that uses the copy transport rather than a broken one.
@@ -229,13 +291,27 @@ mod tests {
             KERN_SUCCESS
         );
 
-        send_port(rendezvous.name(), spare).expect("the right crosses the rendezvous");
+        send_port(rendezvous.name(), OwnedSurfacePort::new(spare))
+            .expect("the right crosses the rendezvous");
         let received = rendezvous
             .receive(std::time::Duration::from_secs(2))
             .expect("receiving");
-        assert!(
-            received.is_some_and(|port| port != MACH_PORT_NULL),
-            "a port right arrived"
+        let received = received.expect("a port right arrived");
+        assert_ne!(received.raw(), MACH_PORT_NULL);
+        drop(received);
+        // The copied receive-side right and original temporary send-side right must both be
+        // gone. Removing a send reference now must fail, while our receive right remains valid.
+        assert_ne!(
+            unsafe {
+                mach2::mach_port::mach_port_mod_refs(
+                    task,
+                    spare,
+                    mach2::port::MACH_PORT_RIGHT_SEND,
+                    -1,
+                )
+            },
+            KERN_SUCCESS
         );
+        assert_eq!(unsafe { mach_port_destroy(task, spare) }, KERN_SUCCESS);
     }
 }

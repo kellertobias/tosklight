@@ -278,3 +278,31 @@ it("TL843 retains venue stair steps through the complete Control patch HTTP path
     const written=await writtenFixture(changedPatchFixtureCandidate(fixture,{name:"Balcony stairs"}).fixture);
     expect(written.scenery_options).toMatchObject({architecture});
 });
+
+it("preserves independent manual optics on fixture and multipatch through read, edit and HTTP write", async () => {
+    const wire = wireSnapshot();
+    const rootOptics = {zoom_degrees: 41, shaper_blades: [0.1,0.2,0.3,0.4]};
+    const copyOptics = {zoom_degrees: null, shaper_blades: [0.4,0.3,0.2,0.1]};
+    wire.fixtures[0].installed_appearance = Object.assign({}, appearance, {manual_optics: rootOptics});
+    wire.fixtures[0].multipatch[0].installed_appearance = Object.assign({}, appearance, {manual_optics: copyOptics});
+    const snapshot = decodePatchSnapshot(wire);
+    expect(snapshot.fixtures[0].installedAppearance?.manualOptics?.zoomDegrees).toBe(41);
+    const fixture = projectionToPatchedFixture(snapshot.fixtures[0], snapshot.profileRevisions[0], createPatchDefinitionResolver([venueDefinition()]));
+    expect(fixture.installed_appearance?.manual_optics).toEqual(rootOptics);
+    expect(fixture.multipatch?.[0].installed_appearance?.manual_optics).toEqual(copyOptics);
+    const written = await writtenFixture({...fixture, name: "Unrelated rename"});
+    expect((written.installed_appearance as {manual_optics: unknown}).manual_optics).toEqual(rootOptics);
+    expect((written.multipatch as {installed_appearance: {manual_optics: unknown}}[])[0].installed_appearance.manual_optics).toEqual(copyOptics);
+});
+
+it.each([
+    {zoom_degrees: 0, shaper_blades: [0,0,0,0]},
+    {zoom_degrees: 171, shaper_blades: [0,0,0,0]},
+    {zoom_degrees: Number.NaN, shaper_blades: [0,0,0,0]},
+    {zoom_degrees: null, shaper_blades: [0,0,0]},
+    {zoom_degrees: null, shaper_blades: [0,0,1.1,0]},
+])("rejects invalid manual optics in an authoritative snapshot %j", (optics) => {
+    const wire = wireSnapshot();
+    wire.fixtures[0].installed_appearance = Object.assign({}, appearance, {manual_optics: optics});
+    expect(() => decodePatchSnapshot(wire)).toThrow(/manual_optics/);
+});

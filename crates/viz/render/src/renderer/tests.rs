@@ -44,6 +44,35 @@ fn culling_and_surface_shaders_share_the_uploaded_light_layout() {
             })
             .expect("Light storage struct");
         assert_eq!(std::mem::size_of::<GpuLight>(), span as usize);
+        let members = module
+            .types
+            .iter()
+            .find_map(|(_, ty)| {
+                if ty.name.as_deref() == Some("Light") {
+                    if let naga::TypeInner::Struct { ref members, .. } = ty.inner {
+                        return Some(members);
+                    }
+                }
+                None
+            })
+            .unwrap();
+        for (name, offset) in [
+            (
+                "shaper_params",
+                std::mem::offset_of!(GpuLight, shaper_params),
+            ),
+            ("gate", std::mem::offset_of!(GpuLight, gate)),
+            ("gobo_wheels", std::mem::offset_of!(GpuLight, gobo_wheels)),
+        ] {
+            assert_eq!(
+                members
+                    .iter()
+                    .find(|m| m.name.as_deref() == Some(name))
+                    .unwrap()
+                    .offset as usize,
+                offset
+            );
+        }
     }
     assert_eq!(
         std::mem::align_of::<GpuLight>(),
@@ -258,3 +287,5 @@ fn media_shader_validates_and_captures_when_a_gpu_is_available() {
         .expect("media pipeline capture");
     assert_eq!((image.width, image.height), (96, 64));
 }
+
+mod media_orientation;

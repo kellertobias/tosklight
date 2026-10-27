@@ -1030,6 +1030,7 @@ async fn planning_patch_preserves_each_instances_installation_calibrations() {
         color_calibration: Some(copy_color.clone()),
         installed_appearance: light_fixture::InstalledFixtureAppearance {
             color_temperature_kelvin: Some(4_200),
+            manual_optics: None,
             shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
             ..Default::default()
         },

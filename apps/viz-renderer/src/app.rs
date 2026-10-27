@@ -63,10 +63,13 @@ impl viz_render::PresentationSurface for WindowSurface {
 }
 
 mod benchmark;
+mod cli_capture;
 mod draw;
 mod input;
+mod native_input;
 mod renderer_settings;
 mod sources;
+mod still;
 
 use sources::canonical_demo_show_path;
 
@@ -80,10 +83,14 @@ pub struct Application {
     renderer: Option<Renderer>,
     session: Option<Session>,
     quick_settings: QuickSettings,
-    /// Captures the operator has taken, and their Blender exports.
+    /// Retained scene snapshots taken by the operator.
     snapshots: crate::snapshots::Snapshots,
     /// Whether a `--snapshot` run has already asked for its one capture.
     snapshot_requested: bool,
+    still_jobs: crate::stills::StillJobs,
+    still_ui: still::StillUi,
+    last_still_frame: Option<still::ResolvedFrame>,
+    ime_composing: bool,
     camera: CameraControl,
     modifiers: ModifiersState,
     /// Which mouse buttons are currently held. The right button turns the camera on the spot —
@@ -117,6 +124,7 @@ pub struct Application {
     /// loop spends its time in the window system, where input is delivered, rather than parked
     /// inside the driver waiting for a drawable.
     next_frame: Instant,
+    low_gpu_schedule: crate::pacing::LowGpuSchedule,
     frame_interval: Duration,
     /// False while the window is hidden behind another one and nothing needs presenting.
     visible: bool,
@@ -125,6 +133,7 @@ pub struct Application {
     stats: FrameStats,
     overlay: Overlay,
     redraw_gate: crate::redraw::RedrawGate,
+    cli_capture: cli_capture::CliCapture,
     camera_is_local: bool,
     /// Ownership of the dedicated external 3D presentation camera. Embedded Stage helpers never
     /// consult this state: their camera remains the desk pane's local view.
@@ -249,6 +258,8 @@ impl ExternalCameraOwnership {
 
 /// The session facts one benchmark frame needs, read before the session borrow ends.
 struct Measured {
+    quality: viz_scene::RenderQuality,
+    output_size: (u32, u32),
     latency: (f32, f32, f32),
     dmx_hz: f32,
     fixtures: usize,
@@ -295,6 +306,10 @@ impl Application {
             quick_settings,
             snapshots: crate::snapshots::Snapshots::default(),
             snapshot_requested: false,
+            still_jobs: crate::stills::StillJobs::default(),
+            still_ui: still::StillUi::default(),
+            last_still_frame: None,
+            ime_composing: false,
             camera: CameraControl::default(),
             modifiers: ModifiersState::empty(),
             turning: false,
@@ -312,6 +327,7 @@ impl Application {
             media_notice: None,
             last_frame: Instant::now(),
             next_frame: Instant::now(),
+            low_gpu_schedule: crate::pacing::LowGpuSchedule::default(),
             frame_interval: DEFAULT_FRAME_INTERVAL,
             visible: true,
             frame_intervals: Vec::with_capacity(240),
@@ -319,6 +335,7 @@ impl Application {
             stats: FrameStats::default(),
             overlay: Overlay::default(),
             redraw_gate: crate::redraw::RedrawGate::default(),
+            cli_capture: cli_capture::CliCapture::default(),
             camera_is_local: false,
             external_camera: ExternalCameraOwnership::default(),
             hosted_show: None,
@@ -468,6 +485,9 @@ impl Application {
     }
 
     fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: Key, text: Option<String>) {
+        if self.handle_still_key(&key) {
+            return;
+        }
         if self.quick_settings_chord(&key) {
             self.toggle_quick_settings();
             return;
@@ -538,6 +558,15 @@ impl Application {
                 (size.width.max(1) as f32, size.height.max(1) as f32)
             })
             .unwrap_or((1280.0, 720.0))
+    }
+
+    /// Focus and reveal retain immediate redraws, outside the scheduled animation ceiling.
+    fn request_current_picture(&mut self) {
+        self.low_gpu_schedule.suspend();
+        self.next_frame = Instant::now();
+        if let Some(window) = self.window.as_ref() {
+            window.request_redraw();
+        }
     }
 
     /// How long to leave before the next frame falls due.
@@ -648,11 +677,8 @@ impl Application {
                 self.quick_settings.message = format!("Switching to {}", kind.label());
                 self.reconnect();
             }
-            QuickSettingsOutcome::ExportSnapshot(index) => {
-                let blender = self.preferences.blender_path();
-                self.snapshots.export(index, blender);
-            }
             QuickSettingsOutcome::FocusView => self.focus_view(),
+            QuickSettingsOutcome::Render4kImage => self.render_4k_image(),
             QuickSettingsOutcome::Close
             | QuickSettingsOutcome::AppliedLocally
             | QuickSettingsOutcome::Invalid(_)
@@ -773,7 +799,7 @@ impl ApplicationHandler for Application {
         let attributes = Window::default_attributes()
             .with_title(title)
             .with_inner_size(winit::dpi::LogicalSize::new(1600.0, 900.0));
-        let window = match event_loop.create_window(attributes) {
+        let window = match crate::capture_display::create(event_loop, attributes) {
             Ok(window) => Arc::new(window),
             Err(error) => {
                 eprintln!("window: {error}");
@@ -899,21 +925,12 @@ impl ApplicationHandler for Application {
                     renderer.resize(size.width, size.height);
                 }
             }
+            WindowEvent::Ime(event) => {
+                self.ime_composing =
+                    matches!(event, winit::event::Ime::Preedit(ref text, _) if !text.is_empty());
+            }
             WindowEvent::KeyboardInput { event, .. } => {
-                let pressed = event.state == ElementState::Pressed;
-                // Movement keys are held, not typed, so they are tracked in both directions and
-                // never reach the Quick Settings text fields.
-                let movement = self.track_walk_key(&event.logical_key, pressed);
-                if movement && !self.quick_settings.open && !self.command_chord() {
-                    return;
-                }
-                if pressed {
-                    self.handle_key(
-                        event_loop,
-                        event.logical_key.clone(),
-                        event.text.map(|text| text.to_string()),
-                    );
-                }
+                self.keyboard_event(event_loop, event);
             }
             WindowEvent::ScaleFactorChanged { .. } => {
                 // The window may have landed on a display that refreshes at another rate. Only the
@@ -924,6 +941,7 @@ impl ApplicationHandler for Application {
                 // A window that comes back from behind another one has to show a current frame at
                 // once, not whatever was last presented before the system stopped compositing it.
                 self.visible = !occluded;
+                self.low_gpu_schedule.suspend();
                 if !occluded {
                     if let Some(renderer) = self.renderer.as_mut() {
                         renderer.reconfigure();
@@ -934,15 +952,13 @@ impl ApplicationHandler for Application {
                     }
                 }
             }
-            WindowEvent::Focused(true) => {
-                self.next_frame = Instant::now();
-                if let Some(window) = self.window.as_ref() {
-                    window.request_redraw();
-                }
-            }
+            WindowEvent::Focused(true) => self.request_current_picture(),
             WindowEvent::MouseInput { state, button, .. } => {
                 let pressed = state == ElementState::Pressed;
                 trace_input(&format!("button {button:?} {state:?}"));
+                if pressed && button == MouseButton::Left && self.click_still_panel() {
+                    return;
+                }
                 if pressed
                     && button == MouseButton::Left
                     && self.hotspot_under_cursor() == Some(ui::Hotspot::OpenSettings)
@@ -987,6 +1003,13 @@ impl ApplicationHandler for Application {
                 }
             }
             WindowEvent::MouseWheel { delta, phase, .. } => {
+                if self
+                    .still_ui
+                    .contains(self.cursor.0 as f32, self.cursor.1 as f32)
+                {
+                    self.scroll_still_panel(delta);
+                    return;
+                }
                 trace_input(&format!("wheel {delta:?} phase {phase:?}"));
                 let amount = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y,
@@ -1089,10 +1112,17 @@ impl ApplicationHandler for Application {
                 crate::menu::MenuCommand::CloseShowFile => self.close_show_file(),
                 crate::menu::MenuCommand::ConnectToDesk => self.close_show_file(),
                 crate::menu::MenuCommand::TakeSnapshot => self.take_snapshot(),
+                crate::menu::MenuCommand::Render4kImage => self.render_4k_image(),
                 crate::menu::MenuCommand::QuickSettings => {
                     self.toggle_quick_settings();
                 }
             }
+        }
+        // Capture menu commands freeze the current resolved picture first. Adopting a new
+        // provider frame before that would invalidate its guard without resolving a new draw.
+        // CPU input/lamp state still progresses while occluded; this submits no GPU work.
+        if let Some(session) = self.session.as_mut() {
+            session.pump(Instant::now());
         }
         // Pace the frames. Presenting back to back parks the event loop inside the driver waiting
         // for a drawable for almost the whole refresh interval, and a mouse the operator is
@@ -1103,7 +1133,9 @@ impl ApplicationHandler for Application {
         if now >= self.next_frame {
             // One frame is owed however late this is; missed frames are never chased.
             self.next_frame = now + interval;
-            if let Some(window) = self.window.as_ref() {
+            if let Some(window) = self.window.as_ref()
+                && self.low_gpu_schedule.request()
+            {
                 window.request_redraw();
             }
         }

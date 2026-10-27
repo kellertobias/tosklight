@@ -103,6 +103,7 @@ fn installed_appearance_round_trips_stable_catalog_identity_and_fallback() {
                 visualizer_srgb: "#C01020".into(),
             },
         },
+        manual_optics: None,
         shaper_angles_degrees: [-10.0, 20.0, 0.0, 179.0],
     };
 

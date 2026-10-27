@@ -7,6 +7,7 @@ use viz_scene::{
 
 fn fixture(number: u32, position: Vec3) -> FixtureInstance {
     FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: viz_scene::uuid::Uuid::new_v4(),
@@ -21,6 +22,7 @@ fn fixture(number: u32, position: Vec3) -> FixtureInstance {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody::default(),
         patched: true,
         address: Some((1, number as u16)),

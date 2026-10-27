@@ -21,11 +21,26 @@
 //! own web renderer, which is why nothing here has to cope with having no transport.
 
 mod benchmark;
+mod benchmark_pacing;
+mod cpu_runtime;
+mod flow;
+mod mechanics;
+mod pass_profile;
+mod picture;
+mod producer;
+#[cfg(test)]
+mod shared_slots_gpu_tests;
+mod still;
+mod transport;
 use crate::helper_source::{Embedding, HelperSource};
 use benchmark::{BenchmarkDrawWitness, BenchmarkHeartbeatClock};
+use std::sync::{
+    Arc,
+    mpsc::{self, Receiver, Sender},
+};
 use std::time::{Duration, Instant};
 use viz_desk::{DeskConnection, DeskProvider};
-use viz_helper::protocol::{FrameTransport, PaneInput};
+use viz_helper::protocol::{FrameId, FrameTransport, PaneInput, SHARED_FRAME_SLOTS};
 use viz_render::{Overlay, Renderer, ResolvedCamera};
 use viz_scene::{ProviderEvent, Scene, SceneProvider, SceneValues, ViewConfiguration};
 
@@ -51,6 +66,9 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     };
     let epoch = Instant::now();
     let mut heartbeat_clock = BenchmarkHeartbeatClock::new(state.benchmark.is_some());
+    // An explicit matched-rate benchmark condition remains validated, while all production
+    // rendering now observes the same 60 Hz ceiling.
+    benchmark_pacing::validate_environment(state.benchmark.is_some())?;
 
     /*
      * The rig comes from the desk's own server, through the same provider the standalone
@@ -66,10 +84,10 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     loop {
         if let Some(rig) = rig.as_mut() {
             let events = rig.poll();
-            drain(events, &mut state);
+            drain(events, &mut state, epoch);
         }
         let events = source.poll();
-        if drain(events, &mut state) {
+        if drain(events, &mut state, epoch) {
             // The desk's channel ended. Its window has gone or it asked this to stop; either way
             // there is nothing left to draw for.
             return Ok(());
@@ -89,101 +107,45 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
                 .filter_map(|id| uuid::Uuid::parse_str(id).ok())
                 .collect();
         }
-        // The picture settings are the renderer's own, and the desk sends them rather than
-        // applying them: it is not the one drawing this.
-        if let Some(viz_helper::protocol::ToHelper::Picture {
-            atmosphere,
-            ambient,
-            quality,
-            exposure,
-            laser_brightness,
-            lamp_fog_cloudiness,
-            lamp_fog_turbulence,
-            laser_fog_cloudiness,
-            laser_fog_turbulence,
-            show_labels,
-            floor_grid,
-            show_beam_guides,
-            background,
-            mode,
-            follow_preload,
-        }) = source.picture()
-        {
-            state.values.atmosphere = viz_scene::AtmospherePreference {
-                amount: atmosphere.clamp(0.0, 1.0),
-            }
-            .resolve();
-            state.view.ambient = ambient.clamp(0.0, 2.0);
-            state.view.exposure = exposure.clamp(0.05, 4.0);
-            state.view.laser_brightness = laser_brightness.clamp(0.0, 4.0);
-            state.view.fog_variation = viz_scene::FogVariation {
-                lamp_cloudiness: lamp_fog_cloudiness.clamp(0.0, 1.0),
-                lamp_turbulence: lamp_fog_turbulence.clamp(0.0, 1.0),
-                laser_cloudiness: laser_fog_cloudiness.clamp(0.0, 1.0),
-                laser_turbulence: laser_fog_turbulence.clamp(0.0, 1.0),
-            };
-            state.view.show_labels = *show_labels;
-            state.view.floor_grid = *floor_grid;
-            state.view.show_aim_guides = *show_beam_guides;
-            state.view.background = Some(background.map(|channel| channel.clamp(0.0, 1.0)));
-            // The provider is what lays the preload over the live picture, so the flag goes to it
-            // rather than being kept here: the values are decoded there, and a second opinion about
-            // whether to overlay would eventually disagree with the first.
-            if state.following_preload != *follow_preload {
-                state.following_preload = *follow_preload;
-                if let Some(rig) = rig.as_mut() {
-                    rig.follow_preload(*follow_preload);
+        picture::apply(&mut state, &source, &mut rig);
+        // A Picture just before Capture may switch Live/Preload. Resolve that lane through
+        // the provider's cached authoritative output before freezing; do not tag old Live values
+        // as Preload while waiting for the next ordinary loop. poll() never waits for network I/O.
+        if source.has_capture_start() {
+            if let Some(rig) = rig.as_mut() {
+                if drain(rig.poll(), &mut state, epoch) {
+                    return Ok(());
                 }
             }
-            let was = state.view.mode;
-            state.view.mode = match mode {
-                viz_helper::protocol::StageViewMode::TopDown => viz_scene::ViewMode::TopDown,
-                viz_helper::protocol::StageViewMode::LeftToRight => {
-                    viz_scene::ViewMode::LeftToRight
-                }
-                viz_helper::protocol::StageViewMode::RightToLeft => {
-                    viz_scene::ViewMode::RightToLeft
-                }
-                viz_helper::protocol::StageViewMode::FrontToBack => {
-                    viz_scene::ViewMode::FrontToBack
-                }
-                viz_helper::protocol::StageViewMode::BackToFront => {
-                    viz_scene::ViewMode::BackToFront
-                }
-                viz_helper::protocol::StageViewMode::Lines3d => viz_scene::ViewMode::Lines3d,
-                viz_helper::protocol::StageViewMode::Simple3d => viz_scene::ViewMode::Simple3d,
-                viz_helper::protocol::StageViewMode::Full3d => viz_scene::ViewMode::Full3d,
-            };
-            /*
-             * Choosing a view frames the rig in it. This is the whole of what "viewed from" means:
-             * an operator asking for the plan from stage left is asking to stand at stage left, not
-             * to have the same picture relabelled — and the camera they had was aimed for the view
-             * they were looking at, which this no longer is.
-             *
-             * It overrides a camera the operator moved by hand, deliberately. That camera belonged
-             * to the view they have just left. Within a view their own aim is theirs and nothing
-             * takes it back.
-             */
-            if state.view.mode != was {
-                state.view.camera =
-                    viz_scene::Camera::framed(state.view.mode, state.frame_bounds());
-                state.camera_is_local = false;
-            }
-            state.view.quality = match quality {
-                viz_helper::protocol::RenderQuality::Draft => viz_scene::RenderQuality::Draft,
-                viz_helper::protocol::RenderQuality::Standard => viz_scene::RenderQuality::Standard,
-                viz_helper::protocol::RenderQuality::High => viz_scene::RenderQuality::High,
-                viz_helper::protocol::RenderQuality::Ultra => viz_scene::RenderQuality::Ultra,
-            };
         }
-        // Publish the initial/framed camera as well as pointer changes, after the pane's picture
-        // settings have resolved its actual view. Encoders must work before the first gesture.
-        if let Some(camera) = state.take_camera_update() {
-            source.send_camera(&camera);
+
+        state.poll_transport(&mut source)?;
+        let visible = source.visible()
+            && embedding.pane.width.is_finite()
+            && embedding.pane.width > 0.0
+            && embedding.pane.height.is_finite()
+            && embedding.pane.height > 0.0;
+        if state.producer.set_visible(visible, Instant::now()) {
+            state.redraw_gate.invalidate();
         }
-        state.resize_for(&embedding)?;
+        state.visible = visible;
+        state
+            .mechanics
+            .advance(&state.scene, &mut state.values, Instant::now(), false);
+        state.cpu.advance(
+            &state.scene,
+            &mut state.values,
+            &state.view,
+            epoch.elapsed().as_secs_f32(),
+            Instant::now(),
+            false,
+        );
+        picture::prepare(&mut state, &mut source, &embedding)?;
+        still::service(&mut state, &mut source, epoch);
         benchmark::draw_and_observe(&mut state, epoch, &mut source, &mut heartbeat_clock);
-        std::thread::sleep(IDLE_SLEEP);
+        // Input, source changes and GPU callbacks stay responsive independently of the 60 Hz
+        // render deadline. A skipped/hidden turn never prepares scene geometry or submits GPU work.
+        std::thread::sleep(state.producer.sleep_for(Instant::now()));
     }
 }
 
@@ -222,7 +184,7 @@ fn wait_for_embedding(source: &mut HelperSource) -> Result<Embedding, String> {
 }
 
 /// Apply what the provider produced. Returns true once the channel has ended.
-fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
+fn drain(events: Vec<ProviderEvent>, state: &mut PaneState, epoch: Instant) -> bool {
     let mut finished = false;
     for event in events {
         if let Some(benchmark) = state.benchmark.as_mut() {
@@ -230,6 +192,7 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
         }
         match event {
             ProviderEvent::Snapshot { scene, view } => {
+                state.values.reset_lamp_response();
                 state.scene = *scene;
                 if let Some(view) = view {
                     state.adopt_desk_view(view);
@@ -240,11 +203,26 @@ fn drain(events: Vec<ProviderEvent>, state: &mut PaneState) -> bool {
                 state.scene = *scene;
                 state.frame_rig_if_unaimed();
             }
-            ProviderEvent::Values(values) => adopt_provider_values(
-                &mut state.values,
-                *values,
-                state.scene.physics_scenery.len(),
-            ),
+            ProviderEvent::Values(values) => {
+                let now = Instant::now();
+                state
+                    .mechanics
+                    .advance(&state.scene, &mut state.values, now, true);
+                adopt_provider_values(
+                    &mut state.values,
+                    *values,
+                    state.scene.physics_scenery.len(),
+                );
+                state.values.advance_lamp_response(&state.scene, 0.0);
+                state.cpu.advance(
+                    &state.scene,
+                    &mut state.values,
+                    &state.view,
+                    epoch.elapsed().as_secs_f32(),
+                    Instant::now(),
+                    true,
+                );
+            }
             ProviderEvent::View(view) => state.adopt_desk_view(view),
             ProviderEvent::Connection(connection) => {
                 finished |= matches!(connection, viz_scene::ConnectionState::Failed { .. });
@@ -281,7 +259,12 @@ struct PaneState {
     /// Physical pixel size of the pane, which the desk's layout and display scale decide.
     size: (u32, u32),
     /// The surface handed to the desk, while the transport is a shared one.
-    shared: Option<viz_surface::SharedSurface>,
+    shared: [Option<Arc<viz_surface::SharedSurface>>; SHARED_FRAME_SLOTS],
+    producer: producer::Producer,
+    completions: Receiver<FrameId>,
+    completed: Sender<FrameId>,
+    pending_copy: Option<(FrameId, viz_render::PendingCapture)>,
+    visible: bool,
     /// Where to hand the desk each surface, while the transport shares one.
     surface_service: Option<String>,
     /// Whether the operator is following their preload, which the provider lays over the live
@@ -298,16 +281,18 @@ struct PaneState {
     /// five hundred times a second for a picture the redraw gate then declines is the cost this
     /// remembers its way out of.
     overlay_inputs: Option<crate::redraw::LabelInputs>,
-    last_tick: Instant,
+    mechanics: mechanics::MechanicsClock,
     presented_frames: u64,
     benchmark: Option<BenchmarkDrawWitness>,
-    physics: crate::physics::Physics,
-    lasers: crate::lasers::Lasers,
+    cpu: cpu_runtime::CpuRuntime,
+    stills: crate::stills::StillJobs,
+    last_still_status: Option<viz_helper::still::Status>,
 }
 
 impl PaneState {
     fn new(embedding: &Embedding) -> Result<Self, String> {
         let size = pane_pixels(embedding);
+        let (completed, completions) = mpsc::channel();
         let mut renderer = Renderer::headless(size.0, size.1)?;
         renderer.set_media_content_enabled(false);
         let target = embedding
@@ -321,27 +306,45 @@ impl PaneState {
         );
         Ok(Self {
             renderer,
+            stills: crate::stills::StillJobs::default(),
+            last_still_status: None,
             scene: Scene::default(),
             values: SceneValues::default(),
             view: ViewConfiguration::default(),
             overlay: Overlay::default(),
             transport: embedding.transport,
             size,
-            shared: None,
+            shared: std::array::from_fn(|_| None),
+            producer: producer::Producer::new(
+                embedding.transport == FrameTransport::Shared,
+                Instant::now(),
+            )
+            .with_flow(flow::Flow::from_environment(
+                crate::helper_source::benchmark_reporting_enabled(
+                    std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").as_deref(),
+                ),
+            )),
+            completions,
+            completed,
+            pending_copy: None,
+            visible: true,
             surface_service: embedding.surface_service.clone(),
             camera_is_local: false,
             reported_camera: None,
             following_preload: false,
             redraw_gate: crate::redraw::RedrawGate::default(),
             overlay_inputs: None,
-            last_tick: Instant::now(),
+            mechanics: mechanics::MechanicsClock::new(Instant::now()),
             presented_frames: 0,
             benchmark: crate::helper_source::benchmark_reporting_enabled(
                 std::env::var_os("LIGHT_STAGE_PACKAGED_BENCH_REPORT").as_deref(),
             )
             .then(|| BenchmarkDrawWitness::new(embedding.desk.is_some())),
-            physics: crate::physics::Physics::with_state_path(physics_state_path),
-            lasers: crate::lasers::Lasers::new(crate::lasers::Lasers::directory(None)),
+            cpu: cpu_runtime::CpuRuntime::new(
+                crate::lasers::Lasers::new(crate::lasers::Lasers::directory(None)),
+                crate::physics::Physics::with_state_path(physics_state_path),
+                Instant::now(),
+            ),
         })
     }
 
@@ -353,22 +356,6 @@ impl PaneState {
         }
         self.reported_camera = Some(camera);
         Some(camera)
-    }
-
-    /// Follow the pane the desk's layout reports.
-    ///
-    /// A shared surface is a fixed size, so a resize replaces it and the desk is told — which is
-    /// why the handle is announced on every change rather than once at the start.
-    fn resize_for(&mut self, embedding: &Embedding) -> Result<(), String> {
-        let size = pane_pixels(embedding);
-        if size == self.size {
-            return Ok(());
-        }
-        self.size = size;
-        self.renderer.resize(size.0, size.1);
-        // A shared surface is a fixed size, so the next frame builds and announces a new one.
-        self.shared = None;
-        Ok(())
     }
 
     fn rebuild_fixture_overlay(&mut self) {
@@ -633,36 +620,33 @@ impl PaneState {
     /// Resolve frame-rate fixture state before deciding whether the picture changed. In
     /// particular, desk output supplies laser DMX slots, while the packaged scan script must run
     /// here on the drawing thread, just as it does in the standalone renderer.
-    fn prepare_frame(&mut self, elapsed: f32, time: f32) -> bool {
+    fn prepare_frame(&mut self, time: f32) -> bool {
         let motion_was_active = self
             .values
             .is_time_driven(&viz_scene::PersistencePreference::default());
-        self.values.apply_physical_motion(elapsed);
-        self.values.apply_calibrated_motion(&self.scene, elapsed);
-        self.lasers.run(&self.scene, &mut self.values, time);
-        self.physics.run(
+        self.mechanics
+            .advance(&self.scene, &mut self.values, Instant::now(), true);
+        self.cpu.advance(
             &self.scene,
             &mut self.values,
+            &self.view,
             time,
-            self.view.quality,
-            self.view.physics_reset_generation,
+            Instant::now(),
+            false,
         );
-        motion_was_active
+        motion_was_active || self.mechanics.dirty() || self.cpu.dirty()
     }
 
     fn draw(&mut self, epoch: Instant, source: &mut HelperSource) -> Result<(), String> {
+        let Some(frame) = self.producer.begin(Instant::now()) else {
+            return Ok(());
+        };
         if let Some(benchmark) = self.benchmark.as_mut() {
             benchmark.idle_unchanged = false;
             benchmark.draw_healthy = false;
         }
-        let now = Instant::now();
-        let elapsed = now
-            .saturating_duration_since(self.last_tick)
-            .as_secs_f32()
-            .min(0.25);
-        self.last_tick = now;
         let time = epoch.elapsed().as_secs_f32();
-        let motion_was_active = self.prepare_frame(elapsed, time);
+        let motion_was_active = self.prepare_frame(time);
         let persistence = viz_scene::PersistencePreference {
             decay_seconds: 0.0,
             ..viz_scene::PersistencePreference::default()
@@ -700,18 +684,38 @@ impl PaneState {
         } else {
             None
         };
-        if !self.redraw_gate.should_draw(redraw_state, time_driven) {
+        if !self.redraw_gate.should_draw(&redraw_state, time_driven) {
+            self.producer.cancel(frame);
             if let Some(benchmark) = self.benchmark.as_mut() {
                 benchmark.skipped(same_successful_picture, self.presented_frames);
             }
             return Ok(());
         }
-        let stats = match self.transport {
-            FrameTransport::Shared => self.draw_shared(time, source),
-            FrameTransport::Copy => self.draw_copy(time, source),
-        }?;
-        self.presented_frames = self.presented_frames.saturating_add(1);
+        let result = match self.transport {
+            FrameTransport::Shared => self.draw_shared(frame, time, source),
+            FrameTransport::Copy => self.draw_copy(frame, time, source),
+        };
+        let stats = match result {
+            Ok(stats) => stats,
+            Err(error) => {
+                self.producer.cancel(frame);
+                return Err(error);
+            }
+        };
+        self.producer.submitted(frame);
+        self.redraw_gate.succeeded(redraw_state);
+        self.mechanics.succeeded();
+        self.cpu.succeeded();
+        self.presented_frames = frame.sequence;
         if let Some(benchmark) = self.benchmark.as_mut() {
+            benchmark.profile_passes(
+                &stats,
+                &self.view,
+                self.size,
+                self.scene.revision,
+                self.following_preload,
+                self.renderer.gpu_timing_coverage(),
+            );
             if let Some(candidate) = benchmark_candidate {
                 benchmark.last_success = Some(candidate);
             }
@@ -740,6 +744,7 @@ impl PaneState {
             self.values.newest_input_micros,
             presented_epoch_micros,
             stats,
+            self.transport,
             renderer,
             quality,
             self.view.mode.wire().to_owned(),
@@ -748,58 +753,6 @@ impl PaneState {
             self.size.1,
         );
         Ok(())
-    }
-
-    /// Draw straight into the surface the desk samples.
-    fn draw_shared(
-        &mut self,
-        time: f32,
-        source: &mut HelperSource,
-    ) -> Result<viz_render::FrameStats, String> {
-        if self.shared.is_none() {
-            let surface = viz_surface::create(self.renderer.device(), self.size.0, self.size.1)
-                .map_err(|error| error.to_string())?;
-            // The right first, then the message that says one is waiting: the desk reads the
-            // rendezvous when the message arrives, and a right already queued is one it finds
-            // rather than one it waits for.
-            #[cfg(target_os = "macos")]
-            {
-                let service = self
-                    .surface_service
-                    .as_deref()
-                    .ok_or("the desk asked for a shared surface without saying where to send it")?;
-                viz_surface::rendezvous::send_port(service, surface.mach_port())?;
-            }
-            source.send_surface(surface.handle(), self.size.0, self.size.1);
-            self.shared = Some(surface);
-        }
-        let Some(surface) = self.shared.as_ref() else {
-            return Ok(self.renderer.stats());
-        };
-        self.renderer
-            .render_into(
-                surface.view(),
-                &self.scene,
-                &self.values,
-                &self.view,
-                &self.overlay,
-                time,
-            )
-            .map_err(|error| error.to_string())
-    }
-
-    /// Draw into a private texture, read it back, and send the pixels.
-    fn draw_copy(
-        &mut self,
-        time: f32,
-        source: &mut HelperSource,
-    ) -> Result<viz_render::FrameStats, String> {
-        let image = self
-            .renderer
-            .capture(&self.scene, &self.values, &self.view, &self.overlay, time)
-            .map_err(|error| error.to_string())?;
-        source.send_frame(image.width, image.height, image.rgba);
-        Ok(self.renderer.stats())
     }
 }
 
@@ -870,7 +823,7 @@ mod tests {
             return;
         };
         // Ignore operator script overrides: exercise the portable packaged script.
-        state.lasers = crate::lasers::Lasers::new(None);
+        state.cpu.lasers = crate::lasers::Lasers::new(None);
         state.scene = crate::demo::build_scene();
         let index = state
             .scene
@@ -886,7 +839,15 @@ mod tests {
             desk_values.frame = frame;
             assert!(desk_values.laser_scans[index].points.is_empty());
             adopt_provider_values(&mut state.values, desk_values.clone(), 0);
-            state.prepare_frame(1.0 / 60.0, frame as f32 / 60.0);
+            state.cpu.advance(
+                &state.scene,
+                &mut state.values,
+                &state.view,
+                frame as f32 / 60.0,
+                Instant::now(),
+                true,
+            );
+            state.prepare_frame(frame as f32 / 60.0);
             let scan = &state.values.laser_scans[index];
             assert_eq!(scan.fault, None);
             assert!(
@@ -913,7 +874,15 @@ mod tests {
             "export function scan() { throw new Error('broken scan'); }",
         ));
         optics.script_key = optics.script_key.wrapping_add(1);
-        state.prepare_frame(1.0 / 60.0, 0.1);
+        state.cpu.advance(
+            &state.scene,
+            &mut state.values,
+            &state.view,
+            0.1,
+            Instant::now(),
+            true,
+        );
+        state.prepare_frame(0.1);
         assert!(state.values.laser_scans[index].points.is_empty());
         assert!(
             state.values.laser_scans[index].fault.is_some(),
@@ -1034,6 +1003,7 @@ mod tests {
                 view: None,
             }],
             &mut state,
+            Instant::now(),
         );
         let framed = state.view.camera;
         assert_eq!(

@@ -51,7 +51,10 @@ const bridge = {
 	takeStagePaneBenchmarkSamples: mock.take,
 	packagedStageBenchmarkPrepared: mock.prepared,
 };
-vi.mock("./platform/desktop", () => ({ useDesktopBridge: () => bridge }));
+vi.mock("./platform/desktop", () => ({
+	useDesktopBridge: () => bridge,
+	DesktopProvider: ({ children }: { children: ReactNode }) => children,
+}));
 
 import { NativePackagedStageBenchmarkApp } from "./NativePackagedStageBenchmarkApp";
 import {
@@ -200,5 +203,24 @@ describe("packaged benchmark Stage mode", () => {
 			"Invalid host Stage observation",
 		);
 		expect(observations.rows).toHaveLength(1);
+	});
+});
+
+
+describe("fixed baseline layout", () => {
+	it.each(["single", "dual"] as const)("holds the %s canvas budget without lifecycle resize/release", async (baselineLayout) => {
+		Object.defineProperty(window, "devicePixelRatio", { configurable: true, value: 2 });
+		const fixedConfig = { ...config, stageEnabled: true, fixtureSheet: false, controlDurationSeconds: 1, durationSeconds: 12, baselineLayout, baselineQuality: "high" as const, baselineView: "full_3d" as const };
+		await act(async () => { render(<NativePackagedStageBenchmarkApp config={fixedConfig} />); });
+		await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+		const layout = document.querySelector(`[data-baseline-layout="${baselineLayout}"]`) as HTMLElement;
+		expect(layout.style.width).toBe("960px");
+		expect(layout.style.height).toBe("540px");
+		expect(screen.getAllByTestId("stage")).toHaveLength(baselineLayout === "dual" ? 2 : 1);
+		expect(mock.stage.mock.calls.every(([props]) => (props as { stageView: string }).stageView === "3d")).toBe(true);
+		await act(async () => { await vi.advanceTimersByTimeAsync(8_000); });
+		expect(screen.queryByTestId("native-stage-released")).toBeNull();
+		expect(layout.firstElementChild?.getAttribute("style")).toContain("padding-right: 0");
+		expect(screen.queryByTestId("sheet")).toBeNull();
 	});
 });

@@ -266,6 +266,12 @@ pub fn application_installed_appearance(
                 note,
             },
         },
+        manual_optics: input
+            .manual_optics
+            .map(|optics| fixture::InstalledManualOptics {
+                zoom_degrees: optics.zoom_degrees,
+                shaper_blades: optics.shaper_blades,
+            }),
         shaper_angles_degrees: input.shaper_angles_degrees,
     }
 }
@@ -483,6 +489,12 @@ fn wire_installed_appearance(
                 note: note.clone(),
             },
         },
+        manual_optics: input.manual_optics.as_ref().map(|optics| {
+            wire::PatchInstalledManualOptics {
+                zoom_degrees: optics.zoom_degrees,
+                shaper_blades: optics.shaper_blades,
+            }
+        }),
         shaper_angles_degrees: input.shaper_angles_degrees,
     }
 }

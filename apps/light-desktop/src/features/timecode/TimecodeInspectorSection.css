@@ -1,0 +1,23 @@
+.timecode-editor-inspector .timecode-inspector-section {
+	border: 1px solid #414b5c;
+	border-radius: 5px;
+	margin: 12px 0;
+}
+.timecode-editor-inspector .timecode-inspector-section > summary {
+	min-height: 44px;
+	padding: 12px 10px;
+	box-sizing: border-box;
+	cursor: pointer;
+	font-size: 0.8rem;
+	color: #dce7fa;
+}
+.timecode-editor-inspector .timecode-inspector-section-content { padding: 0 10px 4px; }
+.timecode-editor-inspector .timecode-selection-inspector:has(> .timecode-inspector-section) {
+	display: block;
+	padding: 0;
+	border-top: 0;
+}
+.timecode-editor-inspector .timecode-selection-inspector > .timecode-inspector-section {
+	width: 100%;
+	box-sizing: border-box;
+}

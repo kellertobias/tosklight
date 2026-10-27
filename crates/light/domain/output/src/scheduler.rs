@@ -65,6 +65,7 @@ mod tests {
                 Duration::from_secs(1),
                 &cancel,
                 Some(&wake),
+                None,
             )
             .await,
             "a programmer wake requests an immediate extra output tick"
@@ -79,7 +80,9 @@ mod tests {
         let original_deadline = Instant::now() - Duration::from_millis(5);
         let mut deadline = original_deadline;
 
-        assert!(wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None).await);
+        assert!(
+            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None, None).await
+        );
         assert_eq!(health.lock().unwrap().deadline_misses, 0);
         assert_eq!(deadline, original_deadline);
     }
@@ -91,7 +94,9 @@ mod tests {
         let interval = Duration::from_millis(20);
         let mut deadline = Instant::now() - interval;
 
-        assert!(wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None).await);
+        assert!(
+            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, None, None).await
+        );
         let health = health.lock().unwrap();
         assert_eq!(health.deadline_misses, 1);
         assert!(health.maximum_lateness_micros >= 20_000);
@@ -168,8 +173,15 @@ async fn run_scheduler_dynamic_inner<F, Fut>(
             // reporting the useful extra work as a scheduler miss.
             deadline += interval;
         }
-        let waiting =
-            wait_for_deadline_or_wake(&health, &mut deadline, interval, &cancel, wake.as_deref());
+        let wait_origin = diagnostics.wait_origin(trace.as_ref());
+        let waiting = wait_for_deadline_or_wake(
+            &health,
+            &mut deadline,
+            interval,
+            &cancel,
+            wake.as_deref(),
+            wait_origin,
+        );
         scheduled_tick = match trace {
             Some(span) => waiting.instrument(span).await,
             None => waiting.await,
@@ -203,6 +215,7 @@ fn record_tick_duration(health: &Mutex<OutputHealth>, tick_started: Instant, int
         .partition_point(|upper_bound| *upper_bound < tick_micros);
     let bucket = bucket.min(current.tick_duration_bucket_counts.len() - 1);
     current.tick_duration_bucket_counts[bucket] += 1;
+    current.record_fine_tick_duration(tick_micros);
     current.scheduler_utilization =
         (tick_started.elapsed().as_secs_f64() / interval.as_secs_f64()) as f32;
 }
@@ -213,8 +226,11 @@ async fn wait_for_deadline_or_wake(
     interval: Duration,
     cancel: &CancellationToken,
     wake: Option<&Notify>,
+    diagnostic_origin: Option<Instant>,
 ) -> bool {
     let now = Instant::now();
+    // Keep the requested target before the existing missed-deadline rebase can replace it.
+    let observation = diagnostics::WaitObservation::begin(diagnostic_origin, *deadline, now);
     let already_late = now > *deadline;
     let late = now.saturating_duration_since(*deadline);
     if already_late {
@@ -230,7 +246,9 @@ async fn wait_for_deadline_or_wake(
             *deadline = now;
         }
         diagnostics::deadline(interval, late, late >= interval, true);
-        diagnostics::resumed(0);
+        if let Some(observation) = observation {
+            diagnostics::resumed_at(observation, 0, now);
+        }
         return true;
     }
     diagnostics::deadline(interval, late, false, false);
@@ -241,8 +259,8 @@ async fn wait_for_deadline_or_wake(
         }
     };
     tokio::select! {
-        _ = tokio::time::sleep_until(tokio::time::Instant::from_std(*deadline)) => { diagnostics::resumed(1); true },
-        _ = cancel.cancelled() => { diagnostics::resumed(2); true },
-        _ = wake => { diagnostics::resumed(3); false },
+        _ = tokio::time::sleep_until(tokio::time::Instant::from_std(*deadline)) => { diagnostics::resumed(observation, 1); true },
+        _ = cancel.cancelled() => { diagnostics::resumed(observation, 2); true },
+        _ = wake => { diagnostics::resumed(observation, 3); false },
     }
 }

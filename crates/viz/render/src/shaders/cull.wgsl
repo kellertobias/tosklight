@@ -25,6 +25,7 @@ struct Light {
     optics: vec4<f32>,
     shapers: vec4<f32>,
     shaper_angles: vec4<f32>,
+    shaper_params: vec4<f32>,    // manual edge >0; zero inherits dynamic feather+frost; yzw reserved
     gate: vec4<f32>,
     shadow: vec4<f32>,
     gobo_wheels: array<vec4<f32>, 8>,
@@ -35,6 +36,18 @@ struct Light {
 @group(0) @binding(1) var<storage, read> lights: array<Light>;
 @group(0) @binding(2) var<storage, read_write> tile_counts: array<atomic<u32>>;
 @group(0) @binding(3) var<storage, read_write> tile_lights: array<u32>;
+
+override DRAFT_CONE_BOUNDS: bool = false;
+// Test comparisons can retain the previous inline calculation. Production always precomputes.
+override PRECOMPUTED_BOUNDS: bool = true;
+struct StoredBounds {
+    limits: vec4<f32>,
+    visible: u32,
+    pad0: u32,
+    pad1: u32,
+    pad2: u32,
+};
+@group(1) @binding(0) var<storage, read_write> screen_bounds: array<StoredBounds>;
 
 const TILE_SIZE: u32 = 16u;
 const MAX_LIGHTS_PER_TILE: u32 = 256u;
@@ -71,13 +84,35 @@ fn light_bounds(light: Light) -> ScreenBounds {
         radius = range * sin_outer;
     }
 
+    var world_min = centre - vec3<f32>(radius);
+    var world_max = centre + vec3<f32>(radius);
+    let axis_length = length(light.direction_cos_outer.xyz);
+    // Draft surface lighting rejects both distance>range and dot(ray,axis)<=cos_outer,
+    // before evaluating any optics. Thus both enclosing AABBs may be intersected safely.
+    // Other tiers retain their existing sphere bounds, including all malformed/wide cases.
+    if (DRAFT_CONE_BOUNDS && cos_outer >= 0.5 && cos_outer <= 1.0
+        && axis_length >= 0.9999 && axis_length <= 1.0001
+        && range > 0.0 && range < 1e10
+        && all(abs(light.position_range.xyz) < vec3<f32>(1e10))) {
+        let axis = light.direction_cos_outer.xyz / axis_length;
+        let effective_cos = light.direction_cos_outer.w / axis_length;
+        if (effective_cos >= 0.5 && effective_cos <= 1.0) {
+            let end = light.position_range.xyz + axis * range;
+            let radial = range * sqrt(max(1.0 - effective_cos * effective_cos, 0.0)) / effective_cos;
+            let extent = radial * sqrt(max(vec3<f32>(1.0) - axis * axis, vec3<f32>(0.0)));
+            let padding = vec3<f32>(max(range * 1e-4, 1e-4));
+            world_min = max(world_min, min(light.position_range.xyz, end - extent) - padding);
+            world_max = min(world_max, max(light.position_range.xyz, end + extent) + padding);
+        }
+    }
+
     for (var corner: u32 = 0u; corner < 8u; corner = corner + 1u) {
         let sign = vec3<f32>(
             select(-1.0, 1.0, (corner & 1u) != 0u),
             select(-1.0, 1.0, (corner & 2u) != 0u),
             select(-1.0, 1.0, (corner & 4u) != 0u),
         );
-        let world = vec4<f32>(centre + sign * radius, 1.0);
+        let world = vec4<f32>(select(world_min, world_max, sign > vec3<f32>(0.0)), 1.0);
         let clip = globals.view_projection * world;
         if (clip.w <= 0.0001) {
             // Straddles the camera plane: treat as covering the whole screen.
@@ -97,6 +132,25 @@ fn light_bounds(light: Light) -> ScreenBounds {
     return result;
 }
 
+// This function invokes the unchanged conservative arithmetic once per light, rather than
+// once per light per tile. A separate compute pass publishes these records before culling.
+@compute @workgroup_size(64)
+fn bounds_main(@builtin(global_invocation_id) invocation: vec3<u32>) {
+    let index = invocation.x;
+    if (index >= u32(globals.params2.x)) { return; }
+    let bounds = light_bounds(lights[index]);
+    screen_bounds[index].limits = vec4<f32>(bounds.min, bounds.max);
+    screen_bounds[index].visible = select(0u, 1u, bounds.visible);
+}
+fn current_bounds(index: u32) -> ScreenBounds {
+    if (!PRECOMPUTED_BOUNDS) { return light_bounds(lights[index]); }
+    let stored = screen_bounds[index];
+    var bounds: ScreenBounds;
+    bounds.min = stored.limits.xy;
+    bounds.max = stored.limits.zw;
+    bounds.visible = stored.visible != 0u;
+    return bounds;
+}
 @compute @workgroup_size(64)
 fn cull_main(
     @builtin(workgroup_id) group: vec3<u32>,
@@ -113,7 +167,7 @@ fn cull_main(
     let tile_max = tile_min + vec2<f32>(f32(TILE_SIZE));
     let count = u32(globals.params2.x);
     for (var index = local; index < count; index = index + WORKGROUP) {
-        let bounds = light_bounds(lights[index]);
+        let bounds = current_bounds(index);
         if (!bounds.visible) {
             continue;
         }

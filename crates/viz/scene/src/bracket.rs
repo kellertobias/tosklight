@@ -81,6 +81,7 @@ mod tests {
 
     fn lantern(bracket: f32, hinge: Option<Vec3>) -> FixtureInstance {
         FixtureInstance {
+            lamp_response: Default::default(),
             position: Vec3::new(1.0, 5.0, -2.0),
             rotation_degrees: Vec3::new(0.0, 90.0, 0.0),
             bracket_degrees: bracket,

@@ -26,7 +26,12 @@ pub(super) fn push_crowds(frame: &mut FrameInstances, scene: &Scene, style: &Fra
         let draw = requested.min(remaining);
         remaining = remaining.saturating_sub(draw);
         frame.crowd_drawn = frame.crowd_drawn.saturating_add(draw as u32);
-        push_people(frame, crowd, draw);
+        push_people(
+            frame,
+            crowd,
+            draw,
+            style.detailed_people && style.quality == RenderQuality::Ultra,
+        );
         if remaining == 0 {
             break;
         }
@@ -44,7 +49,7 @@ fn population(crowd: &CrowdArea) -> usize {
         .max(1.0) as usize
 }
 
-fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
+fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize, detailed: bool) {
     let orientation = euler_degrees(crowd.rotation_degrees);
     let mut random = SplitMix64::new(population_seed(crowd));
     let half_width = crowd.width_metres * 0.5;
@@ -69,6 +74,7 @@ fn push_people(frame: &mut FrameInstances, crowd: &CrowdArea, count: usize) {
             orientation * Quat::from_rotation_y(yaw),
             crowd.posture,
             person_size(crowd.seed, index),
+            detailed.then_some((crowd.seed, index)),
         );
     }
 }
@@ -126,6 +132,7 @@ fn push_person(
     orientation: Quat,
     posture: CrowdPosture,
     size: PersonSize,
+    detailed: Option<(u64, usize)>,
 ) {
     let posture_scale = match posture {
         CrowdPosture::Sitting => 0.72,
@@ -133,6 +140,21 @@ fn push_person(
     };
     let rendered_height = size.height * posture_scale;
     let scale = Vec3::new(rendered_height * size.width, rendered_height, 1.0);
+    if let Some((seed, index)) = detailed {
+        // Unlike the zero-depth silhouette, normalized anatomy must scale on all three axes.
+        push_detailed(
+            frame,
+            Mat4::from_scale_rotation_translation(
+                Vec3::new(scale.x, scale.y, scale.x),
+                orientation,
+                floor,
+            ),
+            posture == CrowdPosture::Sitting,
+            seed,
+            index,
+        );
+        return;
+    }
     frame.mesh(MeshKind::CrowdPerson).push(MeshInstance::new(
         Mat4::from_scale_rotation_translation(scale, orientation, floor),
         Vec3::splat(0.008),
@@ -419,3 +441,36 @@ mod tests {
         assert_ne!(person_size(42, 7), person_size(42, 8));
     }
 }
+
+fn push_detailed(frame: &mut FrameInstances, model: Mat4, seated: bool, seed: u64, index: usize) {
+    // Separate stream: choosing detail cannot consume placement/height/yaw random values.
+    let mut random =
+        SplitMix64::new(seed ^ (index as u64).wrapping_mul(0x9e3779b97f4a7c15) ^ 0x50454f504c45);
+    let skin = [
+        Vec3::new(0.30, 0.16, 0.09),
+        Vec3::new(0.16, 0.075, 0.035),
+        Vec3::new(0.42, 0.26, 0.16),
+    ];
+    let clothes = [
+        Vec3::new(0.018, 0.024, 0.034),
+        Vec3::new(0.035, 0.015, 0.017),
+        Vec3::new(0.016, 0.028, 0.022),
+        Vec3::splat(0.022),
+    ];
+    let skin = skin[(random.next() % skin.len() as u64) as usize];
+    let top = clothes[(random.next() % clothes.len() as u64) as usize];
+    let bottom = Vec3::new(0.012, 0.016, 0.024) * random.range(0.7, 1.3);
+    for (kind, colour, roughness) in [
+        (MeshKind::DetailedPeopleSkin(seated), skin, 0.78),
+        (MeshKind::DetailedPeopleTop(seated), top, 0.94),
+        (MeshKind::DetailedPeopleBottom(seated), bottom, 0.96),
+    ] {
+        frame
+            .mesh(kind)
+            .push(MeshInstance::new(model, colour, roughness, Vec3::ZERO, 0.0));
+    }
+}
+
+#[cfg(test)]
+#[path = "crowd_detail_tests.rs"]
+mod detail_tests;

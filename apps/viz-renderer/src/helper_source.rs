@@ -7,6 +7,8 @@
 //! The reading happens on its own thread because the channel is a blocking pipe and the render
 //! loop must not wait on it. What crosses between them is already-decoded state, so a desk that
 //! stops sending leaves the last picture up rather than blocking a frame.
+//! Output has its own bounded FIFO writer too: encoding and pipe backpressure cannot stall input
+//! or CPU simulation. A full or failed writer ends this helper instead of losing ownership messages.
 
 use std::io::{Read, Write};
 use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
@@ -18,13 +20,15 @@ use viz_scene::{
     SceneProvider, SceneValues, ViewConfiguration,
 };
 
+mod writer;
+
 /// What the reading thread hands to the render loop.
 enum FromChannel {
     Scene(Box<Scene>),
     Values(Box<SceneValues>),
     View(Box<ViewConfiguration>),
     /// Where in the window this helper may draw.
-    Pane(viz_helper::pane::PaneRect),
+    Pane(viz_helper::pane::PaneRect, f32),
     /// Draw the desk's Stage pane rather than a window of this process's own.
     Embed(Embedding),
     /// What the operator did over the pane, forwarded because the webview above it takes the
@@ -37,6 +41,9 @@ enum FromChannel {
     Picture(viz_helper::protocol::ToHelper),
     /// What the operator has selected, which the renderer draws and never decides.
     Selection(Vec<String>),
+    Visibility(bool),
+    Released(viz_helper::protocol::FrameId),
+    Still(viz_helper::protocol::ToHelper),
     /// The channel ended, with the reason to show.
     Finished(String),
 }
@@ -68,7 +75,7 @@ pub struct HelperSource {
     ///
     /// A helper filling its own window presents to it and never uses this. One drawing the desk's
     /// Stage pane has no window of its own to present to, so its frames go back up the channel.
-    to_desk: Box<dyn Write + Send>,
+    to_desk: writer::Writer,
     /// The rectangle the desk's layout says is the Stage pane, when this helper is drawing one.
     ///
     /// `None` means the helper owns its whole window, which is the desk-opened case today. The
@@ -85,6 +92,9 @@ pub struct HelperSource {
     picture: Option<viz_helper::protocol::ToHelper>,
     /// What the operator has selected, as the desk last said.
     selection: Option<Vec<String>>,
+    visible: bool,
+    released: Vec<viz_helper::protocol::FrameId>,
+    still_request: Option<viz_helper::protocol::ToHelper>,
 }
 
 impl HelperSource {
@@ -104,6 +114,7 @@ impl HelperSource {
             &viz_helper::protocol::supported_transports(),
         )
         .map_err(|error| error.to_string())?;
+        let to_desk = writer::Writer::start(to_desk)?;
         let (outbox, inbox) = channel();
         std::thread::Builder::new()
             .name("viz-helper-channel".into())
@@ -120,26 +131,35 @@ impl HelperSource {
             },
             have_scene: false,
             finished: false,
-            to_desk: Box::new(to_desk),
+            to_desk,
             pane: None,
             embedding: None,
             input: Vec::new(),
             picture: None,
             selection: None,
+            visible: true,
+            released: Vec::new(),
+            still_request: None,
         })
     }
 
     /// Hand a rendered pane back to the desk.
     ///
-    /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
-    /// finishing for that reason. Saying so twice would not help anybody.
-    pub fn send_frame(&mut self, width: u32, height: u32, rgba: Vec<u8>) {
+    /// The owned pixels move to the bounded writer without serialization or a pipe wait here.
+    pub fn send_frame(
+        &mut self,
+        frame: viz_helper::protocol::FrameId,
+        width: u32,
+        height: u32,
+        rgba: Vec<u8>,
+    ) {
         let message = viz_helper::protocol::FromHelper::Frame {
+            frame,
             width,
             height,
             rgba,
         };
-        self.send(&message);
+        self.send(message);
     }
 
     pub fn send_frame_presented(
@@ -149,6 +169,7 @@ impl HelperSource {
         source_input_epoch_micros: u64,
         presented_epoch_micros: u64,
         stats: viz_render::FrameStats,
+        transport: viz_helper::protocol::FrameTransport,
         renderer: String,
         quality: viz_helper::protocol::RenderQuality,
         mode: String,
@@ -156,7 +177,7 @@ impl HelperSource {
         width: u32,
         height: u32,
     ) {
-        self.send(&viz_helper::protocol::FromHelper::FramePresented {
+        self.send(viz_helper::protocol::FromHelper::FramePresented {
             sequence,
             source_frame,
             source_input_epoch_micros,
@@ -164,6 +185,9 @@ impl HelperSource {
             cpu_micros: stats.cpu_micros,
             acquire_micros: stats.acquire_micros,
             gpu_micros: stats.gpu_micros,
+            gpu_sample_id: stats.gpu_sample_id,
+            gpu_sample_matches_frame: stats.gpu_sample_matches_frame,
+            transport,
             instances: stats.instances,
             draw_calls: stats.draw_calls,
             degraded: stats.degraded,
@@ -198,16 +222,25 @@ impl HelperSource {
                 viz_helper::protocol::FromHelper::BenchmarkHeartbeat { .. }
             )
         {
-            self.send(&heartbeat);
+            self.send(heartbeat);
         }
     }
 
-    /// Failure is not reported upwards: the desk has gone, and a helper without a desk is already
-    /// finishing for that reason.
-    fn send(&mut self, message: &viz_helper::protocol::FromHelper) {
-        if let Ok(payload) = viz_helper::protocol::encode(message) {
-            let _ = viz_helper::framing::write_frame(&mut self.to_desk, &payload);
-        }
+    /// Queue ownership messages in exact order, or latch a terminal channel failure.
+    fn send(&mut self, message: viz_helper::protocol::FromHelper) {
+        self.to_desk.send(message);
+    }
+
+    pub fn send_frame_ready(&mut self, frame: viz_helper::protocol::FrameId) {
+        self.send(viz_helper::protocol::FromHelper::FrameReady { frame });
+    }
+
+    pub fn visible(&self) -> bool {
+        self.visible
+    }
+
+    pub fn take_released_frames(&mut self) -> Vec<viz_helper::protocol::FrameId> {
+        std::mem::take(&mut self.released)
     }
 
     /// Where this helper may draw, if the desk has said. `None` means the whole window.
@@ -230,11 +263,14 @@ impl HelperSource {
     /// Announce a surface the desk can sample, replacing whatever it held before.
     pub fn send_surface(
         &mut self,
+        frame: viz_helper::protocol::FrameId,
         handle: viz_helper::protocol::SharedSurfaceHandle,
         width: u32,
         height: u32,
     ) {
-        self.send(&viz_helper::protocol::FromHelper::Surface {
+        self.send(viz_helper::protocol::FromHelper::Surface {
+            generation: frame.generation,
+            slot: frame.slot,
             handle,
             width,
             height,
@@ -249,7 +285,7 @@ impl HelperSource {
     pub fn send_camera(&mut self, camera: &viz_scene::Camera) {
         let aimed = camera.target - camera.position;
         let distance = aimed.length().max(0.001);
-        self.send(&viz_helper::protocol::FromHelper::Camera {
+        self.send(viz_helper::protocol::FromHelper::Camera {
             x: camera.position.x,
             y: camera.position.y,
             z: camera.position.z,
@@ -261,12 +297,12 @@ impl HelperSource {
 
     /// Answer a pick with the fixture the operator pointed at.
     pub fn send_picked(&mut self, fixture: Option<String>, additive: bool) {
-        self.send(&viz_helper::protocol::FromHelper::Picked { fixture, additive });
+        self.send(viz_helper::protocol::FromHelper::Picked { fixture, additive });
     }
 
     /// Tell the desk about something the operator has to see, without stopping.
     pub fn report(&mut self, detail: &str) {
-        self.send(&viz_helper::protocol::FromHelper::Error {
+        self.send(viz_helper::protocol::FromHelper::Error {
             detail: detail.to_owned(),
         });
     }
@@ -283,6 +319,18 @@ impl HelperSource {
     }
 
     /// Take the pane input that arrived since the last frame.
+    pub fn has_capture_start(&self) -> bool {
+        matches!(self.still_request, Some(ToHelper::CaptureStart { .. }))
+    }
+
+    pub fn take_still_request(&mut self) -> Option<ToHelper> {
+        self.still_request.take()
+    }
+
+    pub fn send_still_status(&mut self, status: viz_helper::still::Status) {
+        self.send(viz_helper::protocol::FromHelper::StillStatus { status });
+    }
+
     pub fn take_input(&mut self) -> Vec<viz_helper::protocol::PaneInput> {
         std::mem::take(&mut self.input)
     }
@@ -318,7 +366,9 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 Ok(view) => outbox.send(FromChannel::View(Box::new(view))),
                 Err(detail) => outbox.send(FromChannel::Finished(format!("view: {detail}"))),
             },
-            ToHelper::Pane { pane } => outbox.send(FromChannel::Pane(pane)),
+            ToHelper::Visibility { visible } => outbox.send(FromChannel::Visibility(visible)),
+            ToHelper::ReleaseFrame { frame } => outbox.send(FromChannel::Released(frame)),
+            ToHelper::Pane { pane, scale } => outbox.send(FromChannel::Pane(pane, scale)),
             ToHelper::Embed {
                 pane,
                 scale,
@@ -332,6 +382,9 @@ fn read_channel(mut from_desk: impl Read, outbox: &Sender<FromChannel>) {
                 desk,
                 surface_service,
             })),
+            message @ (ToHelper::CaptureStart { .. } | ToHelper::CaptureCancel { .. }) => {
+                outbox.send(FromChannel::Still(message))
+            }
             ToHelper::Input { input } => outbox.send(FromChannel::Input(input)),
             picture @ ToHelper::Picture { .. } => outbox.send(FromChannel::Picture(picture)),
             ToHelper::Selection { fixtures } => outbox.send(FromChannel::Selection(fixtures)),
@@ -360,6 +413,23 @@ impl SceneProvider for HelperSource {
 
     fn poll(&mut self) -> Vec<ProviderEvent> {
         let mut events = Vec::new();
+        // Capture is an ordered barrier. Later camera/picture/value messages cannot be folded
+        // into the invocation before the owner has applied prior events and frozen its state.
+        if self.still_request.is_some() {
+            return events;
+        }
+
+        if let Some(detail) = self.to_desk.failure() {
+            if !self.finished {
+                self.finished = true;
+                self.connection = ConnectionState::Failed {
+                    boundary: "the desk's channel".into(),
+                    detail: detail.to_owned(),
+                };
+                events.push(ProviderEvent::Connection(self.connection.clone()));
+            }
+            return events;
+        }
         loop {
             match self.inbox.try_recv() {
                 Ok(FromChannel::Scene(scene)) => {
@@ -381,7 +451,14 @@ impl SceneProvider for HelperSource {
                 Ok(FromChannel::View(view)) => events.push(ProviderEvent::View(*view)),
                 // Geometry, not scene content: the render loop reads it when it draws rather than
                 // it being an event the host has to act on.
-                Ok(FromChannel::Pane(pane)) => self.pane = Some(pane),
+                Ok(FromChannel::Pane(pane, scale)) => {
+                    self.pane = Some(pane);
+                    if scale.is_finite() && scale > 0.0 {
+                        if let Some(embedding) = self.embedding.as_mut() {
+                            embedding.scale = scale;
+                        }
+                    }
+                }
                 Ok(FromChannel::Embed(embedding)) => {
                     self.pane = Some(embedding.pane);
                     self.embedding = Some(embedding);
@@ -389,6 +466,13 @@ impl SceneProvider for HelperSource {
                 Ok(FromChannel::Input(input)) => self.input.push(input),
                 Ok(FromChannel::Picture(picture)) => self.picture = Some(picture),
                 Ok(FromChannel::Selection(fixtures)) => self.selection = Some(fixtures),
+                Ok(FromChannel::Visibility(visible)) => self.visible = visible,
+                Ok(FromChannel::Released(frame)) => self.released.push(frame),
+                Ok(FromChannel::Still(request)) => {
+                    self.still_request = Some(request);
+                    break;
+                }
+
                 Ok(FromChannel::Finished(reason)) => {
                     self.finished = true;
                     self.connection = ConnectionState::Failed {
@@ -436,7 +520,7 @@ impl HelperSource {
     /// a failed connection, which is what the window shows. The embedded pane has no window to
     /// show anything in, so it asks directly.
     pub fn is_finished(&self) -> bool {
-        self.finished
+        self.finished || self.to_desk.failure().is_some()
     }
 }
 
@@ -458,6 +542,22 @@ mod tests {
 
         fn written(&self) -> Vec<u8> {
             self.0.lock().expect("writer").clone()
+        }
+
+        fn written_frames(&self, expected: usize) -> Vec<u8> {
+            for _ in 0..200 {
+                let written = self.written();
+                let mut reader = written.as_slice();
+                let mut count = 0;
+                while viz_helper::framing::read_frame(&mut reader).is_ok() {
+                    count += 1;
+                }
+                if count >= expected {
+                    return written;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+            panic!("writer did not deliver {expected} frames");
         }
     }
 
@@ -510,6 +610,46 @@ mod tests {
     }
 
     #[test]
+    fn writer_failure_finishes_helper_and_reports_connection_failure() {
+        struct Broken;
+        impl Write for Broken {
+            fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::ErrorKind::BrokenPipe.into())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let mut source = HelperSource::start(
+            std::io::Cursor::new(desk_channel(&[])),
+            Vec::new(),
+            "test".into(),
+        )
+        .unwrap();
+        source.to_desk = writer::Writer::start(Broken).unwrap();
+        source.send_frame_ready(viz_helper::protocol::FrameId {
+            generation: 1,
+            slot: 0,
+            sequence: 1,
+        });
+        for _ in 0..200 {
+            if source.to_desk.failure().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert!(source.is_finished());
+        assert!(source.poll().iter().any(|event| matches!(event,
+            ProviderEvent::Connection(ConnectionState::Failed { detail, .. })
+                if detail.contains("writer failed")
+        )));
+        assert!(
+            source.poll().is_empty(),
+            "terminal failure is reported once"
+        );
+    }
+
+    #[test]
     fn passive_benchmark_gate_writes_no_extra_bytes_in_ordinary_mode() {
         let answer = Recorder::new();
         let mut source = HelperSource::start(
@@ -533,7 +673,7 @@ mod tests {
         source.send_benchmark_heartbeat_when(false, heartbeat.clone());
         assert_eq!(answer.written().len(), greeting_len);
         source.send_benchmark_heartbeat_when(true, heartbeat.clone());
-        let written = answer.written();
+        let written = answer.written_frames(3);
         let mut reader = &written[greeting_len..];
         let frame = viz_helper::framing::read_frame(&mut reader).unwrap();
         assert_eq!(
@@ -631,7 +771,7 @@ mod tests {
             width: 960.0,
             height: 540.0,
         };
-        let channel = desk_channel(&[ToHelper::Pane { pane }]);
+        let channel = desk_channel(&[ToHelper::Pane { pane, scale: 1.0 }]);
         let mut source =
             HelperSource::start(std::io::Cursor::new(channel), Vec::new(), "test".to_owned())
                 .expect("the handshake completes");
@@ -643,6 +783,47 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(5));
         }
         assert_eq!(source.pane(), Some(pane));
+    }
+
+    #[test]
+    fn pane_moves_update_scale_without_replacing_desk_endpoint() {
+        let frame = viz_helper::protocol::FrameId {
+            generation: 3,
+            slot: 1,
+            sequence: 9,
+        };
+        let pane = viz_helper::pane::PaneRect {
+            x: 5.0,
+            y: 6.0,
+            width: 320.0,
+            height: 180.0,
+        };
+        let channel = desk_channel(&[
+            ToHelper::Embed {
+                pane,
+                scale: 1.0,
+                transport: viz_helper::protocol::FrameTransport::Copy,
+                desk: None,
+                surface_service: None,
+            },
+            ToHelper::Pane { pane, scale: 2.0 },
+            ToHelper::Visibility { visible: false },
+            ToHelper::ReleaseFrame { frame },
+        ]);
+        let mut source =
+            HelperSource::start(std::io::Cursor::new(channel), Vec::new(), "test".into()).unwrap();
+        for _ in 0..200 {
+            source.poll();
+            if source.is_finished() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert_eq!(source.embedding().unwrap().scale, 2.0);
+        assert_eq!(source.embedding().unwrap().pane, pane);
+        assert_eq!(source.take_released_frames(), vec![frame]);
+        assert!(source.take_released_frames().is_empty());
+        assert!(!source.visible());
     }
 
     /// A pane the helper rendered goes back up the channel, because a helper drawing the desk's
@@ -659,11 +840,20 @@ mod tests {
         )
         .expect("the handshake completes");
 
-        source.send_frame(2, 1, vec![9; 2 * 4]);
+        source.send_frame(
+            viz_helper::protocol::FrameId {
+                generation: 1,
+                slot: 0,
+                sequence: 1,
+            },
+            2,
+            1,
+            vec![9; 2 * 4],
+        );
 
         // The greeting is first on the wire — the answer and then what this helper can do — and
         // the frame follows both.
-        let written = returned.written();
+        let written = returned.written_frames(3);
         let mut reader = written.as_slice();
         let _ready = viz_helper::framing::read_frame(&mut reader).expect("the greeting answer");
         let capabilities =
@@ -680,6 +870,11 @@ mod tests {
         assert_eq!(
             decoded,
             FromHelper::Frame {
+                frame: viz_helper::protocol::FrameId {
+                    generation: 1,
+                    slot: 0,
+                    sequence: 1
+                },
                 width: 2,
                 height: 1,
                 rgba: vec![9; 8]
@@ -698,6 +893,82 @@ mod tests {
         assert!(
             !source.capabilities().uses_network_input,
             "the desk decodes DMX, not this"
+        );
+    }
+    #[test]
+    fn capture_barrier_preserves_prior_input_and_blocks_later_picture_until_frozen() {
+        let before = ViewConfiguration {
+            mode: viz_scene::ViewMode::Lines3d,
+            ..Default::default()
+        };
+        let after = ViewConfiguration {
+            mode: viz_scene::ViewMode::TopDown,
+            ..Default::default()
+        };
+        let messages = [
+            scene_message(1),
+            ToHelper::View {
+                payload: encode(&before).unwrap(),
+            },
+            ToHelper::Input {
+                input: viz_helper::protocol::PaneInput::Orbit { dx: 1.0, dy: 2.0 },
+            },
+            ToHelper::CaptureStart {
+                request_id: "invocation".into(),
+                pane_id: "preload".into(),
+            },
+            ToHelper::View {
+                payload: encode(&after).unwrap(),
+            },
+            ToHelper::Input {
+                input: viz_helper::protocol::PaneInput::Orbit { dx: 99.0, dy: 99.0 },
+            },
+        ];
+        let mut source = HelperSource::start(
+            std::io::Cursor::new(desk_channel(&messages)),
+            Vec::new(),
+            "test".into(),
+        )
+        .unwrap();
+        let mut prior = Vec::new();
+        for _ in 0..200 {
+            prior.extend(source.poll());
+            if source.has_capture_start() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        assert!(source.has_capture_start());
+        assert!(
+            prior
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==before.mode))
+        );
+        assert!(
+            !prior
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==after.mode))
+        );
+        assert_eq!(
+            source.take_input(),
+            vec![viz_helper::protocol::PaneInput::Orbit { dx: 1.0, dy: 2.0 }]
+        );
+        assert!(
+            source.poll().is_empty(),
+            "later messages remain queued while freeze is pending"
+        );
+        assert!(
+            matches!(source.take_still_request(),Some(ToHelper::CaptureStart{request_id,..}) if request_id=="invocation")
+        );
+        let later = drain(&mut source);
+        assert!(
+            later
+                .iter()
+                .any(|event| matches!(event,ProviderEvent::View(view) if view.mode==after.mode))
+        );
+        assert_eq!(
+            source.take_input(),
+            vec![viz_helper::protocol::PaneInput::Orbit { dx: 99.0, dy: 99.0 }]
         );
     }
 }

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NativeStagePane } from "./useNativeStagePane";
 import { stageViewMode, useStagePanePicture } from "./useStagePanePicture";
 
+const pictureFlags = vi.hoisted(() => ({ detailedPeople: true }));
 const bridge = vi.hoisted(() => ({ setStagePanePicture: vi.fn() }));
 vi.mock("../../platform/desktop", () => ({ useDesktopBridge: () => bridge }));
 vi.mock("../../state/AppContext", () => ({
@@ -16,6 +17,7 @@ vi.mock("../../state/AppContext", () => ({
 			stageEnvironmentBrightness: 0.3,
 			stageVizQuality: "ultra",
 			stageVizExposure: 1,
+			stageVizDetailedPeople: pictureFlags.detailedPeople,
 			stageVizLaserBrightness: 1,
 			stageVizShowLabels: true,
 			stageShowFloorGrid: true,
@@ -29,6 +31,7 @@ describe("Control Stage picture admission", () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+		pictureFlags.detailedPeople = true;
 	});
 
 	it.each(["3d", "3d-viz"] as const)("maps saved %s to wireframe", (view) => {
@@ -64,6 +67,7 @@ describe("Control Stage picture admission", () => {
 				mode: "lines_3d",
 				quality: "draft",
 				atmosphere: 0,
+				detailedPeople: true,
 				followPreload: true,
 			}),
 		);
@@ -86,6 +90,22 @@ describe("Control Stage picture admission", () => {
 			"stage",
 			expect.objectContaining({ mode, quality: "draft" }),
 		);
+	});
+
+	it("updates the frozen-image detail preference without promoting live Control rendering", () => {
+		const pane = { id: "stage", active: true } as NativeStagePane;
+		const hook = renderHook(() => useStagePanePicture(pane));
+		pictureFlags.detailedPeople = false;
+		hook.rerender();
+		expect(bridge.setStagePanePicture).toHaveBeenLastCalledWith("stage", expect.objectContaining({
+			detailedPeople: false, quality: "draft", mode: "lines_3d",
+		}));
+	});
+
+	it("freezes the requested image haze without enabling live fog or shaded rendering", () => {
+		const { result } = renderHook(() => useStagePanePicture({ id: "stage", active: true } as NativeStagePane));
+		expect(result.current).toMatchObject({ atmosphere: 1, quality: "draft", mode: "lines_3d" });
+		expect(bridge.setStagePanePicture).toHaveBeenLastCalledWith("stage", expect.objectContaining({ atmosphere: 0, quality: "draft", mode: "lines_3d" }));
 	});
 
 	it("sends no settings to an inactive native pane", () => {

@@ -218,3 +218,17 @@ fn every_shipped_lamp_model_exposes_real_glass_cells() {
     eprintln!("Audited real glass connectivity for {count} renderer-owned lamp/projector models");
     assert!(count >= 44);
 }
+
+#[test]
+fn generic_acl_keeps_narrow_cone_soft_field_and_actual_glass_alignment() {
+    let plan = compile(&[packaged("generic--acl.toskfixture", 0, 1.0)]);
+    assert_eq!(plan.scene.emitters.len(), 1);
+    let emitter = &plan.scene.emitters[0];
+    assert_eq!(
+        (emitter.beam_angle_degrees, emitter.field_angle_degrees),
+        (8.0, 10.0)
+    );
+    assert!((emitter.optics.sharpness - 0.4).abs() < 0.0001);
+    assert!((emitter.optics.uniformity - 0.3).abs() < 0.0001);
+    assert_sources_on_glass(&plan, "soft ACL preserves its real GLB lens");
+}

@@ -1,6 +1,8 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useDesktopBridge } from "../../platform/desktop";
 import type { StagePaneGesture } from "../../platform/desktop/types";
+import { NativeStageAttachment } from "./nativeStageAttachment";
+import { observeNativeStageVisibility } from "./nativeStageVisibility";
 
 /**
  * The Stage drawn by the native renderer, in a rectangle of the desk's own window.
@@ -21,33 +23,22 @@ export interface NativeStagePane {
 	id: string;
 	/** Attach to the element the pane should fill. */
 	ref: (element: HTMLElement | null) => void;
-	/** True while the native renderer is drawing this pane. */
+	/** True while the native attachment exists, including when its picture is suspended. */
 	active: boolean;
 	/** What went wrong, once the desk has something to say about it. */
 	trouble: string | null;
 	/** What is drawing, for the diagnostics an operator reads. */
 	renderer: string | null;
+	/** Surface bounded command failures in the same pane status as native failures. */
+	reportError?: (error: unknown) => void;
 	/** Forward a gesture the pane element captured. */
 	send: (gesture: StagePaneGesture, x: number, y: number) => void;
 }
 
 /** How often the desk is asked what the pane is doing. Diagnostics, not the picture. */
 const STATUS_INTERVAL = 2_000;
-
-/** Measure the native drawable from the pane's current CSS bounds and display scale. */
-function nativeStageGeometry(element: HTMLElement) {
-	const rect = element.getBoundingClientRect();
-	const scale = window.devicePixelRatio || 1;
-	return {
-		x: rect.left,
-		y: rect.top,
-		width: rect.width,
-		height: rect.height,
-		scale,
-		surfaceWidth: Math.max(1, Math.round(window.innerWidth * scale)),
-		surfaceHeight: Math.max(1, Math.round(window.innerHeight * scale)),
-	};
-}
+const MAX_RESTARTS = 5;
+const HEALTHY_RESET_MILLIS = 30_000;
 
 export function useNativeStagePane(
 	enabled = true,
@@ -58,11 +49,28 @@ export function useNativeStagePane(
 	const [element, setElement] = useState<HTMLElement | null>(null);
 	const [active, setActive] = useState(false);
 	const [trouble, setTrouble] = useState<string | null>(null);
+	const reportError = useCallback((error: unknown) => setTrouble(String(error)), []);
 	const [renderer, setRenderer] = useState<string | null>(null);
 	const [restart, setRestart] = useState(0);
-	const opened = useRef(false);
-	/** True once the desk has named a renderer, so a first poll cannot be read as a stop. */
-	const drew = useRef(false);
+	const [retryDelay, setRetryDelay] = useState<number | null>(null);
+	const recovery = useRef({ attempts: 0, healthySince: null as number | null });
+	const [attachRequested, setAttachRequested] = useState(enabled);
+	const enabledRef = useRef(enabled);
+	enabledRef.current = enabled;
+	const operations = useRef(Promise.resolve());
+	const refreshVisibility = useRef<(() => void) | null>(null);
+	useEffect(() => {
+		if (enabled) setAttachRequested(true);
+		refreshVisibility.current?.();
+	}, [enabled]);
+	useEffect(() => {
+		if (retryDelay === null || !enabled) return;
+		const timer = window.setTimeout(() => {
+			setRetryDelay(null);
+			setRestart((value) => value + 1);
+		}, retryDelay);
+		return () => window.clearTimeout(timer);
+	}, [retryDelay, enabled]);
 
 	/*
 	 * Reported from the element rather than from any layout constant. The pane moves when a sheet
@@ -98,90 +106,69 @@ export function useNativeStagePane(
 	}, [desktopBridge]);
 
 	useEffect(() => {
-		if (!enabled || !element || !available) return;
-		let observer: ResizeObserver | null = null;
-		let report: (() => void) | null = null;
-		let unsubscribeMove: (() => void) | null = null;
+		if (!attachRequested || !element || !available) return;
 		let disposed = false;
-
-		const geometry = () => nativeStageGeometry(element);
-
-		// Opening is started without awaiting anything first, so a re-render cannot cancel it
-		// between a question and its answer.
-		opened.current = true;
-		void desktopBridge
-			.openStagePane(paneId, live3d, geometry())
-			.then(() => {
-				if (disposed) {
-					// A hidden pane may finish opening after cleanup sent its first close.
-					void desktopBridge.closeStagePane(paneId);
-					return;
-				}
-				setActive(true);
-				report = () => {
-					void desktopBridge.setStagePane(paneId, geometry());
-				};
-				observer = new ResizeObserver(report);
-				observer.observe(element);
-				window.addEventListener("resize", report);
-				window.addEventListener("scroll", report, true);
-				void desktopBridge.onCurrentWindowMoved(report).then((unsubscribe) => {
-					if (disposed) unsubscribe();
-					else unsubscribeMove = unsubscribe;
-				});
-				report();
-			})
-			.catch((error) => {
-				// The desk could not start or attach the renderer. The caller keeps its web
-				// renderer, and the reason is shown rather than swallowed.
-				opened.current = false;
-				setTrouble(String(error));
-			});
-
+		let unsubscribeMove: (() => void) | null = null;
+		const serialize = (work: () => Promise<void>) => {
+			const operation = operations.current.then(work);
+			operations.current = operation.catch(() => undefined);
+			return operation;
+		};
+		const attachment = new NativeStageAttachment(desktopBridge, paneId, live3d, serialize,
+			() => { if (!disposed) setActive(true); },
+			(error) => { if (!disposed) setTrouble(String(error)); });
+		const visibility = observeNativeStageVisibility(element, () => enabledRef.current,
+			(geometry, visible) => attachment.update(geometry, visible));
+		refreshVisibility.current = visibility.report;
+		void desktopBridge.onCurrentWindowMoved(visibility.report).then((unsubscribe) => {
+			if (disposed) unsubscribe(); else unsubscribeMove = unsubscribe;
+		}).catch((error) => { if (!disposed) setTrouble(String(error)); });
 		return () => {
 			disposed = true;
-			observer?.disconnect();
+			visibility.dispose();
+			if (refreshVisibility.current === visibility.report) refreshVisibility.current = null;
 			unsubscribeMove?.();
-			if (report) {
-				window.removeEventListener("resize", report);
-				window.removeEventListener("scroll", report, true);
-			}
-			if (opened.current) {
-				opened.current = false;
-				drew.current = false;
-				setActive(false);
-				void desktopBridge.closeStagePane(paneId);
-			}
+			setActive(false);
+			attachment.dispose();
 		};
-	}, [element, enabled, available, desktopBridge, paneId, live3d, restart]);
+	}, [element, attachRequested, available, desktopBridge, paneId, live3d, restart]);
 
 	useEffect(() => {
+		// Active is set only after the serialized native open and initial visibility update finish.
+		// A missing description now means loss, including death before the first status response.
 		if (!active) return;
 		let cancelled = false;
+		let lost = false;
+		let inFlight = false;
 		const poll = async () => {
-			const [description, detail] = await desktopBridge.stagePaneStatus(paneId);
-			if (cancelled) return;
-			setRenderer(description);
-			setTrouble(detail);
-			// The desk takes the pane down when its renderer dies rather than holding a still
-			// picture of a rig that has since moved. Noticing that here is what returns the Stage
-			// to the web renderer instead of leaving a transparent hole where it was.
-			//
-			// Only after the desk has named a renderer at least once: the first poll can land
-			// before the desk has finished opening, and reading that as a stop would have the
-			// interface tear down a pane the desk is still holding.
-			if (description !== null) drew.current = true;
-			else if (drew.current) {
+			if (inFlight || lost) return;
+			inFlight = true;
+			try {
+				const [description, detail] = await desktopBridge.stagePaneStatus(paneId);
+				if (cancelled || lost) return;
+				setRenderer(description);
+				setTrouble(detail);
+				if (description !== null) {
+					recovery.current.healthySince ??= Date.now();
+					if (Date.now() - recovery.current.healthySince >= HEALTHY_RESET_MILLIS)
+						recovery.current.attempts = 0;
+					return;
+				}
+				lost = true;
 				setActive(false);
-				setRestart((value) => value + 1);
-			}
+				recovery.current.healthySince = null;
+				if (recovery.current.attempts >= MAX_RESTARTS) {
+					setTrouble(`${detail ?? "Stage renderer stopped repeatedly"}; reopen the Stage to try again.`);
+					return;
+				}
+				setRetryDelay(Math.min(4_000, 250 * 2 ** recovery.current.attempts++));
+			} catch (error) {
+				if (!cancelled) setTrouble(String(error));
+			} finally { inFlight = false; }
 		};
 		void poll();
 		const timer = window.setInterval(() => void poll(), STATUS_INTERVAL);
-		return () => {
-			cancelled = true;
-			window.clearInterval(timer);
-		};
+		return () => { cancelled = true; window.clearInterval(timer); };
 	}, [active, desktopBridge, paneId]);
 
 	return {
@@ -190,9 +177,10 @@ export function useNativeStagePane(
 		active,
 		trouble,
 		renderer,
+		reportError,
 		send: (gesture, x, y) => {
-			if (!active) return;
-			void desktopBridge.sendStagePaneInput(gesture, x, y, paneId);
+			if (!active || !enabledRef.current) return;
+			void Promise.resolve(desktopBridge.sendStagePaneInput(gesture, x, y, paneId)).catch(reportError);
 		},
 	};
 }

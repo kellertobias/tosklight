@@ -1,3 +1,4 @@
+import { mergeCueTimingFields } from "./mergeCueTimingFields";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CueList } from "../../api/types";
 import type { SaveCueListTopology } from "../playbackTopology/useCueListTopologyWriter";
@@ -200,52 +201,10 @@ function useCueTimingHistory(
 		async (cueListId: string, expected: CueList, target: CueList) => {
 			const body = current(cueListId);
 			if (!body) throw new Error("The authoritative Cue List is unavailable.");
-			const next = restoreTimingFields(body, expected, target);
+			const next = mergeCueTimingFields(body, expected, target);
 			if (next !== body) await save(cueListId, next);
 		},
 		[current, save],
 	);
 	return { current, restore };
-}
-
-/** Restore only this gesture's timing cells; unrelated Cue edits are never replaced. */
-function restoreTimingFields(
-	body: CueList,
-	expected: CueList,
-	target: CueList,
-): CueList {
-	const keys = [
-		"delay_millis",
-		"fade_millis",
-		"out_delay_millis",
-		"out_fade_millis",
-	] as const;
-	const cues = [...body.cues];
-	let changed = false;
-	for (const before of expected.cues) {
-		const after = target.cues.find((cue) => cue.id === before.id);
-		if (!after)
-			throw new Error("The Cue timing history no longer matches this Cuelist.");
-		const fields = keys.filter((key) => before[key] !== after[key]);
-		if (!fields.length) continue;
-		const index = cues.findIndex((cue) => cue.id === before.id);
-		const current = cues[index];
-		if (!current)
-			throw new Error("A Cue in this timing edit no longer exists.");
-		for (const key of fields) {
-			if (current[key] !== before[key] && current[key] !== after[key])
-				throw new Error(
-					"Cue timings changed since this edit. Undo/Redo was not applied.",
-				);
-		}
-		const next = { ...current };
-		for (const key of fields) {
-			if (next[key] === after[key]) continue;
-			changed = true;
-			if (after[key] === undefined) delete next[key];
-			else next[key] = after[key];
-		}
-		cues[index] = next;
-	}
-	return changed ? { ...body, cues } : body;
 }

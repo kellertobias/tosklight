@@ -593,3 +593,6 @@ fn older_revision_output_still_requires_every_current_physical_identity() {
         assert_eq!(desk.deliver([desk.output(Some(stamp(8, 2)), B)]), 1);
     }
 }
+
+#[path = "output_demand_admission_tests.rs"]
+mod demand;

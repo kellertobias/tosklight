@@ -47,6 +47,8 @@ pub enum CueListPlaybackAction {
     Back,
     Jump(CueNumber),
     ExecuteCueId(uuid::Uuid),
+    /// A late forward Timecode crossing: restore elapsed fades and execute final-Cue actions.
+    ExecuteTimelineCues(Vec<(uuid::Uuid, u64)>),
     ReconstructCueId {
         cue_id: uuid::Uuid,
         elapsed_millis: u64,
@@ -545,6 +547,11 @@ fn execute_cue_list(
             .map(EnginePlaybackOutcome::Active),
         CueListPlaybackAction::ExecuteCueId(cue_id) => playback
             .execute_timeline_cue_id(id, cue_id)
+            .cloned()
+            .map(Box::new)
+            .map(EnginePlaybackOutcome::Active),
+        CueListPlaybackAction::ExecuteTimelineCues(cues) => playback
+            .execute_timeline_cues(id, &cues)
             .cloned()
             .map(Box::new)
             .map(EnginePlaybackOutcome::Active),

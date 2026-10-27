@@ -31,6 +31,65 @@ impl Drop for Renderer {
     }
 }
 
+/// Blocking child pipes must not make an ownership regression hang the test process. The reader
+/// thread may block on the OS pipe, but every test-side read has a bounded no-progress deadline;
+/// dropping Renderer kills the child and closes the producer end on failure.
+struct DeadlineReader {
+    chunks: std::sync::mpsc::Receiver<Vec<u8>>,
+    pending: Vec<u8>,
+    offset: usize,
+}
+
+impl DeadlineReader {
+    fn new(mut source: std::process::ChildStdout) -> Self {
+        let (tx, chunks) = std::sync::mpsc::sync_channel(8);
+        std::thread::spawn(move || {
+            let mut buffer = [0_u8; 8192];
+            loop {
+                match source.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(count) => {
+                        if tx.send(buffer[..count].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        Self {
+            chunks,
+            pending: Vec::new(),
+            offset: 0,
+        }
+    }
+}
+
+impl Read for DeadlineReader {
+    fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+        if bytes.is_empty() {
+            return Ok(0);
+        }
+        if self.offset == self.pending.len() {
+            self.pending = self.chunks.recv_timeout(PATIENCE).map_err(|error| {
+                std::io::Error::new(
+                    match error {
+                        std::sync::mpsc::RecvTimeoutError::Timeout => std::io::ErrorKind::TimedOut,
+                        std::sync::mpsc::RecvTimeoutError::Disconnected => {
+                            std::io::ErrorKind::UnexpectedEof
+                        }
+                    },
+                    "embedded renderer pipe made no progress before its deadline",
+                )
+            })?;
+            self.offset = 0;
+        }
+        let count = bytes.len().min(self.pending.len() - self.offset);
+        bytes[..count].copy_from_slice(&self.pending[self.offset..self.offset + count]);
+        self.offset += count;
+        Ok(count)
+    }
+}
+
 fn start() -> Renderer {
     let mut command = Command::new(env!("CARGO_BIN_EXE_viz-renderer"));
     command
@@ -60,7 +119,7 @@ fn next(from: &mut impl Read) -> FromHelper {
 fn the_pane_answers_what_the_operator_does_to_it() {
     let mut renderer = start();
     let mut to_renderer = renderer.child.stdin.take().expect("stdin");
-    let mut from_renderer = renderer.child.stdout.take().expect("stdout");
+    let mut from_renderer = DeadlineReader::new(renderer.child.stdout.take().expect("stdout"));
     let Some(transport) = embed(&mut to_renderer, &mut from_renderer) else {
         eprintln!("no GPU here; skipping the gesture exchange");
         return;
@@ -155,7 +214,8 @@ fn embed(to: &mut impl Write, from: &mut impl Read) -> Option<FrameTransport> {
     let FromHelper::Capabilities { transports } = next(from) else {
         return None;
     };
-    let transport = *transports.iter().max()?;
+    let transport = FrameTransport::Copy;
+    assert!(transports.contains(&transport));
     send(
         to,
         &ToHelper::Embed {
@@ -171,13 +231,42 @@ fn embed(to: &mut impl Write, from: &mut impl Read) -> Option<FrameTransport> {
             surface_service: None,
         },
     );
-    match next(from) {
-        FromHelper::Frame { .. } | FromHelper::Surface { .. } => Some(transport),
+    match next_image(from) {
+        FromHelper::Frame { frame, .. } => {
+            assert_eq!(wait_ready(from), frame);
+            send(to, &ToHelper::ReleaseFrame { frame });
+            Some(transport)
+        }
+        FromHelper::Surface { .. } => Some(transport),
         FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
             eprintln!("the renderer could not draw here: {detail}");
             None
         }
         other => panic!("unexpected answer while waiting for the first picture: {other:?}"),
+    }
+}
+
+/// Camera reports and submission diagnostics are independent of texture readiness.
+fn next_image(from: &mut impl Read) -> FromHelper {
+    loop {
+        let message = next(from);
+        if matches!(
+            message,
+            FromHelper::Frame { .. }
+                | FromHelper::Surface { .. }
+                | FromHelper::Error { .. }
+                | FromHelper::Stopping { .. }
+        ) {
+            return message;
+        }
+    }
+}
+
+fn wait_ready(from: &mut impl Read) -> viz_helper::protocol::FrameId {
+    loop {
+        if let FromHelper::FrameReady { frame } = next(from) {
+            return frame;
+        }
     }
 }
 
@@ -208,7 +297,7 @@ fn wait_for_camera(from: &mut impl Read) -> [f32; 6] {
 fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
     let mut renderer = start();
     let mut to_renderer = renderer.child.stdin.take().expect("stdin");
-    let mut from_renderer = renderer.child.stdout.take().expect("stdout");
+    let mut from_renderer = DeadlineReader::new(renderer.child.stdout.take().expect("stdout"));
 
     send(
         &mut to_renderer,
@@ -289,8 +378,14 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
     );
 
     // The renderer has a scene of nothing, which still draws: an empty stage is a picture.
-    match next(&mut from_renderer) {
-        FromHelper::Surface { width, height, .. } => {
+    match next_image(&mut from_renderer) {
+        FromHelper::Surface {
+            generation,
+            slot,
+            width,
+            height,
+            ..
+        } => {
             assert_eq!(
                 transport,
                 FrameTransport::Shared,
@@ -311,9 +406,13 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
                 let opened = viz_surface::import_from_port(&device, port, width, height);
                 assert!(opened.is_ok(), "{:?}", opened.err());
             }
+            let ready = wait_ready(&mut from_renderer);
+            assert_eq!((ready.generation, ready.slot), (generation, slot));
+            send(&mut to_renderer, &ToHelper::ReleaseFrame { frame: ready });
             return;
         }
         FromHelper::Frame {
+            frame,
             width,
             height,
             rgba,
@@ -325,12 +424,34 @@ fn the_desk_asks_for_a_pane_and_the_renderer_draws_one() {
             );
             assert_eq!((width, height), (1_280, 720));
             assert_eq!(rgba.len(), 1_280 * 720 * 4, "a full pane of RGBA");
-            // One frame could be a one-shot. The pane is a loop, so a second has to follow
-            // without the desk asking for it.
-            let FromHelper::Frame { width, height, .. } = next(&mut from_renderer) else {
-                panic!("the renderer drew once and stopped");
+            assert_eq!(wait_ready(&mut from_renderer), frame);
+            send(&mut to_renderer, &ToHelper::ReleaseFrame { frame });
+            // Static images stop. A display-scale change produces a new raster generation.
+            send(
+                &mut to_renderer,
+                &ToHelper::Pane {
+                    pane: PaneRect {
+                        x: 240.0,
+                        y: 48.0,
+                        width: 640.0,
+                        height: 360.0,
+                    },
+                    scale: 1.5,
+                },
+            );
+            let FromHelper::Frame {
+                frame: resized,
+                width,
+                height,
+                ..
+            } = next_image(&mut from_renderer)
+            else {
+                panic!("the renderer did not rasterize the changed scale");
             };
-            assert_eq!((width, height), (1_280, 720));
+            assert_eq!((width, height), (960, 540));
+            assert!(resized.generation > frame.generation);
+            assert_eq!(wait_ready(&mut from_renderer), resized);
+            send(&mut to_renderer, &ToHelper::ReleaseFrame { frame: resized });
             return;
         }
         // No GPU on this machine. That is a machine without an adapter, not a broken pane.
@@ -351,4 +472,158 @@ fn test_device() -> Option<wgpu::Device> {
     let (device, _queue) =
         pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
     Some(device)
+}
+
+/// A hidden pane still answers the control surface, but cannot render until it resumes; a stale
+/// generation's acknowledgement cannot unlock the one in-flight copy after that resumption.
+#[test]
+fn hidden_camera_and_scale_resume_preserve_exact_copy_ownership() {
+    use std::sync::mpsc;
+    use viz_helper::protocol::FrameId;
+    let mut renderer = start();
+    let mut to = renderer.child.stdin.take().expect("stdin");
+    let mut from = renderer.child.stdout.take().expect("stdout");
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        while let Ok(bytes) = read_frame(&mut from) {
+            let Ok(message) = decode::<FromHelper>(&bytes) else {
+                break;
+            };
+            if tx.send(message).is_err() {
+                break;
+            }
+        }
+    });
+    let receive = || {
+        rx.recv_timeout(PATIENCE)
+            .expect("renderer response within deadline")
+    };
+    send(
+        &mut to,
+        &ToHelper::Hello {
+            protocol_major: PROTOCOL_MAJOR,
+            protocol_minor: PROTOCOL_MINOR,
+            title: "Ownership test".into(),
+        },
+    );
+    assert!(matches!(receive(), FromHelper::Ready { .. }));
+    assert!(matches!(receive(), FromHelper::Capabilities { .. }));
+    let pane = PaneRect {
+        x: 0.0,
+        y: 0.0,
+        width: 160.0,
+        height: 90.0,
+    };
+    send(
+        &mut to,
+        &ToHelper::Embed {
+            pane,
+            scale: 1.0,
+            transport: FrameTransport::Copy,
+            desk: None,
+            surface_service: None,
+        },
+    );
+    let first = loop {
+        match receive() {
+            FromHelper::FrameReady { frame } => break frame,
+            FromHelper::Error { detail } | FromHelper::Stopping { detail } => {
+                eprintln!("no GPU here: {detail}");
+                return;
+            }
+            _ => {}
+        }
+    };
+    send(&mut to, &ToHelper::ReleaseFrame { frame: first });
+    send(&mut to, &ToHelper::Visibility { visible: false });
+    send(&mut to, &ToHelper::Pane { pane, scale: 2.0 });
+    send(
+        &mut to,
+        &ToHelper::Input {
+            input: PaneInput::Place {
+                x: Some(3.0),
+                y: None,
+                z: None,
+                pan: None,
+                tilt: None,
+                distance: None,
+            },
+        },
+    );
+    loop {
+        match receive() {
+            FromHelper::Camera { x, .. } if (x - 3.0).abs() < 0.001 => break,
+            FromHelper::Frame { .. } => {
+                panic!("hidden pane rendered after ordered visibility instruction")
+            }
+            _ => {}
+        }
+    }
+    // Camera response proves ordered instructions were drained; a later frame would be hidden work.
+    while let Ok(message) = rx.recv_timeout(Duration::from_millis(80)) {
+        assert!(!matches!(
+            message,
+            FromHelper::Frame { .. } | FromHelper::FrameReady { .. }
+        ));
+    }
+    send(&mut to, &ToHelper::Visibility { visible: true });
+    let resumed = loop {
+        match receive() {
+            FromHelper::Frame {
+                frame,
+                width,
+                height,
+                ..
+            } => {
+                assert_eq!((width, height), (320, 180));
+                assert!(frame.generation > first.generation);
+            }
+            FromHelper::FrameReady { frame } => break frame,
+            _ => {}
+        }
+    };
+    send(&mut to, &ToHelper::ReleaseFrame { frame: first });
+    send(
+        &mut to,
+        &ToHelper::ReleaseFrame {
+            frame: FrameId {
+                sequence: resumed.sequence + 1,
+                ..resumed
+            },
+        },
+    );
+    send(
+        &mut to,
+        &ToHelper::Input {
+            input: PaneInput::Place {
+                x: Some(4.0),
+                y: None,
+                z: None,
+                pan: None,
+                tilt: None,
+                distance: None,
+            },
+        },
+    );
+    loop {
+        match receive() {
+            FromHelper::Camera { x, .. } if (x - 4.0).abs() < 0.001 => break,
+            FromHelper::Frame { .. } => panic!("stale release unlocked the retained copy slot"),
+            _ => {}
+        }
+    }
+    while let Ok(message) = rx.recv_timeout(Duration::from_millis(80)) {
+        assert!(!matches!(
+            message,
+            FromHelper::Frame { .. } | FromHelper::FrameReady { .. }
+        ));
+    }
+    send(&mut to, &ToHelper::ReleaseFrame { frame: resumed });
+    loop {
+        if let FromHelper::FrameReady { frame } = receive() {
+            assert_eq!(frame.generation, resumed.generation);
+            assert!(frame.sequence > resumed.sequence);
+            break;
+        }
+    }
 }

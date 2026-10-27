@@ -23,11 +23,7 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
             .get(&section.surface_id)
             .map(|appearance| appearance.average)
             .unwrap_or(Vec3::ZERO);
-        let panel_model = Mat4::from_scale_rotation_translation(
-            Vec3::new(section.size.x, 1.0, section.size.y),
-            orientation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
-            section.position + orientation * Vec3::Z * (section.size.z * 0.501 + 0.0005),
-        );
+        let panel_model = panel_model(section, orientation);
         let crop = [
             section.crop.left,
             section.crop.top,
@@ -216,6 +212,21 @@ pub(super) fn push_media(frame: &mut FrameInstances, scene: &Scene, style: &Fram
     }
 }
 
+fn panel_model(section: &viz_scene::MediaSection, orientation: Quat) -> Mat4 {
+    // TV screen solids project past the outer casing. Keep the sampled image just
+    // ahead of their front face so depth cannot hide it with average emission.
+    let screen_offset = match &section.kind {
+        MediaSectionKind::Tv { bezel_metres, .. } => bezel_metres.max(0.005) * 0.6,
+        _ => 0.0,
+    };
+    Mat4::from_scale_rotation_translation(
+        Vec3::new(section.size.x, 1.0, section.size.y),
+        orientation * Quat::from_rotation_x(std::f32::consts::FRAC_PI_2),
+        section.position
+            + orientation * Vec3::Z * (section.size.z * 0.501 + screen_offset + 0.0005),
+    )
+}
+
 fn push_projector(
     frame: &mut FrameInstances,
     projector: &viz_scene::MediaProjector,
@@ -275,6 +286,7 @@ fn push_projector(
         optics: [0.0; 4],
         shapers: [0.0; 4],
         shaper_angles: [0.0; 4],
+        shaper_params: [0.0; 4],
         gate: [-1.0, 0.0, 0.0, 0.0],
         shadow: [-1.0, 0.0, 0.0, 0.0],
         gobo_wheels: [[0.0; 4]; MAX_OPTICAL_WHEELS],
@@ -296,6 +308,54 @@ fn push_projector(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tv_image_is_in_front_of_both_bezel_and_screen_at_any_rotation() {
+        let rotation = Vec3::new(20.0, 65.0, -12.0);
+        let position = Vec3::new(3.0, -2.0, 1.0);
+        let orientation = euler_degrees(rotation);
+        let mut scene = Scene::default();
+        scene.media_sections.push(viz_scene::MediaSection {
+            id: viz_scene::uuid::Uuid::new_v4(),
+            surface_id: viz_scene::uuid::Uuid::new_v4(),
+            name: "TV".into(),
+            source_id: None,
+            fallback_source_id: None,
+            position,
+            rotation_degrees: rotation,
+            size: Vec3::new(2.0, 1.0, 0.1),
+            crop: viz_scene::MediaCrop {
+                left: 0.0,
+                top: 0.0,
+                width: 1.0,
+                height: 1.0,
+            },
+            kind: MediaSectionKind::Tv {
+                bezel_metres: 0.03,
+                spill: 0.0,
+            },
+        });
+        let mut frame = FrameInstances::default();
+        push_media(&mut frame, &scene, &FrameStyle::default());
+        let local = Mat4::from_rotation_translation(orientation, position).inverse();
+        let panel_depth = local
+            .transform_point3(frame.media_panels[0].model.transform_point3(Vec3::ZERO))
+            .z;
+        for (_, instances) in &frame.meshes {
+            for instance in instances {
+                let front = local
+                    .transform_point3(
+                        Mat4::from_cols_array_2d(&instance.model)
+                            .transform_point3(Vec3::new(0.0, 0.0, 0.5)),
+                    )
+                    .z;
+                assert!(
+                    panel_depth > front + 0.0001,
+                    "texture behind TV solid: {panel_depth} <= {front}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn one_source_is_drawn_once_per_authored_consumer_without_filling_sparse_led_holes() {

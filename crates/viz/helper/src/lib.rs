@@ -17,6 +17,7 @@ pub mod framing;
 pub mod handshake;
 pub mod pane;
 pub mod protocol;
+pub mod still;
 
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};

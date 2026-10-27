@@ -25,10 +25,10 @@ and browser-connected desks.
 
 <p align="center">
   <a href="https://kellertobias.github.io/tosklight/">
-    <img src="https://kellertobias.github.io/tosklight/screenshots/application-overview.png" alt="ToskLight operator desktop with Fixture Sheet, 3D Stage, Groups, Presets, and Playbacks" width="49%">
+    <img src="https://kellertobias.github.io/tosklight/screenshots/application-overview.jpg" alt="ToskLight operator desktop with Fixture Sheet, 3D Stage, Groups, Presets, and Playbacks" width="49%">
   </a>
   <a href="https://kellertobias.github.io/tosklight/">
-    <img src="https://kellertobias.github.io/tosklight/screenshots/stage-3d.png" alt="ToskLight 3D Stage visualizer" width="49%">
+    <img src="https://kellertobias.github.io/tosklight/screenshots/stage-3d.jpg" alt="ToskLight 3D Stage visualizer" width="49%">
   </a>
 </p>
 

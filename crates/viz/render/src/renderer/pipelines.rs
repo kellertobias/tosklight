@@ -6,7 +6,7 @@
 
 use super::layouts::{Layouts, PipelineLayouts};
 use super::{
-    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, MEDIA_WGSL, OVERLAY_WGSL, POST_WGSL,
+    BEAM_WGSL, COMMON_WGSL, CULL_WGSL, LASER_WGSL, LINES_WGSL, MEDIA_WGSL, POST_WGSL,
     SCENE_DEPTH_BINDING, SHADOW_PRELUDE_WGSL, SHADOW_WGSL, SURFACE_WGSL, scene_depth_binding,
 };
 use crate::instances::{BeamInstance, GpuMediaPanel, LaserInstance, LineVertex, MeshInstance};
@@ -25,14 +25,23 @@ pub(super) struct Modules {
     pub cull: wgpu::ShaderModule,
     pub post: wgpu::ShaderModule,
     pub shadow: wgpu::ShaderModule,
-    pub overlay: wgpu::ShaderModule,
 }
 
 impl Modules {
-    pub(super) fn new(device: &wgpu::Device, samples: u32) -> Self {
+    pub(super) fn new(device: &wgpu::Device, samples: u32, draft: bool) -> Self {
         let surface_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz surface"),
-            source: wgpu::ShaderSource::Wgsl(format!("{COMMON_WGSL}\n{SURFACE_WGSL}").into()),
+            source: wgpu::ShaderSource::Wgsl(
+                format!(
+                    "{COMMON_WGSL}\n{}",
+                    if draft {
+                        include_str!("../shaders/draft_surface.wgsl")
+                    } else {
+                        SURFACE_WGSL
+                    }
+                )
+                .into(),
+            ),
         });
         let media_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz media"),
@@ -41,10 +50,19 @@ impl Modules {
         // The beam pass reads the depth the geometry left behind. Multisampled depth is a
         // different WGSL type, so the declaration follows the sample count the adapter gave us;
         // the load itself is written once and takes sample 0 either way.
+        let beam_source = if draft {
+            format!(
+                "{}\n{}",
+                include_str!("../shaders/draft_integral.wgsl"),
+                include_str!("../shaders/draft_beam.wgsl")
+            )
+        } else {
+            BEAM_WGSL.to_owned()
+        };
         let beam_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("viz beam"),
             source: wgpu::ShaderSource::Wgsl(
-                format!("{COMMON_WGSL}\n{BEAM_WGSL}")
+                format!("{COMMON_WGSL}\n{beam_source}")
                     .replace(SCENE_DEPTH_BINDING, scene_depth_binding(samples))
                     .into(),
             ),
@@ -77,10 +95,6 @@ impl Modules {
                 format!("{SHADOW_PRELUDE_WGSL}\n{SHADOW_WGSL}").into(),
             ),
         });
-        let overlay_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("viz overlay"),
-            source: wgpu::ShaderSource::Wgsl(OVERLAY_WGSL.into()),
-        });
         Self {
             surface: surface_module,
             media: media_module,
@@ -90,7 +104,6 @@ impl Modules {
             cull: cull_module,
             post: post_module,
             shadow: shadow_module,
-            overlay: overlay_module,
         }
     }
 }
@@ -104,10 +117,10 @@ pub(super) struct Pipelines {
     pub laser: wgpu::RenderPipeline,
     pub shadow: wgpu::RenderPipeline,
     pub cull: wgpu::ComputePipeline,
+    pub bounds: wgpu::ComputePipeline,
     pub extract: wgpu::RenderPipeline,
     pub blur: wgpu::RenderPipeline,
     pub composite: wgpu::RenderPipeline,
-    pub overlay: wgpu::RenderPipeline,
 }
 
 impl Pipelines {
@@ -118,6 +131,7 @@ impl Pipelines {
         modules: &Modules,
         multisample: wgpu::MultisampleState,
         surface_format: wgpu::TextureFormat,
+        draft_mode: bool,
     ) -> Self {
         Self {
             surface: surface_pipeline(device, pipeline_layouts, modules, multisample),
@@ -126,7 +140,8 @@ impl Pipelines {
             beam: beam_pipeline(device, pipeline_layouts, modules, multisample),
             laser: laser_pipeline(device, pipeline_layouts, modules, multisample),
             shadow: shadow_pipeline(device, pipeline_layouts, modules),
-            cull: cull_pipeline(device, pipeline_layouts, modules),
+            cull: cull_pipeline(device, pipeline_layouts, modules, draft_mode, "cull_main"),
+            bounds: cull_pipeline(device, pipeline_layouts, modules, draft_mode, "bounds_main"),
             extract: fullscreen_pipeline(
                 device,
                 "viz bloom extract",
@@ -151,7 +166,6 @@ impl Pipelines {
                 "composite",
                 surface_format,
             ),
-            overlay: overlay_pipeline(device, pipeline_layouts, modules, surface_format),
         }
     }
 }
@@ -412,6 +426,8 @@ fn cull_pipeline(
     device: &wgpu::Device,
     layouts: &PipelineLayouts,
     modules: &Modules,
+    draft_mode: bool,
+    entry: &str,
 ) -> wgpu::ComputePipeline {
     let (cull_pipeline_layout, cull_module) = (&layouts.cull, &modules.cull);
 
@@ -419,19 +435,21 @@ fn cull_pipeline(
         label: Some("viz cull"),
         layout: Some(cull_pipeline_layout),
         module: cull_module,
-        entry_point: Some("cull_main"),
-        compilation_options: Default::default(),
+        entry_point: Some(entry),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &[("DRAFT_CONE_BOUNDS", if draft_mode { 1.0 } else { 0.0 })],
+            ..Default::default()
+        },
         cache: None,
     })
 }
 
-fn overlay_pipeline(
+pub(super) fn overlay_pipeline(
     device: &wgpu::Device,
-    layouts: &PipelineLayouts,
-    modules: &Modules,
+    overlay_pipeline_layout: &wgpu::PipelineLayout,
+    overlay_module: &wgpu::ShaderModule,
     surface_format: wgpu::TextureFormat,
 ) -> wgpu::RenderPipeline {
-    let (overlay_pipeline_layout, overlay_module) = (&layouts.overlay, &modules.overlay);
     let format = surface_format;
 
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -526,4 +544,36 @@ mod tests {
             "each beam must converge instead of adding unbounded energy"
         );
     }
+}
+
+#[cfg(test)]
+pub(in crate::renderer) fn test_cone_cull_pipeline(
+    device: &wgpu::Device,
+    bindings: &wgpu::BindGroupLayout,
+    bounds: &wgpu::BindGroupLayout,
+    enabled: bool,
+) -> wgpu::ComputePipeline {
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Draft cull comparison layout"),
+        bind_group_layouts: &[Some(bindings), Some(bounds)],
+        immediate_size: 0,
+    });
+    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("Draft cull comparison shader"),
+        source: wgpu::ShaderSource::Wgsl(CULL_WGSL.into()),
+    });
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some("Draft cull comparison"),
+        layout: Some(&layout),
+        module: &shader,
+        entry_point: Some("cull_main"),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: &[
+                ("DRAFT_CONE_BOUNDS", if enabled { 1.0 } else { 0.0 }),
+                ("PRECOMPUTED_BOUNDS", 0.0),
+            ],
+            ..Default::default()
+        },
+        cache: None,
+    })
 }

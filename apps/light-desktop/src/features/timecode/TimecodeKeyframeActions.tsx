@@ -24,7 +24,7 @@ import {
 	SPEED_GROUP_MIN_BPM,
 } from "../speedGroupRuntime/contracts";
 
-function laneWithVolumeCurve(
+export function laneWithVolumeCurve(
 	definition: TimecodeDefinition,
 	laneId: string,
 	keyframeId: string,
@@ -341,7 +341,7 @@ function CueStepButtons({
 }
 
 /// The editors for whichever keyframe kind is selected, or nothing when none is.
-function SelectedKeyframeValue({
+export function SelectedKeyframeValue({
 	speed,
 	volume,
 	onValue,
@@ -377,6 +377,7 @@ function SelectedKeyframeValue({
 			/>
 			<SelectField
 				label="Easing"
+				ariaLabel="Easing"
 				value={volume.curve}
 				onChange={onEasing}
 				options={TIMECODE_EASINGS}
@@ -554,16 +555,32 @@ export function scaleClipCueTimings({
  */
 export function useSelectedCue(
 	selection: TimecodeEditorSelection | null,
-): [string | null, (cueId: string | null) => void] {
-	const [selectedCueId, setSelectedCueId] = useState<string | null>(null);
+): [
+	string | null,
+	(cueId: string | null, selection?: TimecodeEditorSelection) => void,
+] {
 	const clipKey =
 		selection?.kind === "clip"
 			? `${selection.laneId}:${selection.itemId}`
 			: null;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: the Cue is cleared by the clip
-	// identity, not by the selection object that happens to carry it.
+	const [selected, setSelected] = useState<{
+		clipKey: string | null;
+		cueId: string | null;
+	}>({ clipKey: null, cueId: null });
 	useEffect(() => {
-		setSelectedCueId(null);
-	}, [clipKey]);
-	return [selectedCueId, setSelectedCueId];
+		if (selected.clipKey !== clipKey) setSelected({ clipKey, cueId: null });
+	}, [clipKey, selected.clipKey]);
+	// Selection and Cue identity can change in the same pointer event. An effect clearing
+	// the old clip would otherwise erase the newly tapped Cue after that event commits.
+	return [
+		selected.clipKey === clipKey ? selected.cueId : null,
+		(cueId, nextSelection) =>
+			setSelected({
+				clipKey:
+					nextSelection?.kind === "clip"
+						? `${nextSelection.laneId}:${nextSelection.itemId}`
+						: clipKey,
+				cueId,
+			}),
+	];
 }

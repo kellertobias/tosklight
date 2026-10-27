@@ -4,6 +4,52 @@ use super::*;
 use light_wire::v2::attribute_configuration as attribute_wire;
 use light_wire::v2::runtime as wire;
 
+#[cfg(test)]
+mod fine_histogram_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn wire_omits_empty_fine_data_and_publishes_complete_scheduler_counts() {
+        let health = OutputHealth::default();
+        let empty = output_health(health.clone(), light_output::ChangeLeadSnapshot::default());
+        assert!(
+            serde_json::to_value(empty)
+                .unwrap()
+                .get("tick_duration_fine_histogram")
+                .is_none()
+        );
+        let shared = std::sync::Arc::new(std::sync::Mutex::new(health));
+        let cancel = tokio_util::sync::CancellationToken::new();
+        let stop = cancel.clone();
+        light_output::run_scheduler(44, cancel, std::sync::Arc::clone(&shared), move || {
+            stop.cancel();
+            async { Ok(0) }
+        })
+        .await;
+        let snapshot = shared.lock().unwrap().clone();
+        let expected_coarse = snapshot.tick_duration_bucket_counts.to_vec();
+        let wire = output_health(snapshot, light_output::ChangeLeadSnapshot::default());
+        assert_eq!(wire.tick_duration_bucket_counts, expected_coarse);
+        let fine = wire.tick_duration_fine_histogram.as_ref().unwrap();
+        assert_eq!(fine.schema_version, 1);
+        assert_eq!(
+            fine.bounds_micros,
+            light_output::OUTPUT_FINE_TICK_DURATION_BUCKET_BOUNDS_MICROS
+        );
+        assert_eq!(fine.sample_count, 1);
+        assert_eq!(fine.counts.iter().sum::<u64>(), fine.sample_count);
+        let json = serde_json::to_value(wire).unwrap();
+        assert_eq!(json["tick_duration_fine_histogram"]["sample_count"], 1);
+        assert_eq!(
+            json["tick_duration_fine_histogram"]["counts"]
+                .as_array()
+                .unwrap()
+                .len(),
+            133
+        );
+    }
+}
+
 pub(super) fn desk(desk: ControlDesk) -> wire::RuntimeControlDesk {
     wire::RuntimeControlDesk {
         show_compact_encoders: desk.show_compact_encoders,
@@ -45,6 +91,16 @@ pub(super) fn output_health(
     health: OutputHealth,
     change_lead: light_output::ChangeLeadSnapshot,
 ) -> wire::RuntimeOutputHealth {
+    let tick_duration_fine_histogram =
+        health
+            .complete_fine_tick_duration_counts()
+            .map(|(counts, sample_count)| wire::OutputTickDurationHistogram {
+                schema_version: 1,
+                bounds_micros: light_output::OUTPUT_FINE_TICK_DURATION_BUCKET_BOUNDS_MICROS
+                    .to_vec(),
+                counts: counts.to_vec(),
+                sample_count,
+            });
     wire::RuntimeOutputHealth {
         frames_sent: health.frames_sent,
         packets_sent: health.packets_sent,
@@ -57,6 +113,7 @@ pub(super) fn output_health(
         tick_duration_bucket_bounds_micros: light_output::OUTPUT_TICK_DURATION_BUCKET_BOUNDS_MICROS
             .to_vec(),
         tick_duration_bucket_counts: health.tick_duration_bucket_counts.to_vec(),
+        tick_duration_fine_histogram,
         scheduler_utilization: health.scheduler_utilization,
         recent_window_seconds: light_output::OUTPUT_RECENT_WINDOW.as_secs() as u32,
         recent_frame_hz_minimum: health.recent_frame_hz_minimum,

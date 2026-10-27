@@ -352,7 +352,7 @@ impl RenderQuality {
     /// Render-target scale applied before the upscale/composite pass.
     pub fn resolution_scale(self) -> f32 {
         match self {
-            Self::Draft => 0.75,
+            Self::Draft => 0.25,
             Self::Standard => 1.0,
             Self::High => 1.0,
             Self::Ultra => 1.0,
@@ -634,6 +634,9 @@ pub struct ViewConfiguration {
     pub mode: ViewMode,
     pub camera: Camera,
     pub quality: RenderQuality,
+    /// Requested local audience detail. Retained in Draft/Lines for highest-quality captures.
+    #[serde(default)]
+    pub detailed_people: bool,
     /// Operator-safe exposure multiplier.
     pub exposure: f32,
     /// How brightly everything that is not a light source is lit, `0..=1`. At zero the rig is
@@ -676,6 +679,7 @@ impl Default for ViewConfiguration {
         Self {
             mode: ViewMode::Full3d,
             camera: Camera::default(),
+            detailed_people: false,
             quality: RenderQuality::High,
             exposure: 1.0,
             ambient: 0.06,
@@ -692,6 +696,9 @@ impl Default for ViewConfiguration {
 }
 
 impl ViewConfiguration {
+    pub fn effective_detailed_people(&self) -> bool {
+        self.detailed_people && self.quality == RenderQuality::Ultra && self.mode.simulates_light()
+    }
     /// The colour to clear to: the operator's, where they have chosen one and the mode is a
     /// rendered picture rather than a printed plan.
     pub fn background_colour(&self) -> [f32; 3] {
@@ -926,5 +933,28 @@ mod tests {
         };
         let camera = Camera::framed(ViewMode::TopDown, bounds);
         assert!(camera.position.y > bounds.max.y);
+    }
+}
+
+#[cfg(test)]
+mod detailed_people_compatibility {
+    use super::*;
+    #[test]
+    fn old_view_json_defaults_detail_off_and_requested_draft_detail_round_trips() {
+        let mut view = ViewConfiguration {
+            quality: RenderQuality::Draft,
+            detailed_people: true,
+            ..Default::default()
+        };
+        let json = serde_json::to_value(view).unwrap();
+        assert!(
+            serde_json::from_value::<ViewConfiguration>(json.clone())
+                .unwrap()
+                .detailed_people
+        );
+        let mut legacy = json;
+        legacy.as_object_mut().unwrap().remove("detailed_people");
+        view = serde_json::from_value(legacy).unwrap();
+        assert!(!view.detailed_people && view.quality == RenderQuality::Draft);
     }
 }

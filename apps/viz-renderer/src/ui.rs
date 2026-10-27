@@ -229,7 +229,7 @@ fn contrasting_ink(background: [f32; 4]) -> [f32; 4] {
     }
 }
 
-fn ui_scale(width: f32) -> f32 {
+pub(crate) fn ui_scale(width: f32) -> f32 {
     if width >= 2400.0 {
         3.0
     } else if width >= 1200.0 {
@@ -625,6 +625,7 @@ mod tests {
             | Row::Connect => QuickSettingsTab::Source,
             Row::Quality
             | Row::Focus
+            | Row::Render4kImage
             | Row::Appearance
             | Row::Background
             | Row::Ambient
@@ -637,10 +638,12 @@ mod tests {
             | Row::LaserBrightness
             | Row::Persistence
             | Row::PersistenceFalloff => QuickSettingsTab::Rendering,
-            Row::Labels | Row::ShowSelection | Row::FloorGrid | Row::CrowdAmount => {
-                QuickSettingsTab::Features
-            }
-            Row::BlenderPath | Row::Snapshot(_) => QuickSettingsTab::Snapshots,
+            Row::Labels
+            | Row::ShowSelection
+            | Row::FloorGrid
+            | Row::CrowdAmount
+            | Row::DetailedPeople => QuickSettingsTab::Features,
+            Row::Snapshot(_) => QuickSettingsTab::Snapshots,
             Row::Cancel => settings.tab,
         };
         settings
@@ -749,6 +752,7 @@ mod tests {
                 vec![
                     Row::Quality,
                     Row::Focus,
+                    Row::Render4kImage,
                     Row::Ambient,
                     Row::Exposure,
                     Row::FogAmount,
@@ -770,9 +774,10 @@ mod tests {
                     Row::ShowSelection,
                     Row::FloorGrid,
                     Row::CrowdAmount,
+                    Row::DetailedPeople,
                 ],
             ),
-            (QuickSettingsTab::Snapshots, vec![Row::BlenderPath]),
+            (QuickSettingsTab::Snapshots, vec![]),
         ];
         let mut seen = Vec::new();
         for (tab, rows) in expected {
@@ -785,9 +790,14 @@ mod tests {
             assert_eq!(actual, rows, "wrong rows in {}", tab.label());
             seen.extend(actual);
         }
+        let row_count = seen.len();
         seen.sort_by_key(|row| format!("{row:?}"));
         seen.dedup();
-        assert_eq!(seen.len(), 25, "a setting was duplicated between tabs");
+        assert_eq!(
+            seen.len(),
+            row_count,
+            "a setting was duplicated between tabs"
+        );
 
         settings.selected = select(&mut settings, Row::Exposure);
         let exposure = preferences.exposure;
@@ -855,9 +865,7 @@ mod tests {
                         live_beams: 130,
                         triangles: 90_000,
                     },
-                    blend: None,
                 },
-                export: crate::snapshots::ExportState::Idle,
             })
             .collect()
     }
@@ -959,7 +967,7 @@ mod tests {
         assert_eq!(settings.row_label(Row::Snapshot(0)), "Snapshot 14:20:00");
         assert_eq!(
             settings.value(Row::Snapshot(1), &preferences),
-            "301 fixtures, 130 live \u{2014} Enter exports"
+            "301 fixtures, 130 live"
         );
     }
 
@@ -999,65 +1007,20 @@ mod tests {
         settings.move_selection(-1);
         assert_eq!(settings.row(), Row::Cancel);
         settings.move_selection(1);
-        assert_eq!(settings.row(), Row::BlenderPath);
+        assert_eq!(settings.row(), Row::Snapshot(0));
     }
 
     #[test]
-    fn activating_a_snapshot_asks_for_that_one_to_be_exported() {
+    fn activating_a_snapshot_reports_its_saved_folder_without_an_export() {
         let (mut settings, mut preferences) = fixture();
         settings.snapshots = kept(3);
         settings.selected = select(&mut settings, Row::Snapshot(2));
         assert_eq!(
             settings.activate(&mut preferences),
-            QuickSettingsOutcome::ExportSnapshot(2)
-        );
-        assert!(
-            settings.message.contains("14:22:00"),
-            "the operator should be told which one: {}",
-            settings.message
-        );
-    }
-
-    #[test]
-    fn a_snapshot_already_being_exported_is_not_started_a_second_time() {
-        let (mut settings, mut preferences) = fixture();
-        settings.snapshots = kept(1);
-        settings.snapshots[0].export = crate::snapshots::ExportState::Running;
-        settings.selected = select(&mut settings, Row::Snapshot(0));
-        assert_eq!(
-            settings.activate(&mut preferences),
             QuickSettingsOutcome::None
         );
-        assert!(settings.message.contains("already being exported"));
-    }
-
-    #[test]
-    fn naming_a_blender_keeps_it_without_touching_the_connection() {
-        // Where Blender lives has nothing to do with the desk, so it must not need Connect —
-        // which would reconnect the session as a side effect of setting an export tool.
-        let (mut settings, mut preferences) = fixture();
-        settings.toggle(&preferences);
-        settings.selected = select(&mut settings, Row::BlenderPath);
-        settings.activate(&mut preferences);
-        assert!(settings.editing);
-        for character in "/opt/blender".chars() {
-            settings.type_character(character);
-        }
-        settings.activate(&mut preferences);
-        assert!(!settings.editing);
-        assert_eq!(preferences.blender, "/opt/blender");
-        assert_eq!(preferences.host, "127.0.0.1", "the endpoint was untouched");
-    }
-
-    #[test]
-    fn the_blender_row_says_whether_one_was_found_at_all() {
-        let (mut settings, preferences) = fixture();
-        settings.toggle(&preferences);
-        let value = settings.value(Row::BlenderPath, &preferences);
-        assert!(
-            value.starts_with("Found: ") || value.starts_with("Not found"),
-            "an operator has to be able to tell the two apart: {value}"
-        );
+        assert!(settings.message.contains("14:22:00"));
+        assert!(settings.message.contains("/tmp/snap-2"));
     }
 
     #[test]

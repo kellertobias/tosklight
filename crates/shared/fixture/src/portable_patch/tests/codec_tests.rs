@@ -551,6 +551,7 @@ fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instan
                 visualizer_srgb: "#C01020".into(),
             },
         },
+        manual_optics: None,
         shaper_angles_degrees: [-30.0, 15.5, 0.0, 179.5],
     };
     fixture.multipatch[0].installed_appearance = InstalledFixtureAppearance {
@@ -564,6 +565,7 @@ fn installed_appearance_round_trips_catalog_fallbacks_and_custom_gels_per_instan
             color_srgb: "#80A0FF".into(),
             note: Some("Balcony copy only".into()),
         },
+        manual_optics: None,
         shaper_angles_degrees: [1.0, 2.0, 3.0, 4.0],
     };
 
@@ -822,4 +824,57 @@ fn venue_architecture_round_trips_in_the_actual_portable_patch_record() {
         fixture.scenery_options
     );
     assert_eq!(serde_json::to_value(decoded).unwrap(), body);
+}
+
+#[test]
+fn manual_optics_preserve_legacy_and_independent_physical_installations() {
+    let profile = profile();
+    let mut original = fixture(&profile);
+    let legacy = serde_json::to_value(&original.installed_appearance).unwrap();
+    assert!(legacy.get("manual_optics").is_none());
+    let read: InstalledFixtureAppearance = serde_json::from_value(legacy).unwrap();
+    assert!(read.manual_optics.is_none());
+    original.installed_appearance.manual_optics = Some(crate::InstalledManualOptics {
+        zoom_degrees: Some(48.0),
+        shaper_blades: [0.12, 0.3, 0.24, 0.11],
+    });
+    original.multipatch[0].installed_appearance.manual_optics =
+        Some(crate::InstalledManualOptics {
+            zoom_degrees: Some(35.0),
+            shaper_blades: [0.2, 0.1, 0.4, 0.3],
+        });
+    let record = PortablePatchedFixtureRecord::from_runtime_fixture(&original).unwrap();
+    let restored = PortablePatchedFixtureRecord::decode(record.body().clone())
+        .unwrap()
+        .patch()
+        .unwrap();
+    assert_eq!(restored.installed_appearance, original.installed_appearance);
+    assert_eq!(
+        restored.multipatch[0].installed_appearance,
+        original.multipatch[0].installed_appearance
+    );
+    for angle in [0.0, 170.1, f32::NAN, f32::INFINITY] {
+        let invalid = crate::InstalledManualOptics {
+            zoom_degrees: Some(angle),
+            shaper_blades: [0.0; 4],
+        };
+        assert!(invalid.validate().is_err());
+    }
+    for insertion in [-0.1, 1.01, f32::NAN, f32::INFINITY] {
+        let invalid = crate::InstalledManualOptics {
+            zoom_degrees: None,
+            shaper_blades: [insertion, 0.0, 0.0, 0.0],
+        };
+        assert!(invalid.validate().is_err());
+    }
+    for angle in [1.0, 170.0] {
+        assert!(
+            crate::InstalledManualOptics {
+                zoom_degrees: Some(angle),
+                shaper_blades: [0.0, 1.0, 0.2, 0.9]
+            }
+            .validate()
+            .is_ok()
+        );
+    }
 }

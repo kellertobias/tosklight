@@ -2,6 +2,20 @@
 	"version": 1,
 	"entries": [
 		{
+			"file": "control-homepage-hero.png",
+			"title": "Control live workspace",
+			"caption": "Operate eight virtual playbacks below Groups and presets, with the Fixture Sheet alongside.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/control-homepage-hero.png"
+		},
+		{
+			"file": "application-overview-icons.png",
+			"title": "Application overview",
+			"caption": "The approved Busking workspace with proper fixture group icons, reusable presets, playbacks and programmer.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/application-overview-icons.png"
+		},
+		{
 			"file": "control-desk.png",
 			"title": "The desk",
 			"caption": "Everything an operator touches, on one surface.",
@@ -23,8 +37,8 @@
 		},
 		{
 			"file": "control-groups.png",
-			"title": "Groups",
-			"caption": "Keep the fixture selections you use throughout the show close at hand.",
+			"title": "Groups and presets",
+			"caption": "Groups and Color, Position and Beam presets keep cues connected to reusable show objects.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/control-groups.png"
 		},
@@ -34,6 +48,13 @@
 			"caption": "Build a repeatable sequence of intentions for the show.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/control-cues.png"
+		},
+		{
+			"file": "control-timecode.png",
+			"title": "Timecode · In development",
+			"caption": "Cue triggers, fade points, audio, and Speed Groups on one timeline. Still in development — use with caution and test your show before relying on it live.",
+			"theme": "dark",
+			"sourceFile": "docs/marketing/assets/stills/control-timecode.png"
 		},
 		{
 			"file": "control-preload-go.png",
@@ -413,8 +434,8 @@
 		},
 		{
 			"file": "media-server-text.png",
-			"title": "Media Server library text",
-			"caption": "The Library's Text filter expands through folders 200–249 and combines pooled sources, a picture preview, multiline authoring, and appearance controls.",
+			"title": "A countdown to doors opening",
+			"caption": "Configure a real countdown target, display format and behavior after zero beside its running Pixel preview.",
 			"theme": "dark",
 			"sourceFile": "docs/marketing/assets/stills/media-server-text.png"
 		},
@@ -480,15 +501,15 @@
 		{
 			"file": "architect-renderer-white-ultra.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-renderer-white-ultra.png",
-			"title": "The rig in white",
-			"caption": "A distinct native Ultra render of the Showcase rig with white stage lighting.",
+			"title": "Ultra · white lighting study",
+			"caption": "A detailed Ultra preview for inspecting white stage lighting and fixture coverage.",
 			"theme": "dark"
 		},
 		{
 			"file": "architect-renderer-warm-ultra.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-renderer-warm-ultra.png",
-			"title": "Ultra Rendering Quality",
-			"caption": "Adjust the rendering quality to suit your computer’s graphics performance.",
+			"title": "Ultra · warm lighting study",
+			"caption": "A detailed Ultra preview for inspecting warm stage lighting and the atmosphere of the venue.",
 			"theme": "dark"
 		},
 		{
@@ -517,6 +538,83 @@
 			"sourceFile": "docs/marketing/assets/stills/control-position-reference.png",
 			"title": "Shared position references",
 			"caption": "ToskLight Control’s Patch sheet for the same portable Show: stage washes share 3D point 950 as their position reference.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-output-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-output-config.png",
+			"title": "Pixel output for Architect's LED panels",
+			"caption": "Pixel's LED Triptych output at 1536 × 512, advertised source 514, feeds three contiguous mapped LED panels in Architect.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-wireframe-native.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-wireframe-native.png",
+			"title": "Wireframe · live checks",
+			"caption": "Quickly check fixture positions and beam directions during a live show, with very little rendering work.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-main.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-main.png",
+			"title": "Ultra · detailed preview",
+			"caption": "Inspect the full lighting look, video walls and detailed 3D people when your computer has the graphics power. Use Ultra for high-quality customer images with the regular renderer.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-front.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-front.png",
+			"title": "Mapped video · front view",
+			"caption": "Three LED panels display contiguous sections of the media-server output behind the stage.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-stage-side.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-stage-side.png",
+			"title": "Mapped video · audience view",
+			"caption": "Lighting, video surfaces and a stage-facing audience in the same venue.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-surface-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-surface-config.png",
+			"title": "Map video to the LED walls",
+			"caption": "Architect maps the Stage LED Panels source to three physical LED panels; the first panel uses the left third of the source.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-media-crop-config.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-media-crop-config.png",
+			"title": "Crop the source across LED panels",
+			"caption": "The actual Architect surface editor exposes normalized source crops, two-metre panel dimensions and occupied LED cells.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-native-export-4k.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-native-export-4k.png",
+			"title": "Ultra · 4K customer export",
+			"caption": "A full-venue 3840 × 2160 image rendered by ToskLight at its highest native quality, with visible laser fans, atmospheric haze, mapped video and detailed people. Export from Architect without changing the live preview quality.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-draft.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-draft.png",
+			"title": "Draft · lightweight lighting preview",
+			"caption": "See the lights during live operation on a more capable machine, or pre-program on a machine with limited graphics power.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-standard.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-standard.png",
+			"title": "Standard · everyday pre-programming",
+			"caption": "Balance lighting detail and rendering speed while building cues and checking the show before arriving on site.",
+			"theme": "dark"
+		},
+		{
+			"file": "architect-renderer-ultra-live.png",
+			"sourceFile": "docs/marketing/assets/stills/architect-renderer-ultra-live.png",
+			"title": "Ultra · detailed preview",
+			"caption": "Inspect the full lighting look, video walls and detailed 3D people when your computer has the graphics power. Use the separate 4K export for high-quality customer images.",
 			"theme": "dark"
 		}
 	]

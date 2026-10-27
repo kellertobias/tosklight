@@ -1,4 +1,4 @@
-//! Standalone-only CITP workers. Each unique source owns one capacity-one latest frame.
+//! CPU CITP workers shared by standalone and embedded capture. Each unique source owns one capacity-one latest frame.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -7,93 +7,129 @@ use std::time::Duration;
 use viz_render::media::{EDGE, MediaFrame};
 use viz_scene::{MediaSourceBinding, Scene};
 
+mod capture_cache;
+mod mailbox;
+use mailbox::Mailbox;
+#[cfg(test)]
+mod tests;
+
+#[derive(PartialEq, Eq)]
+struct Binding {
+    server: viz_scene::uuid::Uuid,
+    host: String,
+    port: u16,
+    source: u16,
+}
+impl From<&MediaSourceBinding> for Binding {
+    fn from(source: &MediaSourceBinding) -> Self {
+        Self {
+            server: source.server_id,
+            host: source.host.clone(),
+            port: source.port,
+            source: source.advertised_source_id,
+        }
+    }
+}
+impl Binding {
+    fn matches(&self, source: &MediaSourceBinding) -> bool {
+        self.server == source.server_id
+            && self.host == source.host
+            && self.port == source.port
+            && self.source == source.advertised_source_id
+    }
+}
 struct Worker {
     stop: Arc<AtomicBool>,
+    binding: Binding,
 }
 
 #[derive(Default)]
 pub struct MediaWorkers {
     workers: HashMap<viz_scene::uuid::Uuid, Worker>,
-    latest: Arc<Mutex<HashMap<viz_scene::uuid::Uuid, MediaFrame>>>,
-    health: Arc<Mutex<HashMap<viz_scene::uuid::Uuid, (String, bool)>>>,
+    mailbox: Arc<Mutex<Mailbox>>,
 }
 
 impl MediaWorkers {
+    /// Retain CPU pixels only: embedded wireframe never creates a live media atlas.
+    pub fn for_embedded_capture() -> Self {
+        let mut mailbox = Mailbox::default();
+        mailbox.enable_capture_cache();
+        Self {
+            workers: HashMap::new(),
+            mailbox: Arc::new(Mutex::new(mailbox)),
+        }
+    }
+
+    pub fn frozen_media(&self) -> Result<viz_render::media::FrozenMedia, String> {
+        self.mailbox
+            .lock()
+            .map_err(|_| "Media capture cache is unavailable".to_string())?
+            .snapshot(std::time::Instant::now())
+    }
+
     pub fn reconcile(&mut self, scene: &Scene) {
-        let wanted = scene
+        self.reconcile_with(scene, spawn_source);
+    }
+
+    fn reconcile_with(
+        &mut self,
+        scene: &Scene,
+        mut start: impl FnMut(MediaSourceBinding, Arc<AtomicBool>, Arc<Mutex<Mailbox>>),
+    ) {
+        let wanted: HashMap<_, _> = scene
             .media_sources
             .iter()
-            .map(|source| source.id)
-            .collect::<std::collections::HashSet<_>>();
+            .map(|source| (source.id, source))
+            .collect();
         self.workers.retain(|id, worker| {
-            if wanted.contains(id) {
-                true
-            } else {
+            let keep = wanted.get(id).is_some_and(|source| {
+                source.fallback_rgba.is_none() && worker.binding.matches(source)
+            });
+            if !keep {
                 worker.stop.store(true, Ordering::Release);
-                false
             }
+            keep
         });
-        if let Ok(mut health) = self.health.lock() {
-            health.retain(|id, _| wanted.contains(id));
+        if let Ok(mut mailbox) = self.mailbox.lock() {
+            mailbox.retain(&wanted);
         }
         for source in &scene.media_sources {
             if let Some(rgba) = source.fallback_rgba.as_ref() {
-                if let Ok(mut latest) = self.latest.lock() {
-                    latest.entry(source.id).or_insert_with(|| MediaFrame {
-                        source_id: source.id,
-                        sequence: 1,
-                        width: EDGE,
-                        height: EDGE,
-                        rgba: rgba.clone(),
-                        persistent: true,
-                    });
-                }
-                if let Ok(mut health) = self.health.lock() {
-                    health.remove(&source.id);
+                if let Ok(mut mailbox) = self.mailbox.lock() {
+                    mailbox.fallback(source, rgba);
                 }
                 continue;
             }
-            if !self.workers.contains_key(&source.id) {
-                self.start(source.clone());
+            if self.workers.contains_key(&source.id) {
+                if let Ok(mut mailbox) = self.mailbox.lock() {
+                    mailbox.rename(source);
+                }
+                continue;
             }
+            let stop = Arc::new(AtomicBool::new(false));
+            if let Ok(mut mailbox) = self.mailbox.lock() {
+                mailbox.activate(source, Arc::clone(&stop));
+            }
+            self.workers.insert(
+                source.id,
+                Worker {
+                    stop: Arc::clone(&stop),
+                    binding: Binding::from(source),
+                },
+            );
+            start(source.clone(), stop, Arc::clone(&self.mailbox));
         }
-    }
-
-    fn start(&mut self, source: MediaSourceBinding) {
-        let id = source.id;
-        let stop = Arc::new(AtomicBool::new(false));
-        let thread_stop = Arc::clone(&stop);
-        let latest = Arc::clone(&self.latest);
-        let health = Arc::clone(&self.health);
-        if let Ok(mut state) = health.lock() {
-            state.insert(id, (source.name.clone(), false));
-        }
-        std::thread::Builder::new()
-            .name(format!("viz-media-{}", source.name))
-            .spawn(move || run_source(source, thread_stop, latest, health))
-            .ok();
-        self.workers.insert(id, Worker { stop });
     }
 
     pub fn drain(&self) -> Vec<MediaFrame> {
-        self.latest
+        self.mailbox
             .lock()
-            .map(|mut frames| frames.drain().map(|(_, frame)| frame).collect())
+            .map(|mut state| state.drain())
             .unwrap_or_default()
     }
 
     pub fn offline_notice(&self) -> Option<String> {
-        let health = self.health.lock().ok()?;
-        let names = health
-            .values()
-            .filter_map(|(name, live)| (!*live).then_some(name.as_str()))
-            .collect::<Vec<_>>();
-        (!names.is_empty()).then(|| {
-            format!(
-                "Media offline — showing fallback or black; retrying {}",
-                names.join(", ")
-            )
-        })
+        self.mailbox.lock().ok()?.offline_notice()
     }
 }
 
@@ -105,12 +141,14 @@ impl Drop for MediaWorkers {
     }
 }
 
-fn run_source(
-    source: MediaSourceBinding,
-    stop: Arc<AtomicBool>,
-    latest: Arc<Mutex<HashMap<viz_scene::uuid::Uuid, MediaFrame>>>,
-    health: Arc<Mutex<HashMap<viz_scene::uuid::Uuid, (String, bool)>>>,
-) {
+fn spawn_source(source: MediaSourceBinding, stop: Arc<AtomicBool>, mailbox: Arc<Mutex<Mailbox>>) {
+    std::thread::Builder::new()
+        .name(format!("viz-media-{}", source.name))
+        .spawn(move || run_source(source, stop, mailbox))
+        .ok();
+}
+
+fn run_source(source: MediaSourceBinding, stop: Arc<AtomicBool>, mailbox: Arc<Mutex<Mailbox>>) {
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -118,7 +156,6 @@ fn run_source(
         return;
     };
     runtime.block_on(async move {
-        let mut sequence = 0_u64;
         while !stop.load(Ordering::Acquire) {
             let address = tokio::net::lookup_host((source.host.as_str(), source.port))
                 .await
@@ -139,10 +176,8 @@ fn run_source(
             )
             .await;
             let Ok(mut subscription) = connected else {
-                if let Ok(mut state) = health.lock()
-                    && let Some((_, live)) = state.get_mut(&source.id)
-                {
-                    *live = false;
+                if let Ok(mut state) = mailbox.lock() {
+                    state.set_live(source.id, &stop, false);
                 }
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 continue;
@@ -167,28 +202,20 @@ fn run_source(
                     .resize_exact(EDGE, EDGE, image::imageops::FilterType::Triangle)
                     .to_rgba8()
                     .into_raw();
-                sequence = sequence.wrapping_add(1).max(1);
                 let frame = MediaFrame {
                     source_id: source.id,
-                    sequence,
+                    sequence: 0, // Assigned only after the current lifetime is admitted.
                     width: EDGE,
                     height: EDGE,
                     rgba,
                     persistent: false,
                 };
-                if let Ok(mut slot) = latest.lock() {
-                    slot.insert(source.id, frame);
-                }
-                if let Ok(mut state) = health.lock()
-                    && let Some((_, live)) = state.get_mut(&source.id)
-                {
-                    *live = true;
+                if let Ok(mut state) = mailbox.lock() {
+                    state.publish(&stop, frame);
                 }
             }
-            if let Ok(mut state) = health.lock()
-                && let Some((_, live)) = state.get_mut(&source.id)
-            {
-                *live = false;
+            if let Ok(mut state) = mailbox.lock() {
+                state.set_live(source.id, &stop, false);
             }
             tokio::time::sleep(Duration::from_millis(250)).await;
         }

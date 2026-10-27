@@ -1,6 +1,7 @@
 //! Execute the production haze interval helpers on the GPU and compare every sample with
 //! production point occlusion. This covers the haze path without opening a renderer window.
 use super::*;
+use crate::gpu::Gpu;
 use crate::instances::{GpuCurtainBlocker, GpuCurtainShadow, GpuLight};
 use glam::{Mat4, Quat, Vec3};
 use wgpu::util::DeviceExt;

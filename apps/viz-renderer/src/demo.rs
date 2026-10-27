@@ -223,6 +223,7 @@ fn push_demo_laser(scene: &mut Scene) {
     });
     let laser = scene.fixtures.len();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: Uuid::from_u128(0x1a5e_0000_0000_0000_0000_0000_0000_0001),
@@ -240,6 +241,7 @@ fn push_demo_laser(scene: &mut Scene) {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody {
             size: laser_body,
             kind: BodyKind::Machine,
@@ -293,6 +295,7 @@ fn push_demo_effect(scene: &mut Scene) {
     let fixture_index = scene.fixtures.len();
     let identity = Uuid::from_u128(0xefec_7000_0000_0000_0000_0000_0000_0001);
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: identity,
@@ -307,6 +310,7 @@ fn push_demo_effect(scene: &mut Scene) {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody {
             size: Vec3::new(0.32, 0.36, 0.32),
             kind: BodyKind::Machine,
@@ -346,6 +350,7 @@ fn push_demo_effect(scene: &mut Scene) {
 fn push_demo_hazer(scene: &mut Scene) {
     let hazer = scene.fixtures.len();
     scene.fixtures.push(FixtureInstance {
+        lamp_response: Default::default(),
         drawn_as_scenery: false,
         invisible: false,
         instance_id: Uuid::nil(),
@@ -360,6 +365,7 @@ fn push_demo_hazer(scene: &mut Scene) {
         shaper_degrees: None,
         installed_colour: [1.0; 3],
         installed_shaper_angles_degrees: [0.0; 4],
+        installed_shaper_blades: [0.0; 4],
         body: FixtureBody {
             size: Vec3::new(0.5, 0.4, 0.35),
             kind: BodyKind::Machine,
@@ -477,6 +483,7 @@ pub(crate) fn build_scene() -> Scene {
             let x = -6.3 + slot as f32 * 1.8;
             let index = scene.fixtures.len();
             scene.fixtures.push(FixtureInstance {
+                lamp_response: Default::default(),
                 drawn_as_scenery: false,
                 invisible: false,
                 instance_id: Uuid::nil(),
@@ -486,6 +493,7 @@ pub(crate) fn build_scene() -> Scene {
                 position: Vec3::new(x, height, depth),
                 installed_colour: [1.0; 3],
                 installed_shaper_angles_degrees: [0.0; 4],
+                installed_shaper_blades: [0.0; 4],
                 body: FixtureBody {
                     size: Vec3::new(0.34, 0.5, 0.34),
                     kind: BodyKind::MovingHead,
@@ -548,6 +556,7 @@ fn push_demo_pixel_bars(scene: &mut Scene) {
         let index = scene.fixtures.len();
         let x = -5.0 + slot as f32 * 2.0;
         scene.fixtures.push(FixtureInstance {
+            lamp_response: Default::default(),
             drawn_as_scenery: false,
             invisible: false,
             instance_id: Uuid::nil(),
@@ -557,6 +566,7 @@ fn push_demo_pixel_bars(scene: &mut Scene) {
             position: Vec3::new(x, 0.35, -6.2),
             installed_colour: [1.0; 3],
             installed_shaper_angles_degrees: [0.0; 4],
+            installed_shaper_blades: [0.0; 4],
             body: FixtureBody {
                 size: Vec3::new(1.1, 0.12, 0.12),
                 kind: BodyKind::Bar,

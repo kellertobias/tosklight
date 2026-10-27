@@ -18,14 +18,20 @@ use winit::event_loop::ActiveEventLoop;
 
 impl Application {
     pub(super) fn draw(&mut self, event_loop: &ActiveEventLoop) {
+        // Exit is deferred by the window system; already queued redraws must not capture again.
+        if self.cli_capture.started() {
+            return;
+        }
         let Some((now, delta, width, height)) = self.begin_frame(event_loop) else {
             return;
         };
         let Some(mut session) = self.session.take() else {
             return;
         };
-        self.draw_session(&mut session, event_loop, now, delta, width, height);
-        self.session = Some(session);
+        let benchmark = self.draw_session(&mut session, event_loop, now, delta, width, height);
+        if self.finish_benchmark_frame(session, benchmark) {
+            event_loop.exit();
+        }
     }
 
     fn draw_session(
@@ -36,7 +42,11 @@ impl Application {
         delta: f32,
         width: f32,
         height: f32,
-    ) {
+    ) -> Option<(
+        Measured,
+        Result<viz_render::FrameStats, RenderError>,
+        Instant,
+    )> {
         session.pump(now);
         self.adopt_connected_renderer_settings(session);
         self.pump_media(session);
@@ -123,25 +133,36 @@ impl Application {
             time,
             motion_was_active,
         );
+        self.last_still_frame = Some(super::still::ResolvedFrame {
+            view: view.clone(),
+            time,
+            scene_revision: session.scene.revision,
+            show_id: session.scene.show_id,
+            values_frame: values.frame,
+        });
         session.values = values;
         let Some(result) = result else {
-            return;
+            return None;
         };
+        let observed = Instant::now();
         record_frame(
-            result,
+            &result,
             session,
             &mut self.stats,
             &mut self.presented_frames,
             &mut self.frame_interval,
             &mut self.next_frame,
         );
+        self.finish_frame_pacing(result.is_ok(), now, observed, &view);
         if self.options.verify_only && self.presented_frames >= 2 {
             event_loop.exit();
         }
         if self.options.benchmark_seconds.is_none() {
-            return;
+            return None;
         }
         let measured = Measured {
+            quality: view.quality,
+            output_size: (width as u32, height as u32),
             latency: session.latency_percentiles(),
             dmx_hz: session.input_rate_hz(),
             fixtures: session.scene.fixtures.len(),
@@ -150,7 +171,30 @@ impl Application {
             inputs: session.diagnostics.inputs.clone(),
             scene_ready: !session.scene.emitters.is_empty(),
         };
-        self.record_benchmark_frame(&measured, delta, now, event_loop);
+        Some((measured, result, observed))
+    }
+
+    /// A carried animation phase is separate from hidden/retry/adaptive backoff.
+    fn finish_frame_pacing(
+        &mut self,
+        succeeded: bool,
+        started: Instant,
+        completed: Instant,
+        view: &viz_scene::ViewConfiguration,
+    ) {
+        if self.visible && crate::pacing::low_gpu_mode(view.quality, view.mode) {
+            self.next_frame = if succeeded {
+                self.low_gpu_schedule
+                    .succeeded(started, completed, self.frame_interval)
+            } else {
+                self.low_gpu_schedule.retry(completed, self.next_frame)
+            };
+        } else {
+            self.low_gpu_schedule.suspend();
+            if !self.visible {
+                self.next_frame = self.next_frame.max(started + self.pace());
+            }
+        }
     }
 
     /// Hand the session's media surfaces to the decode workers and upload what they finished.
@@ -226,7 +270,7 @@ impl Application {
     #[allow(clippy::too_many_arguments)]
     fn render_frame(
         &mut self,
-        session: &Session,
+        session: &mut Session,
         event_loop: &ActiveEventLoop,
         now: Instant,
         delta: f32,
@@ -260,7 +304,8 @@ impl Application {
             notice,
             camera_control,
         );
-        let time_driven = motion_was_active
+        let time_driven = session.lamp_picture_dirty()
+            || motion_was_active
             || crate::redraw::is_time_driven(values, view, &self.preferences.persistence);
         build_overlay(
             &mut self.overlay,
@@ -278,6 +323,7 @@ impl Application {
             width,
             height,
         );
+        self.still_ui.draw(&mut self.overlay, width, height);
         let media_identity = self.media_revision ^ renderer.media_presentation_identity();
         let redraw_state = crate::redraw::RedrawState::new(
             session.scene.revision,
@@ -290,19 +336,27 @@ impl Application {
         let forced = self.options.capture.is_some()
             || self.options.verify_only
             || self.options.benchmark_seconds.is_some();
-        if !forced && !self.redraw_gate.should_draw(redraw_state, time_driven) {
+        if !forced && !self.redraw_gate.should_draw(&redraw_state, time_driven) {
             self.next_frame = now + Duration::from_millis(50);
+            self.low_gpu_schedule.suspend();
             return None;
         }
         renderer.observe_frame_interval(view.quality, (delta * 1_000_000.0) as u64);
-        if let Some(path) = self.options.capture.clone()
-            && self.presented_frames + 1 >= u64::from(self.options.capture_frames)
-        {
+        if let Some(path) = self.cli_capture.take_due(
+            self.options.capture.as_deref(),
+            self.presented_frames,
+            self.options.capture_frames,
+        ) {
             write_capture(renderer, session, values, view, &self.overlay, time, &path);
             event_loop.exit();
             return None;
         }
-        Some(renderer.render(&session.scene, values, view, &self.overlay, time))
+        let result = renderer.render(&session.scene, values, view, &self.overlay, time);
+        session.observe_lamp_submission(result.is_ok());
+        if result.is_ok() {
+            self.redraw_gate.succeeded(redraw_state);
+        }
+        Some(result)
     }
 }
 
@@ -492,7 +546,7 @@ fn write_capture(
 /// A frame that could not be presented is not a failure of the show: a surface that is briefly
 /// unavailable is skipped, and only a real device error is reported as one.
 fn record_frame(
-    result: Result<viz_render::FrameStats, RenderError>,
+    result: &Result<viz_render::FrameStats, RenderError>,
     session: &mut Session,
     stats: &mut viz_render::FrameStats,
     presented_frames: &mut u64,
@@ -501,7 +555,7 @@ fn record_frame(
 ) {
     match result {
         Ok(frame) => {
-            *stats = frame;
+            *stats = *frame;
             *presented_frames += 1;
             let presented = Instant::now();
             session.record_presented(presented);
@@ -522,23 +576,29 @@ fn record_frame(
 }
 
 impl Application {
-    /// Fold this frame into the `--benchmark` run, and print the report when it is done.
-    fn record_benchmark_frame(
+    /// Restore authority before a benchmark changes views; drawing temporarily takes the session.
+    pub(super) fn finish_benchmark_frame(
         &mut self,
-        measured: &Measured,
-        delta: f32,
-        now: Instant,
-        event_loop: &ActiveEventLoop,
-    ) {
+        session: Session,
+        benchmark: Option<(
+            Measured,
+            Result<viz_render::FrameStats, RenderError>,
+            Instant,
+        )>,
+    ) -> bool {
+        self.session = Some(session);
+        let Some((measured, outcome, now)) = benchmark else {
+            return false;
+        };
         if self.benchmark.is_empty() {
-            // Give the connection a moment to load the scene before measuring.
             if now.duration_since(self.epoch).as_secs_f32() > 2.0 && measured.scene_ready {
                 self.start_benchmark();
             }
-        } else if self.record_benchmark(delta, measured) {
-            self.print_benchmark(measured);
-            event_loop.exit();
+        } else if self.record_benchmark(now, &outcome, &measured) {
+            self.print_benchmark(&measured);
+            return true;
         }
+        false
     }
 }
 
@@ -566,6 +626,7 @@ impl Application {
     /// ends the frame rather than drawing one.
     fn begin_frame(&mut self, event_loop: &ActiveEventLoop) -> Option<(Instant, f32, f32, f32)> {
         let now = Instant::now();
+        self.low_gpu_schedule.delivered();
         let delta = now.duration_since(self.last_frame).as_secs_f32();
         self.last_frame = now;
         // Hold the pace even when this frame returns early, so a session that is still connecting
@@ -582,6 +643,7 @@ impl Application {
         }
 
         // Held movement keys are applied once per frame so speed follows frame time.
+        self.observe_still();
         let mode = self.view_mode();
         self.apply_walk(mode, delta.clamp(0.0, 0.1));
         let (width, height) = self.surface_size();

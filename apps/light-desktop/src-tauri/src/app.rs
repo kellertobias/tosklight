@@ -18,8 +18,12 @@ pub(crate) fn run() {
             crate::stage_pane::stage_pane_available,
             crate::stage_pane::open_stage_pane,
             crate::stage_pane::set_stage_pane,
+            crate::stage_pane::set_stage_pane_visibility,
             crate::stage_pane::close_stage_pane,
             crate::stage_pane::stage_pane_input,
+            crate::stage_pane::still::start_stage_pane_capture,
+            crate::stage_pane::still::cancel_stage_pane_capture,
+            crate::stage_pane::still::open_stage_pane_capture,
             crate::stage_pane::set_stage_pane_picture,
             crate::stage_pane::set_stage_pane_selection,
             crate::stage_pane::stage_pane_status,
@@ -32,6 +36,7 @@ pub(crate) fn run() {
             crate::lifecycle::frontend_ready,
             crate::packaged_benchmark::packaged_stage_benchmark_config,
             crate::packaged_benchmark::packaged_stage_benchmark_prepared,
+            crate::packaged_benchmark::exercise_packaged_stage_benchmark_visibility,
             crate::packaged_benchmark::focus_packaged_stage_benchmark_window,
             crate::packaged_benchmark::append_packaged_stage_benchmark_sample
         ])

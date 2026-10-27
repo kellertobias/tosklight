@@ -291,6 +291,7 @@ function installedAppearanceAt(value: unknown, path: string): void {
 		canonicalSrgbAt(gel.color_srgb, path + ".gel.color_srgb");
 		if (gel.note !== null) stringAt(gel.note, path + ".gel.note");
 	}
+    if (appearance.manual_optics !== undefined) manualOpticsAt(appearance.manual_optics, path + ".manual_optics");
 	const angles = arrayAt(
 		appearance.shaper_angles_degrees,
 		path + ".shaper_angles_degrees",
@@ -306,6 +307,22 @@ function installedAppearanceAt(value: unknown, path: string): void {
 				angle,
 			);
 	});
+}
+
+function manualOpticsAt(value: unknown, path: string): void {
+    const optics = objectAt(value, path);
+    if (optics.zoom_degrees !== null) {
+        finiteNumberAt(optics.zoom_degrees, path + ".zoom_degrees");
+        if ((optics.zoom_degrees as number) < 1 || (optics.zoom_degrees as number) > 170)
+            invalid(path + ".zoom_degrees", "full opening degrees from 1 through 170", optics.zoom_degrees);
+    }
+    const blades = arrayAt(optics.shaper_blades, path + ".shaper_blades");
+    if (blades.length !== 4) invalid(path + ".shaper_blades", "exactly four blade closures", blades);
+    blades.forEach((blade, index) => {
+        finiteNumberAt(blade, `${path}.shaper_blades[${index}]`);
+        if ((blade as number) < 0 || (blade as number) > 1)
+            invalid(`${path}.shaper_blades[${index}]`, "a closure from zero through one", blade);
+    });
 }
 
 function canonicalSrgbAt(value: unknown, path: string): void {

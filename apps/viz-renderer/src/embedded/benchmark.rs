@@ -51,13 +51,29 @@ pub(super) struct BenchmarkDrawWitness {
     pub(super) follow_preload: bool,
     pub(super) idle_unchanged: bool,
     pub(super) draw_healthy: bool,
+    pass_profile: Option<super::pass_profile::PassProfile>,
 }
 
 impl BenchmarkDrawWitness {
     pub(super) fn new(rig_available: bool) -> Self {
         Self {
             rig_available,
+            pass_profile: super::pass_profile::PassProfile::from_environment(),
             ..Default::default()
+        }
+    }
+
+    pub(super) fn profile_passes(
+        &mut self,
+        stats: &viz_render::FrameStats,
+        view: &ViewConfiguration,
+        size: (u32, u32),
+        revision: u64,
+        follow_preload: bool,
+        timing_coverage: Option<viz_scene::gpu_timing::TimingCoverage>,
+    ) {
+        if let Some(profile) = self.pass_profile.as_mut() {
+            profile.observe(stats, view, size, revision, follow_preload, timing_coverage);
         }
     }
 

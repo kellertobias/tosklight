@@ -1,3 +1,7 @@
+import { TimecodePaneScope, TimelineInspectorPreferenceContext, useTimecodeSidebarPreference } from "../features/timecode/useTimecodeSidebarPreference";
+import { importTimecodeMarkerCsv } from "../features/timecode/importTimecodeMarkerCsv";
+import { EMPTY_TIMELINE_TITLE_STATE, TimelineTitleStateContext } from "../features/timecode/useTimelineTitleActions";
+import { timecodeTimelineTitleActions } from "../features/timecode/timecodeTimelineTitleActions";
 import { formatErrorDetails } from "@tosklight/ui";
 import { ErrorAlert } from "@tosklight/ui";
 import {
@@ -58,7 +62,6 @@ import {
 import type { ShowObject } from "../features/showObjects/contracts";
 import { useShowObjectView } from "../features/showObjects/ShowObjectsView";
 import {
-	parseMarkerCsv,
 	reconcileAutomaticAudioLane,
 } from "../features/timecode/editorModel";
 import { useTimecodeActions } from "../features/timecode/TimecodeActionsContext";
@@ -79,6 +82,7 @@ import { TimecodeFrameField } from "../features/timecode/TimecodeFrameField";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
 import type { WindowProps } from "./windowTypes";
 import "./TimecodeRuntimeWindow.css";
+import "../features/timecode/TimecodeEditorPolish.css";
 
 const FPS = 44;
 const TIMECODE_POOL_SIZE = 100;
@@ -114,7 +118,7 @@ function useCueListPlaybackNumbers(active: boolean): Map<string, number> {
 	return useMemo(() => new Map(cueLists.flatMap(({body}) => body.pool_number == null ? [] : [[body.id, body.pool_number] as const])), [cueLists]);
 }
 
-export function TimecodeRuntimeWindow({
+function TimecodeRuntimeWindow({
 	active = true,
 	compact = false,
 }: WindowProps) {
@@ -435,6 +439,17 @@ function AudioFileField({
 	);
 }
 
+function timecodeSaveStatus(
+	audioImporting: boolean, saving: boolean, hasRecord: boolean,
+	hasSaveError: boolean, waveformLoading: boolean,
+) {
+	if (audioImporting) return "Importing audio…";
+	if (saving) return hasRecord ? "Saving…" : "Creating…";
+	if (hasSaveError) return "Not saved";
+	if (waveformLoading) return "Loading waveform…";
+	return hasRecord ? "Saved" : "Not saved";
+}
+
 export function TimecodeEditor({
 	showId,
 	item,
@@ -503,11 +518,12 @@ export function TimecodeEditor({
 	const [audioImporting, setAudioImporting] = useState(false);
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	const [settingsOpen, setSettingsOpen] = useState(false);
+	const [inspectorVisible, setInspectorVisible] = useTimecodeSidebarPreference();
 	const [markersLocked, setMarkersLocked] = useState(false);
 	const [csvMode, setCsvMode] = useState<"append" | "replace">("append");
 	const [csvError, setCsvError] = useState<string | null>(null);
 	const timelineRef = useRef<TimecodeTimelineEditorHandle>(null);
-
+	const [timelineTitleState, setTimelineTitleState] = useState(EMPTY_TIMELINE_TITLE_STATE);
 	const isNew = !record;
 	const duration = draft.duration_frame ?? 0;
 	const frame = Math.min(editorFrame, duration);
@@ -573,29 +589,14 @@ export function TimecodeEditor({
 			setError(`Could not close before autosave completed: ${String(reason)}`);
 		}
 	};
-	const importCsv = async (file: File) => {
-		try {
-			const csvSource = await file.text();
-			const imported = parseMarkerCsv(csvSource, FPS, Math.max(1, duration));
-			setDraft({
-				...latestDraft.current,
-				markers:
-					csvMode === "append"
-						? [...latestDraft.current.markers, ...imported]
-						: imported,
-			});
-			setCsvError(null);
-		} catch (reason) {
-			setCsvError(formatErrorDetails(reason));
-		}
-	};
+	const importCsv = (file: File) => importTimecodeMarkerCsv(file, { fps: FPS, duration, mode: csvMode, latestDraft, setDraft, setError: setCsvError });
+
 	const transportActions = timecodeTransportActions({
 		disabled: isNew || busy || Boolean(saveError),
 		stopDisabled: isNew || actionBusy,
 		state: transport?.state,
 		onAction: act,
 	});
-
 	const addAction = useTimecodeAddAction({
 		timelineRef,
 		draft,
@@ -613,22 +614,11 @@ export function TimecodeEditor({
 				title={`Timecode ${draft.number}`}
 				info={{
 					primary: transport?.state ?? "Stopped",
-					secondary: audioImporting
-						? "Importing audio…"
-						: saving
-							? record
-								? "Saving…"
-								: "Creating…"
-							: saveError
-								? "Not saved"
-								: waveformLoading
-									? "Loading waveform…"
-									: record
-										? "Saved"
-										: "Not saved",
+					secondary: timecodeSaveStatus(audioImporting, saving, Boolean(record), Boolean(saveError), waveformLoading),
 				}}
 				groups={[
 					{ id: "timecode-add", actions: [addAction] },
+					{ id: "timecode-selection", actions: timecodeTimelineTitleActions(timelineRef, timelineTitleState) },
 					{
 						id: "timecode-history",
 						actions: [
@@ -698,6 +688,8 @@ export function TimecodeEditor({
 										importCsv,
 										markersLocked,
 										setMarkersLocked,
+										inspectorVisible,
+										setInspectorVisible,
 									}}
 								/>
 							),
@@ -717,25 +709,29 @@ export function TimecodeEditor({
 				onRetrySave={retrySave}
 				onRetryWaveform={retryWaveform}
 			/>
-			<TimecodeTimelineEditor
-				ref={timelineRef}
-				definition={draft}
-				frame={frame}
-				fps={FPS}
-				cueLists={effectiveCueLists}
-				audioPlayers={audioPlayers}
-				waveformPeaks={waveformPeaks}
-				markersLocked={markersLocked}
-				clipStatuses={transport?.cue_list_clips}
-				onScrub={scrub}
-				onCommit={setDraft}
-				onPreview={previewDraft}
-				onBeginGesture={beginGesture}
-				onEndGesture={endGesture}
-				timingDefaults={timingDefaults}
-				onSaveCueList={saveCueTiming}
-				onCueTimingError={setError}
-			/>
+			<TimelineInspectorPreferenceContext.Provider value={{ visible: inspectorVisible, setVisible: setInspectorVisible }}>
+			<TimelineTitleStateContext.Provider value={setTimelineTitleState}>
+				<TimecodeTimelineEditor
+					ref={timelineRef}
+					definition={draft}
+					frame={frame}
+					fps={FPS}
+					cueLists={effectiveCueLists}
+					audioPlayers={audioPlayers}
+					waveformPeaks={waveformPeaks}
+					markersLocked={markersLocked}
+					clipStatuses={transport?.cue_list_clips}
+					onScrub={scrub}
+					onCommit={setDraft}
+					onPreview={previewDraft}
+					onBeginGesture={beginGesture}
+					onEndGesture={endGesture}
+					timingDefaults={timingDefaults}
+					onSaveCueList={saveCueTiming}
+					onCueTimingError={setError}
+				/>
+			</TimelineTitleStateContext.Provider>
+			</TimelineInspectorPreferenceContext.Provider>
 		</section>
 	);
 }
@@ -757,6 +753,8 @@ export function TimecodeSettings({
 	importCsv,
 	markersLocked,
 	setMarkersLocked,
+	inspectorVisible = false,
+	setInspectorVisible,
 }: {
 	draft: TimecodeDefinition;
 	setDraft(value: TimecodeDefinition): void;
@@ -770,6 +768,8 @@ export function TimecodeSettings({
 	importCsv(file: File): Promise<void>;
 	markersLocked: boolean;
 	setMarkersLocked(value: boolean): void;
+	inspectorVisible?: boolean;
+	setInspectorVisible?(value: boolean): void;
 }) {
 	const [activeTab, setActiveTab] =
 		useState<(typeof TIMECODE_SETTINGS_TABS)[number]>("Generic");
@@ -795,6 +795,8 @@ export function TimecodeSettings({
 			</div>
 			{activeTab === "Generic" && (
 				<>
+					<CheckboxField label="Show selection sidebar" checked={inspectorVisible}
+						onChange={(event) => setInspectorVisible?.(event.currentTarget.checked)} />
 					<TextField
 						label="Name"
 						value={draft.name}
@@ -928,7 +930,7 @@ function useTimecodeAddAction({
 		ariaLabel: "Add",
 		label: (
 			<>
-				<span aria-hidden="true">＋</span> Add
+				<span aria-hidden="true">＋</span> Add…
 			</>
 		),
 		dropdown: {
@@ -1133,3 +1135,11 @@ function useTimecodeEditState({
 		},
 	};
 }
+
+/** Each pane keeps its own local presentation preference within the connected desk. */
+function TimecodeRuntimePresentation(props: WindowProps) {
+	return <TimecodePaneScope.Provider value={props.paneId ?? "built-in"}>
+		<TimecodeRuntimeWindow {...props} />
+	</TimecodePaneScope.Provider>;
+}
+export { TimecodeRuntimePresentation as TimecodeRuntimeWindow };

@@ -97,7 +97,7 @@ jobs:
           from pathlib import Path
           root = Path('.artifacts/generated/pages')
           manifest = json.loads(Path('docs/marketing/screenshot-manifest.json').read_text())
-          files = [root / 'screenshots' / entry['file'].replace('/', '-') for entry in manifest['entries']]
+          files = sorted((root / 'screenshots').glob('*.jpg')) + [root / 'screenshots/web-images.json']
           report = {
               'sourceCommit': os.environ['GITHUB_SHA'],
               'captureArchiveSHA256': os.environ['CAPTURE_SHA256'],

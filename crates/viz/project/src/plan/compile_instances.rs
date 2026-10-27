@@ -47,6 +47,10 @@ pub(super) fn compile_instances(
             .and_then(|index| scene.models.get(index as usize))
             .and_then(|drawn| Some(drawn.bracket_hinge? * drawn.scale_to(size)));
         scene.fixtures.push(FixtureInstance {
+            lamp_response: super::lamp_response::resolve(
+                &fixture.profile,
+                &instance.installed_appearance,
+            ),
             drawn_as_scenery: generated_scenery.is_some(),
             invisible: point,
             instance_id: instance.instance_id,
@@ -64,6 +68,11 @@ pub(super) fn compile_instances(
                 &instance.installed_appearance,
             ),
             installed_shaper_angles_degrees: instance.installed_appearance.shaper_angles_degrees,
+            installed_shaper_blades: instance
+                .installed_appearance
+                .manual_optics
+                .as_ref()
+                .map_or([0.0; 4], |optics| optics.shaper_blades),
             // Scaled here, once, so the drawn model, picking and the plan symbol all read the
             // same size from the body.
             body: FixtureBody {
@@ -71,11 +80,7 @@ pub(super) fn compile_instances(
                 kind: class.body_kind(moving),
             },
             patched: !shared_addresses.is_empty(),
-            address: instance
-                .split_patches
-                .iter()
-                .find_map(|(_, address)| *address)
-                .or_else(|| shared_addresses.values().copied().min()),
+            address: instance_address(instance, &shared_addresses),
             model,
             fallback: emitterless_fallback(fixture, &geometry, class),
         });
@@ -126,6 +131,7 @@ pub(super) fn compile_instances(
             laser.clone(),
             effect.clone(),
         );
+        super::manual_optics::apply_zoom(scene, bindings, emitter_start, instance);
         crate::physical::attach(
             fixture,
             mode,
@@ -147,6 +153,17 @@ pub(super) fn compile_instances(
             });
         }
     }
+}
+
+fn instance_address(
+    instance: &PhysicalInstance,
+    shared_addresses: &HashMap<u16, (u16, u16)>,
+) -> Option<(u16, u16)> {
+    instance
+        .split_patches
+        .iter()
+        .find_map(|(_, address)| *address)
+        .or_else(|| shared_addresses.values().copied().min())
 }
 
 /// Apply the installed output override without changing the shared profile optics.
