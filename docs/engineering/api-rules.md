@@ -4,9 +4,11 @@ Maintainer decisions, 2026-07-23. These rules are binding for every new or rewor
 route and for every client call site. When touching an existing route that violates them,
 bring it into compliance in the same chunk or record precisely why not.
 
-Customer-facing protocol documentation covers **OSC only** (`docs/help/90-Protocols/`). The
-HTTP and WebSocket APIs are internal application transports plus an integrator convenience;
-they are not published documentation surfaces for now.
+The complete customer-facing protocol reference covers OSC (`docs/engineering/protocols/osc.md`).
+The operator manual has short REST, OSC, hardware-bridge, and scripting introductions under
+`docs/help/99-Integration/`. HTTP and WebSocket APIs remain internal application transports plus
+an integrator convenience; the introduction links their source contracts rather than providing
+a complete published HTTP/WS reference.
 
 ## 1 — Classify every write
 

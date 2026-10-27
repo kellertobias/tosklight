@@ -1,0 +1,97 @@
+# Fixture models
+
+A fixture profile may name its own 3D model. Most do not, the shipped library, an MVR
+import and a hand-built profile all commonly arrive with nothing but channels, so the
+Visualizer chooses one of the models ToskLight ships instead of drawing a box.
+
+A profile can also name the body it wants. **Settings > Library**, then **Simulation > Body** in the profile editor
+offers every model ToskLight ships, listed in the
+[Model Catalogue](../../99-Appendix/01-model-catalogue.md), and a profile that names one is drawn as
+that. This is how a PAR 64 long nose is told apart from a PAR 16, or an eight-cell blinder from a
+two: the guess below cannot make those distinctions, because nothing in a channel set does.
+
+When a profile names no body, or names one this build does not contain, the Visualizer chooses a fallback. It checks the declared fixture type first, then the available channels.
+
+The guess never looks at a manufacturer or a product name. It looks at what the profile
+says about itself, in two passes.
+
+## Declared fixture type
+
+If the profile declares a fixture type, that decides it. A profile that calls itself a
+blinder is drawn as a blinder even if its author gave it a colour mixer.
+
+| Fixture type contains | Model |
+| --- | --- |
+| `hazer`, `haze`, `fogger`, `fog`, `smoke` | `hazer` |
+| `laser`, `lasers` | `show-laser` |
+| `scanner`, `mirror` | `scanner-mirror-spot` |
+| `blinder` | `blinder-4-cell` |
+| `strobe` | `led-strobe` |
+| `strip`, `sunstrip`, `pixel`, `bar` | `led-strip-rgbcct-1000` |
+| `fresnel` | `fresnel-barn-doors` |
+| `par`, `parcan`, `acl` | `led-par-x-in-1` with colour mixing, otherwise `par-64-short-nose-black` |
+| `wash` | `moving-head-led-wash-400` if it moves, otherwise `led-par-x-in-1` |
+| `profile`, `spot`, `ellipsoidal`, `beam` | `moving-head-profile` if it moves, otherwise `profile-spot` |
+
+A laser is decided by its type alone. Nothing in a channel set distinguishes one, a show
+laser's chart calls the position of its figure inside the scan field Pan and Tilt, which
+reads as a moving head to every rule below, so a projector whose profile does not say it
+is a laser is neither drawn nor rendered as one.
+
+## Channel-based fallback
+
+A profile with no type, or a type nobody recognises, is read from its channel set. The
+rules are applied in this order, because the tests are not mutually exclusive, a moving
+head with both a gobo wheel and a colour mixer is a profile, and a fixture with a strobe
+channel and an RGB mixer is an LED PAR that happens to strobe.
+
+| The mode has | Model |
+| --- | --- |
+| A fog, haze or smoke channel | `hazer` |
+| Pan and Tilt, plus a colour wheel or a gobo wheel | `moving-head-profile` |
+| Pan and Tilt, plus colour mixing and no gobo | `moving-head-led-wash-400` |
+| Pan and Tilt, and nothing else to go on | `moving-head-wash` |
+| Colour mixing, no Pan or Tilt | `led-par-x-in-1` |
+| A Strobe channel, no colour mixing, no Pan or Tilt | `led-strobe` |
+| Nothing but a level | `fresnel-barn-doors` |
+
+Colour mixing means RGB or CMY: a subtractive head is still a mixing head, and neither is
+a gobo spot.
+
+A bare dimmer channel uses the Fresnel fallback. Set the body explicitly when that is the wrong shape for the rig.
+
+## Model size and rigging
+
+Each model is authored in metres at the size of the product it represents.
+A profile's declared physical dimensions override that model size, so a smaller declared size draws a smaller fixture in the rig. Copy the size from the [Model Catalogue](../../99-Appendix/01-model-catalogue.md) into the profile if you
+want them to agree exactly.
+
+Every model that flies carries its rigging as one switchable part: a half-coupler at the
+hanging point with its safety bond. A fixture the show has on a floor base rather than on
+a bar can have that part hidden without touching the rest of the model.
+
+Fixtures also declare where their hardware swivels, the bracket bolts a static lantern
+tilts on, and the hinge of each barn-door leaf, so those parts can be aimed rather than
+being frozen where they were modelled. A lantern's **Bracket** angle turns its body about
+those bracket bolts while the hanging frame and the coupler stay where they hang, in the
+Visualizer and in the Viz editor's side views alike.
+
+## Emitting faces
+
+The Visualizer lights the fixture's emitting face: the lens of a moving head or Fresnel, the row of lamps on a blinder or Sunstrip, or the front of an LED strip. The face stands across the aim, so it turns with pan and tilt and
+it is seen edge-on from the side, exactly as the real fixture is.
+
+Its shape and size come from the profile's own optics block when the library declares one.
+When the profile says nothing, which is the common case, the declared fixture type decides,
+bounded by two things it can never exceed: the body of the fixture that carries it, and the
+spacing between neighbouring lamps of the same fixture, so a bank of lamps stays a row of
+lamps instead of merging into one bright tube.
+
+The scanner models keep their chassis still. Only the mirror and its gimbal move, around
+the mirror's centre, while the outgoing beam steers from that centre. This draws the
+scanner's visible mechanics without calculating reflections inside the fixture.
+
+The **LED PAR, pizza lamp** model has separate red, green and blue diode faces. Each set
+follows its corresponding colour channel and the dimmer and shutter; their combined
+colour still produces one beam. The Generic **Dimmer RGB Control PAR** uses this model.
+Selecting a pizza model does not turn its diode faces into separately addressable pixels.

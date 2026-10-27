@@ -5,9 +5,9 @@ import type {
 } from "../../../light-desktop/src/api/types";
 
 export const helpQuickStartId = "00-Quick-Start/index.md";
-export const helpNestedTopicId = "10-Desk/20-Programmer-and-Cues/01-command-line.md";
+export const helpNestedTopicId = "20-ToskLight-Control/20-Programmer-and-Cues/01-command-line.md";
 /** The folder holding the nested topic, for a story that needs it already open. */
-export const helpNestedFolderId = "10-Desk/20-Programmer-and-Cues/index.md";
+export const helpNestedFolderId = "20-ToskLight-Control/20-Programmer-and-Cues/index.md";
 
 const topics: HelpCatalogEntry[] = [
   { id: helpQuickStartId, title: "Quick Start", kind: "topic", children: [] },
@@ -18,7 +18,7 @@ const topics: HelpCatalogEntry[] = [
     kind: "folder",
     children: [
       { id: helpNestedTopicId, title: "Command Line", kind: "topic", children: [] },
-      { id: "10-Desk/20-Programmer-and-Cues/02-selecting-and-setting-values.md", title: "Selecting and Setting Values", kind: "topic", children: [] },
+      { id: "20-ToskLight-Control/20-Programmer-and-Cues/02-selecting-and-setting-values.md", title: "Selecting and Setting Values", kind: "topic", children: [] },
     ],
   },
   {
