@@ -45,4 +45,10 @@ describe("indexed fixture label placement", () => {
 		expect(new Set([...layout.labels, ...layout.unplaced].map((label) => label.key)).size).toBe(1000);
 		checkBoxes(layout.labels.map((label) => label.box));
 	});
+	it("never falls back to placing text on a lamp when there is no free space", () => {
+		const layout = placeLabels(requests(1), bounds, 1.5, [bounds]);
+		expect(layout.labels).toEqual([]);
+		expect(layout.unplaced).toHaveLength(1);
+	});
+
 });

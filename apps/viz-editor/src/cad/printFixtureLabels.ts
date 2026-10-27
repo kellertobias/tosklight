@@ -1,7 +1,8 @@
+import { fixtureLabelObstacle } from "./fixtureLabelObstacles";
 import { visibleEntities } from "./cutPlanes";
-import { labelWidth, placeLabels, type LabelRequest } from "./labelPlacement";
+import { labelWidth, placeLabels, type LabelBounds, type LabelRequest } from "./labelPlacement";
 import { PRINT_BORDER_MM, PRINT_TITLE_HEIGHT_MM, PT_MM, printPageScale } from "./printLayout";
-import { type CadEntity, type CadPrintPage, printPageHeight, printPaperSize, projectPoint } from "./types";
+import { type CadDrawing, type CadEntity, type CadPrintPage, printPageHeight, printPaperSize, projectPoint } from "./types";
 
 export const FIXTURE_LABEL_SIZE = 6;
 export const FIXTURE_LABEL_LINE_HEIGHT = 8;
@@ -12,7 +13,7 @@ export function fixtureLabelLines(entity: CadEntity, ids: boolean, dmx: boolean)
 }
 
 /** One layout in PDF points, relative to the page's top-left plan window, also mapped to CAD. */
-export function printFixtureLabelLayout(page: CadPrintPage, entities: readonly CadEntity[]) {
+export function printFixtureLabelLayout(page: CadPrintPage, entities: readonly CadEntity[], drawings: readonly CadDrawing[] = []) {
 	const scale = printPageScale(page) * PT_MM;
 	const height = printPageHeight(page);
 	const widthPoints = page.widthMillimetres * scale;
@@ -23,8 +24,15 @@ export function printFixtureLabelLayout(page: CadPrintPage, entities: readonly C
 	const footer = (PRINT_BORDER_MM + PRINT_TITLE_HEIGHT_MM) / paper.height * heightPoints;
 	const bounds = { x: inset, y: inset, width: widthPoints - inset * 2, height: heightPoints - inset - footer };
 	const requests: LabelRequest[] = [];
+	const obstacles: LabelBounds[] = [];
+	const drawingById = new Map(drawings.map((drawing) => [drawing.id, drawing]));
+	const pagePoint = (point: [number, number]): [number, number] => [
+		(point[0] - page.centreMillimetres[0] + page.widthMillimetres / 2) * scale,
+		(page.centreMillimetres[1] + height / 2 - point[1]) * scale,
+	];
 	for (const entity of visibleEntities(entities, page.view, page.cutPlanes)) {
 		if (entity.kind === "venue") continue;
+		obstacles.push(fixtureLabelObstacle(entity, drawingById.get(entity.drawingId), page.view, page.rotationQuarterTurns, pagePoint, page.showMountingHardware !== false));
 		const lines = fixtureLabelLines(entity, page.showFixtureIds, page.showDmxAddresses);
 		if (!lines.length) continue;
 		const point = projectPoint(entity.positionMillimetres, page.view, page.rotationQuarterTurns);
@@ -35,5 +43,5 @@ export function printFixtureLabelLayout(page: CadPrintPage, entities: readonly C
 		if (anchor[0] < 0 || anchor[0] > widthPoints || anchor[1] < 0 || anchor[1] > heightPoints) continue;
 		requests.push({ key: entity.id, anchor, lines, width: labelWidth(lines, FIXTURE_LABEL_SIZE), height: lines.length * FIXTURE_LABEL_LINE_HEIGHT + FIXTURE_LABEL_PADDING * 2 });
 	}
-	return { ...placeLabels(requests, bounds), bounds, scale, widthPoints, heightPoints };
+	return { ...placeLabels(requests, bounds, 1.5, obstacles), obstacles, bounds, scale, widthPoints, heightPoints };
 }

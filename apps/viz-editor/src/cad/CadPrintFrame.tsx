@@ -17,7 +17,7 @@ import {
 	printGridMillimetres,
 } from "./print";
 import { TITLE_W, TITLE_H, BORDER, PT_MM } from "./printLayout";
-import type { CadEntity, CadPrintPage, TileCamera } from "./types";
+import type { CadDrawing, CadEntity, CadPrintPage, TileCamera } from "./types";
 import { printPageHeight, printPaperSize } from "./types";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
 import type { CadUnderlay } from "./underlays";
@@ -25,6 +25,7 @@ import type { CadUnderlay } from "./underlays";
 interface PrintFrameProps {
 	page: CadPrintPage;
 	entities: readonly CadEntity[];
+	drawings?: readonly CadDrawing[];
 	underlays: readonly CadUnderlay[];
 	camera: TileCamera;
 	viewportRotation?: number;
@@ -200,6 +201,7 @@ function PrintPageUnderlays({
 
 /** One print page drawn over the tile it belongs to, as the sheet it will become. */
 export function PrintFrame({
+	drawings,
 	page,
 	entities,
 	underlays,
@@ -267,7 +269,7 @@ export function PrintFrame({
 					{...{ page, underlays, camera, height, millimetrePixels }}
 				/>
 				{showLabels ? <PrintPageLabels
-					{...{ page, entities, camera, height, millimetrePixels }}
+					{...{ page, entities, drawings, camera, height, millimetrePixels }}
 				/> : null}
 				<PrintTitleBlock {...{ page, documentInfo }} />
 			</div>

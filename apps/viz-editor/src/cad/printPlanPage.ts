@@ -301,7 +301,7 @@ export function planPageStream(
 			),
 		);
 	commands.push(...annotationCommands(annotations, page, frame, fonts));
-	commands.push(...fixtureLabelCommands(page, scene.entities, frame.point));
+	commands.push(...fixtureLabelCommands(page, scene.entities, frame.point, scene.drawings));
 	commands.push(...furnitureCommands(page, info, frame));
 	return [
 		{
