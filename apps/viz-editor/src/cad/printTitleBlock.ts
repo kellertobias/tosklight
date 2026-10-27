@@ -38,10 +38,10 @@ export function printTitleEntries(page: CadPrintPage, info: CadPrintDocumentInfo
 	const headings = printTitleHeadings(page, info);
 	const separator = printTitleSeparatorY(page, info);
 	const contacts = [
-		info.lightingDesigner ? `Lighting Designer: ${info.lightingDesigner}` : "",
+		...(info.lightingDesigner ? ["Lighting Designer", info.lightingDesigner] : []),
 		info.contactPhone ? `Phone: ${info.contactPhone}` : "",
 		info.contactEmail ? `Email: ${info.contactEmail}` : "",
-	].filter(Boolean).map((value, index) => ({ value, x: 6, y: separator - 9 - index * 9, size: 6, width: 207 }));
+	].filter(Boolean).map((value, index) => ({ value, x: 6, y: separator - 8 - index * 8, size: 6, width: 207 }));
 	const metadata = [
 		`Printed  ${saved(info.printedAt ?? Date.now() / 1000)}`,
 		`${info.fixtureCount} fixtures / ${info.universeCount} universes`,
@@ -49,6 +49,6 @@ export function printTitleEntries(page: CadPrintPage, info: CadPrintDocumentInfo
 	].map((value, index) => ({ value, x: 225, y: TITLE_H - 12 - index * 9, size: 6, width: TITLE_W - 231 }));
 	return [...headings, ...contacts, {
 		value: "Generated with ToskLight Architect · www.tosklight.de",
-		x: 6, y: 5, size: 6, width: 207, muted: true,
+		x: 6, y: 3, size: 6, width: 207, muted: true,
 	}, ...metadata];
 }
