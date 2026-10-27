@@ -269,7 +269,7 @@ describe("CAD PDF export", () => {
 				const broadGlyphs = [...field[4]].filter((character) => character === "W").length;
 				expect(x + broadGlyphs * size * 0.944).toBeLessThan(columnsEnd);
 			} else {
-				expect(field[4]).toContain("Scale 1:");
+				expect(field[4]).toContain("Generated with ToskLight Architect");
 				expect(x + field[4].length * size * 0.6).toBeLessThan(titleLeft);
 			}
 		}
@@ -286,15 +286,24 @@ describe("CAD PDF export", () => {
 		expect(entries.slice(0, 3).map((entry) => entry.value)).toEqual(["Lighting Overview", "Summer Show / Festival", "Grand Hall"]);
 		const headings = entries.slice(0, 3);
 		for (const entry of headings) expect(entry.y).toBeGreaterThan(printTitleSeparatorY(page("Lighting Overview"), info));
-		const contacts = entries.filter((entry) => entry.value === "Lighting Designer" || entry.value === "Alex Designer" || /^(Phone|Email):/.test(entry.value));
-		expect(contacts.map((entry) => entry.value)).toEqual(["Lighting Designer", "Alex Designer", "Phone: +49 1234 567890", "Email: tobias.keller@example.org"]);
+		const contacts = entries.filter((entry) => entry.value === "Alex Designer" || /^(Phone|Email):/.test(entry.value));
+		expect(contacts.map((entry) => entry.value)).toEqual(["Alex Designer", "Phone: +49 1234 567890", "Email: tobias.keller@example.org"]);
 		for (const entry of contacts) {
 			expect(entry.y + entry.size).toBeLessThan(printTitleSeparatorY(page("Lighting Overview"), info));
 			expect(entry.x + entry.width).toBeLessThan(PRINT_TITLE_DIVIDER_X);
 		}
-		const footer = entries.find((entry) => entry.muted);
-		expect(footer?.value).toBe("Generated with ToskLight Architect · www.tosklight.de");
-		expect((footer?.y ?? 0) + (footer?.size ?? 0)).toBeLessThan(contacts[3].y);
+		expect(entries.some((entry) => entry.value.includes("Generated with"))).toBe(false);
+		expect(entries.some((entry) => entry.value === "Lighting Designer")).toBe(false);
+		const rails = entries.filter((entry) => entry.rotation);
+		expect(rails.map((entry) => entry.value)).toEqual(["Project", "Designer"]);
+		for (const entry of rails) {
+			expect(entry.rotation).toBe(90);
+			expect(entry.x).toBeLessThan(22);
+		}
+		const pdf = new TextDecoder().decode(buildCadPdf(scene, [page("Lighting Overview")], info));
+		expect(pdf.match(/0 1 -1 0 [\d.]+ [\d.]+ cm/g)).toHaveLength(2);
+		expect(pdf).toContain("Generated with ToskLight Architect \\267 www.tosklight.de");
+		expect(entries.find((entry) => entry.value.startsWith("Scale 1:"))?.value).toContain(" / Grid 500 mm");
 		for (const entry of entries.filter((entry) => entry.x > PRINT_TITLE_DIVIDER_X)) {
 			expect(entry.y).toBeGreaterThan(PRINT_TITLE_MARK.y + PRINT_TITLE_MARK.size);
 		}

@@ -1,3 +1,6 @@
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { LABEL_CAPACITY_MESSAGE, labelWidth, placeLabels, type LabelRequest } from "./labelPlacement";
+import { fixtureLabelLines } from "./printFixtureLabels";
 /**
  * The DOM drawn over a CAD viewport's canvas: the scale bar an operator reads a distance off, and
  * the fixture identities beside the rig.
@@ -41,16 +44,27 @@ export function CadScaleBar({
 	);
 }
 
-/** Fixture IDs and DMX patch beside each fixture, following a move while it is previewed. */
-export function CadEntityLabels({
-	entities,
-	preview,
-	view,
-	rotationQuarterTurns,
-	camera,
-	showFixtureIds,
-	showDmxAddresses,
-}: {
+function useLabelViewport(enabled: boolean) {
+	const ref = useRef<HTMLDivElement>(null);
+	const [size, setSize] = useState({ width: 1000, height: 800 });
+	useLayoutEffect(() => {
+		const element = ref.current;
+		if (!element || !enabled) return;
+		const resize = () => {
+			const bounds = element.getBoundingClientRect();
+			if (bounds.width > 0 && bounds.height > 0) setSize({ width: bounds.width, height: bounds.height });
+		};
+		resize();
+		if (typeof ResizeObserver === "undefined") return;
+		const observer = new ResizeObserver(resize);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [enabled]);
+	return { ref, ...size };
+}
+
+/** Complete fixture instance labels share the indexed collision solver used by printed plans. */
+export function CadEntityLabels({ entities, preview, view, rotationQuarterTurns, camera, showFixtureIds, showDmxAddresses }: {
 	entities: readonly CadEntity[];
 	preview: CadTransformPreview | null;
 	view: CadViewDirection;
@@ -59,48 +73,33 @@ export function CadEntityLabels({
 	showFixtureIds: boolean;
 	showDmxAddresses: boolean;
 }) {
-	// Reference annotations belong to fixture labels. Hide them with IDs so a shared flybar
-	// reference does not cover the entire rig; the selected element still explains it in Info.
-	if (!showFixtureIds && !showDmxAddresses) return null;
-	return (
-		<div className="cad-entity-labels" aria-hidden="true">
-			{entities.map((entity) => {
-				const worldDelta = previewDeltaForEntity(
-					preview,
-					entity.logicalFixtureId,
-				);
-				const point = projectPoint(
-					entity.positionMillimetres.map(
-						(value, index) => value + worldDelta[index],
-					) as [number, number, number],
-					view,
-					rotationQuarterTurns,
-				);
-				return (
-					<span
-						key={entity.id}
-						className="cad-entity-label"
-						style={{
-							left: `calc(50% + ${(point[0] + camera.pan[0]) * camera.zoom}px)`,
-							top: `calc(50% - ${(point[1] + camera.pan[1]) * camera.zoom}px)`,
-						}}
-					>
-						{showFixtureIds ? `ID ${entity.fixtureDisplayId}` : null}
-						{showFixtureIds && showDmxAddresses ? " · " : null}
-						{showDmxAddresses ? `DMX ${entity.dmxAddress}` : null}
-						{showFixtureIds && entity.positionReference ? (
-							<>
-								{showFixtureIds || showDmxAddresses ? " · " : null}
-								<span className="cad-entity-label-reference">
-									Follows 3D Point {entity.positionReference}
-								</span>
-							</>
-						) : null}
-					</span>
-				);
-			})}
-		</div>
-	);
+	const enabled = showFixtureIds || showDmxAddresses;
+	const viewport = useLabelViewport(enabled);
+	const bounds = { x: -viewport.width / 2 + 4, y: -viewport.height / 2 + 4, width: viewport.width - 8, height: viewport.height - 8 };
+	const layout = useMemo(() => {
+		const requests: LabelRequest[] = [];
+		for (const entity of entities) {
+			const delta = previewDeltaForEntity(preview, entity.logicalFixtureId);
+			const point = projectPoint(entity.positionMillimetres.map((value, index) => value + delta[index]) as [number, number, number], view, rotationQuarterTurns);
+			const anchor: [number, number] = [(point[0] + camera.pan[0]) * camera.zoom, -(point[1] + camera.pan[1]) * camera.zoom];
+			if (anchor[0] < bounds.x || anchor[0] > bounds.x + bounds.width || anchor[1] < bounds.y || anchor[1] > bounds.y + bounds.height) continue;
+			const lines = [fixtureLabelLines(entity, showFixtureIds, showDmxAddresses).join(" · ")].filter(Boolean);
+			if (showFixtureIds && entity.positionReference) lines.push(`Follows 3D Point ${entity.positionReference}`);
+			if (lines.length) requests.push({ key: entity.id, anchor, lines, width: labelWidth(lines, 10, 5), height: lines.length * 12 + 6 });
+		}
+		return placeLabels(requests, bounds, 3);
+	}, [entities, preview, view, rotationQuarterTurns, camera, showFixtureIds, showDmxAddresses, viewport.width, viewport.height]);
+	if (!enabled) return null;
+	return <div ref={viewport.ref} className="cad-entity-labels">
+		<svg aria-hidden="true" width="100%" height="100%" viewBox={`${-viewport.width / 2} ${-viewport.height / 2} ${viewport.width} ${viewport.height}`} style={{ position: "absolute", inset: 0 }}>
+			{layout.labels.map((label) => <line key={label.key} x1={label.leader[0][0]} y1={label.leader[0][1]} x2={label.leader[1][0]} y2={label.leader[1][1]} stroke="#8797a5" strokeWidth={0.7} />)}
+		</svg>
+		{layout.labels.map((label) => <span key={label.key} className="cad-entity-label" data-fixture-instance={label.key}
+			style={{ left: `calc(50% + ${label.anchor[0]}px)`, top: `calc(50% + ${label.anchor[1]}px)`, translate: "none", transform: `translate(${label.box.x - label.anchor[0]}px, ${label.box.y - label.anchor[1]}px)`, boxSizing: "border-box", width: label.box.width, height: label.box.height }}>
+			{label.lines[0]}{label.lines.slice(1).map((line, index) => <span key={index} style={{ display: "block", lineHeight: "12px" }} className="cad-entity-label-reference">{line}</span>)}
+		</span>)}
+		{layout.unplaced.length ? <div role="status" className="cad-label-capacity-warning">{layout.unplaced.length} labels do not fit. {LABEL_CAPACITY_MESSAGE}</div> : null}
+	</div>;
 }
 
 /**

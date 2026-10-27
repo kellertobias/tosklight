@@ -11,6 +11,10 @@ const ADVANCES = [
 	500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500,
 	500, 334, 260, 334, 584,
 ];
+export function titleTextWidth(label: string, size: number, bold = false): number {
+	return Array.from(label).reduce((sum, character) => sum + (ADVANCES[character.charCodeAt(0) - 32] ?? 1015), 0) / 1000 * (bold ? 1.25 : 1) * size;
+}
+
 export function fitTitleText(value: string, size: number, width: number, bold = false): { label: string; size: number } {
 	const clean = value.replace(/\s+/g, " ").trim();
 	const measure = (label: string) => Array.from(label).reduce(

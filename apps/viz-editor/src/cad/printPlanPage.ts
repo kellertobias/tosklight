@@ -1,3 +1,4 @@
+import { fixtureLabelCommands } from "./printFixtureLabelCommands";
 import { parseCompanyLogo } from "../document/companyLogo";
 import {
 	annotationLabels,
@@ -22,13 +23,12 @@ import {
 	printPageLayout,
 	printPageScale,
 	PT_MM,
-	printScaleDenominator,
 	TITLE_H,
 	TITLE_W,
 } from "./printLayout";
-import { distance, n, path, text, titleMark } from "./printPdfOps";
-import { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleSeparatorY, printTitleEntries } from "./printTitleBlock";
-import { titleText } from "./printTitleText";
+import { n, path, text, titleMark } from "./printPdfOps";
+import { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, PRINT_GENERATED_FOOTER, printTitleSeparatorY, printTitleEntries } from "./printTitleBlock";
+import { fitTitleText, titleTextWidth, titleText } from "./printTitleText";
 import {
 	entityPlanGeometry,
 	isPositionPoint,
@@ -226,24 +226,7 @@ function entityCommands(
 		);
 		commands.push(path([point(start), point(end)], false, false));
 	}
-	const labels = [
-		page.showFixtureIds ? `ID ${entity.fixtureDisplayId}` : "",
-		page.showDmxAddresses && entity.dmxAddress !== "—"
-			? `DMX ${entity.dmxAddress}`
-			: "",
-	].filter(Boolean);
-	if (!labels.length) return commands;
-	commands.push("0 0.71 0.92 rg");
-	for (const [index, label] of labels.entries())
-		commands.push(
-			text(
-				label,
-				point(centre)[0] + 3,
-				point(centre)[1] + 3 - index * 8,
-				6,
-				true,
-			),
-		);
+
 	return commands;
 }
 
@@ -272,12 +255,16 @@ function furnitureCommands(
 		"0.08 0.08 0.08 rg",
 		...printTitleEntries(page, info).flatMap((entry) => [
 			entry.muted ? "0.45 0.45 0.45 rg" : "0.08 0.08 0.08 rg",
-			titleText(entry.value, tx + entry.x, BORDER + entry.y, entry.size, entry.width, entry.bold),
+			...(entry.rotation ? (() => {
+				const fitted = fitTitleText(entry.value, entry.size, entry.width, entry.bold);
+				return ["q", `0 1 -1 0 ${n(tx + entry.x)} ${n(BORDER + entry.y)} cm`,
+					text(fitted.label, -titleTextWidth(fitted.label, fitted.size, entry.bold) / 2, 0, fitted.size, entry.bold), "Q"];
+			})() : [titleText(entry.value, tx + entry.x, BORDER + entry.y, entry.size, entry.width, entry.bold)]),
 		]),
-		"0.08 0.08 0.08 rg",
+		"0.45 0.45 0.45 rg",
 		titleText(
-			`Scale 1:${printScaleDenominator(page)} / Grid ${distance(frame.grid)}`,
-			BORDER + 5, BORDER + 8, 7, tx - BORDER - 10,
+			PRINT_GENERATED_FOOTER,
+			BORDER + 5, BORDER + 8, 6, tx - BORDER - 10,
 		),
 		"Q",
 	];
@@ -314,6 +301,7 @@ export function planPageStream(
 			),
 		);
 	commands.push(...annotationCommands(annotations, page, frame, fonts));
+	commands.push(...fixtureLabelCommands(page, scene.entities, frame.point));
 	commands.push(...furnitureCommands(page, info, frame));
 	return [
 		{

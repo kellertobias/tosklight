@@ -6,6 +6,7 @@ import { PrintPageLabels, PrintPageSettings } from "./CadPrintPageParts";
 import {
 	type CadPrintDocumentInfo,
 	PRINT_TITLE_MARK,
+	PRINT_GENERATED_FOOTER,
 	PRINT_TITLE_DIVIDER_X,
 	printTitleSeparatorY,
 	printTitleEntries,
@@ -14,9 +15,8 @@ import {
 	PRINT_TITLE_HEIGHT_MM,
 	PRINT_TITLE_WIDTH_MM,
 	printGridMillimetres,
-	printScaleDenominator,
 } from "./print";
-import { TITLE_W, TITLE_H } from "./printLayout";
+import { TITLE_W, TITLE_H, BORDER, PT_MM } from "./printLayout";
 import type { CadEntity, CadPrintPage, TileCamera } from "./types";
 import { printPageHeight, printPaperSize } from "./types";
 import { placedPolylines, underlaysForPage } from "./underlayGeometry";
@@ -29,6 +29,7 @@ interface PrintFrameProps {
 	camera: TileCamera;
 	viewportRotation?: number;
 	selected: boolean;
+	showLabels?: boolean;
 	onSelect(): void;
 	onChange(change: Partial<CadPrintPage>): void;
 	onCamera(camera: TileCamera): void;
@@ -119,7 +120,9 @@ function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | 
 		universeCount: 0, ...documentInfo,
 	};
 	const logo = parseCompanyLogo(info.companyLogo);
-	return (
+	const footerWidth = printPaperSize(page).width * PT_MM - BORDER * 2 - TITLE_W;
+	const footer = fitTitleText(PRINT_GENERATED_FOOTER, 6, footerWidth - 10);
+	return (<>
 		<svg className="cad-print-title-block" viewBox={`0 0 ${TITLE_W} ${TITLE_H}`} role="img" aria-label={`${page.name} information`}>
 			<rect x="0" y="0" width={TITLE_W} height={TITLE_H} fill="#0b0d10" stroke="#f5f5f5" strokeWidth="0.9" />
 			<line x1={PRINT_TITLE_DIVIDER_X} x2={PRINT_TITLE_DIVIDER_X} y1="0" y2={TITLE_H} stroke="#f5f5f5" strokeWidth="0.9" />
@@ -131,11 +134,19 @@ function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | 
 			{printTitleEntries(page, info).map((entry, index) => {
 				const fitted = fitTitleText(entry.value, entry.size, entry.width, entry.bold);
 				return <text key={`${index}:${entry.value}`} x={entry.x} y={TITLE_H - entry.y}
+					transform={entry.rotation ? `rotate(-90 ${entry.x} ${TITLE_H - entry.y})` : undefined}
+					textAnchor={entry.rotation ? "middle" : "start"}
 					fontSize={fitted.size} fontWeight={entry.bold ? "bold" : "normal"}
 					fontFamily="Helvetica, Arial, sans-serif" fill={entry.muted ? "#a0a0a0" : "#f5f5f5"}>{fitted.label}</text>;
 			})}
 		</svg>
-	);
+		<svg viewBox={`0 0 ${footerWidth} 14`} aria-label="Generated with ToskLight Architect"
+			style={{ position: "absolute", left: "var(--cad-print-border)", bottom: "var(--cad-print-border)",
+				width: "calc(100% - var(--cad-print-border) * 2 - var(--cad-print-title-width))",
+				height: `calc(var(--cad-print-title-width) * ${14 / TITLE_W})`, pointerEvents: "none" }}>
+			<text x="5" y="6" fontSize={footer.size} fontFamily="Helvetica, Arial, sans-serif" fill="#a0a0a0">{footer.label}</text>
+		</svg>
+	</>);
 }
 
 /**
@@ -195,6 +206,7 @@ export function PrintFrame({
 	camera,
 	viewportRotation = 0,
 	selected,
+	showLabels = true,
 	onSelect,
 	onChange,
 	onCamera,
@@ -254,9 +266,9 @@ export function PrintFrame({
 				<PrintPageUnderlays
 					{...{ page, underlays, camera, height, millimetrePixels }}
 				/>
-				<PrintPageLabels
+				{showLabels ? <PrintPageLabels
 					{...{ page, entities, camera, height, millimetrePixels }}
-				/>
+				/> : null}
 				<PrintTitleBlock {...{ page, documentInfo }} />
 			</div>
 			<button

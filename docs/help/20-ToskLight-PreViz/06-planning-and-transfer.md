@@ -302,11 +302,20 @@ Use **Delete page** to remove the selected sheet. **Fixed scale** locks a plan t
 denominator, including after paper rotation. The frame can still move; unlock it to resize freely.
 
 The title block prints the page title above the project or show name, then the venue and
-lighting designer's details. Missing phone and email rows are omitted. The right side holds
-the **Printed** timestamp, fixture and universe counts, scale and logo. A gray footer identifies
-ToskLight Architect and www.tosklight.de. The scale also appears in the separate left footer.
+designer's details. Vertical **Project** and **Designer** labels identify the two left sections.
+Missing phone and email rows are omitted. The right side holds the **Printed** timestamp,
+fixture and universe counts, scale, grid spacing and logo. The company logo fits its box without
+changing its proportions. A separate gray footer on the left identifies ToskLight Architect and
+www.tosklight.de.
 The application shows white text on a dark block; PDF output uses black text on white.
 The default vector logo retains its blue accent in both.
+
+PDF plans retain vector fixture outlines and text, so zooming or printing does not depend on a
+bitmap export resolution. A supplied company logo retains the resolution of its uploaded image.
+Fixture IDs and DMX labels use collision-aware placement, with leader lines back to their lamps
+when needed. Print mode shows labels for the selected sheet, or the first included sheet when
+none is selected, while retaining the other page frames. If labels cannot fit at a readable size,
+the preview warns and export asks you to use closer framing or split the plan into pages.
 
 Top plans place the audience at the bottom; elevations look from their named direction. The
 viewport's orientation mark follows a rotated plan. Lens direction indicators show the fixtures'

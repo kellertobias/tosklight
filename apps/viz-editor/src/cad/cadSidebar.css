@@ -329,3 +329,16 @@
 	cursor: default;
 	opacity: 0.45;
 }
+
+.cad-label-capacity-warning {
+	position: absolute;
+	top: 34px;
+	left: 8px;
+	right: 8px;
+	padding: 8px;
+	background: #291d0a;
+	border: 1px solid #d49a3b;
+	color: #ffe2af;
+	font: 12px / 1.4 sans-serif;
+	pointer-events: none;
+}

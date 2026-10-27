@@ -442,8 +442,8 @@ export function CadViewport({
 					view,
 					rotationQuarterTurns,
 					camera,
-					showFixtureIds,
-					showDmxAddresses,
+					showFixtureIds: showFixtureIds && !printMode,
+					showDmxAddresses: showDmxAddresses && !printMode,
 				}}
 			/>
 			<CadMoveReadout readout={interaction.readout} camera={camera} />
@@ -505,11 +505,13 @@ function CadViewportPrintFrames({
 	| "onChangePrintPage"
 	| "documentInfo"
 > & { camera: TileCamera; onCamera(camera: TileCamera): void }) {
+	const labelPageId = selectedPrintPageId ?? printPages.find((page) => page.included)?.id ?? printPages[0]?.id;
 	return printMode && printPages.length ? (
 		<div className="cad-print-frames">
 			{printPages.map((page) => (
 				<PrintFrame
 					key={page.id}
+					showLabels={page.id === labelPageId}
 					underlays={underlays}
 					page={page}
 					entities={entities}

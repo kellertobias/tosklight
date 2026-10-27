@@ -1,11 +1,12 @@
+import { FIXTURE_LABEL_LINE_HEIGHT, FIXTURE_LABEL_PADDING, FIXTURE_LABEL_SIZE, printFixtureLabelLayout } from "./printFixtureLabels";
+import { LABEL_CAPACITY_MESSAGE } from "./labelPlacement";
 import { Button, SwitchField } from "@tosklight/ui";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CadDepthMenu } from "./CadDepthMenu";
 import { PRINT_BORDER_MM } from "./print";
 import {
 	type CadEntity,
 	type CadPrintPage,
-	projectPoint,
 	type TileCamera,
 } from "./types";
 import {
@@ -123,51 +124,24 @@ export function PrintPageLabels({
 	height: number;
 	millimetrePixels: number;
 }) {
-	return (
-		<>
-				{page.showFixtureIds || page.showDmxAddresses ? (
-			<div className="cad-print-labels">
-				{entities
-					.filter((entity) => entity.kind !== "venue")
-					.map((entity) => {
-						const point = projectPoint(
-							entity.positionMillimetres,
-							page.view,
-							page.rotationQuarterTurns,
-						);
-						const x =
-							(point[0] -
-								page.centreMillimetres[0] +
-								page.widthMillimetres / 2) *
-								camera.zoom -
-							PRINT_BORDER_MM * millimetrePixels;
-						const y =
-							(page.centreMillimetres[1] + height / 2 - point[1]) *
-								camera.zoom -
-							PRINT_BORDER_MM * millimetrePixels;
-						if (
-							x < 0 ||
-							y < 0 ||
-							x > page.widthMillimetres * camera.zoom ||
-							y > height * camera.zoom
-						)
-							return null;
-						return (
-							<span key={entity.id} style={{ left: x, top: y }}>
-								{page.showFixtureIds
-									? `ID ${entity.fixtureDisplayId}`
-									: null}
-								{page.showFixtureIds && page.showDmxAddresses
-									? " · "
-									: null}
-								{page.showDmxAddresses && entity.dmxAddress !== "—"
-									? `DMX ${entity.dmxAddress}`
-									: null}
-							</span>
-						);
-					})}
-			</div>
-		) : null}
-		</>
-	);
+	const layout = useMemo(() => printFixtureLabelLayout(page, entities), [page, entities]);
+	if (!page.showFixtureIds && !page.showDmxAddresses) return null;
+	return <>
+		<svg className="cad-print-labels" aria-label="Fixture labels"
+			viewBox={`0 0 ${layout.widthPoints} ${layout.heightPoints}`}
+			style={{ left: -PRINT_BORDER_MM * millimetrePixels, top: -PRINT_BORDER_MM * millimetrePixels, width: page.widthMillimetres * camera.zoom, height: height * camera.zoom }}>
+			<g stroke="#00b6eb" strokeWidth={0.3}>
+				{layout.labels.map((label) => <line key={label.key} x1={label.leader[0][0]} y1={label.leader[0][1]} x2={label.leader[1][0]} y2={label.leader[1][1]} />)}
+			</g>
+			{layout.labels.map((label) => <g key={label.key} data-fixture-instance={label.key}>
+				<rect x={label.box.x} y={label.box.y} width={label.box.width} height={label.box.height} fill="#0b0d10" />
+				{label.lines.map((line, index) => <text key={index}
+					x={label.box.x + FIXTURE_LABEL_PADDING} y={label.box.y + FIXTURE_LABEL_PADDING + FIXTURE_LABEL_SIZE + index * FIXTURE_LABEL_LINE_HEIGHT}
+					fontFamily="Helvetica, Arial, sans-serif" fontSize={FIXTURE_LABEL_SIZE} fontWeight="bold" fill="#00b6eb">{line}</text>)}
+			</g>)}
+		</svg>
+		{layout.unplaced.length ? <div role="status" className="cad-label-capacity-warning">
+			{layout.unplaced.length} labels do not fit. {LABEL_CAPACITY_MESSAGE}
+		</div> : null}
+	</>;
 }

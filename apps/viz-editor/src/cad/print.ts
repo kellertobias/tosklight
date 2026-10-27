@@ -31,7 +31,7 @@ export {
 	printScaleDenominator,
 	rotatePrintPage,
 } from "./printLayout";
-export { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, printTitleSeparatorY, printTitleEntries } from "./printTitleBlock";
+export { PRINT_TITLE_DIVIDER_X, PRINT_TITLE_MARK, PRINT_GENERATED_FOOTER, printTitleSeparatorY, printTitleEntries } from "./printTitleBlock";
 export { fitTitleText } from "./printTitleText";
 export type { CadPrintDocumentInfo } from "./printLayout";
 
