@@ -17,8 +17,11 @@ wire-format and implementation material belongs in `docs/engineering`, outside t
 
 The pinned `@tobisk/markdown-manuals` renderer builds PDF, offline HTML and its ZIP below
 `.artifacts/generated/manual`. Its Python environment is under `.artifacts/cache/manual-venv`.
-Set `LIGHT_MANUAL_RENDERER_PACKAGE` only when deliberately testing another renderer version.
-The build rasterizes source SVG diagrams at2× under the manual artifact tree and mirrors ignored
+The renderer's source revision and browser dependencies are locked in `docs/help/.tooling`;
+`npm run manual` installs them separately from the desktop workspace. The source revision includes
+the list and table pagination fixes. Set `LIGHT_MANUAL_RENDERER_PACKAGE` only when deliberately
+testing another published renderer version.
+The build rasterizes source SVG diagrams at 2× under the manual artifact tree and mirrors ignored
 PNGs into Help assets for the pinned PDF renderer. The manual hook selects those PNGs for PDF/HTML;
 in-app Help retains the authored SVG.
 

@@ -279,16 +279,21 @@ test("manual renderer and browser dependencies are reviewed exact lockfile input
 		),
 	);
 	assert.equal(tooling.private, true);
-	assert.equal(tooling.dependencies["@tobisk/markdown-manuals"], "1.3.4");
+	const rendererRevision = "9b9d953fc1516403c9a5c663b8cfbc50196b3bb9";
+	assert.equal(
+		tooling.dependencies["@tobisk/markdown-manuals"],
+		`git+https://github.com/kellertobias/markdown-docgen.git#${rendererRevision}`,
+	);
 	assert.deepEqual(tooling.overrides, {
 		puppeteer: "25.7.0",
 		"puppeteer-core": "25.7.0",
 	});
 	assert.deepEqual(lock.packages[""].dependencies, tooling.dependencies);
 	assert.equal(
-		lock.packages["node_modules/@tobisk/markdown-manuals"].version,
-		"1.3.4",
+		lock.packages["node_modules/@tobisk/markdown-manuals"].resolved.split("#").at(-1),
+		rendererRevision,
 	);
+	assert.doesNotMatch(source, /LIGHT_MANUAL_RENDERER_PACKAGE:/);
 	for (const name of ["puppeteer", "puppeteer-core"]) {
 		const packages = Object.entries(lock.packages).filter(
 			([key]) =>

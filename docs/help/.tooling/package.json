@@ -4,7 +4,7 @@
 	"private": true,
 	"description": "Locked build-only operator manual renderer; installed only by npm run manual.",
 	"dependencies": {
-		"@tobisk/markdown-manuals": "1.3.4"
+		"@tobisk/markdown-manuals": "git+https://github.com/kellertobias/markdown-docgen.git#9b9d953fc1516403c9a5c663b8cfbc50196b3bb9"
 	},
 	"overrides": {
 		"puppeteer": "25.7.0",
