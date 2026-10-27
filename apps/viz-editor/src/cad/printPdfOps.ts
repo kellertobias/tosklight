@@ -34,16 +34,19 @@ export function mark(x: number, y: number, box = 52) {
 
 /**
  * The title block's corner mark: the company logo when the show has one, fitted into the same
- * 52-point square and kept in proportion, and the ToskLight mark otherwise.
+ * available rectangle and kept in proportion, and the ToskLight mark otherwise.
  */
-export function titleMark(logo: CompanyLogo | null, x: number, y: number, box = 52) {
-	if (!logo) return mark(x, y, box);
-	const scale = Math.min(box / logo.width, box / logo.height);
+export function titleMark(logo: CompanyLogo | null, x: number, y: number, boxWidth = 52, boxHeight = boxWidth) {
+	if (!logo) {
+		const size = Math.min(boxWidth, boxHeight);
+		return mark(x + (boxWidth - size) / 2, y + (boxHeight - size) / 2, size);
+	}
+	const scale = Math.min(boxWidth / logo.width, boxHeight / logo.height);
 	const width = logo.width * scale;
 	const height = logo.height * scale;
 	return [
 		"q",
-		`${n(width)} 0 0 ${n(height)} ${n(x + (box - width) / 2)} ${n(y + (box - height) / 2)} cm`,
+		`${n(width)} 0 0 ${n(height)} ${n(x + (boxWidth - width) / 2)} ${n(y + (boxHeight - height) / 2)} cm`,
 		"/CompanyLogo Do",
 		"Q",
 	];

@@ -6,7 +6,7 @@ import {
 import { saved, distance } from "./printPdfOps";
 import type { CadPrintPage } from "./types";
 
-export const PRINT_TITLE_MARK = { x: 252, y: 10, size: 36 } as const;
+export const PRINT_TITLE_MARK = { x: 225, y: 10, width: TITLE_W - 231, height: 36, size: 36 } as const;
 export const PRINT_TITLE_DIVIDER_X = 219;
 
 

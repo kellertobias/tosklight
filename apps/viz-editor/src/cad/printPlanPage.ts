@@ -251,7 +251,7 @@ function furnitureCommands(
 		`${n(tx)} ${n(BORDER)} ${n(TITLE_W)} ${n(TITLE_H)} re S`,
 		`${n(tx + PRINT_TITLE_DIVIDER_X)} ${n(BORDER)} 0 ${n(TITLE_H)} re S`,
 		`${n(tx)} ${n(BORDER + printTitleSeparatorY(page, info))} ${n(PRINT_TITLE_DIVIDER_X)} 0 re S`,
-		...titleMark(parseCompanyLogo(info.companyLogo), tx + PRINT_TITLE_MARK.x, BORDER + PRINT_TITLE_MARK.y, PRINT_TITLE_MARK.size),
+		...titleMark(parseCompanyLogo(info.companyLogo), tx + PRINT_TITLE_MARK.x, BORDER + PRINT_TITLE_MARK.y, PRINT_TITLE_MARK.width, PRINT_TITLE_MARK.height),
 		"0.08 0.08 0.08 rg",
 		...printTitleEntries(page, info).flatMap((entry) => [
 			entry.muted ? "0.45 0.45 0.45 rg" : "0.08 0.08 0.08 rg",

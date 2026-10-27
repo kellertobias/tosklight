@@ -67,12 +67,16 @@ describe("the company logo on printed pages", () => {
 		expect(document.match(/\/XObject << \/CompanyLogo \d+ 0 R >>/g)).toHaveLength(2);
 	});
 
-	it("fits wide and tall company logos into the requested 36-point square without changing aspect", () => {
+	it("fits company logos into the available rectangle and keeps the default mark square", () => {
 		const wide = parseCompanyLogo(logo);
 		const tall = parseCompanyLogo(JSON.stringify({ mediaType: "image/jpeg", width: 100, height: 200, data: "/9j/4AAQ" }));
 		expect(titleMark(wide, 10, 20, 36).join("\n")).toContain("36 0 0 18 10 29 cm");
 		expect(titleMark(tall, 10, 20, 36).join("\n")).toContain("18 0 0 36 19 20 cm");
 		expect(titleMark(null, 10, 20, 36).join("\n")).toContain("10 20 36 36 re f");
+		const banner = parseCompanyLogo(JSON.stringify({ mediaType: "image/jpeg", width: 400, height: 100, data: "/9j/4AAQ" }));
+		expect(titleMark(banner, 10, 20, 100, 36).join("\n")).toContain("100 0 0 25 10 25.50 cm");
+		expect(titleMark(tall, 10, 20, 100, 36).join("\n")).toContain("18 0 0 36 51 20 cm");
+		expect(titleMark(null, 10, 20, 100, 36).join("\n")).toContain("42 20 36 36 re f");
 	});
 
 	it("keeps the ToskLight mark and embeds no image when the show has no logo", () => {

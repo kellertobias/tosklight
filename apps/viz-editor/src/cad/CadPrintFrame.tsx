@@ -129,8 +129,8 @@ function PrintTitleBlock({ page, documentInfo }: Pick<PrintFrameProps, "page" | 
 			<line x1="0" x2={PRINT_TITLE_DIVIDER_X} y1={TITLE_H - printTitleSeparatorY(page, info)} y2={TITLE_H - printTitleSeparatorY(page, info)} stroke="#f5f5f5" strokeWidth="0.9" />
 			<image href={logo ? companyLogoUrl(logo) : architectIconUrl}
 				aria-label={logo ? "Company logo" : "ToskLight vector logo with blue accent"}
-				x={PRINT_TITLE_MARK.x} y={TITLE_H - PRINT_TITLE_MARK.y - PRINT_TITLE_MARK.size}
-				width={PRINT_TITLE_MARK.size} height={PRINT_TITLE_MARK.size} preserveAspectRatio="xMidYMid meet" />
+				x={logo ? PRINT_TITLE_MARK.x : PRINT_TITLE_MARK.x + (PRINT_TITLE_MARK.width - PRINT_TITLE_MARK.size) / 2} y={TITLE_H - PRINT_TITLE_MARK.y - PRINT_TITLE_MARK.height}
+				width={logo ? PRINT_TITLE_MARK.width : PRINT_TITLE_MARK.size} height={PRINT_TITLE_MARK.height} preserveAspectRatio="xMidYMid meet" />
 			{printTitleEntries(page, info).map((entry, index) => {
 				const fitted = fitTitleText(entry.value, entry.size, entry.width, entry.bold);
 				return <text key={`${index}:${entry.value}`} x={entry.x} y={TITLE_H - entry.y}
