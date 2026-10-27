@@ -376,3 +376,9 @@ test("reporting can remeasure a pinned release with separately identified curren
 		/sha256sum --check --ignore-missing report-checksums.txt/,
 	);
 });
+
+
+test("native screenshot inputs use the same bounded validator as release CI", () => {
+	assert.match(source, /sha256sum --check[\s\S]*python3 tools\/manual-captures\.py restore-native "\$archive"/);
+	assert.doesNotMatch(source, /Native archive exceeds 150 MB/);
+});
