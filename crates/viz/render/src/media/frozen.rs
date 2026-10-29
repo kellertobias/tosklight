@@ -143,6 +143,10 @@ pub(super) struct RetainedFrames {
     frames: BTreeMap<Uuid, Arc<MediaFrame>>,
 }
 impl RetainedFrames {
+    pub(super) fn retain(&mut self, sources: &HashSet<Uuid>) {
+        self.frames.retain(|id, _| sources.contains(id));
+    }
+
     /// Validation/sequence/budget checks precede cloning, so rejected pixels are never retained.
     pub(super) fn prepare(&self, frame: &MediaFrame) -> Result<Option<Arc<MediaFrame>>, String> {
         if frame.width != EDGE

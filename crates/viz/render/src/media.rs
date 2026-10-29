@@ -35,7 +35,6 @@ pub struct MediaAtlas {
     persistent: HashSet<Uuid>,
     average: HashMap<Uuid, [f32; 3]>,
     flicker: HashMap<Uuid, f32>,
-    next_layer: u32,
     uploads: u64,
 }
 
@@ -84,9 +83,20 @@ impl MediaAtlas {
             persistent: HashSet::new(),
             average: HashMap::new(),
             flicker: HashMap::new(),
-            next_layer: 1,
             uploads: 0,
         }
+    }
+
+    /// Retire removed/rebound sources before adopting frames from their new producers.
+    /// Layers are reused only after the next frame fully overwrites them. Frozen jobs retain
+    /// their own immutable Arc pixels, independent of this live atlas's ownership.
+    pub fn retain_sources(&mut self, sources: &HashSet<Uuid>) {
+        self.layers.retain(|id, _| sources.contains(id));
+        self.retained.retain(sources);
+        self.updated_at.retain(|id, _| sources.contains(id));
+        self.persistent.retain(|id| sources.contains(id));
+        self.average.retain(|id, _| sources.contains(id));
+        self.flicker.retain(|id, _| sources.contains(id));
     }
 
     pub fn layer_with_fallback(&self, source: Option<Uuid>, fallback: Option<Uuid>) -> u32 {
@@ -112,11 +122,9 @@ impl MediaAtlas {
         let layer = if let Some(layer) = self.layers.get(&frame.source_id) {
             *layer
         } else {
-            if self.next_layer >= MAX_SOURCES {
-                return Err(format!("media source budget is {MAX_SOURCES}"));
-            }
-            let layer = self.next_layer;
-            self.next_layer += 1;
+            let layer = (1..MAX_SOURCES)
+                .find(|candidate| !self.layers.values().any(|layer| layer == candidate))
+                .ok_or_else(|| format!("media source budget is {MAX_SOURCES}"))?;
             self.layers.insert(frame.source_id, layer);
             layer
         };

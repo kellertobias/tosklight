@@ -179,3 +179,136 @@ fn native_job_publishes_frozen_preload_media_to_two_cropped_surfaces() {
     assert_eq!(view.quality, RenderQuality::Draft);
     println!("4K frozen media evidence: {}", path.display());
 }
+
+#[test]
+#[ignore = "requires a real Pixel CITP test-pattern Program, serialized GPU and explicit evidence directory"]
+fn native_job_freezes_real_pixel_program_on_independently_cropped_surfaces() {
+    let endpoint: std::net::SocketAddr = std::env::var("LIGHT_MEDIA_CITP_PROOF_ENDPOINT")
+        .expect("set the isolated Pixel CITP endpoint")
+        .parse()
+        .unwrap();
+    let source: u16 = std::env::var("LIGHT_MEDIA_CITP_PROOF_SOURCE")
+        .expect("set the enumerated numeric Program source")
+        .parse()
+        .unwrap();
+    let root = PathBuf::from(
+        std::env::var_os("LIGHT_STILL_IMAGE_EVIDENCE_DIR")
+            .expect("set a canonical artifact evidence directory"),
+    );
+    let (mut scene, values, view) = mapped_walls();
+    let binding = &mut scene.media_sources[0];
+    binding.host = endpoint.ip().to_string();
+    binding.port = endpoint.port();
+    binding.advertised_source_id = source;
+    binding.name = "Actual Pixel Program".into();
+    binding.fallback_rgba = None;
+    let source_id = binding.id;
+    for section in &mut scene.media_sections {
+        section.source_id = Some(source_id);
+        section.fallback_source_id = None;
+    }
+    let mut workers = crate::media_worker::MediaWorkers::default();
+    workers.reconcile(&scene);
+    let mut renderer = viz_render::Renderer::headless(8, 8).expect("real GPU required");
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut first = None;
+    loop {
+        let mut changed = false;
+        for frame in workers.drain() {
+            if frame.rgba.chunks_exact(4).any(|p| p[0] > 80 && p[1] < 50) {
+                changed = first
+                    .as_ref()
+                    .is_some_and(|old: &Vec<u8>| *old != frame.rgba);
+                first.get_or_insert_with(|| frame.rgba.clone());
+                renderer.update_media_frame(&frame).unwrap();
+            }
+        }
+        if changed {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "actual Program did not deliver changing test-pattern pixels"
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let camera = ResolvedCamera::resolve(
+        &view.camera,
+        ViewMode::Full3d,
+        STILL_WIDTH as f32 / STILL_HEIGHT as f32,
+        scene.bounds,
+    );
+    let frozen = Arc::new(
+        FrozenStill::new(
+            &scene,
+            &values,
+            &view,
+            3.25,
+            renderer.frozen_media(),
+            StillOrigin {
+                pane_id: "actual-program".into(),
+                follow_preload: false,
+            },
+        )
+        .unwrap(),
+    );
+    assert!(
+        frozen.media_notice().is_none(),
+        "actual live pixels must be available at invocation"
+    );
+    // Retire every live pixel after invocation. The queued job must retain its own picture.
+    renderer.retain_media_sources(&Default::default());
+    drop(workers);
+    fs::create_dir_all(&root).unwrap();
+    let destination = root.join("frozen-real-pixel-program.png");
+    let mut jobs = StillJobs::default();
+    jobs.start(
+        frozen,
+        StillOptions {
+            destination: Some(destination),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let saved = loop {
+        if let Some(status) = jobs.status().filter(|s| s.phase.is_terminal()) {
+            break status;
+        }
+        assert!(Instant::now() < deadline, "native job did not finish");
+        std::thread::sleep(Duration::from_millis(2));
+    };
+    let Phase::Saved { path } = saved.phase else {
+        panic!("native job failed: {:?}", saved.phase)
+    };
+    let (width, height, pixels) = png_pixels(&path);
+    assert_eq!((width, height), (STILL_WIDTH, STILL_HEIGHT));
+    for (x, channel) in [(-0.55, 0usize), (0.55, 1usize)] {
+        // The real clip has a moving white vertical marker. Three separated samples keep
+        // that marker from making a correctly mapped quadrant look like the wrong source.
+        let matching = [-0.25, 0.0, 0.25]
+            .into_iter()
+            .filter(|offset| {
+                let (px, py) = camera
+                    .project(
+                        Vec3::new(x + offset, 0.25, 0.0),
+                        width as f32,
+                        height as f32,
+                    )
+                    .unwrap();
+                let start = (py.round() as usize * width as usize + px.round() as usize) * 4;
+                let pixel = &pixels[start..start + 4];
+                pixel[channel] > 80
+                    && pixel[channel] > pixel[(channel + 1) % 3].saturating_add(40)
+                    && pixel[channel] > pixel[(channel + 2) % 3].saturating_add(40)
+            })
+            .count();
+        assert!(
+            matching >= 2,
+            "wrong real Program crop on wall {x}: {matching}/3 samples match"
+        );
+    }
+    assert_eq!(view.mode, ViewMode::Lines3d);
+    assert_eq!(view.quality, RenderQuality::Draft);
+    println!("Real Program frozen 4K evidence: {}", path.display());
+}

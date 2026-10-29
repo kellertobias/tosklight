@@ -67,6 +67,41 @@ fn stable_source_reuses_its_worker_until_any_connection_identity_changes() {
     assert_eq!(workers.workers.len(), 1);
 }
 
+#[test]
+fn producer_changes_report_atlas_invalidation_before_new_pixels_arrive() {
+    let mut workers = MediaWorkers::default();
+    let mut scene = scene();
+    let id = scene.media_sources[0].id;
+    let mut starts = Vec::new();
+    let mut reconcile = |workers: &mut MediaWorkers, scene: &Scene| {
+        workers.reconcile_with(scene, |_, token, _| starts.push(token))
+    };
+    assert_eq!(reconcile(&mut workers, &scene), vec![id]);
+    assert!(reconcile(&mut workers, &scene).is_empty());
+    scene.media_sources[0].name = "Renamed".into();
+    scene.media_sources[0].aspect_ratio = Some(1.0);
+    assert!(reconcile(&mut workers, &scene).is_empty());
+    for field in ["host", "port", "source", "server"] {
+        match field {
+            "host" => scene.media_sources[0].host = "remote.example".into(),
+            "port" => scene.media_sources[0].port = 14910,
+            "source" => scene.media_sources[0].advertised_source_id = 514,
+            _ => scene.media_sources[0].server_id = Uuid::new_v4(),
+        }
+        assert_eq!(reconcile(&mut workers, &scene), vec![id], "{field}");
+        assert!(workers.drain().is_empty());
+    }
+    scene.media_sources[0].fallback_rgba = Some(vec![1, 2, 3, 255]);
+    assert!(reconcile(&mut workers, &scene).is_empty());
+    assert!(workers.drain()[0].persistent);
+    scene.media_sources[0].fallback_rgba = None;
+    assert_eq!(reconcile(&mut workers, &scene), vec![id]);
+    assert!(
+        workers.drain().is_empty(),
+        "offline replacement must invalidate persistent old artwork"
+    );
+}
+
 enum Delivery {
     Frame(Arc<AtomicBool>, MediaFrame),
     Health(Arc<AtomicBool>, bool),

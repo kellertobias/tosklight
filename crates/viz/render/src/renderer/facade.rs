@@ -202,6 +202,15 @@ impl Renderer {
         self.media_content_enabled = enabled;
     }
 
+    pub fn retain_media_sources(
+        &mut self,
+        sources: &std::collections::HashSet<viz_scene::uuid::Uuid>,
+    ) {
+        if let Some(atlas) = self.media_atlas.as_mut() {
+            atlas.retain_sources(sources);
+        }
+    }
+
     pub fn update_media_frame(&mut self, frame: &crate::media::MediaFrame) -> Result<bool, String> {
         self.media_atlas
             .get_or_insert_with(|| crate::media::MediaAtlas::new(&self.gpu.device, &self.gpu.queue))

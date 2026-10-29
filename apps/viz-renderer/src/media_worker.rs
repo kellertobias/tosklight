@@ -67,15 +67,17 @@ impl MediaWorkers {
             .snapshot(std::time::Instant::now())
     }
 
-    pub fn reconcile(&mut self, scene: &Scene) {
-        self.reconcile_with(scene, spawn_source);
+    /// Sources whose producer identity changed must lose previously uploaded pixels before drain.
+    pub fn reconcile(&mut self, scene: &Scene) -> Vec<viz_scene::uuid::Uuid> {
+        self.reconcile_with(scene, spawn_source)
     }
 
     fn reconcile_with(
         &mut self,
         scene: &Scene,
         mut start: impl FnMut(MediaSourceBinding, Arc<AtomicBool>, Arc<Mutex<Mailbox>>),
-    ) {
+    ) -> Vec<viz_scene::uuid::Uuid> {
+        let mut replaced = Vec::new();
         let wanted: HashMap<_, _> = scene
             .media_sources
             .iter()
@@ -106,6 +108,7 @@ impl MediaWorkers {
                 }
                 continue;
             }
+            replaced.push(source.id);
             let stop = Arc::new(AtomicBool::new(false));
             if let Ok(mut mailbox) = self.mailbox.lock() {
                 mailbox.activate(source, Arc::clone(&stop));
@@ -119,6 +122,7 @@ impl MediaWorkers {
             );
             start(source.clone(), stop, Arc::clone(&self.mailbox));
         }
+        replaced
     }
 
     pub fn drain(&self) -> Vec<MediaFrame> {

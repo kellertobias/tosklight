@@ -25,6 +25,68 @@ fn live_frames_hold_for_two_seconds_while_fallbacks_never_expire() {
 }
 
 #[test]
+#[ignore = "requires a real GPU; run explicitly with --ignored --test-threads=1"]
+fn retiring_media_clears_all_live_ownership_without_changing_frozen_pixels() {
+    let gpu = crate::gpu::Gpu::headless(8, 8).expect("GPU required for atlas retirement");
+    let mut atlas = MediaAtlas::new(&gpu.device, &gpu.queue);
+    let id = Uuid::new_v4();
+    let other = Uuid::new_v4();
+    let mut persistent = frame(id, 1, 40);
+    persistent.persistent = true;
+    atlas.update(&gpu.queue, &persistent).unwrap();
+    atlas.update(&gpu.queue, &frame(other, 1, 90)).unwrap();
+    let frozen = atlas.snapshot();
+    let before = atlas.presentation_identity();
+    let other_layer = atlas.layer_with_fallback(Some(other), None);
+    atlas.retain_sources(&HashSet::from([other]));
+    assert_eq!(atlas.layer_with_fallback(Some(id), None), 0);
+    assert_eq!(atlas.layer_with_fallback(None, Some(id)), 0);
+    assert_eq!(atlas.appearance(Some(id), None), ([0.0; 3], 0.0));
+    assert_eq!(atlas.layer_with_fallback(Some(other), None), other_layer);
+    assert!(!atlas.persistent.contains(&id));
+    assert!(!atlas.updated_at.contains_key(&id));
+    assert_eq!(atlas.snapshot().sources().len(), 1);
+    assert_ne!(atlas.presentation_identity(), before);
+    // A new producer can restart at the same sequence; no old admission state survives.
+    assert!(atlas.update(&gpu.queue, &frame(id, 1, 150)).unwrap());
+    assert_eq!(
+        atlas
+            .snapshot()
+            .sources()
+            .iter()
+            .find(|s| s.frame.source_id == id)
+            .unwrap()
+            .frame
+            .rgba[0],
+        150
+    );
+    let old = frozen
+        .sources()
+        .iter()
+        .find(|s| s.frame.source_id == id)
+        .unwrap();
+    assert!(old.available && old.frame.persistent);
+    assert_eq!(old.frame.rgba[0], 40);
+}
+
+#[test]
+#[ignore = "requires a real GPU; run explicitly with --ignored --test-threads=1"]
+fn removed_media_layers_are_reused_beyond_the_historical_source_budget() {
+    let gpu = crate::gpu::Gpu::headless(8, 8).expect("GPU required for atlas reuse");
+    let mut atlas = MediaAtlas::new(&gpu.device, &gpu.queue);
+    for index in 1..=MAX_SOURCES * 2 {
+        let id = Uuid::from_u128(u128::from(index));
+        atlas.retain_sources(&HashSet::from([id]));
+        atlas
+            .update(&gpu.queue, &frame(id, 1, index as u8))
+            .unwrap();
+        assert_eq!(atlas.layers.len(), 1);
+        assert_eq!(atlas.layer_with_fallback(Some(id), None), 1);
+        assert_eq!(atlas.snapshot().sources().len(), 1);
+    }
+}
+
+#[test]
 fn sampled_average_drives_projector_colour_without_per_pixel_gpu_lights() {
     let average = average_rgb(&[128, 64, 32, 255].repeat(128));
     assert!((average[0] - 128.0 / 255.0).abs() < 0.001);

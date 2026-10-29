@@ -49,7 +49,6 @@ impl Application {
     )> {
         session.pump(now);
         self.adopt_connected_renderer_settings(session);
-        self.pump_media(session);
         let preserve_external_override =
             is_external_camera_target(self.options.embed, session.source_view.mode)
                 && self.external_camera.local_override();
@@ -74,6 +73,9 @@ impl Application {
         }
 
         session.pump(Instant::now());
+        // The final provider poll can replace bindings. Reconcile against the exact scene
+        // drawn and frozen below, never a scene from the earlier poll.
+        self.pump_media(session);
         let atmosphere = self.preferences.atmosphere.resolve();
         let waiting_for_dmx = session.waiting_for_dmx();
         let live_beams = live_beam_count(session);
@@ -200,8 +202,16 @@ impl Application {
     /// Hand the session's media surfaces to the decode workers and upload what they finished.
     fn pump_media(&mut self, session: &Session) {
         if let Some(workers) = self.media_workers.as_mut() {
-            workers.reconcile(&session.scene);
+            let replaced = workers.reconcile(&session.scene);
             if let Some(renderer) = self.renderer.as_mut() {
+                let retained = session
+                    .scene
+                    .media_sources
+                    .iter()
+                    .map(|source| source.id)
+                    .filter(|id| !replaced.contains(id))
+                    .collect();
+                renderer.retain_media_sources(&retained);
                 for frame in workers.drain() {
                     match renderer.update_media_frame(&frame) {
                         Ok(true) => self.media_revision = self.media_revision.wrapping_add(1),
