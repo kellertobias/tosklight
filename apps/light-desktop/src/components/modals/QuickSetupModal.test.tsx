@@ -5,6 +5,7 @@ import { ShowLifecycleProvider } from "../../features/showLifecycle/ShowLifecycl
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ServerController } from "../../features/server/model";
 import { createShowLifecycleActions } from "../../features/server/showLifecycle";
+import { createShowRevisionActions } from "../../features/server/showRevisions";
 import type { SetupWindowController } from "../../windows/setupWindow/controller";
 import { ShowsRecoverySection } from "../../windows/setupWindow/GeneralSections";
 import { useCommandLineShortcuts } from "../control/commandLine/useCommandLineShortcuts";
@@ -34,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   },
   server: {
     status: "connected" as const,
+    setShowDescription: vi.fn(),
+    openCleanDefaultShow: vi.fn(),
     bootstrap: {
       active_show: {
         id: "copy",
@@ -187,6 +190,89 @@ afterEach(() => {
 });
 
 describe("QuickSetupModal show workflows", () => {
+	it("shows pending revision metadata until the cold read resolves the saved revision", async () => {
+		const pending = loadDeferred<any[]>();
+		mocks.server.listShowRevisions.mockReturnValue(pending.promise);
+		render(<QuickSetupModal />);
+		expect(screen.getByText("Last named revision: Loading…")).toBeVisible();
+		expect(screen.queryByText("Last named revision: None")).toBeNull();
+		await act(async () => pending.resolve([{
+			show_id: "copy", revision: 1, name: "Five Basic Colors", created_at: "2026-10-16T10:00:00Z",
+		}]));
+		expect(screen.getByText(/Last named revision: Five Basic Colors/)).toBeVisible();
+		expect(mocks.server.openShow).not.toHaveBeenCalled();
+		expect(mocks.server.saveShowRevision).not.toHaveBeenCalled();
+	});
+
+	it("shows None only after a successful empty revision read", async () => {
+		render(<QuickSetupModal />);
+		expect(await screen.findByText("Last named revision: None")).toBeVisible();
+	});
+
+	it("distinguishes a failed production revision read and retries on reopening Show", async () => {
+		mocks.realLifecycleProvider = true;
+		const apiRead = vi.fn().mockRejectedValueOnce(new Error("Revision read unavailable")).mockResolvedValue([]);
+		const setError = vi.fn();
+		const actions = createShowRevisionActions({ api: { shows: { showRevisions: apiRead } }, setError } as unknown as ServerController);
+		const view = render(<ShowLifecycleProvider lifecycle={{ ...mocks.server, ...actions }}><QuickSetupModal /></ShowLifecycleProvider>);
+		expect(await screen.findByText("Last named revision: Unavailable — reopen Show to retry")).toBeVisible();
+		expect(screen.queryByText("Last named revision: None")).toBeNull();
+		expect(setError).toHaveBeenCalledWith(expect.stringContaining("Revision read unavailable"));
+		mocks.setupOpen = false;
+		view.rerender(<ShowLifecycleProvider lifecycle={{ ...mocks.server, ...actions }}><QuickSetupModal /></ShowLifecycleProvider>);
+		mocks.setupOpen = true;
+		view.rerender(<ShowLifecycleProvider lifecycle={{ ...mocks.server, ...actions }}><QuickSetupModal /></ShowLifecycleProvider>);
+		expect(await screen.findByText("Last named revision: None")).toBeVisible();
+		expect(apiRead).toHaveBeenCalledTimes(2);
+	});
+
+	it("ignores a previous Show-menu read after closing and reopening", async () => {
+		const oldRead = loadDeferred<any[]>();
+		const freshRead = loadDeferred<any[]>();
+		mocks.server.listShowRevisions.mockReturnValueOnce(oldRead.promise).mockReturnValueOnce(freshRead.promise);
+		const view = render(<QuickSetupModal />);
+		mocks.setupOpen = false;
+		view.rerender(<QuickSetupModal />);
+		mocks.setupOpen = true;
+		view.rerender(<QuickSetupModal />);
+		await act(async () => oldRead.resolve([]));
+		expect(screen.getByText("Last named revision: Loading…")).toBeVisible();
+		await act(async () => freshRead.resolve([{ show_id: "copy", revision: 2, name: "Current revision", created_at: "" }]));
+		expect(screen.getByText(/Last named revision: Current revision/)).toBeVisible();
+	});
+
+	it("keeps the revision just saved when an older metadata read completes", async () => {
+		const pending = loadDeferred<any[]>();
+		mocks.server.listShowRevisions.mockReturnValue(pending.promise);
+		mocks.server.saveShowRevision.mockResolvedValue({ show_id: "copy", revision: 1, name: "Fresh focus", created_at: "" });
+		render(<QuickSetupModal />);
+		fireEvent.click(screen.getByRole("button", { name: /Save Named Revision/ }));
+		const dialog = screen.getByRole("dialog", { name: "Save named revision" });
+		fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Fresh focus" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save Revision 1" }));
+		expect(await screen.findByText(/Last named revision: Fresh focus/)).toBeVisible();
+		await act(async () => pending.resolve([]));
+		expect(screen.getByText(/Last named revision: Fresh focus/)).toBeVisible();
+	});
+
+	it("does not let a previous show's late save invalidate the current metadata read", async () => {
+		const save = loadDeferred<any>();
+		const read = loadDeferred<any[]>();
+		mocks.server.listShowRevisions.mockResolvedValueOnce([]).mockReturnValueOnce(read.promise);
+		mocks.server.saveShowRevision.mockReturnValue(save.promise);
+		const view = render(<QuickSetupModal />);
+		await screen.findByText("Last named revision: None");
+		fireEvent.click(screen.getByRole("button", { name: /Save Named Revision/ }));
+		const dialog = screen.getByRole("dialog", { name: "Save named revision" });
+		fireEvent.change(within(dialog).getByRole("textbox"), { target: { value: "Old show focus" } });
+		fireEvent.click(within(dialog).getByRole("button", { name: "Save Revision 1" }));
+		mocks.server.bootstrap = { ...mocks.server.bootstrap, active_show: { ...mocks.server.bootstrap.active_show, id: "other" } };
+		view.rerender(<QuickSetupModal />);
+		await act(async () => save.resolve({ show_id: "copy", revision: 1, name: "Old show focus", created_at: "" }));
+		await act(async () => read.resolve([{ show_id: "other", revision: 2, name: "Festival focus", created_at: "" }]));
+		expect(screen.getByText(/Last named revision: Festival focus/)).toBeVisible();
+	});
+
 	it("registers the new Show-menu Playback surface before opening its screen", async () => {
 		mocks.desktopAvailable = true;
 		let registered!: () => void;

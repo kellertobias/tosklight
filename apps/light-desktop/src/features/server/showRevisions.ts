@@ -14,13 +14,14 @@ export function createShowRevisionActions(
 > {
 	const { api, setError, bootstrap, refresh } = model;
 	return {
-		listShowRevisions: async (id) => {
+		listShowRevisions: async (id, options) => {
 			try {
 				const revisions = await api.shows.showRevisions(id);
 				setError(null);
 				return revisions;
 			} catch (reason) {
 				setError(formatErrorDetails(reason));
+				if (options?.throwOnError) throw reason;
 				return [];
 			}
 		},

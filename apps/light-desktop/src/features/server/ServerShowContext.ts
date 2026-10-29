@@ -29,6 +29,7 @@ export interface ServerShowContext {
 
 	listShowRevisions: (
 		id: string,
+		options?: { throwOnError?: boolean },
 	) => Promise<import("../../api/types").ShowRevision[]>;
 	saveShowRevision: (
 		name: string,

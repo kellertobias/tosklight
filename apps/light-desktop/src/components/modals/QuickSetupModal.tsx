@@ -87,7 +87,7 @@ interface ShowRevisionControllerOptions {
 	activeShowId?: string;
 	revisionName: string;
 	shows: ShowEntry[];
-	listShowRevisions: (showId: string) => Promise<ShowRevision[]>;
+	listShowRevisions: (showId: string, options?: { throwOnError?: boolean }) => Promise<ShowRevision[]>;
 	saveShowRevision: (name: string) => Promise<ShowRevision | null>;
 	openShowRevision: (showId: string, revision: number) => Promise<boolean>;
 	setRevisionName: Dispatch<SetStateAction<string>>;
@@ -99,14 +99,24 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 	const optionsRef = useRef(options);
 	optionsRef.current = options;
 	const [byShow, setByShow] = useState<Record<string, ShowRevision[]>>({});
+	const readGeneration = useRef(0);
+	const [readState, setReadState] = useState<{ showId: string; status: "loading" | "loaded" | "unavailable" }>();
 	useEffect(() => {
 		if (!options.enabled || !options.activeShowId) return;
 		const showId = options.activeShowId;
+		const generation = ++readGeneration.current;
+		let cancelled = false;
+		setReadState({ showId, status: "loading" });
 		void optionsRef.current
-			.listShowRevisions(showId)
-			.then((revisions) =>
-				setByShow((current) => ({ ...current, [showId]: revisions })),
-			);
+			.listShowRevisions(showId, { throwOnError: true })
+			.then((revisions) => {
+				if (cancelled || generation !== readGeneration.current) return;
+				setByShow((current) => ({ ...current, [showId]: revisions }));
+				setReadState({ showId, status: "loaded" });
+			}, () => {
+				if (!cancelled && generation === readGeneration.current) setReadState({ showId, status: "unavailable" });
+			});
+		return () => { cancelled = true; };
 	}, [options.enabled, options.activeShowId, optionsRef]);
 	const saveNamed = async (value = optionsRef.current.revisionName) => {
 		const current = optionsRef.current;
@@ -119,6 +129,10 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 			...loaded,
 			[showId]: [revision, ...(loaded[showId] ?? [])],
 		}));
+		if (optionsRef.current.activeShowId === showId) {
+			++readGeneration.current;
+			setReadState({ showId, status: "loaded" });
+		}
 		current.setRevisionName("");
 		current.setRevisionOpen(false);
 	};
@@ -129,6 +143,7 @@ function useShowRevisionController(options: ShowRevisionControllerOptions) {
 			current.setLoadOpen(false);
 	};
 	return {
+		revisionReadStatus: readState && readState.showId === options.activeShowId ? readState.status : "loading",
 		activeRevisions: options.activeShowId
 			? (byShow[options.activeShowId] ?? [])
 			: [],
@@ -362,6 +377,7 @@ function useQuickSetupModel() {
 		dispatch({ type: "SET_MODAL", modal: "setupOpen", value: false });
 	const {
 		activeRevisions,
+		revisionReadStatus,
 		byShow: revisionsByShow,
 		loadNamed: loadNamedRevision,
 		openLoadMenu,
@@ -371,7 +387,7 @@ function useQuickSetupModel() {
 		activeShowId,
 		revisionName: dialogs.revisionName,
 		shows: lifecycle?.shows ?? [],
-		listShowRevisions: lifecycle?.listShowRevisions ?? (async () => []),
+		listShowRevisions: lifecycle?.listShowRevisions ?? (async () => { throw new Error("Desk is disconnected"); }),
 		saveShowRevision: lifecycle?.saveShowRevision ?? (async () => null),
 		openShowRevision: lifecycle?.openShowRevision ?? (async () => false),
 		setRevisionName: dialogs.setRevisionName,
@@ -458,6 +474,7 @@ function useQuickSetupModel() {
 		mvr,
 		view: {
 			activeRevisions,
+			revisionReadStatus,
 			activeShow,
 			activeShowId,
 			activeShowIsProvisional,
@@ -553,7 +570,7 @@ function QuickSetupTitleBar({ model }: { model: QuickSetupModel }) {
 }
 
 function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
-	const { activeRevisions, activeShow, revisionCopy, showIndicator, patchSummary } =
+	const { activeRevisions, revisionReadStatus, activeShow, revisionCopy, showIndicator, patchSummary } =
 		model.view;
 	const { bootstrap } = model.authorities;
 	const dialogs = model.dialogs;
@@ -586,7 +603,7 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 					<small>Created: {showDate(activeShow?.created_at)}</small>
 					<small>Previously loaded: {showDate(activeShow?.last_loaded_at)}</small>
 					<small>Last saved: {showDate(activeShow?.updated_at)}</small>
-					<small>Last named revision: {latestRevision ? `${latestRevision.name} · ${showDate(latestRevision.created_at)}` : "None"}</small>
+					<small>Last named revision: {revisionReadStatus === "loading" ? "Loading…" : revisionReadStatus === "unavailable" ? "Unavailable — reopen Show to retry" : latestRevision ? `${latestRevision.name} · ${showDate(latestRevision.created_at)}` : "None"}</small>
 				</span>
 			</div>
 			<div className="show-status-line"><strong>Status</strong><span>Server {showIndicator.connected ? "connected" : "disconnected"} · Hardware {bootstrap?.hardware_connected ? "connected" : "disconnected"}</span></div>

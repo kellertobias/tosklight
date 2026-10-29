@@ -36,7 +36,7 @@ export interface ShowLifecycleActions {
 	overwriteShow: (destinationId: string) => Promise<boolean>;
 	uploadShow: (file: File, overwrite?: boolean) => Promise<void>;
 	downloadShow: (show: ShowEntry) => Promise<void>;
-	listShowRevisions: (id: string) => Promise<ShowRevision[]>;
+	listShowRevisions: (id: string, options?: { throwOnError?: boolean }) => Promise<ShowRevision[]>;
 	saveShowRevision: (name: string) => Promise<ShowRevision | null>;
 	openShowRevision: (id: string, revision: number) => Promise<boolean>;
 	previewMvr: (file: File, showId?: string, signal?: AbortSignal) => Promise<MvrImportPreview>;
