@@ -3660,6 +3660,7 @@ dependencies = [
  "image",
  "jiff",
  "light-application",
+ "light-beat",
  "light-control",
  "light-core",
  "light-discovery",

@@ -1,4 +1,5 @@
 import { audioVolumeLinePoints } from "./audioLaneGeometry";
+import { SongAnalysisLaneButton } from "./TimecodeBeatGrid";
 import { speedGroupLinePoints } from "./speedLaneGeometry";
 import { AudioLaneFileName } from "./timecodeEditorShared";
 import type { PointerEvent as ReactPointerEvent } from "react";
@@ -103,6 +104,7 @@ export function LaneLabel({
 					<span>{kind}</span>
 				)}
 			</Button>
+			{pinned && <SongAnalysisLaneButton />}
 			{expanded && (
 				<Button
 					className="timecode-cue-close"

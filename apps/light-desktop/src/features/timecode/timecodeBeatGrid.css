@@ -1,0 +1,107 @@
+.timecode-beat-grid {
+	position: absolute;
+	inset: 0;
+	z-index: 3;
+	pointer-events: none;
+}
+
+.timecode-beat-line,
+.timecode-bar-line {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 1px;
+	background: color-mix(in srgb, var(--cyan, #1bd6ec) 12%, transparent);
+}
+
+.timecode-bar-line {
+	background: color-mix(in srgb, var(--cyan, #1bd6ec) 30%, transparent);
+}
+
+.timecode-suggested-section {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	border-left: 2px dashed color-mix(in srgb, var(--amber, #ffb30f) 75%, transparent);
+}
+
+.timecode-suggested-section b {
+	position: absolute;
+	bottom: 6px;
+	left: 4px;
+	padding: 1px 6px;
+	border: 1px dashed var(--amber, #ffb30f);
+	border-radius: 4px;
+	background: color-mix(in srgb, var(--panel, #0e1217) 85%, transparent);
+	color: var(--amber, #ffb30f);
+	font-size: 11px;
+	font-style: italic;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.timecode-song-analysis {
+	display: grid;
+	gap: 8px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line, #29313a);
+}
+
+.timecode-song-analysis > header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+.timecode-song-analysis > header > span {
+	color: var(--muted, #84919b);
+}
+
+.timecode-song-analysis progress {
+	width: 180px;
+	accent-color: var(--cyan, #1bd6ec);
+}
+
+.timecode-song-analysis .ui-button {
+	min-height: 40px;
+}
+
+.timecode-section-suggestions {
+	display: flex;
+	gap: 8px;
+	margin: 0;
+	padding: 0 0 4px;
+	overflow-x: auto;
+	list-style: none;
+}
+
+.timecode-section-suggestions li {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 6px;
+	border: 1px dashed var(--amber, #ffb30f);
+	border-radius: 6px;
+}
+
+.timecode-section-suggestions .ui-text-control {
+	width: 170px;
+}
+
+.timecode-section-time {
+	color: var(--amber, #ffb30f);
+	font-variant-numeric: tabular-nums;
+}
+
+.timecode-song-analysis-lane.ui-button {
+	position: absolute;
+	right: 6px;
+	bottom: 6px;
+	min-height: 28px;
+	padding: 0 8px;
+	border-color: color-mix(in srgb, var(--amber, #ffb30f) 60%, transparent);
+	color: var(--amber, #ffb30f);
+	font-size: 11px;
+}

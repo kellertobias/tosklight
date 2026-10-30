@@ -634,6 +634,8 @@ export function snapTimelineFrame(
 	options?: {
 		selection?: TimecodeEditorSelection;
 		movingClip?: boolean;
+		/** Beat frames to snap to as well, when snapping to the beat grid is on. */
+		beatFrames?: readonly number[];
 	},
 ): number {
 	const duration = definition.duration_frame ?? Number.MAX_SAFE_INTEGER;
@@ -661,6 +663,7 @@ export function snapTimelineFrame(
 		duration,
 		...definition.markers.map((marker) => marker.frame),
 		...clipEdges,
+		...(options?.beatFrames ?? []),
 	]) {
 		for (const anchored of [candidate, candidate - movingLength]) {
 			const distance = Math.abs(anchored - proposed);

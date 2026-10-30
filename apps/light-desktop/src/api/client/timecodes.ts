@@ -1,6 +1,7 @@
 import type {
 	InternalAudioStatus,
 	ShowObjectActionOutcome,
+	TimecodeAudioAnalysisSnapshot,
 	TimecodeCollectionSnapshot as WireTimecodeCollectionSnapshot,
 	TimecodeDefinition as WireTimecodeDefinition,
 	TimecodeObjectAction as WireTimecodeObjectAction,
@@ -20,6 +21,7 @@ import type {
 } from "../types/timecode";
 import { jsonRequest, type LiveClientTransport } from "./transport";
 
+export type { TimecodeAudioAnalysisSnapshot };
 export type {
 	TimecodeAudioImportResult,
 	TimecodeAudioOutputDevices,
@@ -148,6 +150,29 @@ export class TimecodesApiClient {
 		return this.transport.request(
 			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/audio/waveform`,
 			{ headers: showHeaders(showId) },
+		);
+	}
+
+	audioAnalysis(showId: string, timecodeId: string): Promise<TimecodeAudioAnalysisSnapshot> {
+		return this.transport.request(
+			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/audio/analysis`,
+			{ headers: showHeaders(showId) },
+		);
+	}
+
+	startAudioAnalysis(showId: string, timecodeId: string): Promise<TimecodeAudioAnalysisSnapshot> {
+		return this.post(
+			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/audio/analysis`,
+			showId,
+			{ request_id: crypto.randomUUID() },
+		);
+	}
+
+	cancelAudioAnalysis(showId: string, timecodeId: string): Promise<TimecodeAudioAnalysisSnapshot> {
+		return this.post(
+			`/api/v2/timecodes/${encodeURIComponent(timecodeId)}/audio/analysis/cancel`,
+			showId,
+			{},
 		);
 	}
 

@@ -8,6 +8,7 @@ import type {
 	TimecodeDefinition,
 } from "../../api/types/timecode";
 import { volumeDragTravel } from "./audioLaneGeometry";
+import { useBeatSnapFrames } from "./TimecodeBeatGrid";
 import {
 	cueListClipScale,
 	moveTimelineItem,
@@ -50,6 +51,7 @@ interface Options {
 export function useTimelineDrag(options: Options) {
 	const latest = useRef(options);
 	latest.current = options;
+	const beatSnap = useBeatSnapFrames();
 	const drag = useRef<DragState | null>(null);
 	useEffect(() => {
 		const move = (event: PointerEvent) => {
@@ -83,6 +85,7 @@ export function useTimelineDrag(options: Options) {
 								movingClip:
 									active.selection.kind === "clip" &&
 									active.clipEdge === undefined,
+								beatFrames: beatSnap.current,
 							},
 						);
 			let next =

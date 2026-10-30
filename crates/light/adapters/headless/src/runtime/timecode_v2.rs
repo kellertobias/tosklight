@@ -54,6 +54,15 @@ pub(super) fn router() -> Router<AppState> {
             get(audio_waveform),
         )
         .route(
+            "/api/v2/timecodes/{timecode_id}/audio/analysis",
+            get(super::timecode_analysis::analysis_snapshot)
+                .post(super::timecode_analysis::start_analysis),
+        )
+        .route(
+            "/api/v2/timecodes/{timecode_id}/audio/analysis/cancel",
+            post(super::timecode_analysis::cancel_analysis),
+        )
+        .route(
             "/api/v2/timecodes/{timecode_id}/runtime",
             get(runtime_snapshot),
         )

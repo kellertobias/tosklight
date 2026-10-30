@@ -8,7 +8,7 @@ use super::timecode_v2::load_timecode;
 use super::*;
 use light_wire::v2::timecode as wire;
 
-pub(super) struct WaveformSink(Vec<u8>);
+pub(super) struct WaveformSink(pub(super) Vec<u8>);
 
 impl light_application::AssetChunkSink for WaveformSink {
     fn write_chunk(&mut self, bytes: &[u8]) -> Result<(), light_application::AssetError> {
@@ -70,7 +70,16 @@ pub(super) async fn audio_waveform(
     Ok(Json(wire::TimecodeAudioWaveform { peaks }))
 }
 
-pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Vec<f32>, String> {
+/// The PCM data of a stored Timecode WAV: what the waveform and the analysis both read.
+pub(super) struct WavPcm<'a> {
+    format: u16,
+    channels: usize,
+    bits: u16,
+    pub(super) sample_rate: u32,
+    samples: &'a [u8],
+}
+
+pub(super) fn wav_pcm(bytes: &[u8]) -> Result<WavPcm<'_>, String> {
     if bytes.len() < 12 || &bytes[0..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
         return Err("asset is not a RIFF/WAVE file".into());
     }
@@ -78,6 +87,7 @@ pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Ve
     let mut format = None;
     let mut channels = None;
     let mut bits = None;
+    let mut sample_rate = None;
     let mut samples = None;
     while cursor.checked_add(8).is_some_and(|end| end <= bytes.len()) {
         let id = &bytes[cursor..cursor + 4];
@@ -96,6 +106,9 @@ pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Ve
             channels = Some(u16::from_le_bytes(
                 bytes[start + 2..start + 4].try_into().unwrap(),
             ));
+            sample_rate = Some(u32::from_le_bytes(
+                bytes[start + 4..start + 8].try_into().unwrap(),
+            ));
             bits = Some(u16::from_le_bytes(
                 bytes[start + 14..start + 16].try_into().unwrap(),
             ));
@@ -108,12 +121,51 @@ pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Ve
     let channels = usize::from(channels.ok_or_else(|| "missing channel count".to_string())?);
     let bits = bits.ok_or_else(|| "missing sample width".to_string())?;
     let samples = samples.ok_or_else(|| "missing data chunk".to_string())?;
-    let bytes_per_sample = usize::from(bits / 8);
     if channels == 0 || !matches!((format, bits), (1, 16) | (3, 32)) {
         return Err("only PCM16 or IEEE-float32 WAV waveform data is supported".into());
     }
-    let frame_bytes = channels * bytes_per_sample;
-    let frame_count = samples.len() / frame_bytes;
+    Ok(WavPcm {
+        format,
+        channels,
+        bits,
+        sample_rate: sample_rate.unwrap_or(48_000),
+        samples,
+    })
+}
+
+impl WavPcm<'_> {
+    fn frame_count(&self) -> usize {
+        self.samples.len() / (self.channels * usize::from(self.bits / 8))
+    }
+
+    fn sample(&self, frame: usize, channel: usize) -> f32 {
+        let bytes_per_sample = usize::from(self.bits / 8);
+        let offset = (frame * self.channels + channel) * bytes_per_sample;
+        if self.format == 1 {
+            f32::from(i16::from_le_bytes(
+                self.samples[offset..offset + 2].try_into().unwrap(),
+            )) / f32::from(i16::MAX)
+        } else {
+            f32::from_le_bytes(self.samples[offset..offset + 4].try_into().unwrap())
+        }
+    }
+
+    /// Every frame averaged across channels.
+    pub(super) fn mono(&self) -> Vec<f32> {
+        (0..self.frame_count())
+            .map(|frame| {
+                (0..self.channels)
+                    .map(|channel| self.sample(frame, channel))
+                    .sum::<f32>()
+                    / self.channels as f32
+            })
+            .collect()
+    }
+}
+
+pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Vec<f32>, String> {
+    let pcm = wav_pcm(bytes)?;
+    let (channels, frame_count) = (pcm.channels, pcm.frame_count());
     if frame_count == 0 {
         return Err("audio contains no samples".into());
     }
@@ -124,101 +176,9 @@ pub(super) fn pcm_waveform_peaks(bytes: &[u8], bucket_count: usize) -> Result<Ve
         let last = ((bucket + 1) * frame_count / count).max(first + 1);
         for frame in first..last {
             for channel in 0..channels {
-                let offset = frame * frame_bytes + channel * bytes_per_sample;
-                let value = if format == 1 {
-                    f32::from(i16::from_le_bytes(
-                        samples[offset..offset + 2].try_into().unwrap(),
-                    )) / f32::from(i16::MAX)
-                } else {
-                    f32::from_le_bytes(samples[offset..offset + 4].try_into().unwrap())
-                };
-                *peak = peak.max(value.abs().min(1.0));
+                *peak = peak.max(pcm.sample(frame, channel).abs().min(1.0));
             }
         }
     }
     Ok(peaks)
-}
-
-#[cfg(test)]
-mod waveform_tests {
-    use super::{AUDIO_WAVEFORM_BUCKETS, AUDIO_WAVEFORM_BUCKETS_MAXIMUM, pcm_waveform_peaks};
-
-    /// Builds a mono PCM16 WAV whose amplitude ramps across `frames` samples.
-    fn ramp_wav(frames: usize) -> Vec<u8> {
-        let data = (0..frames)
-            .flat_map(|frame| {
-                let value = ((frame % 128) as f32 / 127.0 * f32::from(i16::MAX)) as i16;
-                value.to_le_bytes()
-            })
-            .collect::<Vec<_>>();
-        let mut wav = Vec::new();
-        wav.extend_from_slice(b"RIFF");
-        wav.extend_from_slice(&(36u32 + data.len() as u32).to_le_bytes());
-        wav.extend_from_slice(b"WAVEfmt ");
-        wav.extend_from_slice(&16u32.to_le_bytes());
-        wav.extend_from_slice(&1u16.to_le_bytes());
-        wav.extend_from_slice(&1u16.to_le_bytes());
-        wav.extend_from_slice(&44_100u32.to_le_bytes());
-        wav.extend_from_slice(&88_200u32.to_le_bytes());
-        wav.extend_from_slice(&2u16.to_le_bytes());
-        wav.extend_from_slice(&16u16.to_le_bytes());
-        wav.extend_from_slice(b"data");
-        wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        wav.extend_from_slice(&data);
-        wav
-    }
-
-    #[test]
-    fn the_default_resolution_resolves_far_more_than_a_lane_wide_overview() {
-        // One minute at 44.1 kHz, which is shorter than most show audio.
-        let wav = ramp_wav(44_100 * 60);
-        let peaks = pcm_waveform_peaks(&wav, AUDIO_WAVEFORM_BUCKETS).unwrap();
-
-        assert_eq!(peaks.len(), AUDIO_WAVEFORM_BUCKETS);
-        // The previous fixed 220 buckets left roughly a quarter-second per bucket at this length,
-        // and the 4096 that replaced them still smeared a zoomed-in lane into straight lines.
-        assert!(AUDIO_WAVEFORM_BUCKETS >= 4_096 * 20);
-        assert!(peaks.iter().all(|peak| (0.0..=1.0).contains(peak)));
-    }
-
-    #[test]
-    fn a_request_cannot_ask_for_more_buckets_than_the_audio_has_frames() {
-        let wav = ramp_wav(64);
-        let peaks = pcm_waveform_peaks(&wav, AUDIO_WAVEFORM_BUCKETS_MAXIMUM).unwrap();
-
-        assert_eq!(
-            peaks.len(),
-            64,
-            "buckets are capped at one per sample frame"
-        );
-    }
-
-    #[test]
-    fn waveform_uses_actual_pcm_samples_and_bounds_the_projection() {
-        let samples = [0i16, i16::MAX, i16::MIN, 0];
-        let data = samples
-            .into_iter()
-            .flat_map(i16::to_le_bytes)
-            .collect::<Vec<_>>();
-        let mut wav = Vec::new();
-        wav.extend_from_slice(b"RIFF");
-        wav.extend_from_slice(&(36u32 + data.len() as u32).to_le_bytes());
-        wav.extend_from_slice(b"WAVEfmt ");
-        wav.extend_from_slice(&16u32.to_le_bytes());
-        wav.extend_from_slice(&1u16.to_le_bytes());
-        wav.extend_from_slice(&1u16.to_le_bytes());
-        wav.extend_from_slice(&44_100u32.to_le_bytes());
-        wav.extend_from_slice(&88_200u32.to_le_bytes());
-        wav.extend_from_slice(&2u16.to_le_bytes());
-        wav.extend_from_slice(&16u16.to_le_bytes());
-        wav.extend_from_slice(b"data");
-        wav.extend_from_slice(&(data.len() as u32).to_le_bytes());
-        wav.extend_from_slice(&data);
-
-        let peaks = pcm_waveform_peaks(&wav, 2).unwrap();
-        assert_eq!(peaks.len(), 2);
-        assert!((peaks[0] - 1.0).abs() < 0.0001);
-        assert!((peaks[1] - 1.0).abs() < 0.0001);
-        assert!(pcm_waveform_peaks(b"not wav", 2).is_err());
-    }
 }

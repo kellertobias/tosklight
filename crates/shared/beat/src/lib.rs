@@ -26,7 +26,9 @@ mod detector;
 mod filter;
 mod level;
 mod onset;
+mod song;
 mod spectrum;
 mod tempo;
 
 pub use detector::{Detector, HOP, Instrument, Onset, Reading, Tuning, Voice};
+pub use song::{SectionLabel, SongAnalysis, SongSection, analyse_song};

@@ -28,6 +28,61 @@ pub struct TimecodeAudioWaveform {
     pub peaks: Vec<f32>,
 }
 
+/// Starts, or returns the cached result of, the offline analysis of a Timecode's audio.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioAnalysisRequest {
+    #[schemars(length(min = 1, max = 128))]
+    pub request_id: String,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum TimecodeAudioAnalysisState {
+    Idle,
+    Running,
+    Ready,
+    Failed,
+    Cancelled,
+}
+
+/// One suggested song section, starting on a bar.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioSection {
+    #[ts(type = "number")]
+    pub frame: u64,
+    /// Intro, Verse, Chorus, Breakdown, Bridge or Outro: a suggestion for the operator to rename.
+    pub label: String,
+    /// The section's loudness relative to the song, `0..=1`.
+    pub energy: f32,
+}
+
+/// The beat grid and suggested sections of one audio content, in Timecode frames.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioAnalysis {
+    /// SHA-256 of the analysed audio; unchanged audio is never analysed twice.
+    pub digest: String,
+    /// Zero when the audio has no steady pulse; the grid is then empty.
+    pub bpm: f32,
+    #[ts(type = "number[]")]
+    pub beat_frames: Vec<u64>,
+    #[ts(type = "number[]")]
+    pub downbeat_frames: Vec<u64>,
+    pub sections: Vec<TimecodeAudioSection>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct TimecodeAudioAnalysisSnapshot {
+    pub timecode_id: Uuid,
+    pub asset_id: Uuid,
+    #[ts(type = "number")]
+    pub asset_revision: u64,
+    pub state: TimecodeAudioAnalysisState,
+    /// `0..=1` while running.
+    pub progress: f32,
+    pub error: Option<String>,
+    pub analysis: Option<TimecodeAudioAnalysis>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct TimecodeFrameRate {
     pub numerator: u32,

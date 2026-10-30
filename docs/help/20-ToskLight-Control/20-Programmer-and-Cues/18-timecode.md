@@ -12,6 +12,19 @@ Select a clip to choose its Start/End Cue and start/end behavior, or its Audio P
 
 Select a marker and choose **Place Marker** to use the playhead position, or **Move To** for an exact time. [Timeline navigation](36-timecode-navigation.md) covers scrolling, zoom, markers, and the overview. [Cue timing on the timeline](35-timecode-cue-editing.md) covers Trigger, fade points, and clip boundaries.
 
+## Find beats and song sections
+
+With audio linked, ToskLight can find the song's beat grid and suggest where its sections start. Choose **Analyse** in the audio lane's header. The **Song analysis** strip opens above the timeline and shows the progress; **Cancel** stops it. Analysing a song takes a few seconds.
+
+When it finishes, the strip shows the tempo and the timeline draws faint beat lines and stronger bar lines. The lane button then reads **Sections**: it shows or hides the strip, so the timeline keeps its full height when you do not need it. Suggested sections appear as dashed amber lines with their names, and as a list in the strip. Names are suggestions: Intro, Verse, Chorus, Breakdown, Bridge and Outro, chosen from how the music repeats and how loud it is. Rename one in its field before you accept it.
+
+- **Accept** turns a suggestion into an ordinary marker at that bar. **Accept All** accepts every remaining suggestion.
+- **Discard** hides a suggestion without storing anything.
+- A suggestion that already has a marker within a beat is not offered again, so analysing again keeps your accepted markers.
+- **Beat grid** shows or hides the beat and bar lines. **Snap to beats** makes dragged clips, keyframes and markers snap to beats as well as to markers and clip edges.
+
+The result belongs to the audio file. The desk keeps it, so reopening the show, or linking the same audio to another Timecode, shows the grid at once without analysing again. Replacing the audio needs a new analysis.
+
 ## Inspect and run
 
 Scrub the ruler or drag the playhead to inspect another time without seeking live output. The **Playhead** encoder shows that editor position. Press the transport-position button in the title to seek explicitly to it.

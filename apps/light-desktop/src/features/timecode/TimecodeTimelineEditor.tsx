@@ -1,3 +1,4 @@
+import { TimecodeBeatGridLayer } from "./TimecodeBeatGrid";
 import { useTimelineInspectorPreference } from "./useTimecodeSidebarPreference";
 import { useTimelineInspectorVisibility } from "./useTimelineInspectorVisibility";
 import { volumeKeyframeValues } from "./audioLaneGeometry";
@@ -245,6 +246,7 @@ function TimelineCanvas(props: {
 						Settings.
 					</p>
 				)}
+				<TimecodeBeatGridLayer pixelsPerFrame={props.pixelsPerFrame} />
 				<TimelineLanes {...props} />
 				{props.items
 					.filter((item) => item.kind === "marker")

@@ -263,6 +263,7 @@ mod state;
 mod store_api;
 mod store_preload_targets;
 mod test_bench;
+mod timecode_analysis;
 #[cfg(feature = "native-audio-output")]
 mod timecode_audio_output;
 #[cfg(not(feature = "native-audio-output"))]

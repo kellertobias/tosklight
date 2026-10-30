@@ -2044,6 +2044,31 @@ file_name?: string | null, end_fade_frames?: number | null, };
 export type TimecodeAudioOutputDevices = { devices: Array<string>, };
 export type TimecodeAudioImportResult = { asset_id: string, asset_revision: number, name: string, media_type: string, sample_rate: number, channels: number, sample_frames: number, };
 export type TimecodeAudioWaveform = { peaks: Array<number>, };
+export type TimecodeAudioAnalysisRequest = { request_id: string, };
+export type TimecodeAudioAnalysisState = "idle" | "running" | "ready" | "failed" | "cancelled";
+export type TimecodeAudioSection = { frame: number,
+/**
+ * Intro, Verse, Chorus, Breakdown, Bridge or Outro: a suggestion for the operator to rename.
+ */
+label: string,
+/**
+ * The section's loudness relative to the song, `0..=1`.
+ */
+energy: number, };
+export type TimecodeAudioAnalysis = {
+/**
+ * SHA-256 of the analysed audio; unchanged audio is never analysed twice.
+ */
+digest: string,
+/**
+ * Zero when the audio has no steady pulse; the grid is then empty.
+ */
+bpm: number, beat_frames: number[], downbeat_frames: number[], sections: Array<TimecodeAudioSection>, };
+export type TimecodeAudioAnalysisSnapshot = { timecode_id: string, asset_id: string, asset_revision: number, state: TimecodeAudioAnalysisState,
+/**
+ * `0..=1` while running.
+ */
+progress: number, error: string | null, analysis: TimecodeAudioAnalysis | null, };
 export type TimecodeMarker = { id: string, frame: number, name: string, color?: string | null, };
 export type TimecodeLane = { id: string, name: string, content: TimecodeLaneContent, };
 export type TimecodeLaneContent = { "kind": "cue_list", cue_list_id: string, clips: Array<TimecodeCueListClip>, } | { "kind": "speed_group", group: string, keyframes: Array<TimecodeSpeedKeyframe>, } | { "kind": "audio_volume", keyframes: Array<TimecodeVolumeKeyframe>, } | { "kind": "audio_player", fixture_id: string, clips: Array<TimecodeAudioPlayerClip>, };

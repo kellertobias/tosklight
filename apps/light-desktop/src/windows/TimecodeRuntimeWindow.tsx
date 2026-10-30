@@ -77,6 +77,7 @@ import {
 	useTimecodeEditorTransport,
 } from "../features/timecode/TimecodeEditorTransport";
 import { useTimecodeWaveform } from "../features/timecode/useTimecodeWaveform";
+import { TimecodeSongAnalysis } from "../features/timecode/TimecodeSongAnalysis";
 import { TimecodeEditorFeedback } from "../features/timecode/TimecodeEditorFeedback";
 import { TimecodeFrameField } from "../features/timecode/TimecodeFrameField";
 import { useTimecodeEditorHistory } from "../features/timecode/useTimecodeEditorHistory";
@@ -709,6 +710,7 @@ export function TimecodeEditor({
 				onRetrySave={retrySave}
 				onRetryWaveform={retryWaveform}
 			/>
+			<TimecodeSongAnalysis {...{ showId, api, draft, record, setDraft }}>
 			<TimelineInspectorPreferenceContext.Provider value={{ visible: inspectorVisible, setVisible: setInspectorVisible }}>
 			<TimelineTitleStateContext.Provider value={setTimelineTitleState}>
 				<TimecodeTimelineEditor
@@ -732,6 +734,7 @@ export function TimecodeEditor({
 				/>
 			</TimelineTitleStateContext.Provider>
 			</TimelineInspectorPreferenceContext.Provider>
+			</TimecodeSongAnalysis>
 		</section>
 	);
 }
