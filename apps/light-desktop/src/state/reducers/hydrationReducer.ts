@@ -155,6 +155,33 @@ function hydrateDesks(
 	}));
 }
 
+function newDesktop(state: AppState): AppState {
+	const id = nextDesktopId(state.desks);
+	const source = state.desks.find((desk) => desk.id === state.activeDeskId);
+	const panes =
+		state.savingDesk && source
+			? source.panes.map((pane, index) => ({
+					...pane,
+					recordedScroll: {
+						...pane.recordedScroll,
+						...state.pendingDeskScroll?.[pane.id],
+					},
+					id: `${id}-${pane.kind}-${index + 1}`,
+				}))
+			: [];
+	return {
+		...state,
+		desks: [
+			...state.desks,
+			{ id, name: `Desktop ${state.desks.length + 1}`, panes },
+		],
+		activeDeskId: id,
+		builtIn: null,
+		savingDesk: false,
+		pendingDeskScroll: undefined,
+	};
+}
+
 export function reduceHydration(
 	state: AppState,
 	action: Action,
@@ -213,8 +240,10 @@ export function reduceHydration(
 						? action.windowSettings.stageVizBackground
 						: state.stageVizBackground,
 				stageVizQuality: "draft",
-				stageVizDetailedPeople: typeof action.windowSettings?.stageVizDetailedPeople === "boolean"
-					? action.windowSettings.stageVizDetailedPeople : false,
+				stageVizDetailedPeople:
+					typeof action.windowSettings?.stageVizDetailedPeople === "boolean"
+						? action.windowSettings.stageVizDetailedPeople
+						: false,
 				stageVizAtmosphere: numberOr(
 					action.windowSettings?.stageVizAtmosphere,
 					state.stageVizAtmosphere,
@@ -277,27 +306,8 @@ export function reduceHydration(
 			};
 		case "DISMISS_LAYOUT_MIGRATION_NOTICE":
 			return { ...state, layoutMigrationNotice: false };
-		case "NEW_DESK": {
-			const id = nextDesktopId(state.desks);
-			const source = state.desks.find((desk) => desk.id === state.activeDeskId);
-			const panes =
-				state.savingDesk && source
-					? source.panes.map((pane, index) => ({
-							...pane,
-							id: `${id}-${pane.kind}-${index + 1}`,
-						}))
-					: [];
-			return {
-				...state,
-				desks: [
-					...state.desks,
-					{ id, name: `Desktop ${state.desks.length + 1}`, panes },
-				],
-				activeDeskId: id,
-				builtIn: null,
-				savingDesk: false,
-			};
-		}
+		case "NEW_DESK":
+			return newDesktop(state);
 		default:
 			return undefined;
 	}

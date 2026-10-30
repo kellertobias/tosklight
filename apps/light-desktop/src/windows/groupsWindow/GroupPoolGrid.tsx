@@ -273,7 +273,7 @@ export function GroupPoolGrid({
 	});
 	const selectionFor = groupSelectionResolver(command);
 	return (
-		<WindowScrollArea>
+		<WindowScrollArea scrollKey="groups">
 			<PoolGrid
 				columns={columns}
 				cardSizing={poolCardSizing(state)}

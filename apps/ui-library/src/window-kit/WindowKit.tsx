@@ -437,10 +437,13 @@ export function WindowScrollArea({
 	children,
 	className = "",
 	emptyState,
+	scrollKey,
 }: {
 	children?: ReactNode;
 	className?: string;
 	emptyState?: WindowEmptyState | null;
+	/** Stable viewport identity within a stored Desktop pane. */
+	scrollKey?: string;
 }) {
 	const scroller = useRef<HTMLDivElement>(null);
 	const [metrics, setMetrics] = useState({ top: 0, size: 1, overflow: false });
@@ -488,7 +491,12 @@ export function WindowScrollArea({
 		<div
 			className={`ui-window-scroll-area ${metrics.overflow ? "overflowing" : ""} ${hasEmptyState ? "empty" : ""} ${className}`}
 		>
-			<div ref={scroller} className="ui-window-scroller" onScroll={measure}>
+			<div
+				ref={scroller}
+				data-view-scroll-key={scrollKey}
+				className="ui-window-scroller"
+				onScroll={measure}
+			>
 				{hasEmptyState ? (
 					<div className="ui-window-empty-state" role="status">
 						{emptyState.icon != null && (

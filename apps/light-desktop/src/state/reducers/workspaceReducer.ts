@@ -61,11 +61,40 @@ function addWindow(
 	};
 }
 
+function recordDesktopScroll(
+	state: AppState,
+	action: Extract<Action, { type: "RECORD_DESK_SCROLL" }>,
+): AppState {
+	return {
+		...state,
+		desks: state.desks.map((desk) =>
+			desk.id !== action.id
+				? desk
+				: {
+						...desk,
+						panes: desk.panes.map((pane) =>
+							action.positions?.[pane.id]
+								? {
+										...pane,
+										recordedScroll: {
+											...pane.recordedScroll,
+											...action.positions[pane.id],
+										},
+									}
+								: pane,
+						),
+					},
+		),
+	};
+}
+
 export function reduceWorkspace(
 	state: AppState,
 	action: Action,
 ): AppState | undefined {
 	switch (action.type) {
+		case "RECORD_DESK_SCROLL":
+			return recordDesktopScroll(state, action);
 		case "SET_STAGE_MODE":
 			return { ...state, stageMode: action.value };
 		case "SET_STAGE_VIEW":
@@ -99,7 +128,8 @@ export function reduceWorkspace(
 					1,
 				),
 				stageVizQuality: "draft",
-				stageVizDetailedPeople: action.vizDetailedPeople ?? state.stageVizDetailedPeople,
+				stageVizDetailedPeople:
+					action.vizDetailedPeople ?? state.stageVizDetailedPeople,
 				stageVizExposure: clamp(
 					action.vizExposure ?? state.stageVizExposure,
 					0.05,

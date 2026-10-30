@@ -7,11 +7,13 @@ import {
 	useEffect,
 	useMemo,
 	useReducer,
+	useRef,
 } from "react";
 import { useControlSurfaceTarget } from "../features/controlSurfaceInteraction/useControlSurfaceTarget";
 import { DynamicEditorSessionProvider } from "../features/dynamics/DynamicEditorSessionContext";
 import { frontendPerformanceDiagnostics } from "../features/frontendWarmup/diagnostics";
 import type { AppState, BuiltInWindow } from "../types";
+import { captureDesktopScroll } from "../features/panePresentation/recordedPaneScroll";
 import { type Action, appReducer, initialState } from "./appReducer";
 import { builtInForDeskCommand } from "./builtInMappings";
 
@@ -52,6 +54,8 @@ export function AppProvider({ children }: PropsWithChildren) {
 			return fallback;
 		}
 	});
+	const currentState = useRef(state);
+	currentState.current = state;
 	useEffect(() => {
 		localStorage.setItem(
 			"light.desk-controls",
@@ -70,6 +74,22 @@ export function AppProvider({ children }: PropsWithChildren) {
 		return () => document.documentElement.classList.remove("touch-scrollbars");
 	}, [state.touchScrollbars]);
 	const dispatch = useCallback<Dispatch<Action>>((action) => {
+		const current = currentState.current;
+		const record =
+			action.type === "RECORD_DESK_SCROLL" ||
+			action.type === "START_SAVE_DESK" ||
+			action.type === "SAVE_DESK_TO";
+		if (record) {
+			const id =
+				action.type === "RECORD_DESK_SCROLL" ? action.id : current.activeDeskId;
+			const desk = current.desks.find((item) => item.id === id);
+			if (desk)
+				reduce({
+					...action,
+					positions: action.positions ?? captureDesktopScroll(desk),
+				});
+			return;
+		}
 		const surface = measuredSurface(action);
 		const finish = surface
 			? frontendPerformanceDiagnostics.beginSurfaceSwitch(surface)

@@ -111,6 +111,8 @@ export interface GridRect {
 }
 
 export interface PaneModel extends GridRect {
+	/** Explicitly recorded presentation state; ordinary scrolling never updates this snapshot. */
+	recordedScroll?: import("./features/panePresentation/recordedPaneScroll").RecordedPaneScroll;
 	id: string;
 	kind: BuiltInWindow;
 	title: string;
@@ -222,6 +224,12 @@ export interface GroupModel {
 }
 
 export interface AppState {
+	pendingDeskScroll?: Record<
+		string,
+		import("./features/panePresentation/recordedPaneScroll").RecordedPaneScroll
+	>;
+	/** Transient recall identity, never persisted with the layout or show. */
+	desktopRecallGeneration?: number;
 	dockMode: DockMode;
 	activeDeskId: string;
 	desks: DeskModel[];

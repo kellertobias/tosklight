@@ -13,6 +13,14 @@ export type Action =
 	| { type: "SET_DOCK_MODE"; mode: AppState["dockMode"] }
 	| { type: "OPEN_DESK"; id: string }
 	| {
+			type: "RECORD_DESK_SCROLL";
+			id: string;
+			positions?: Record<
+				string,
+				import("../features/panePresentation/recordedPaneScroll").RecordedPaneScroll
+			>;
+	  }
+	| {
 			type: "OPEN_BUILTIN";
 			kind: BuiltInWindow;
 			patchView?: AppState["patchBuiltInView"];
@@ -47,7 +55,11 @@ export type Action =
 			columns: AppState["patchHiddenColumns"];
 	  }
 	| { type: "SET_PANE_TITLE"; id: string; value: string }
-	| { type: "SET_PANE_TILE_LAYOUT"; id: string; layout: PaneModel["poolTileLayout"] }
+	| {
+			type: "SET_PANE_TILE_LAYOUT";
+			id: string;
+			layout: PaneModel["poolTileLayout"];
+	  }
 	| { type: "SET_PANE_POOL_COLUMNS"; id: string; value: number }
 	| { type: "DISMISS_LAYOUT_MIGRATION_NOTICE" }
 	| { type: "SET_PANE_CUE_SIDEBAR"; id: string; value: boolean }
@@ -200,8 +212,21 @@ export type Action =
 	| { type: "UPDATE_DESK"; id: string; name?: string; icon?: string }
 	| { type: "DELETE_DESK"; id: string }
 	| { type: "NEW_DESK" }
-	| { type: "START_SAVE_DESK" }
-	| { type: "SAVE_DESK_TO"; id: string }
+	| {
+			type: "START_SAVE_DESK";
+			positions?: Record<
+				string,
+				import("../features/panePresentation/recordedPaneScroll").RecordedPaneScroll
+			>;
+	  }
+	| {
+			type: "SAVE_DESK_TO";
+			id: string;
+			positions?: Record<
+				string,
+				import("../features/panePresentation/recordedPaneScroll").RecordedPaneScroll
+			>;
+	  }
 	| { type: "OPEN_WINDOW_PICKER"; rect: GridRect | null }
 	| { type: "ADD_WINDOW"; kind: BuiltInWindow }
 	| { type: "SET_SPEED_GROUP"; value: AppState["speedGroup"] }

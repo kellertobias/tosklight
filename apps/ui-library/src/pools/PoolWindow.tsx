@@ -296,7 +296,7 @@ export function PoolWindow<SlotId extends string | number>({
 			settingsTabs={settingsTabs}
 			className="pool-window"
 		>
-			<WindowScrollArea className="pool-window-scroll-area">
+			<WindowScrollArea className="pool-window-scroll-area" scrollKey="pool">
 				<PoolGrid {...gridProps} />
 			</WindowScrollArea>
 		</WindowFrame>

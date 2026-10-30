@@ -27,6 +27,19 @@ beforeEach(() => context.dispatch.mockReset());
 afterEach(cleanup);
 
 describe("DeskSettingsModal", () => {
+	it("explicitly records current pane positions and explains that later scrolling is transient", () => {
+		renderModal();
+		fireEvent.click(
+			screen.getByRole("button", { name: "Record pane positions" }),
+		);
+		expect(context.dispatch).toHaveBeenCalledWith({
+			type: "RECORD_DESK_SCROLL",
+			id: initialState.activeDeskId,
+		});
+		expect(screen.getByRole("status")).toHaveTextContent(
+			"Later scrolling does not change this snapshot",
+		);
+	});
 	it("sets the shared minimum width for pool tiles", () => {
 		renderModal();
 		fireEvent.change(

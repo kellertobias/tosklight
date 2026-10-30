@@ -15,6 +15,7 @@ import {
 } from "../../windows/WindowRegistry";
 import { SourceLegend } from "../shared/SourceLegend";
 import { PaneChromeProvider } from "./PaneChromeContext";
+import { PaneScrollRestoration } from "./PaneScrollRestoration";
 import { requestPaneRemoval } from "./paneRemovalGuard";
 
 export function Pane({
@@ -28,7 +29,7 @@ export function Pane({
 	maximized: boolean;
 	editing: boolean;
 }) {
-	const { dispatch } = useApp();
+	const { state, dispatch } = useApp();
 	const title =
 		pane.kind === "file_manager" && !pane.titleIsCustom
 			? "File Manager"
@@ -113,12 +114,17 @@ export function Pane({
 			titleActionLabel={deleteArmed ? `Remove ${title} pane` : undefined}
 			onRectChange={updateRect}
 		>
-			<PaneContent
-				active={active}
-				chromeInfo={chromeInfo}
-				chromeToolbar={chromeToolbar}
-				pane={pane}
-			/>
+			<PaneScrollRestoration
+				saved={pane.recordedScroll}
+				recall={state.desktopRecallGeneration ?? 0}
+			>
+				<PaneContent
+					active={active}
+					chromeInfo={chromeInfo}
+					chromeToolbar={chromeToolbar}
+					pane={pane}
+				/>
+			</PaneScrollRestoration>
 		</PaneView>
 	);
 }

@@ -15,9 +15,11 @@ export function DeskSettingsModal() {
 	const desk = state.desks.find((item) => item.id === state.deskSettingsId);
 	const [name, setName] = useState("");
 	const [confirmDelete, setConfirmDelete] = useState(false);
+	const [positionsRecorded, setPositionsRecorded] = useState(false);
 	useEffect(() => {
 		setName(desk?.name ?? "");
 		setConfirmDelete(false);
+		setPositionsRecorded(false);
 	}, [desk?.id]);
 	if (!state.deskSettingsOpen || !desk) return null;
 	const close = () => dispatch({ type: "OPEN_DESK_SETTINGS", id: null });
@@ -107,6 +109,22 @@ export function DeskSettingsModal() {
 								}
 							/>
 						</FormLayout>
+						<Button
+							className="large-action"
+							disabled={desk.id !== state.activeDeskId}
+							onClick={() => {
+								dispatch({ type: "RECORD_DESK_SCROLL", id: desk.id });
+								setPositionsRecorded(true);
+							}}
+						>
+							Record pane positions
+						</Button>
+						{positionsRecorded && (
+							<p role="status">
+								Pane positions recorded. Later scrolling does not change this
+								snapshot.
+							</p>
+						)}
 						<Button className="large-action" onClick={clone}>
 							Clone current desktop
 						</Button>

@@ -2,6 +2,34 @@ import type { AppState } from "../../types";
 import type { Action } from "../appActions";
 import { cueListWindowKind } from "../reducerHelpers";
 
+function saveDesktopTo(
+	state: AppState,
+	action: Extract<Action, { type: "SAVE_DESK_TO" }>,
+): AppState {
+	const source = state.desks.find((desk) => desk.id === state.activeDeskId);
+	return {
+		...state,
+		savingDesk: false,
+		activeDeskId: action.id,
+		pendingDeskScroll: undefined,
+		desks: state.desks.map((desk) =>
+			desk.id !== action.id || !source
+				? desk
+				: {
+						...desk,
+						panes: source.panes.map((pane, index) => ({
+							...pane,
+							recordedScroll: {
+								...pane.recordedScroll,
+								...(action.positions ?? state.pendingDeskScroll)?.[pane.id],
+							},
+							id: `${desk.id}-${pane.kind}-${index + 1}`,
+						})),
+					},
+		),
+	};
+}
+
 export function reduceNavigation(
 	state: AppState,
 	action: Action,
@@ -24,6 +52,7 @@ export function reduceNavigation(
 		case "OPEN_DESK":
 			return {
 				...state,
+				desktopRecallGeneration: (state.desktopRecallGeneration ?? 0) + 1,
 				activeDeskId: action.id,
 				builtIn: null,
 				dockMode: "desks",
@@ -125,26 +154,13 @@ export function reduceNavigation(
 		case "OPEN_WINDOW_PICKER":
 			return { ...state, windowPicker: action.rect };
 		case "START_SAVE_DESK":
-			return { ...state, savingDesk: true };
-		case "SAVE_DESK_TO": {
-			const source = state.desks.find((desk) => desk.id === state.activeDeskId);
 			return {
 				...state,
-				savingDesk: false,
-				activeDeskId: action.id,
-				desks: state.desks.map((desk) =>
-					desk.id !== action.id || !source
-						? desk
-						: {
-								...desk,
-								panes: source.panes.map((pane, index) => ({
-									...pane,
-									id: `${desk.id}-${pane.kind}-${index + 1}`,
-								})),
-							},
-				),
+				savingDesk: true,
+				pendingDeskScroll: action.positions,
 			};
-		}
+		case "SAVE_DESK_TO":
+			return saveDesktopTo(state, action);
 		default:
 			return undefined;
 	}
