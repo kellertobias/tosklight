@@ -41,13 +41,19 @@ pub(super) fn save_copy(
     root_id: String,
     path: String,
     is_base_show: bool,
+    overwrite: bool,
 ) -> Result<ShowEntry, ApiError> {
     let directory = super::file_manager::writable_show_folder(state, &root_id, &path)?;
     let leaf = file_name(&name, "show")?;
     let destination = directory.join(leaf);
-    if destination.exists() {
-        return Err(ApiError::conflict("a file with that name already exists"));
-    }
+    let replaced = if destination.exists() {
+        if !overwrite {
+            return Err(ApiError::conflict("a file with that name already exists"));
+        }
+        Some(replaceable_show(state, &destination)?)
+    } else {
+        None
+    };
     let staged = directory.join(format!(".show-save-{}.show", Uuid::new_v4()));
     let prepared = (|| {
         match (source_show_id, data_base64) {
@@ -75,11 +81,15 @@ pub(super) fn save_copy(
             }
         }
         validate_show_file(&staged).map_err(ApiError::store)?;
-        // Catalog names are unique even when copies are stored in different folders.
-        let catalog_name = available_show_name(
-            state,
-            name.trim().strip_suffix(".show").unwrap_or(name.trim()),
-        )?;
+        // Catalog names are unique even when copies are stored in different folders. A replaced
+        // catalogued show keeps its name and identity, so references to it stay valid.
+        let catalog_name = match replaced.as_ref().and_then(Option::as_ref) {
+            Some(existing) => existing.name.clone(),
+            None => available_show_name(
+                state,
+                name.trim().strip_suffix(".show").unwrap_or(name.trim()),
+            )?,
+        };
         let store = ActiveShowRepository::open(&staged).map_err(ApiError::store)?;
         let copy_id = light_core::ShowId::new();
         store
@@ -89,16 +99,27 @@ pub(super) fn save_copy(
             .checkpoint_for_replacement()
             .map_err(ApiError::store)?;
         drop(store);
-        let bytes = fs::read(&staged).map_err(ApiError::io)?;
-        write_new(&destination, &bytes)?;
+        if let Some(replaced) = &replaced {
+            if let Some(existing) = replaced {
+                backup_show(state, existing)?;
+            }
+            // The validated copy lands in one rename, so a failure leaves the old show intact.
+            fs::rename(&staged, &destination).map_err(ApiError::io)?;
+        } else {
+            let bytes = fs::read(&staged).map_err(ApiError::io)?;
+            write_new(&destination, &bytes)?;
+        }
+        let catalogued = replaced.as_ref().is_some_and(Option::is_some);
         let entry = match state.installation.upsert_show(
             &catalog_name,
             &destination.display().to_string(),
-            false,
+            catalogued,
         ) {
             Ok(entry) => entry,
             Err(error) => {
-                let _ = fs::remove_file(&destination);
+                if replaced.is_none() {
+                    let _ = fs::remove_file(&destination);
+                }
                 return Err(ApiError::store(error));
             }
         };
@@ -118,14 +139,44 @@ pub(super) fn save_copy(
                 Ok(entry)
             }
             Err(error) => {
-                let _ = state.installation.remove_show(entry.id);
-                let _ = fs::remove_file(&destination);
+                if replaced.is_none() {
+                    let _ = state.installation.remove_show(entry.id);
+                    let _ = fs::remove_file(&destination);
+                }
                 Err(error)
             }
         }
     })();
     let _ = fs::remove_file(&staged);
     prepared
+}
+
+/// Checks that an existing destination may be replaced and returns its catalog entry, if any.
+///
+/// The open show is never replaced: it already saves itself, and its file is in use.
+fn replaceable_show(state: &AppState, destination: &FsPath) -> Result<Option<ShowEntry>, ApiError> {
+    if !destination.is_file() {
+        return Err(ApiError::conflict(
+            "a folder with that name already exists; choose another show name",
+        ));
+    }
+    let target = fs::canonicalize(destination).map_err(ApiError::io)?;
+    let same_file = |path: &str| fs::canonicalize(path).is_ok_and(|path| path == target);
+    if state
+        .active_show
+        .current()
+        .is_some_and(|show| same_file(&show.path))
+    {
+        return Err(ApiError::conflict(
+            "that file is the open show and already saves automatically; choose another name",
+        ));
+    }
+    Ok(state
+        .installation
+        .show_library()
+        .map_err(ApiError::store)?
+        .into_iter()
+        .find(|show| same_file(&show.path)))
 }
 
 pub(super) fn export_mvr_file(

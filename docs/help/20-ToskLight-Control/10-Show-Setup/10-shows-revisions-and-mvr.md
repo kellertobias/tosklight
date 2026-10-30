@@ -16,7 +16,7 @@ Use [template shows](19-template-shows.md) for your own reusable starting rigs a
 
 1. Choose **Load Show** from the Show menu.
 2. Open **Source: Internal** in the title bar and choose **Internal**, a listed **USB** drive, or **Network**.
-3. Browse folders, using **Up one folder** to return to the parent.
+3. Browse folders. The location bar above the table names the folder you are in; choose any step in it, or **Up one folder**, to go back.
 4. Choose **Load Latest** beside the intended show.
 
 Folders appear before `.show` files. Each show row includes its last-saved time and an ellipsis button. The ellipsis opens the revision table, with **Latest Autosave** first and named revisions below it. See [Named revisions and copies](17-revisions-and-copies.md) before loading an earlier version.
@@ -27,9 +27,13 @@ Folders appear before `.show` files. Each show row includes its last-saved time 
 
 Open **Save Show As** to choose a name and destination. Its title-bar Source dropdown offers Internal, connected USB drives, and Network. USB drives appear directly in that list.
 
-Click **Location** to expand the folder table. Open the destination folder, then collapse the table to keep its path visible above the name. Folder-read failures show an error in place of the folder list.
+Click **Location** to expand the folder table. It lists the folders and the `.show` files already in the current folder, with the same location bar and **Up one folder** as Load Show. Open the destination folder, then collapse the table to keep its path visible above the name. Folder-read failures show an error in place of the folder list.
 
-Saving to another folder creates an independent portable copy. An existing destination file is refused. The current show and named history remain intact.
+Choose **New Folder** to create a folder in the current location. ToskLight opens it and confirms **Created folder** below the table, so the next save lands inside it. New Folder is not offered on another desk's folders.
+
+Saving to another folder creates an independent portable copy. The current show and named history remain intact.
+
+To overwrite a show in the folder, choose its row or type its name. The row is highlighted, the name field warns that the show already exists, and the save action becomes **Replace Show**. ToskLight always asks before replacing: **Cancel** keeps the existing show, the folder, and the name you entered. A replaced show this desk already knows keeps its library name and identity, and a backup copy is stored with the desk's show backups first. The open show cannot be replaced this way, because it already autosaves.
 
 For established internal shows, selecting an existing show as the destination opens a separate overwrite confirmation. Read [Named revisions and copies](17-revisions-and-copies.md) before confirming it. A failed save leaves an actionable status with the destination or reason.
 

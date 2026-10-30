@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { ShowEntry } from "../../api/types";
 import type { QuickSetupModel } from "./QuickSetupModal";
 import "./newShowDialog.css";
+import { ShowEntryName } from "./showBrowserParts";
 
 function savedTime(value: string) {
     const date = new Date(value);
@@ -46,11 +47,11 @@ export function NewShowDialog({ model }: { model: QuickSetupModel }) {
                 <Button variant="primary" disabled={Boolean(busy)} onClick={() => void create("Creating empty show…", () => lifecycle?.initializeEmptyShow())}>Create Empty Show</Button>
             </div>
             <section className="new-show-base-library">
-                <h4>Start from a base show</h4>
+                <h4 className="show-section-label">Start from a base show</h4>
                 {bases.length ? <WindowScrollArea className="new-show-base-scroll"><table className="new-show-base-table" aria-label="Base shows">
                     <thead><tr><th>Show name</th><th>Description</th><th>Saved</th><th aria-label="Actions" /></tr></thead>
                     <tbody>{bases.map(show => <tr key={show.id}>
-                        <td>{show.name}</td>
+                        <td><ShowEntryName kind="show" name={show.name} /></td>
                         <td><p>{show.description || "No description"}</p><Button size="compact" disabled={Boolean(busy)} aria-label={`Edit description for ${show.name}`} onClick={() => { setEditing(show); setDescription(show.description ?? ""); setError(null); }}>Edit description</Button></td>
                         <td><time dateTime={show.updated_at}>{savedTime(show.updated_at)}</time></td>
                         <td><Button disabled={Boolean(busy)} aria-label={`Create show from ${show.name}`} onClick={() => void create(`Creating show from ${show.name}…`, () => lifecycle?.initializeEmptyShow(show.id))}>Create show</Button></td>

@@ -419,23 +419,85 @@ describe("QuickSetupModal show workflows", () => {
     expect(location).toHaveAttribute("aria-expanded", "false");
     expect(within(dialog).queryByRole("table")).not.toBeInTheDocument();
     fireEvent.click(location);
-    fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
+    fireEvent.click(await within(dialog).findByRole("button", {name:"Tour folder"}));
     await waitFor(() => expect(location).toHaveTextContent("Shows / Tour folder"));
-    fireEvent.click(within(dialog).getByRole("button", {name:"↑ Up one folder"}));
+    fireEvent.click(within(dialog).getByRole("button", {name:"Up one folder"}));
     await waitFor(() => expect(location).toHaveTextContent("Shows /"));
     expect(mocks.files.fileEntries).toHaveBeenCalledTimes(2);
-    expect(within(dialog).queryByRole("button", {name:"↑ Up one folder"})).not.toBeInTheDocument();
-    fireEvent.click(await within(dialog).findByRole("button", {name:"📁 Tour folder"}));
+    expect(within(dialog).getByRole("button", {name:"Up one folder"})).toBeDisabled();
+    fireEvent.click(await within(dialog).findByRole("button", {name:"Tour folder"}));
     fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Folder copy"}});
     await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
     fireEvent.click(within(dialog).getByRole("switch",{name:"Save as Template"}));
     expect(within(dialog).getByRole("switch",{name:"Save as Template"})).toBeChecked();
     fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
-    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"},true));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"},true,false));
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Export MVR"})).toBeEnabled());
     fireEvent.click(within(dialog).getByRole("button",{name:"Export MVR"}));
     await waitFor(() => expect(mocks.server.exportMvrFile).toHaveBeenCalledWith("Folder copy",{rootId:"shows",path:"Tour folder"}));
     expect(mocks.server.saveShowAs).not.toHaveBeenCalled();
+  });
+
+  it("creates a folder from Save As, saves into it, and replaces an existing show only after confirmation", async () => {
+    const listing: Record<string, unknown[]> = {"": [{kind:"file",name:"Encore.show",path:"Encore.show",modified_millis:0}]};
+    mocks.files.fileEntries.mockImplementation(async (_root: string, path: string) => ({entries:listing[path] ?? []}));
+    mocks.files.fileOperation.mockReset().mockImplementation(async (_root: string, input: {name: string}) => {
+      listing[""].push({kind:"folder",name:input.name,path:input.name,modified_millis:0});
+      listing[input.name] = [];
+      return {paths:[input.name],complete:true,items:[]};
+    });
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:"Save As"}));
+    const dialog = screen.getByRole("dialog", {name:"Save show"});
+    fireEvent.click(await within(dialog).findByRole("button", {name:/Location: Shows/}));
+
+    // An existing show is listed; choosing it names the save and marks it as the replace target.
+    fireEvent.click(await within(dialog).findByRole("button", {name:"Use name Encore"}));
+    expect(within(dialog).getByRole("textbox",{name:"Show name"})).toHaveValue("Encore");
+    expect(within(dialog).getByRole("note")).toHaveTextContent("Encore.show already exists here");
+    fireEvent.click(within(dialog).getByRole("button",{name:"Replace Show"}));
+    let confirm = await screen.findByRole("dialog",{name:"Confirm replace show"});
+    expect(confirm).toHaveTextContent("Encore.show in Shows /");
+    fireEvent.click(within(confirm).getByRole("button",{name:"Cancel"}));
+    await waitFor(() => expect(screen.queryByRole("dialog",{name:"Confirm replace show"})).not.toBeInTheDocument());
+    expect(mocks.server.saveShowCopy).not.toHaveBeenCalled();
+    expect(within(dialog).getByRole("textbox",{name:"Show name"})).toHaveValue("Encore");
+    fireEvent.click(within(dialog).getByRole("button",{name:"Replace Show"}));
+    confirm = await screen.findByRole("dialog",{name:"Confirm replace show"});
+    fireEvent.click(within(confirm).getByRole("button",{name:"Replace Show"}));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Encore",{rootId:"shows",path:""},false,true));
+    expect(await within(dialog).findByRole("status")).toHaveTextContent("Replaced Folder copy in Shows /");
+
+    // New Folder creates the folder where the operator is and moves the destination into it.
+    fireEvent.click(within(dialog).getByRole("button",{name:"New Folder"}));
+    fireEvent.change(within(dialog).getByRole("textbox",{name:"New folder name"}),{target:{value:"Encores"}});
+    fireEvent.click(within(dialog).getByRole("button",{name:"Create Folder"}));
+    await waitFor(() => expect(mocks.files.fileOperation).toHaveBeenCalledWith("shows",{operation:"create_folder",destination:"",name:"Encores"}));
+    const location = within(dialog).getByRole("button",{name:/Location: Shows/});
+    await waitFor(() => expect(location).toHaveTextContent("Shows / Encores"));
+    expect(within(dialog).getByRole("status")).toHaveTextContent("Created folder Encores");
+    fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Late set"}});
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenLastCalledWith("Late set",{rootId:"shows",path:"Encores"},false,false));
+  });
+
+  it("asks before replacing when the desk reports the show already exists", async () => {
+    mocks.server.saveShowCopy.mockReset()
+      .mockRejectedValueOnce(new Error("a file with that name already exists"))
+      .mockResolvedValueOnce({name:"Encore"});
+    mocks.files.fileEntries.mockImplementation(async (_root: string, path: string) => ({entries:path ? [] : [{kind:"folder",name:"Tour folder",path:"Tour folder"}]}));
+    render(<QuickSetupModal />);
+    fireEvent.click(screen.getByRole("button", {name:"Save As"}));
+    const dialog = screen.getByRole("dialog", {name:"Save show"});
+    fireEvent.click(await within(dialog).findByRole("button", {name:/Location: Shows/}));
+    fireEvent.click(await within(dialog).findByRole("button", {name:"Tour folder"}));
+    fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Encore"}});
+    await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
+    fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
+    const confirm = await screen.findByRole("dialog",{name:"Confirm replace show"});
+    fireEvent.click(within(confirm).getByRole("button",{name:"Replace Show"}));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenLastCalledWith("Encore",{rootId:"shows",path:"Tour folder"},false,true));
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("shows the server's export summary and every warning until dismissed or another action starts", async () => {
@@ -528,7 +590,7 @@ describe("QuickSetupModal show workflows", () => {
     fireEvent.change(within(dialog).getByRole("textbox",{name:"Show name"}),{target:{value:"Tour-rev-3-2026-07-17"}});
     await waitFor(() => expect(within(dialog).getByRole("button",{name:"Save as New Show"})).toBeEnabled());
     fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
-    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Tour-rev-3-2026-07-17",{rootId:"shows",path:"",instance:"desk-one"},false));
+    await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenCalledWith("Tour-rev-3-2026-07-17",{rootId:"shows",path:"",instance:"desk-one"},false,false));
   });
 
   it("offers saved bases through New Show without opening the original", async () => {
@@ -1234,7 +1296,7 @@ it("reads deliberate Load folder navigation and a fresh catalogue on reopening",
 	render(<QuickSetupModal />);
 	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
 	fireEvent.click(
-		await screen.findByRole("button", { name: "📁 Tour folder" }),
+		await screen.findByRole("button", { name: "Tour folder" }),
 	);
 	await waitFor(() =>
 		expect(mocks.files.fileEntries).toHaveBeenLastCalledWith(
@@ -1246,11 +1308,11 @@ it("reads deliberate Load folder navigation and a fresh catalogue on reopening",
 		expect(screen.getByRole("button", { name: "Up one folder" })).toBeEnabled(),
 	);
 	fireEvent.click(screen.getByRole("button", { name: "Up one folder" }));
-	await screen.findByRole("button", { name: "📁 Tour folder" });
+	await screen.findByRole("button", { name: "Tour folder" });
 	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(3);
 	fireEvent.click(screen.getByRole("button", { name: "Close Load Show" }));
 	fireEvent.click(screen.getByRole("button", { name: /^Load$/ }));
-	await screen.findByRole("button", { name: "📁 Tour folder" });
+	await screen.findByRole("button", { name: "Tour folder" });
 	expect(mocks.files.fileEntries).toHaveBeenCalledTimes(4);
 	expect(mocks.server.openShow).not.toHaveBeenCalled();
 });

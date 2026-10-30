@@ -66,6 +66,9 @@ pub enum ShowLibraryAction {
         path: String,
         #[serde(default)]
         is_base_show: bool,
+        /// Replace an existing show file at the destination. The open show is never replaced.
+        #[serde(default)]
+        overwrite: bool,
     },
     ExportMvrFile {
         #[serde(default)]
@@ -83,6 +86,8 @@ pub enum ShowLibraryAction {
         root_id: String,
         path: String,
         is_base_show: bool,
+        #[serde(default)]
+        overwrite: bool,
     },
     ExportMvrToPeer {
         instance: String,

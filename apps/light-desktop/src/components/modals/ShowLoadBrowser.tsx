@@ -17,6 +17,7 @@ import type {
 import { useFiles } from "../../features/files/FilesContext";
 import { useStableCallback } from "../../features/shared/useStableCallback";
 import type { QuickSetupModel } from "./QuickSetupModal";
+import { ShowEntryName, ShowLocationBar } from "./showBrowserParts";
 import { useShowLoadOperation } from "./showLoadOperation";
 
 type Source = "internal" | "usb" | "network";
@@ -405,13 +406,14 @@ export function ShowLoadBrowser({ model }: { model: QuickSetupModel }) {
 			groups={[{ id: "show-source", actions: showSourceActions(browser) }]}
 		>
 			<div className="show-browser-toolbar">
-				{source !== "network" && path && (
-					<Button
-						disabled={busy}
-						onClick={() => setPath(path.split("/").slice(0, -1).join("/"))}
-					>
-						Up one folder
-					</Button>
+				{source !== "network" && root && (
+					<ShowLocationBar
+						rootLabel={root.label}
+						rootKind={source === "usb" ? "location-drive" : "location-shows"}
+						path={path}
+						busy={busy}
+						onNavigate={setPath}
+					/>
 				)}
 			</div>
 			{source === "usb" && !root && <p>No USB drive connected.</p>}
@@ -519,7 +521,7 @@ function ShowLoadTable({ browser }: { browser: BrowserState }) {
 						<tr key={folder.path}>
 							<td colSpan={3}>
 								<Button disabled={busy} onClick={() => setPath(folder.path)}>
-									📁 {folder.name}
+									<ShowEntryName kind="folder" name={folder.name} />
 								</Button>
 							</td>
 						</tr>
@@ -527,8 +529,11 @@ function ShowLoadTable({ browser }: { browser: BrowserState }) {
 					{rows.map((row) => (
 						<tr key={row.key}>
 							<td>
-								<strong>{row.name}</strong>
-								{row.peer && <small>{row.peer.name}</small>}
+								<ShowEntryName
+									kind="show"
+									name={row.name}
+									detail={row.peer?.name}
+								/>
 							</td>
 							<td>{dateLabel(row.updated)}</td>
 							<td>
@@ -597,7 +602,7 @@ function ShowRevisionBrowser({ browser }: { browser: BrowserState }) {
 						].map((item) => (
 							<tr key={item.revision ?? "latest"}>
 								<td>
-									<strong>{item.name}</strong>
+									<ShowEntryName kind="show" name={item.name} />
 								</td>
 								<td>{dateLabel(item.created_at)}</td>
 								<td>

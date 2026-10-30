@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **449 root cases across 137 files**.
+Default catalog: **450 root cases across 137 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -464,6 +464,7 @@ Default catalog: **449 root cases across 137 files**.
 | show-health.spec.ts | @ui Show Health navigates from cached Media and confirms an intentional Stage origin | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (software only) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (hardware connected) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
+| show-load-browser.spec.ts | TL-679 @ui › Save As creates a folder, saves into it and replaces a show only after confirmation | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 
 ## Serial generated entrypoints
 

@@ -145,6 +145,88 @@ async fn folder_save_rejects_symlink_escape_and_readonly_destination() {
 }
 
 #[tokio::test]
+async fn folder_save_overwrites_only_on_request_and_keeps_the_replaced_show_identity() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let source = create_show(&app, &token, "Overwrite source").await;
+    std::fs::create_dir_all(data_dir.join("shows/tour")).unwrap();
+    let save = |request: &str, overwrite: bool| {
+        let action = serde_json::json!({"type":"save_copy","source_show_id":source["id"],"name":"Tour Copy","root_id":"shows","path":"tour","overwrite":overwrite});
+        let (app, token, request) = (app.clone(), token.clone(), request.to_owned());
+        async move { destination_action(&app, &token, &request, action).await }
+    };
+    let (status, first) = save("overwrite-first", false).await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    let first = first["result"]["show"].clone();
+    let file = data_dir.join("shows/tour/Tour Copy.show");
+    let original = std::fs::read(&file).unwrap();
+
+    let (status, _) = save("overwrite-unconfirmed", false).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(std::fs::read(&file).unwrap(), original);
+
+    let (status, replaced) = save("overwrite-confirmed", true).await;
+    assert_eq!(status, StatusCode::OK, "{replaced}");
+    let replaced = &replaced["result"]["show"];
+    assert_eq!(replaced["id"], first["id"]);
+    assert_eq!(replaced["name"], "Tour Copy");
+    assert_eq!(replaced["path"], first["path"]);
+    let store = ShowStore::open(replaced["path"].as_str().unwrap()).unwrap();
+    assert_eq!(
+        store.id().unwrap().0.to_string(),
+        first["id"].as_str().unwrap()
+    );
+    drop(store);
+    assert_eq!(
+        state
+            .installation
+            .show_library()
+            .unwrap()
+            .iter()
+            .filter(|show| show.name == "Tour Copy")
+            .count(),
+        1
+    );
+    assert!(
+        std::fs::read_dir(data_dir.join("backups"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with("Tour Copy-"))
+    );
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
+async fn folder_save_never_overwrites_the_open_show_or_a_folder() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    let open = create_show(&app, &token, "Open Show").await;
+    let response = app
+        .clone()
+        .oneshot(open_show_request(&token, open["id"].as_str().unwrap()))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let active = state.active_show.current().unwrap();
+    let before = std::fs::read(&active.path).unwrap();
+    let (status, body) = destination_action(&app, &token, "overwrite-open", serde_json::json!({"type":"save_copy","source_show_id":open["id"],"name":"Open Show","root_id":"shows","path":"","overwrite":true})).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert!(body["error"].as_str().unwrap().contains("open show"));
+    assert_eq!(std::fs::read(&active.path).unwrap(), before);
+
+    std::fs::create_dir_all(data_dir.join("shows/Folder.show")).unwrap();
+    let (status, _) = destination_action(&app, &token, "overwrite-folder", serde_json::json!({"type":"save_copy","source_show_id":open["id"],"name":"Folder","root_id":"shows","path":"","overwrite":true})).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert!(data_dir.join("shows/Folder.show").is_dir());
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn mvr_export_writes_the_selected_folder_and_never_overwrites_an_existing_file() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

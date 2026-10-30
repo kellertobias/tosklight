@@ -1,0 +1,31 @@
+/* Kind accents shared by the File Manager and the New, Load and Save Show browsers. */
+.file-kind-icon {
+	flex: none;
+	color: var(--muted);
+}
+
+.file-kind-folder {
+	color: var(--amber, #ffb30f);
+	fill: color-mix(in srgb, var(--amber, #ffb30f) 22%, transparent);
+}
+
+.file-kind-show,
+.file-kind-location-shows {
+	color: var(--cyan, #1bd6ec);
+}
+
+.file-kind-image {
+	color: #c48cff;
+}
+
+.file-kind-audio {
+	color: var(--green, #44d36b);
+}
+
+.file-kind-text {
+	color: #b4c0cc;
+}
+
+.file-kind-location-drive {
+	color: #f08a5d;
+}

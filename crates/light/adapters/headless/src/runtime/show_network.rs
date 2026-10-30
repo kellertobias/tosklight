@@ -405,9 +405,11 @@ async fn desk_save_folders(
             .json()
             .await
             .map_err(|error| ApiError::bad_gateway(error.to_string()))?;
-        listing
-            .entries
-            .retain(|entry| entry.kind == wire::NetworkSaveEntryKind::Folder && entry.writable);
+        listing.entries.retain(|entry| match entry.kind {
+            wire::NetworkSaveEntryKind::Folder => entry.writable,
+            // Existing shows are listed so an overwrite names a file the operator can see.
+            wire::NetworkSaveEntryKind::File => entry.name.to_ascii_lowercase().ends_with(".show"),
+        });
         Ok(wire::NetworkSaveFolders {
             roots,
             root_id: Some(root_id.clone()),
@@ -464,6 +466,7 @@ pub(super) async fn save_copy_to_peer(
     root_id: &str,
     path: &str,
     is_base_show: bool,
+    overwrite: bool,
 ) -> Result<light_wire::v2::runtime::RuntimeShowEntry, ApiError> {
     let peer = discovered_desk(state, instance)?;
     let data =
@@ -472,7 +475,7 @@ pub(super) async fn save_copy_to_peer(
         &peer,
         request_id,
         serde_json::json!({"type":"save_copy", "source_show_id":null,
-        "data_base64":data,"name":name,"root_id":root_id,"path":path,"is_base_show":is_base_show}),
+        "data_base64":data,"name":name,"root_id":root_id,"path":path,"is_base_show":is_base_show,"overwrite":overwrite}),
     )
     .await?;
     match result {

@@ -26,7 +26,7 @@ async function chooseSource(page: Page, scope: Locator, next: string) {
 async function expectTableGeometry(dialog: Locator, row: Locator) {
 	const frame = await dialog.boundingBox();
 	const heading = await dialog.locator(".ui-modal-title-heading").boundingBox();
-	const name = await row.locator("td:first-child strong").boundingBox();
+	const name = await row.locator("td:first-child .show-entry-name").boundingBox();
 	const scroller = await dialog.locator(":scope > .show-browser-table-scroll").boundingBox();
 	const actions = row.locator(".show-row-actions .ui-button");
 	const last = await actions.last().boundingBox();
@@ -84,7 +84,7 @@ for (const hardwareConnected of [false, true]) {
 			await browser.getByRole("button", { name: "Close Load Show" }).click();
 			browser = await openBrowser(page);
 			await expectSharedScrollbar(browser.locator(":scope > .show-browser-table-scroll"));
-			await browser.getByRole("button", { name: `📁 ${folder}`, exact: true }).click();
+			await browser.getByRole("button", { name: folder, exact: true }).click();
 			await expect(browser.locator(".ui-modal-title-heading")).toContainText(folder);
 			await browser.getByRole("button", { name: "Up one folder" }).click();
 			await browser.getByRole("button", { name: /^Source:/ }).click();
@@ -144,14 +144,14 @@ for (const hardwareConnected of [false, true]) {
 			await expect(save.locator(".ui-modal-titlebar").getByRole("button", { name: /^Source:/ })).toBeInViewport();
 			const location = save.getByRole("button", { name: /^Location:/ });
 			await expect(location).toHaveAttribute("aria-expanded", "false");
-			await expect(save.getByRole("button", { name: `📁 ${folder}`, exact: true })).toHaveCount(0);
+			await expect(save.getByRole("button", { name: folder, exact: true })).toHaveCount(0);
 			await location.click();
 			const saveArea = save.locator(".show-save-folder-scroll");
 			await expectSharedScrollbar(saveArea);
 			const titleX = await save.locator(".ui-modal-title-heading").evaluate(node => node.getBoundingClientRect().x);
 			const firstCellX = await saveArea.locator("th").first().evaluate(node => node.getBoundingClientRect().x + Number.parseFloat(getComputedStyle(node).paddingLeft));
 			expect(Math.abs(firstCellX - titleX)).toBeLessThanOrEqual(1);
-			await save.getByRole("button", { name: `📁 ${folder}`, exact: true }).click();
+			await save.getByRole("button", { name: folder, exact: true }).click();
 			const copyName = "Operator folder copy";
 			await save.getByRole("textbox", { name: "Show name", exact: true }).fill(copyName);
 			const base = save.getByRole("switch", { name: "Save as Template", exact: true });
@@ -180,3 +180,56 @@ for (const hardwareConnected of [false, true]) {
 		}
 	});
 }
+
+test("TL-679 @ui › Save As creates a folder, saves into it and replaces a show only after confirmation", async ({ api, desk, page, show }) => {
+	test.setTimeout(90_000);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await api.openShow(show.id, { transition: "hold_current" });
+	await desk.open(api.baseUrl);
+	const folder = `TL-679 folder ${crypto.randomUUID().slice(0, 8)}`;
+	const copyName = "Encore copy";
+	const directory = () => api.request<{ entries: Array<{ name: string; size: number; modified_millis: number | null }> }>("GET", `/api/v2/files/shows/entries?path=${encodeURIComponent(folder)}`);
+	const menu = page.getByRole("dialog", { name: "Show", exact: true });
+	if (!(await menu.isVisible())) await page.getByRole("button", { name: /Open show menu/ }).click();
+	await menu.getByRole("button", { name: "Save As", exact: true }).click();
+	const save = page.getByRole("dialog", { name: "Save show", exact: true });
+	const location = save.getByRole("button", { name: /^Location:/ });
+	await location.click();
+	await expect(save.getByRole("navigation", { name: "Location" })).toBeVisible();
+
+	await save.getByRole("button", { name: "New Folder", exact: true }).click();
+	await save.getByRole("textbox", { name: "New folder name", exact: true }).fill(folder);
+	await save.getByRole("button", { name: "Create Folder", exact: true }).click();
+	await expect(save.getByRole("status").filter({ hasText: `Created folder ${folder}` })).toBeVisible();
+	await expect(location).toContainText(`/ ${folder}`);
+	await expect(save.getByRole("navigation", { name: "Location" }).getByRole("button", { name: folder, exact: true })).toHaveAttribute("aria-current", "location");
+
+	const nameField = save.getByRole("textbox", { name: "Show name", exact: true });
+	await nameField.fill(copyName);
+	await save.getByRole("button", { name: "Save as New Show", exact: true }).click();
+	await expect(save.getByRole("status").filter({ hasText: `Saved ${copyName}` })).toBeVisible();
+	await expect.poll(async () => (await directory()).entries.map(item => item.name)).toEqual([`${copyName}.show`]);
+	const saved = (await directory()).entries[0];
+	const catalogued = (await api.shows<ShowRecord & { path: string }>()).filter(item => item.path.endsWith(`${folder}/${copyName}.show`));
+	expect(catalogued).toHaveLength(1);
+
+	// The existing show is listed, and reusing its name turns the action into an explicit replace.
+	await expect(save.getByRole("button", { name: `Use name ${copyName}`, exact: true })).toBeVisible();
+	await expect(save.getByRole("note")).toContainText(`${copyName}.show already exists here`);
+	await save.getByRole("button", { name: "Replace Show", exact: true }).click();
+	const confirm = page.getByRole("dialog", { name: "Confirm replace show", exact: true });
+	await expect(confirm).toContainText(`${copyName}.show in Shows / ${folder}`);
+	await confirm.getByRole("button", { name: "Cancel", exact: true }).click();
+	await expect(confirm).toBeHidden();
+	await expect(nameField).toHaveValue(copyName);
+	await expect(location).toContainText(`/ ${folder}`);
+	expect((await directory()).entries).toEqual([saved]);
+
+	await save.getByRole("button", { name: "Replace Show", exact: true }).click();
+	await confirm.getByRole("button", { name: "Replace Show", exact: true }).click();
+	await expect(save.getByRole("status").filter({ hasText: `Replaced ${copyName}` })).toBeVisible();
+	const after = (await api.shows<ShowRecord & { path: string }>()).filter(item => item.path.endsWith(`${folder}/${copyName}.show`));
+	expect(after.map(item => item.id)).toEqual(catalogued.map(item => item.id));
+	expect(after[0].revision).toBeGreaterThan(catalogued[0].revision);
+	expect((await directory()).entries.map(item => item.name)).toEqual([`${copyName}.show`]);
+});

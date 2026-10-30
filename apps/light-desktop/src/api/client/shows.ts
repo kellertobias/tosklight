@@ -67,10 +67,10 @@ export class ShowApiClient {
         if (rootId) query.set("root_id", rootId);
         return this.transport.request(`/api/v2/shows/network/${encodeURIComponent(instance)}/folders?${query}`);
     }
-    saveShowCopy(sourceId: string, name: string, target: ShowSaveTarget, baseShow: boolean): Promise<ShowEntry> {
+    saveShowCopy(sourceId: string, name: string, target: ShowSaveTarget, baseShow: boolean, overwrite = false): Promise<ShowEntry> {
         return this.showAction(target.instance
-            ? {type:"save_copy_to_peer",instance:target.instance,source_show_id:sourceId,name,root_id:target.rootId,path:target.path,is_base_show:baseShow}
-            : {type:"save_copy",source_show_id:sourceId,data_base64:null,name,root_id:target.rootId,path:target.path,is_base_show:baseShow});
+            ? {type:"save_copy_to_peer",instance:target.instance,source_show_id:sourceId,name,root_id:target.rootId,path:target.path,is_base_show:baseShow,overwrite}
+            : {type:"save_copy",source_show_id:sourceId,data_base64:null,name,root_id:target.rootId,path:target.path,is_base_show:baseShow,overwrite});
     }
     async exportMvrFile(showId: string, name: string, target: ShowSaveTarget): Promise<ExportedMvrFile> {
         const outcome = await this.action(target.instance

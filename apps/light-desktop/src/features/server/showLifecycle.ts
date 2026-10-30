@@ -176,10 +176,10 @@ function createShowOpeningActions(model: ServerController): ShowOpeningActions {
             setShows(await api.shows.shows());
         },
         networkSaveFolders: (instance, rootId, path) => api.shows.networkSaveFolders(instance, rootId, path),
-        saveShowCopy: async (name, target, baseShow) => {
+        saveShowCopy: async (name, target, baseShow, overwrite = false) => {
             const source = model.bootstrap?.active_show;
             if (!source) throw new Error("Open a show before saving a copy");
-            const saved = await api.shows.saveShowCopy(source.id, name, target, baseShow);
+            const saved = await api.shows.saveShowCopy(source.id, name, target, baseShow, overwrite);
             if (!target.instance) setShows(await api.shows.shows());
             return saved;
         },

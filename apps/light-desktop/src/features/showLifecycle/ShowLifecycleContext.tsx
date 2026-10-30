@@ -25,7 +25,7 @@ export interface ShowLifecycleActions {
 	loadFromVisualizer: (instance: string) => Promise<boolean>;
 	initializeEmptyShow: (baseShowId?: string) => Promise<boolean>;
     networkSaveFolders: (instance: string, rootId: string, path: string) => Promise<import("../../api/client/shows").ShowSaveFolders>;
-    saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean) => Promise<ShowEntry>;
+    saveShowCopy: (name: string, target: import("../../api/client/shows").ShowSaveTarget, baseShow: boolean, overwrite?: boolean) => Promise<ShowEntry>;
     exportMvrFile: (name: string, target: import("../../api/client/shows").ShowSaveTarget) => Promise<import("../../api/client/shows").ExportedMvrFile>;
     networkShows: () => Promise<NetworkShowCatalog>;
     importRemoteShow: (instance: string, showId: string | null, revision: number | null, open: boolean) => Promise<ShowEntry | null>;

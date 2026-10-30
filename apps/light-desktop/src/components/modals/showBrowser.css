@@ -1,0 +1,184 @@
+/*
+ * Shared look of the New Show, Load Show and Save Show browsers: the File Manager's icons,
+ * uppercase column labels, 48px rows and a location bar that always names the folder.
+ */
+.show-entry-name {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 100%;
+	align-items: center;
+	gap: 10px;
+	text-align: left;
+}
+
+.show-entry-name > .file-kind-icon {
+	width: 20px;
+	height: 20px;
+}
+
+.show-entry-label {
+	display: grid;
+	min-width: 0;
+}
+
+.show-entry-label > strong {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-weight: 650;
+}
+
+.show-entry-label > small {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+:is(.show-browser-table, .new-show-base-table) th {
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+:is(.show-browser-table, .new-show-base-table) tbody tr:hover {
+	background: #18212a;
+}
+
+.show-browser-table td {
+	height: 48px;
+	vertical-align: middle;
+}
+
+.show-browser-table td > .ui-button:has(.show-entry-name) {
+	min-height: 44px;
+	max-width: 100%;
+	justify-content: flex-start;
+	border: 0;
+	background: transparent;
+}
+
+.show-browser-table tr.is-replace-target {
+	background: #12323b;
+	box-shadow: inset 3px 0 0 var(--cyan);
+}
+
+.show-location-bar {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 12px;
+}
+
+.show-location-up {
+	flex: none;
+	min-height: 40px;
+}
+
+.show-location-steps {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	overflow: auto hidden;
+	scrollbar-width: none;
+}
+
+.show-location-step {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+}
+
+.show-location-steps .ui-button {
+	display: inline-flex;
+	flex: none;
+	min-height: 40px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px;
+	border: 0;
+	background: transparent;
+	color: var(--muted);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.show-location-steps .ui-button[aria-current="location"] {
+	color: var(--text);
+	font-weight: 700;
+}
+
+.show-location-steps .file-kind-icon {
+	width: 18px;
+	height: 18px;
+}
+
+.show-location-steps .file-tree-chevron {
+	width: 12px;
+	height: 12px;
+	flex: none;
+	color: var(--line2);
+}
+
+.show-section-label {
+	margin: 0;
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+/* Save Show destination browser */
+.show-save-navigation {
+	justify-content: space-between;
+	flex-wrap: nowrap;
+	padding-top: 12px;
+}
+
+.show-save-navigation > .show-location-bar {
+	flex: 1;
+}
+
+.show-save-new-folder {
+	flex: none;
+	min-height: 40px;
+}
+
+.show-save-new-folder-form > .ui-text-control {
+	flex: 1;
+	min-width: 12rem;
+}
+
+.show-save-new-folder-form > .ui-button {
+	min-height: 44px;
+}
+
+.show-save-empty {
+	color: var(--muted);
+	text-align: center;
+}
+
+.show-save-replace-note {
+	margin: 8px 0 0;
+	color: var(--amber);
+}
+
+.ui-modal-stack-layer > .show-replace-modal[role="dialog"] {
+	width: min(560px, calc(100vw - 32px));
+}
+
+.show-replace-modal > p {
+	margin: 16px 0;
+	overflow-wrap: anywhere;
+}
+
+.show-replace-modal footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 12px;
+}
+
+.show-replace-modal footer > .ui-button {
+	min-height: 44px;
+}

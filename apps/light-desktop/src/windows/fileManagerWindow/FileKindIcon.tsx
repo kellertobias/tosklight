@@ -1,3 +1,4 @@
+import "./FileKindIcon.css";
 import type { ReactNode } from "react";
 import type { FileEntry, FileRoot } from "../../api/types";
 import {

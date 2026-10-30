@@ -151,7 +151,8 @@ async fn mock_save_desk() -> (String, SaveDesk, tokio::task::JoinHandle<()>) {
             assert_eq!(headers.get("authorization").unwrap(),"Bearer visualizer");
             Json(serde_json::json!({"root_id":"shows","path":"", "entries":[
                 {"name":"Tour","path":"Tour","kind":"folder","size":0,"modified_millis":null,"created_millis":null,"hidden":false,"writable":true},
-                {"name":"Saved.show","path":"Saved.show","kind":"file","size":8,"modified_millis":null,"created_millis":null,"hidden":false,"writable":true}
+                {"name":"Saved.show","path":"Saved.show","kind":"file","size":8,"modified_millis":null,"created_millis":null,"hidden":false,"writable":true},
+                {"name":"notes.txt","path":"notes.txt","kind":"file","size":8,"modified_millis":null,"created_millis":null,"hidden":false,"writable":true}
             ]}))
         }))
         .route("/api/v2/shows",post(|State(state):State<SaveDesk>,headers:HeaderMap,Json(input):Json<serde_json::Value>|async move {
@@ -207,8 +208,13 @@ async fn network_save_folders_and_write_retry_cleanup_collision_and_permission()
     )
     .await
     .unwrap();
-    assert_eq!(folders.entries.len(), 1);
-    assert_eq!(folders.entries[0].name, "Tour");
+    // Folders to browse and existing shows an overwrite could replace; nothing else.
+    let names: Vec<_> = folders
+        .entries
+        .iter()
+        .map(|entry| entry.name.as_str())
+        .collect();
+    assert_eq!(names, ["Tour", "Saved.show"]);
     assert_eq!(
         desk_save_folders(
             &client,

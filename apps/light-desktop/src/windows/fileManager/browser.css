@@ -212,38 +212,6 @@
 	color: var(--muted);
 }
 
-/* Kind colours */
-.file-manager .file-kind-icon {
-	flex: none;
-	color: var(--muted);
-}
-
-.file-manager .file-kind-folder {
-	color: var(--amber, #ffb30f);
-	fill: color-mix(in srgb, var(--amber, #ffb30f) 22%, transparent);
-}
-
-.file-manager .file-kind-show,
-.file-manager .file-kind-location-shows {
-	color: var(--cyan, #1bd6ec);
-}
-
-.file-manager .file-kind-image {
-	color: #c48cff;
-}
-
-.file-manager .file-kind-audio {
-	color: var(--green, #44d36b);
-}
-
-.file-manager .file-kind-text {
-	color: #b4c0cc;
-}
-
-.file-manager .file-kind-location-drive {
-	color: #f08a5d;
-}
-
 /* Directory contents */
 .file-manager .file-list,
 .file-manager .file-grid {

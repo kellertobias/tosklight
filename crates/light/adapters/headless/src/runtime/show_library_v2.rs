@@ -171,6 +171,7 @@ async fn execute_action(
             root_id,
             path,
             is_base_show,
+            overwrite,
         } => execute_save_copy(
             state,
             source_show_id,
@@ -179,6 +180,7 @@ async fn execute_action(
             root_id,
             path,
             is_base_show,
+            overwrite,
         ),
         Action::ExportMvrFile {
             show_id,
@@ -298,6 +300,7 @@ async fn execute_peer_export_action(
             root_id,
             path,
             is_base_show,
+            overwrite,
         } => {
             execute_save_copy_to_peer(
                 state,
@@ -308,6 +311,7 @@ async fn execute_peer_export_action(
                 root_id,
                 path,
                 is_base_show,
+                overwrite,
             )
             .await
         }
@@ -365,6 +369,7 @@ async fn execute_import_from_desk(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 fn execute_save_copy(
     state: &AppState,
     source_show_id: Option<Uuid>,
@@ -373,6 +378,7 @@ fn execute_save_copy(
     root_id: String,
     path: String,
     is_base_show: bool,
+    overwrite: bool,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     let show = super::show_save_destination::save_copy(
         state,
@@ -382,6 +388,7 @@ fn execute_save_copy(
         root_id,
         path,
         is_base_show,
+        overwrite,
     )?;
     Ok(show_result(show))
 }
@@ -414,6 +421,7 @@ fn execute_export_mvr_file(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn execute_save_copy_to_peer(
     state: &AppState,
     request_id: &str,
@@ -423,6 +431,7 @@ async fn execute_save_copy_to_peer(
     root_id: String,
     path: String,
     is_base_show: bool,
+    overwrite: bool,
 ) -> Result<wire::ShowLibraryActionResult, ApiError> {
     let show = super::show_network::save_copy_to_peer(
         state,
@@ -433,6 +442,7 @@ async fn execute_save_copy_to_peer(
         &root_id,
         &path,
         is_base_show,
+        overwrite,
     )
     .await?;
     Ok(wire::ShowLibraryActionResult::Show { show })
