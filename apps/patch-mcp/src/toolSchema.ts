@@ -58,3 +58,19 @@ export function appearanceWithGel(
 	}
 	return appearance;
 }
+
+/** Content a tool returns as-is, such as an image, instead of JSON text. */
+export interface McpContentResult {
+	readonly mcpContent: Array<
+		| { type: "text"; text: string }
+		| { type: "image"; data: string; mimeType: string }
+	>;
+}
+
+export function mcpContent(content: McpContentResult["mcpContent"]): McpContentResult {
+	return { mcpContent: content };
+}
+
+export function isMcpContent(value: unknown): value is McpContentResult {
+	return typeof value === "object" && value !== null && Array.isArray((value as McpContentResult).mcpContent);
+}

@@ -8,3 +8,8 @@
 declare module "node:fs/promises" {
 	export function readFile(path: string, encoding: string): Promise<string>;
 }
+
+declare module "node:zlib" {
+	export function deflateSync(data: Uint8Array): Uint8Array;
+	export function inflateSync(data: Uint8Array): Uint8Array;
+}

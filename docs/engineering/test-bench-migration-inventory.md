@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **451 root cases across 138 files**.
+Default catalog: **452 root cases across 139 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -239,6 +239,7 @@ Default catalog: **451 root cases across 138 files**.
 | 136-recorded-pane-scroll.spec.ts | @ui recorded Desktop pools restore independent slots after resize, delayed content and layout reload | repository contract | @ui | recorded-pane-scroll | standard failure evidence | parallel | pending-semantic-migration |
 | 137-playback-tile-modes.spec.ts | Playback tile modes retain authored sparse addresses, scroll and Solo outlines @ui | repository contract | @ui | playback-tile-modes | standard failure evidence | parallel | pending-semantic-migration |
 | 141-track-sheet.spec.ts | TL-855 @ui › Track Sheet shows tracking states and edits like command-line Update | repository contract | @ui | track-sheet | standard failure evidence | parallel | pending-semantic-migration |
+| 142-programming-mcp.spec.ts | TL-854 @api › the programming MCP tools select, color, aim and record a Cue on the shared desk command line | repository contract | @api | programming-mcp | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |

@@ -6,3 +6,4 @@ Use these interfaces when connecting another system or writing an integration. N
 - [OSC](02-osc.md) for control input and feedback.
 - [Hardware bridge API](03-hardware-bridge.md) for native device packages.
 - [Scripting](04-scripting.md) for command automation and fixture effects.
+- [MCP server](05-mcp-server.md) for AI assistants that program the desk and edit the patch.

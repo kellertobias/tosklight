@@ -41,6 +41,7 @@ export class Desk implements PatchBackend {
 	private readonly options: DeskOptions;
 	private readonly http: typeof globalThis.fetch;
 	private token: string | null = null;
+	private deskAlias: string | null = null;
 
 	constructor(options: DeskOptions) {
 		this.options = options;
@@ -55,7 +56,11 @@ export class Desk implements PatchBackend {
 	 */
 	private async session(): Promise<string> {
 		if (this.token) return this.token;
-		const opened = await this.request<{ token?: string; id?: string }>(
+		const opened = await this.request<{
+			token?: string;
+			id?: string;
+			desk?: { id?: string };
+		}>(
 			"POST",
 			"/api/v2/sessions",
 			{ desk_id: this.options.deskId },
@@ -64,6 +69,7 @@ export class Desk implements PatchBackend {
 		const token = opened.token ?? opened.id;
 		if (!token) throw new DeskError("the desk opened a session without a token");
 		this.token = token;
+		this.deskAlias = opened.desk?.id ?? this.options.deskId;
 		return token;
 	}
 
@@ -73,10 +79,16 @@ export class Desk implements PatchBackend {
 		body?: unknown,
 		authenticate = true,
 		revision?: number,
+		scope?: { showId?: string },
 	): Promise<T> {
 		const headers: Record<string, string> = {};
 		if (body !== undefined) headers["content-type"] = "application/json";
-		if (authenticate) headers.authorization = `Bearer ${await this.session()}`;
+		if (authenticate) {
+			headers.authorization = `Bearer ${await this.session()}`;
+			// Scoped routes refuse a write meant for another desk or another show.
+			if (scope) headers["x-tosk-desk"] = this.deskAlias ?? this.options.deskId;
+		}
+		if (scope?.showId) headers["x-tosk-show"] = scope.showId;
 		if (revision !== undefined) headers["if-match"] = String(revision);
 		const response = await this.http(`${this.options.baseUrl}${path}`, {
 			method,

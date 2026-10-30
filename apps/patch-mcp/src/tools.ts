@@ -7,6 +7,7 @@
 
 import { type PatchBackend, UnsupportedByProduct } from "./backend";
 import { mediaTools } from "./mediaTools";
+import { programmingTools } from "./programmingTools";
 import { appearanceWithGel, fixtureNumber, gel, type Tool } from "./toolSchema";
 import { addFixture, addFixtureSchema, listFixtures, venueTools } from "./venueTools";
 
@@ -436,4 +437,4 @@ const patchTools: Tool[] = [
 	},
 ];
 
-export const tools: Tool[] = [...patchTools, ...venueTools, ...mediaTools];
+export const tools: Tool[] = [...patchTools, ...venueTools, ...mediaTools, ...programmingTools];

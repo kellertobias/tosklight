@@ -13,12 +13,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { PatchBackend } from "./backend";
 import { DeskError } from "./desk";
+import { isMcpContent } from "./toolSchema";
 import { tools } from "./tools";
 
 /** Serve the patch tools against one product. */
 export function createServer(desk: PatchBackend): Server {
 	const server = new Server(
-		{ name: "tosklight-patch", version: "0.1.0" },
+		{ name: "tosklight", version: "0.2.0" },
 		{ capabilities: { tools: {} } },
 	);
 
@@ -42,6 +43,7 @@ export function createServer(desk: PatchBackend): Server {
 		}
 		try {
 			const result = await tool.run(desk, request.params.arguments ?? {});
+			if (isMcpContent(result)) return { content: result.mcpContent };
 			return {
 				content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 			};
