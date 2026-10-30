@@ -433,7 +433,7 @@ describe("FileManager navigation and previews", () => {
 		).toBeVisible();
 		expect(
 			screen.getByRole("navigation", { name: "Breadcrumb" }),
-		).toHaveTextContent("/ Folder");
+		).toHaveTextContent(/Shows.*Folder/);
 		fireEvent.click(screen.getByRole("button", { name: "Back" }));
 		expect(
 			await screen.findByRole("button", { name: "alpha.txt, file" }),

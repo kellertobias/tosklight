@@ -227,7 +227,7 @@ export class BrowserFiles {
 			await this.desk.click(manager.getByRole("button", { name: "Copy Here" }));
 			await manager
 				.getByRole("navigation", { name: "Breadcrumb" })
-				.getByRole("button", { name: `/ ${workspace}` })
+				.getByRole("button", { name: workspace, exact: true })
 				.click();
 			await this.selectEntry(manager, "alpha.txt, file");
 			await this.beginEdit(manager, "Copy");

@@ -197,7 +197,7 @@ describe("File Manager authoritative locations", () => {
 		await act(async () => vi.advanceTimersByTimeAsync(5100));
 		expect(
 			screen.getByRole("navigation", { name: "Breadcrumb" }),
-		).toHaveTextContent("Shows/ Tour");
+		).toHaveTextContent(/Shows.*Tour/);
 		expect(screen.getByRole("alert")).toHaveTextContent(
 			"Could not load locations",
 		);

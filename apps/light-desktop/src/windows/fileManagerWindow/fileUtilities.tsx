@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type {
 	FileEntry,
 	FileNativeNote,
 	FileOperationResult,
-	FileRoot,
 } from "../../api/types";
 import { Button, TextArea } from "@tosklight/ui";
 import type {
@@ -135,20 +134,6 @@ export function selectionKey(selection: FileManagerSelection) {
 	return `${selection.rootId}:${selection.entry.path}`;
 }
 
-export function rootIcon(root: FileRoot) {
-	if (root.removable || root.icon === "drive") return "⏏";
-	if (root.id === "shows" || root.icon === "shows") return "🎭";
-	if (root.icon && root.icon !== "folder") return root.icon;
-	return "▣";
-}
-
-export function itemIcon(item: FileEntry) {
-	if (item.kind === "folder") return "📁";
-	if (imageExtensions.has(extension(item.name))) return "▧";
-	if (audioExtensions.has(extension(item.name))) return "♪";
-	return "▤";
-}
-
 export function formatSize(value: number) {
 	if (value < 1024) return `${value} B`;
 	if (value < 1024 * 1024)
@@ -187,10 +172,12 @@ export function RasterThumbnail({
 	rootId,
 	entry,
 	load,
+	fallback,
 }: {
 	rootId: string;
 	entry: FileEntry;
 	load: (rootId: string, path: string) => Promise<Blob>;
+	fallback: ReactNode;
 }) {
 	const [url, setUrl] = useState("");
 	useEffect(() => {
@@ -211,9 +198,7 @@ export function RasterThumbnail({
 	return url ? (
 		<img className="file-thumbnail" src={url} alt="" />
 	) : (
-		<span className="file-item-icon" aria-hidden="true">
-			▧
-		</span>
+		<span className="file-item-icon">{fallback}</span>
 	);
 }
 
@@ -226,7 +211,9 @@ export function FileProperties({
 	onNoteDraft,
 	onSaveNote,
 	onOpenText,
+	icon,
 }: {
+	icon?: ReactNode;
 	selection: FileManagerSelection;
 	previewUrl: string;
 	nativeNote: FileNativeNote | null;
@@ -245,7 +232,10 @@ export function FileProperties({
 		entry.kind === "file" && textExtensions.has(extension(entry.name));
 	return (
 		<>
-			<b>{entry.name}</b>
+			<div className="file-properties-heading">
+				{icon && <span className="file-properties-icon">{icon}</span>}
+				<b>{entry.name}</b>
+			</div>
 			<dl>
 				<dt>Type</dt>
 				<dd>
@@ -308,7 +298,9 @@ export function FileProperties({
 				/>
 			)}
 			{!image && !audio && !text && entry.kind === "file" && (
-				<p>Preview unavailable for this file type.</p>
+				<p className="file-preview-unavailable">
+					Preview unavailable for this file type.
+				</p>
 			)}
 		</>
 	);

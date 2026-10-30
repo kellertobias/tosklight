@@ -7,13 +7,12 @@ import {
 	formatSize,
 	formatTime,
 	imageExtensions,
-	itemIcon,
 	pickerSelectionIsValid,
 	RasterThumbnail,
-	rootIcon,
 	textExtensions,
 	validItemName,
 } from "./fileUtilities";
+import { FileKindIcon, fileKind, rootKind, TreeChevron } from "./FileKindIcon";
 import {
 	fileOperationOwnership,
 	fileOperationOwnershipRevision,
@@ -41,29 +40,43 @@ function FileManagerToolbar({
 				>
 					Navigation
 				</Button>
-				<nav aria-label="Breadcrumb">
+				<nav aria-label="Breadcrumb" className="file-breadcrumb">
 					<Button
 						variant="ghost"
+						className="file-breadcrumb-root"
+						aria-current={
+							controller.breadcrumbs.length ? undefined : "location"
+						}
 						onClick={() =>
 							navigation.rootId &&
 							navigation.navigate({ rootId: navigation.rootId, path: "" })
 						}
 					>
+						{navigation.currentRoot && (
+							<FileKindIcon kind={rootKind(navigation.currentRoot)} />
+						)}
 						{navigation.currentRoot?.label ?? "Location"}
 					</Button>
 					{controller.breadcrumbs.map((part, index) => (
-						<Button
-							variant="ghost"
-							key={`${part}-${index}`}
-							onClick={() =>
-								navigation.navigate({
-									rootId: navigation.rootId,
-									path: controller.breadcrumbs.slice(0, index + 1).join("/"),
-								})
-							}
-						>
-							/ {part}
-						</Button>
+						<span className="file-breadcrumb-step" key={`${part}-${index}`}>
+							<TreeChevron expanded={false} />
+							<Button
+								variant="ghost"
+								aria-current={
+									index === controller.breadcrumbs.length - 1
+										? "location"
+										: undefined
+								}
+								onClick={() =>
+									navigation.navigate({
+										rootId: navigation.rootId,
+										path: controller.breadcrumbs.slice(0, index + 1).join("/"),
+									})
+								}
+							>
+								{part}
+							</Button>
+						</span>
 					))}
 				</nav>
 				<Button
@@ -172,7 +185,7 @@ function TreeFolders({
 							? "active"
 							: ""
 					}
-					style={{ paddingInlineStart: `${0.4 + depth * 0.8}rem` }}
+					style={{ paddingInlineStart: `${0.35 + depth * 0.9}rem` }}
 					aria-expanded={expanded}
 					onClick={() => {
 						navigation.navigate({ rootId: treeRootId, path: folder.path });
@@ -182,8 +195,9 @@ function TreeFolders({
 						});
 					}}
 				>
-					<span aria-hidden="true">{expanded ? "▾" : "▸"} 📁</span>{" "}
-					{folder.name}
+					<TreeChevron expanded={expanded} />
+					<FileKindIcon kind="folder" />
+					<span className="file-tree-label">{folder.name}</span>
 				</Button>
 				<TreeFolders
 					controller={controller}
@@ -219,11 +233,12 @@ function FileRoots({ controller }: { controller: FileManagerController }) {
 								void navigation.loadTreeFolder({ rootId: root.id, path: "" });
 							}}
 						>
-							<span aria-hidden="true">
-								{expanded ? "▾" : "▸"} {rootIcon(root)}
-							</span>{" "}
-							{root.label}
-							{root.removable ? " (Removable)" : ""}
+							<TreeChevron expanded={expanded} />
+							<FileKindIcon kind={rootKind(root)} />
+							<span className="file-tree-label">
+								{root.label}
+								{root.removable ? " (Removable)" : ""}
+							</span>
 						</Button>
 						<TreeFolders
 							controller={controller}
@@ -299,7 +314,7 @@ function DirectoryContents({
 					<Button
 						variant="ghost"
 						key={item.path}
-						className={`${selectedItem || sourceItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""} ${targetClass}`}
+						className={`file-entry is-${item.kind} ${selectedItem || sourceItem ? "selected" : ""} ${picker && !pickerAllowed ? "picker-invalid" : ""} ${targetClass}`}
 						aria-pressed={selectedItem}
 						aria-label={`${item.name}, ${item.kind}`}
 						onClick={(event) => operations.selectEntry(item, event)}
@@ -326,13 +341,14 @@ function DirectoryContents({
 									rootId={navigation.rootId}
 									entry={item}
 									load={server.fileThumbnail}
+									fallback={<FileKindIcon kind="image" />}
 								/>
 							) : (
-								<span className="file-item-icon" aria-hidden="true">
-									{itemIcon(item)}
+								<span className="file-item-icon">
+									<FileKindIcon kind={fileKind(item)} />
 								</span>
 							)}
-							<span>{item.name}</span>
+							<span className="file-item-label">{item.name}</span>
 						</span>
 						{state.view === "list" && (
 							<>
@@ -357,6 +373,7 @@ function DirectoryContents({
 			})}
 			{state.listing && !visibleEntries.length && (
 				<p className="file-empty-directory">
+					<FileKindIcon kind="folder" />
 					{normalizedQuery
 						? `No files or folders match “${state.query}”.`
 						: "This folder is empty."}
@@ -380,6 +397,7 @@ function SelectionProperties({
 			<h3>Properties</h3>
 			{state.selected.length === 1 ? (
 				<FileProperties
+					icon={<FileKindIcon kind={fileKind(state.selected[0].entry)} />}
 					selection={state.selected[0]}
 					previewUrl={state.previewUrl}
 					nativeNote={state.nativeNote}
@@ -390,7 +408,7 @@ function SelectionProperties({
 					onOpenText={picker ? undefined : editor.openText}
 				/>
 			) : (
-				<p>
+				<p className="file-properties-empty">
 					{state.selected.length
 						? `${state.selected.length} items selected`
 						: "Select an item"}
