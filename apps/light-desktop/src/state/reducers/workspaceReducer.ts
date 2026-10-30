@@ -30,7 +30,9 @@ function addWindow(
 						? "File Manager"
 						: kind === "text_editor"
 							? "Text Editor"
-							: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
+							: kind === "track_sheet"
+								? "Track Sheet"
+								: cueListWindowTitle(kind[0].toUpperCase() + kind.slice(1), kind),
 		...(isTiledPane(kind)
 			? { poolTileLayout: { mode: "automatic" as const } }
 			: {}),

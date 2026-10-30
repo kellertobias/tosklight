@@ -18,6 +18,7 @@ Use a full built-in for temporary work and a pane for a saved view. [Desk interf
 ## Playback and diagnostics
 
 - [Cuelist and Cue windows](03-cues-and-playbacks.md): pool navigation, Cue table, settings, and following.
+- [Track Sheet](14-track-sheet.md): where each Cue value is set, tracks, is blocked, or is released, and editing it.
 - [Cue previews](11-cue-previews.md): stored Stage pictures and Pixel previews.
 - [Running objects](12-running.md): active objects and their Off actions.
 - [DMX and Help](04-utility-and-diagnostics.md): final output inspection, raw overrides, and manual navigation.

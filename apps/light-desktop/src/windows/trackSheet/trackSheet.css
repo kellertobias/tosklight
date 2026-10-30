@@ -1,0 +1,272 @@
+/*
+ * Track Sheet: Cues across, fixture attributes down. Each state has its own colour and,
+ * where colour alone would not do, a glyph, so the sheet reads on any desk monitor.
+ */
+.track-sheet-window {
+	--ts-label-width: 220px;
+	--ts-header-height: 48px;
+	--ts-hard: #e8f4f8;
+	--ts-up: #44d36b;
+	--ts-down: #ff8a5b;
+	--ts-tracked: #6f8fa3;
+	--ts-block: #ffb30f;
+	--ts-released: #ff6f76;
+	--ts-restore: #c48cff;
+	--ts-cue-only: #c48cff;
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	min-height: 0;
+	background: var(--panel, #0e1217);
+}
+
+.track-sheet-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	padding: 10px 12px;
+	border-bottom: 1px solid var(--line);
+}
+
+.track-sheet-toolbar .ui-field {
+	min-width: 170px;
+}
+
+.track-sheet-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 16px;
+	margin: 0;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line);
+	color: var(--muted);
+	font-size: 12px;
+	list-style: none;
+}
+
+.track-sheet-legend li {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.track-sheet-legend i {
+	width: 12px;
+	height: 12px;
+	border-radius: 2px;
+	background: var(--ts-swatch, transparent);
+	border: 1px solid var(--ts-swatch, var(--line2));
+}
+
+.track-sheet-legend [data-state="hard"] { --ts-swatch: var(--ts-hard); }
+.track-sheet-legend [data-state="up"] { --ts-swatch: var(--ts-up); }
+.track-sheet-legend [data-state="down"] { --ts-swatch: var(--ts-down); }
+.track-sheet-legend [data-state="tracked"] { --ts-swatch: var(--ts-tracked); }
+.track-sheet-legend [data-state="block"] { --ts-swatch: var(--ts-block); }
+.track-sheet-legend [data-state="released"] { --ts-swatch: var(--ts-released); }
+.track-sheet-legend [data-state="restore"] { --ts-swatch: var(--ts-restore); }
+.track-sheet-legend .is-cue-only i {
+	background: transparent;
+	border: 2px dashed var(--ts-cue-only);
+}
+
+.track-sheet-empty {
+	margin: 24px 16px;
+	color: var(--muted);
+}
+
+.track-sheet-grid {
+	display: grid;
+	flex: 1;
+	min-height: 0;
+	grid-template-columns: var(--ts-label-width) minmax(0, 1fr);
+	grid-template-rows: var(--ts-header-height) minmax(0, 1fr);
+	font-variant-numeric: tabular-nums;
+}
+
+.track-sheet-corner {
+	display: flex;
+	align-items: center;
+	padding: 0 12px;
+	border-right: 1px solid var(--line2);
+	border-bottom: 1px solid var(--line2);
+	color: var(--muted);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.track-sheet-header,
+.track-sheet-labels {
+	overflow: hidden;
+}
+
+.track-sheet-header {
+	border-bottom: 1px solid var(--line2);
+	background: var(--panel2, #141920);
+}
+
+.track-sheet-cue {
+	position: absolute;
+	top: 0;
+	display: grid;
+	height: 100%;
+	align-content: center;
+	padding: 0 8px;
+	border-right: 1px solid var(--line);
+	overflow: hidden;
+}
+
+.track-sheet-cue strong,
+.track-sheet-cue small {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.track-sheet-cue small {
+	color: var(--muted);
+	font-size: 11px;
+}
+
+.track-sheet-cue.is-cue-only small {
+	color: var(--ts-cue-only);
+	font-weight: 700;
+}
+
+.track-sheet-labels {
+	border-right: 1px solid var(--line2);
+	background: var(--panel2, #141920);
+}
+
+.track-sheet-label {
+	position: absolute;
+	left: 0;
+	right: 0;
+	display: grid;
+	align-content: center;
+	padding: 0 12px;
+	border-bottom: 1px solid var(--line);
+	overflow: hidden;
+}
+
+.track-sheet-label strong,
+.track-sheet-label span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.track-sheet-label span {
+	color: var(--muted);
+	font-size: 12px;
+}
+
+.track-sheet-body {
+	overflow: auto;
+	overscroll-behavior: contain;
+	-webkit-overflow-scrolling: touch;
+}
+
+.track-sheet-grid .track-sheet-cell.ui-button {
+	position: absolute;
+	display: flex;
+	min-height: 0;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px;
+	border: 0;
+	border-right: 1px solid var(--line);
+	border-bottom: 1px solid var(--line);
+	border-radius: 0;
+	background: transparent;
+	color: var(--ts-color, var(--text));
+	font-weight: 600;
+	touch-action: manipulation;
+}
+
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="hard"] { --ts-color: var(--ts-hard); background: #1a2731; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="up"] { --ts-color: var(--ts-up); background: #14291c; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="down"] { --ts-color: var(--ts-down); background: #2d1d16; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="tracked"] { --ts-color: var(--ts-tracked); font-weight: 400; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="block"] { --ts-color: var(--ts-block); background: #2b2412; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="released"] { --ts-color: var(--ts-released); background: #2c1719; }
+.track-sheet-grid .track-sheet-cell.ui-button[data-state="restore"] { --ts-color: var(--ts-restore); background: #221a2e; }
+
+.track-sheet-grid .track-sheet-cell.is-cue-only {
+	outline: 2px dashed var(--ts-cue-only);
+	outline-offset: -3px;
+}
+
+.track-sheet-cell.from-group .track-sheet-value {
+	font-style: italic;
+}
+
+.track-sheet-grid .track-sheet-cell.is-selected {
+	box-shadow: inset 0 0 0 2px var(--cyan);
+}
+
+.track-sheet-value {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: left;
+}
+
+.track-sheet-mark {
+	flex: none;
+	font-size: 11px;
+}
+
+.track-sheet-swatch {
+	width: 12px;
+	height: 12px;
+	flex: none;
+	border: 1px solid #a5afb6;
+	border-radius: 50%;
+}
+
+.track-sheet-editor {
+	display: grid;
+	gap: 8px;
+	padding: 10px 12px;
+	border-top: 1px solid var(--line2);
+	background: var(--panel2, #141920);
+}
+
+.track-sheet-editor header {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+}
+
+.track-sheet-editor header span {
+	color: var(--muted);
+}
+
+.track-sheet-editor-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.track-sheet-editor-actions > .ui-text-control {
+	width: 120px;
+}
+
+.track-sheet-editor-actions > .ui-button {
+	min-height: 44px;
+}
+
+.track-sheet-editor-note {
+	color: var(--muted);
+}
+
+.track-sheet-editor p {
+	margin: 0;
+}

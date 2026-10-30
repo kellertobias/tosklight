@@ -18,6 +18,7 @@ import { SetupWindow } from "./SetupWindow";
 import { StageWindow } from "./StageWindow";
 import { TextEditorWindow } from "./TextEditorWindow";
 import { TimecodeRuntimeWindow } from "./TimecodeRuntimeWindow";
+import { TrackSheetWindow } from "./TrackSheetWindow";
 import { VirtualPlaybacksWindow } from "./VirtualPlaybacksWindow";
 import { VisualizationWindow } from "./VisualizationWindow";
 import type { WindowProps } from "./windowTypes";
@@ -55,6 +56,7 @@ export const windowRegistry: Record<
 	media: MediaPaneWindow,
 	running: RunningWindow,
 	timecode: TimecodeRuntimeWindow,
+	track_sheet: TrackSheetWindow,
 	scheduler: SchedulerWindow,
 	channels: ChannelsWindow,
 	dmx: DmxWindow,

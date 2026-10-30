@@ -73,6 +73,11 @@ export const windowCategories: readonly WindowChoiceCategory[] = [
 				description: "View Cues for a selected Cuelist.",
 			},
 			{
+				kind: "track_sheet",
+				title: "Track Sheet",
+				description: "See where each Cue value is set, tracks, or is blocked.",
+			},
+			{
 				kind: "playbacks",
 				title: "Playbacks",
 				description: "Place playback actions on a configurable grid.",

@@ -36,8 +36,8 @@ afterEach(() => {
 describe("Open Window categories", () => {
 	it("represents every pane exactly once with a description", () => {
 		const choices = windowCategories.flatMap(({ choices }) => choices);
-		expect(choices).toHaveLength(19);
-		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(19);
+		expect(choices).toHaveLength(20);
+		expect(new Set(choices.map(({ kind }) => kind)).size).toBe(20);
 		expect(choices.every(({ description }) => description.length > 0)).toBe(
 			true,
 		);
@@ -66,6 +66,9 @@ describe("Open Window categories", () => {
 		]);
 		expect(windowChoices).toContainEqual(["cuelists", "Cuelists"]);
 		expect(windowChoices).toContainEqual(["playbacks", "Playbacks"]);
+		expect(
+			availableWindowCategoryChoices("playback").map(({ kind }) => kind),
+		).toContain("track_sheet");
 		expect(windowChoices.some(([kind]) => kind === "cuelist_pool")).toBe(false);
 	});
 

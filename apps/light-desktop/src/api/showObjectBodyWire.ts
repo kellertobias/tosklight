@@ -441,6 +441,7 @@ const BUILT_IN_WINDOWS: readonly BuiltInWindow[] = [
 	"playbacks",
 	"file_manager",
 	"text_editor",
+	"track_sheet",
 ];
 
 function builtInWindowAt(value: unknown, path: string): BuiltInWindow {

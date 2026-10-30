@@ -35,6 +35,7 @@ export type BuiltInWindow =
 	| "help"
 	| "playbacks"
 	| "file_manager"
+	| "track_sheet"
 	| "text_editor";
 
 export type ControlMode = "programmer" | "playbacks";
