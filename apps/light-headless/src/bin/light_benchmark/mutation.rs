@@ -233,6 +233,7 @@ fn with_fixtures(
         .map_err(|error| error.to_string())?;
     let fixtures = (0..count)
         .map(|index| PatchedFixture {
+            stage_position_set: true,
             model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,

@@ -86,6 +86,7 @@ export interface PatchMultiPatch {
 	name: string;
 	splitPatches: readonly PatchSplitAssignment[];
 	location: PatchFixtureLocation;
+	stagePositionSet?: boolean;
 	rotation: PatchFixtureRotation;
 	invertPan?: boolean;
 	invertTilt?: boolean;
@@ -113,6 +114,7 @@ export interface PatchFixtureWrite {
 	layerId: string;
 	directControl: PatchDirectControlEndpoint | null;
 	location: PatchFixtureLocation;
+	stagePositionSet?: boolean;
 	rotation: PatchFixtureRotation;
 	multipatch: readonly PatchMultiPatch[];
 	groupMastersEnabled?: boolean;

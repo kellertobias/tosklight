@@ -119,6 +119,7 @@ function ThruField({
 		<CommitText
 			label={spec.label}
 			ariaLabel={spec.ariaLabel}
+			confirmUnchangedOnEnter={spec.id.startsWith("position-")}
 			placeholder={
 				range ? describeRange(range, spec.digits, spec.unit) : spec.optional ? "None" : undefined
 			}
@@ -200,7 +201,7 @@ export function SeveralPlacement({
 	const allVenue = elements.length > 0 && elements.every((element) => !element.isFixture);
 	const modelFields = model ? sharedModelFields(model, allVenue) : [];
 
-	async function write(next: PatchFixtureProjection[], numeric = false) {
+	async function write(next: PatchFixtureProjection[], numeric = false, confirmPosition = false) {
 		if (!next.length) return;
 		const before = fixtures;
 		const written = new Map(next.map((fixture) => [fixture.fixtureId, fixture]));
@@ -211,6 +212,7 @@ export function SeveralPlacement({
 					sceneRevision,
 					next.map((fixture) => ({
 						id: fixture.fixtureId,
+						...(confirmPosition ? { stagePositionSet: true } : {}),
 						positionMillimetres: [fixture.location.x, fixture.location.y, fixture.location.z],
 						rotationDegrees: [fixture.rotation.x, fixture.rotation.y, fixture.rotation.z],
 					})),
@@ -235,7 +237,7 @@ export function SeveralPlacement({
 						? fixtures.filter((fixture) => lamps.has(fixture.fixtureId))
 						: fixtures;
 					return targets.length ? (
-						<ThruField key={spec.id} spec={spec} targets={targets} onWrite={(next) => void write(next, spec.id.startsWith("position-") || spec.id.startsWith("rotation-"))} />
+						<ThruField key={spec.id} spec={spec} targets={targets} onWrite={(next) => void write(next, spec.id.startsWith("position-") || spec.id.startsWith("rotation-"), spec.id.startsWith("position-"))} />
 					) : null;
 				})}
 			</div>
@@ -261,7 +263,7 @@ export function SeveralPlacement({
 					onClose={() => setAssisting(false)}
 					onApply={(positions) => {
 						setAssisting(false);
-						void write(fixtures.map((fixture, index) => ({ ...fixture, location: positions[index] })));
+						void write(fixtures.map((fixture, index) => ({ ...fixture, location: positions[index], stagePositionSet: true })));
 					}}
 				/>
 			) : null}

@@ -693,6 +693,7 @@ fn logical_head_master_does_not_limit_sibling_heads() {
         (mode.id, head_ids)
     };
     let fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

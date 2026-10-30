@@ -54,6 +54,7 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
     });
     let definition = profile.resolved_definition(mode_id).unwrap();
     let mut fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -85,6 +86,7 @@ fn schema_v2_two_split_fixture() -> PatchedFixture {
         rotation: Default::default(),
         logical_heads: vec![],
         multipatch: vec![MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: Uuid::new_v4(),
             name: "Second body".into(),

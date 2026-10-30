@@ -114,6 +114,7 @@ async function placeDefinitions(
 		return {
 			...candidate.input,
 			location: placement.position,
+			stagePositionSet: true,
 			rotation: placement.rotation,
 			...(extras.sceneryOptions
 				? { sceneryOptions: extras.sceneryOptions }

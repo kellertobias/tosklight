@@ -39,6 +39,7 @@ export const cadSession = {
 			id: string;
 			positionMillimetres: [number, number, number];
 			rotationDegrees: [number, number, number];
+			stagePositionSet?: boolean;
 		}>,
 	) =>
 		invoke<CadTransformOutcome>("cad_set_transforms", {
@@ -52,6 +53,7 @@ export const cadSession = {
 			id: string;
 			positionMillimetres: [number, number, number];
 			rotationDegrees: [number, number, number];
+			stagePositionSet?: boolean;
 		}>,
 	) =>
 		invoke<CadTransformOutcome>("cad_set_numeric_transforms", {

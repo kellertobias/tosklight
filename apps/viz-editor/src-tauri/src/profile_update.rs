@@ -237,6 +237,7 @@ fn mutation(fixture: &PatchFixtureProjection, profile: &FixtureProfile) -> Mutat
             .collect::<Vec<_>>(),
         "layerId": patch.layer_id,
         "location": { "x": patch.location.x, "y": patch.location.y, "z": patch.location.z },
+        "stagePositionSet": patch.stage_position_set,
         "rotation": { "x": patch.rotation.x, "y": patch.rotation.y, "z": patch.rotation.z },
         "bracketAngle": patch.bracket_angle,
         "shaperAngle": patch.shaper_angle,
@@ -337,6 +338,7 @@ mod tests {
                         mode_id: profile.modes[0].id,
                     },
                     patch: PatchedFixturePatch {
+                        stage_position_set: false,
                         fixture_id: light_core::FixtureId(fixture_id),
                         fixture_number: None,
                         virtual_fixture_number: Some(1),

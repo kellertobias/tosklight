@@ -82,3 +82,17 @@ the applicable compatibility and recovery path above.
   lowers it. Schema-10 readers refuse the file before writable use, preserving walls, openings,
   slab outlines and furniture details. No SQL table migration is required. Save/reopen and
   Undo/Redo preserve the typed integer-millimetre construction contract.
+
+- **Explicit Stage placement (TL-863).** Portable root fixtures and physical multipatch copies
+  carry `stage_position_set`. New instances start false; a location edit (including confirmation
+  of zero), location spread, Point assignment, or authored import sets it true. Rotation, address
+  changes and ordinary reads do not mark a fixture placed. Supported legacy records receive this
+  field in the existing atomic show-open migration. Valid nonzero coordinates, including legacy
+  floating-point metres, remain placed; legacy zero or missing coordinates remain unplaced to
+  preserve the previous grid fallback. Existing explicit false is preserved. Legacy origin intent
+  cannot be reconstructed; confirming zero explicitly chooses an authored origin. Unknown fields,
+  stable identities and coordinates remain
+  unchanged; repeated opens are idempotent. Retained Undo bodies use the same compatibility
+  reader without rewriting history. Explicit saved Stage layout transforms remain authoritative;
+  otherwise a true marker honors even the patch origin in Stage and Visualizer. Native CAD Undo
+  restores the prior independent root/copy flags. No SQL schema or reader-floor change is required.

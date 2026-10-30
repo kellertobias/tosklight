@@ -107,6 +107,7 @@ fn patch_one(show_id: ShowId, profile: PatchedFixtureProfileReference) -> PatchF
         fixtures: vec![PatchFixtureCandidate {
             profile,
             patch: PatchedFixturePatch {
+                stage_position_set: false,
                 model_scale: None,
                 scenery_options: Default::default(),
                 scenery_size_metres: None,

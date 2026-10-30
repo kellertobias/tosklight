@@ -21,9 +21,10 @@ import { useCueThumbnailActions } from "../../features/cueThumbnails/CueThumbnai
 import { useDesktopBridge } from "../../platform/desktop";
 import {
 	cueVisualization,
-	migrateStagePosition,
+
 	renderStageThumbnail,
 } from "../stage3dScene";
+import { physicalStagePosition } from "../stage3dScene/positions";
 import { cueStateHash, stageGeometryTag } from "./cueThumbnailState";
 
 const EMPTY_THUMBNAILS: Record<number, string> = {};
@@ -43,36 +44,22 @@ function useStageFixtures(enabled: boolean) {
 				{
 					id: fixture.fixture_id,
 					location: fixture.location,
+					stage_position_set: fixture.stage_position_set,
 					rotation: fixture.rotation,
 				},
 				...(fixture.multipatch ?? []),
 			].map((instance, instanceIndex) => {
 				const index = fixtureIndex * 16 + instanceIndex;
-				const located =
-					instance.location &&
-					(instance.location.x || instance.location.y || instance.location.z)
-						? {
-								x: instance.location.x / 1000,
-								y: instance.location.y / 1000,
-								z: instance.location.z / 1000,
-								rotationX: instance.rotation?.x ?? 0,
-								rotationY: instance.rotation?.y ?? 0,
-								rotationZ: instance.rotation?.z ?? 0,
-							}
-						: null;
 				return {
 					fixture,
 					instanceId: instance.id,
 					index,
-					position:
-						stagePositions3d[instance.id] ??
-						located ??
-						migrateStagePosition(
-							instanceIndex
-								? undefined
-								: stagePositions[fixture.fixture_id],
-							index,
-						),
+					position: physicalStagePosition(
+						instance,
+						stagePositions3d,
+						instanceIndex ? undefined : stagePositions[fixture.fixture_id],
+						index,
+					),
 				};
 			}),
 		);

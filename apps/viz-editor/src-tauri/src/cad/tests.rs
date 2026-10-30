@@ -104,6 +104,7 @@ pub(super) fn transform_session() -> (Session, PathBuf, [Uuid; 2]) {
                     mode_id,
                 },
                 patch: PatchedFixturePatch {
+                    stage_position_set: false,
                     model_scale: None,
                     scenery_options: Default::default(),
                     scenery_size_metres: None,
@@ -172,11 +173,15 @@ fn one_revision_checked_command_moves_a_group_and_rejects_a_stale_repeat() {
         .unwrap();
     let moved = [
         EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id: ids[0],
             position_millimetres: [500, 2_250, 3_000],
             rotation_degrees: [0.0; 3],
         },
         EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id: ids[1],
             position_millimetres: [1_500, 2_250, 3_000],
             rotation_degrees: [0.0; 3],
@@ -260,6 +265,8 @@ fn spread_transform_interpolates_in_explicit_selection_order() {
     let before = ids
         .iter()
         .map(|id| EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id: *id,
             position_millimetres: [1_000, 2_000, 3_000],
             rotation_degrees: [0.0; 3],
@@ -619,11 +626,15 @@ fn snapped_declared_clamp_uses_rotated_stationary_pipe_geometry() {
         revision,
         &[
             EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: ids[0],
                 position_millimetres: [0, 0, 0],
                 rotation_degrees: [0.0, 0.0, 90.0],
             },
             EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: ids[1],
                 position_millimetres: [0, 600, 0],
                 rotation_degrees: [0.0; 3],
@@ -640,4 +651,84 @@ fn snapped_declared_clamp_uses_rotated_stationary_pipe_geometry() {
     assert_eq!(result.attachments[0].truss_member_id, ids[0]);
     drop(session);
     std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn translated_legacy_authorship_is_explicit_and_rotation_preserves_absence() {
+    assert_eq!(super::authored_placement(None, true), Some(true));
+    assert_eq!(super::authored_placement(None, false), None);
+    assert_eq!(super::authored_placement(Some(false), true), Some(true));
+    assert_eq!(super::authored_placement(Some(false), false), Some(false));
+}
+
+#[test]
+fn root_gesture_undo_restores_independent_copy_placement_markers() {
+    let (session, path, ids) = transform_session();
+    let before = session
+        .with(|d| {
+            let patch = d.patch_snapshot().map_err(|e| e.to_string())?;
+            super::selected_transforms(&patch, &BTreeSet::from([ids[0]]))
+        })
+        .unwrap();
+    assert_eq!(before[0].stage_position_set, Some(false));
+    assert!(
+        before[0]
+            .copy_stage_position_set
+            .as_ref()
+            .unwrap()
+            .values()
+            .all(|v| !v)
+    );
+    let cad = super::CadState::default();
+    let revision = session
+        .with(|d| d.patch_revision().map_err(|e| e.to_string()))
+        .unwrap();
+    super::transform::commit(
+        &session,
+        &cad,
+        super::TransformIntent {
+            expected_scene_revision: revision,
+            entity_ids: vec![ids[0]],
+            delta_millimetres: [100, 0, 0],
+            snap_to_mounts: false,
+            spread: false,
+        },
+    )
+    .unwrap();
+    let record = super::history::last_move(&cad.history.lock());
+    let moved = session
+        .with(|d| {
+            let patch = d.patch_snapshot().map_err(|e| e.to_string())?;
+            super::selected_transforms(&patch, &BTreeSet::from([ids[0]]))
+        })
+        .unwrap();
+    assert_eq!(moved[0].stage_position_set, Some(true));
+    assert!(
+        moved[0]
+            .copy_stage_position_set
+            .as_ref()
+            .unwrap()
+            .values()
+            .all(|v| *v)
+    );
+    let revision = session
+        .with(|d| d.patch_revision().map_err(|e| e.to_string()))
+        .unwrap();
+    super::history::restore_move(&session, revision, &record, false).unwrap();
+    let restored = session
+        .with(|d| {
+            let patch = d.patch_snapshot().map_err(|e| e.to_string())?;
+            super::selected_transforms(&patch, &BTreeSet::from([ids[0]]))
+        })
+        .unwrap();
+    assert_eq!(restored[0].stage_position_set, before[0].stage_position_set);
+    assert_eq!(
+        restored[0].copy_stage_position_set,
+        before[0].copy_stage_position_set
+    );
+    assert_eq!(
+        restored[0].position_millimetres,
+        before[0].position_millimetres
+    );
+    let _ = std::fs::remove_file(path);
 }

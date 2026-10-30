@@ -517,6 +517,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         address: Some(1),
     }];
     overlapping_multipatch.multipatch = vec![light_fixture::MultiPatchInstance {
+        stage_position_set: false,
         scenery_size_metres: None,
         id: Uuid::new_v4(),
         name: "Overlapping instance".into(),
@@ -586,6 +587,7 @@ async fn inactive_show_rejects_invalid_schema_v2_patch_before_persistence() {
         },
     ];
     multi_split.multipatch = vec![light_fixture::MultiPatchInstance {
+        stage_position_set: false,
         scenery_size_metres: None,
         id: Uuid::new_v4(),
         name: "Second body".into(),

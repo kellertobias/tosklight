@@ -37,7 +37,7 @@ pub(super) fn analyze(
         checked_at: chrono::Utc::now().to_rfc3339(),
         checks: [
             "DMX overlaps and patch routing",
-            "Stage position metadata and origin placement",
+            "Stage position metadata and authored placement",
             "Group, Cue and Preset references",
         ]
         .map(str::to_string)

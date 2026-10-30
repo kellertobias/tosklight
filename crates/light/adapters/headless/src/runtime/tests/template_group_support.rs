@@ -27,6 +27,7 @@ fn template_fixture(
     footprint: u16,
 ) -> light_fixture::PatchedFixture {
     light_fixture::PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

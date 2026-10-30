@@ -78,6 +78,7 @@ export interface CsvImportRowPlan {
 	name: string;
 	patch: { universe: number; address: number } | null;
 	location: { x: number; y: number; z: number };
+	stagePositionSet: boolean;
 	rotation: { x: number; y: number; z: number };
 	status: CsvRowStatus;
 	message: string | null;
@@ -454,6 +455,7 @@ function planRow(
 		name: cell(row, assignments, "name"),
 		patch: null,
 		location: { x: 0, y: 0, z: 0 },
+		stagePositionSet: false,
 		rotation: { x: 0, y: 0, z: 0 },
 		status: "ready",
 		message: null,
@@ -526,6 +528,7 @@ function planRow(
 			);
 			return plan;
 		}
+		if (location != null) plan.stagePositionSet = true;
 		plan.location[axis] = (location ?? 0) * scale;
 		plan.rotation[axis] = rotation ?? 0;
 	}
@@ -558,6 +561,7 @@ export function csvImportCandidates(
 				})),
 				layer_id: layerId,
 				location: plan.location,
+				stage_position_set: plan.stagePositionSet,
 				rotation: plan.rotation,
 			}),
 		];

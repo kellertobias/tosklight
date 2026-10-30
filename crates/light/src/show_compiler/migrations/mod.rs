@@ -4,6 +4,7 @@ mod objects;
 mod patch;
 mod patch_heads;
 mod records;
+mod stage_position;
 
 use super::invalid_candidate;
 use crate::ActionError;
@@ -95,6 +96,9 @@ pub(super) fn stage_updates(
 ) {
     for update in updates {
         if !preserved.is_some_and(|key| update.targets(key)) {
+            if update.kind == "patched_fixture" {
+                transaction.mark_patch_changed();
+            }
             transaction.put(update.kind, update.id, update.body);
         }
     }

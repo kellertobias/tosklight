@@ -195,6 +195,7 @@ export interface EntityTransform {
 	id: string;
 	positionMillimetres: [number, number, number];
 	rotationDegrees: [number, number, number];
+	stagePositionSet?: boolean;
 }
 
 export interface RigAttachment {

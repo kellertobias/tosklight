@@ -176,6 +176,7 @@ function multipatchAt(value: unknown, path: string): void {
 	stringAt(instance.name, path + ".name");
 	splitArrayAt(instance.split_patches, path + ".split_patches");
 	vectorAt(instance.location, path + ".location", true);
+	booleanAt(instance.stage_position_set, path + ".stage_position_set");
 	vectorAt(instance.rotation, path + ".rotation", false);
 	if (instance.invert_pan !== undefined)
 		booleanAt(instance.invert_pan, path + ".invert_pan");
@@ -364,6 +365,7 @@ function fixtureAt(
 	directControlAt(fixture.direct_control, path + ".direct_control");
 	internalBindingsAt(fixture.internal_bindings, path + ".internal_bindings");
 	vectorAt(fixture.location, path + ".location", true);
+	booleanAt(fixture.stage_position_set, path + ".stage_position_set");
 	vectorAt(fixture.rotation, path + ".rotation", false);
 	arrayAt(fixture.logical_heads, path + ".logical_heads").forEach(
 		(head, index) => {

@@ -23,6 +23,8 @@ pub(super) fn findings(
         result: Vec::new(),
         occupied: HashMap::new(),
         overlaps: HashSet::new(),
+        layout_placements: authored_layout_placements(document, "positions3d", &["x", "y", "z"]),
+        legacy_layout_placements: authored_layout_placements(document, "positions", &["x", "y"]),
         routed: runtime
             .routes
             .iter()
@@ -43,6 +45,8 @@ struct Scanner {
     occupied: Slots,
     overlaps: HashSet<(String, String)>,
     routed: HashSet<u16>,
+    layout_placements: HashSet<Uuid>,
+    legacy_layout_placements: HashSet<Uuid>,
 }
 
 impl Scanner {
@@ -55,7 +59,9 @@ impl Scanner {
                 .unwrap_or_else(|| fixture.fixture_id.0.to_string()),
             fixture.name
         );
-        self.position(object, fixture, &label);
+        if fixture.definition.patch_policy() != light_fixture::PatchPolicy::Internal {
+            self.position(object, fixture, &label);
+        }
         if matches!(
             fixture.definition.patch_policy(),
             light_fixture::PatchPolicy::VisualOnly | light_fixture::PatchPolicy::Internal
@@ -95,11 +101,17 @@ impl Scanner {
 
     fn position(&mut self, object: &PortableShowObject, fixture: &PatchedFixture, label: &str) {
         let body = object.body();
-        if body.get("location").is_none_or(|location| {
-            !["x", "y", "z"]
-                .iter()
-                .all(|axis| location[*axis].is_number())
-        }) {
+        let root_placed = self.layout_placements.contains(&fixture.fixture_id.0)
+            || self
+                .legacy_layout_placements
+                .contains(&fixture.fixture_id.0);
+        if !root_placed
+            && body.get("location").is_none_or(|location| {
+                !["x", "y", "z"]
+                    .iter()
+                    .all(|axis| location[*axis].is_number())
+            })
+        {
             self.result.push(finding(
                 object,
                 "position-missing",
@@ -108,19 +120,32 @@ impl Scanner {
                 Some(fixture.fixture_id.0),
                 false,
             ));
-        } else if fixture.location == light_fixture::FixtureLocation::default()
-            && fixture.position_master.is_none()
-        {
+        } else if !root_placed && !fixture.stage_position_set && fixture.position_master.is_none() {
             self.result.push(finding(
                 object,
-                "position-origin",
-                ShowHealthSeverity::Info,
-                format!(
-                    "{label} is at the Stage origin; verify placement. Origin can be intentional."
-                ),
+                "position-unplaced",
+                ShowHealthSeverity::Warning,
+                format!("{label} has no authored Stage placement. Set its location to confirm placement, including the origin."),
                 Some(fixture.fixture_id.0),
                 false,
             ));
+        }
+        for instance in &fixture.multipatch {
+            if !instance.stage_position_set && !self.layout_placements.contains(&instance.id) {
+                let mut row = finding(
+                    object,
+                    &format!("position-unplaced:{}", instance.id),
+                    ShowHealthSeverity::Warning,
+                    format!(
+                        "{label} copy {} has no authored Stage placement.",
+                        instance.id
+                    ),
+                    Some(fixture.fixture_id.0),
+                    false,
+                );
+                row.multipatch_instance_id = Some(instance.id);
+                self.result.push(row);
+            }
         }
     }
 
@@ -248,4 +273,24 @@ fn normalized(
         universe,
         address,
     }]
+}
+
+fn authored_layout_placements(
+    document: &PortableShowDocument,
+    field: &str,
+    axes: &[&str],
+) -> HashSet<Uuid> {
+    document
+        .object("stage_layout", "main")
+        .and_then(|layout| layout.body().get(field))
+        .and_then(serde_json::Value::as_object)
+        .into_iter()
+        .flat_map(|entries| entries.iter())
+        .filter_map(|(id, value)| {
+            axes.iter()
+                .all(|axis| value[*axis].as_f64().is_some_and(f64::is_finite))
+                .then(|| Uuid::parse_str(id).ok())
+                .flatten()
+        })
+        .collect()
 }

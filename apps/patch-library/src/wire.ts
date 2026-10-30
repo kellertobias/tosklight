@@ -31,6 +31,7 @@ export interface PatchedFixture {
 		head_index: number;
 	}>;
 	location?: { x: number; y: number; z: number };
+	stage_position_set?: boolean;
 	rotation?: { x: number; y: number; z: number };
 	multipatch?: MultiPatchInstance[];
 	group_masters_enabled?: boolean;
@@ -84,6 +85,7 @@ export interface MultiPatchInstance {
 	universe: number | null;
 	address: number | null;
 	location: { x: number; y: number; z: number };
+	stage_position_set?: boolean;
 	rotation: { x: number; y: number; z: number };
 	split_patches?: SplitPatch[];
 	invert_pan?: boolean;

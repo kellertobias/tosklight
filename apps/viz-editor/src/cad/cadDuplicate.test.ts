@@ -38,6 +38,7 @@ describe("duplicating CAD elements", () => {
   const original = fixture("lamp",1,null,{colorCalibration:calibration,multipatch:[{id:"copy",name:"Copy",splitPatches:[],location:{x:0,y:0,z:0},rotation:{x:0,y:0,z:0},colorCalibration:calibration}]});
   const [duplicate] = duplicateFixtures([original],["lamp"],[0,0,0]);
   expect(duplicate.colorCalibration).toBeNull();expect(duplicate.multipatch[0].colorCalibration).toBeNull();
+  expect(duplicate.stagePositionSet).toBe(true);expect(duplicate.multipatch[0].stagePositionSet).toBe(true);
   expect(original.colorCalibration).toBe(calibration);expect(original.multipatch[0].colorCalibration).toBe(calibration);
  });
 

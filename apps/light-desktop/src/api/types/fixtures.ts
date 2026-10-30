@@ -32,6 +32,8 @@ export interface PatchedFixture {
 		head_index: number;
 	}>;
 	location?: { x: number; y: number; z: number };
+	/** Explicitly placed or confirmed against the Stage, including the origin. */
+	stage_position_set?: boolean;
 	/**
 	 * The size a generated Venue object was placed at, in millimetres, like every other
 	 * measurement the patch carries. Absent means the profile's own default.
@@ -95,6 +97,7 @@ export interface MultiPatchInstance {
 	universe: number | null;
 	address: number | null;
 	location: { x: number; y: number; z: number };
+	stage_position_set?: boolean;
 	/**
 	 * The size a generated Venue object was placed at, in millimetres, like every other
 	 * measurement the patch carries. Absent means the profile's own default.

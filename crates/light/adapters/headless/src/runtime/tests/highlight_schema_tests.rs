@@ -90,6 +90,7 @@ fn schema_v2_direct_fixture() -> (light_fixture::PatchedFixture, Uuid, [Uuid; 2]
     let definition = profile.resolved_definition(mode_id).unwrap();
     (
         light_fixture::PatchedFixture {
+            stage_position_set: false,
             model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -225,6 +226,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
     }];
     fixture.multipatch = vec![
         light_fixture::MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: Uuid::new_v4(),
             name: "First physical copy".into(),
@@ -242,6 +244,7 @@ fn highlight_participation_uses_logical_fixture_identities_independent_of_patch(
             installed_appearance: Default::default(),
         },
         light_fixture::MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: Uuid::new_v4(),
             name: "Visualizer-only copy".into(),

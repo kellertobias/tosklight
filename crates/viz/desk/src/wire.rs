@@ -147,6 +147,9 @@ pub struct PatchFixture {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
+    /// Absent on older desks, whose nonzero-coordinate heuristic remains supported.
+    #[serde(default)]
+    pub stage_position_set: Option<bool>,
     /// The size a generated Venue object was placed at, in millimetres like every other measurement
     /// the patch carries. A desk and the planning server both write `scenery_size_metres`; the
     /// camelCase spelling is still accepted.
@@ -227,6 +230,8 @@ pub struct MultiPatch {
     pub split_patches: Vec<SplitAssignment>,
     #[serde(default)]
     pub location: Location,
+    #[serde(default)]
+    pub stage_position_set: Option<bool>,
     /// The size a generated Venue object was placed at, in millimetres like every other measurement
     /// the patch carries. A desk and the planning server both write `scenery_size_metres`; the
     /// camelCase spelling is still accepted.

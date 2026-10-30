@@ -65,6 +65,7 @@ pub fn resolve(
     stored_3d: Option<&StagePosition3d>,
     patch_location: Location,
     patch_rotation: Rotation,
+    stage_position_set: Option<bool>,
     legacy_2d: Option<&StagePosition2d>,
     grid_index: usize,
 ) -> Placement {
@@ -79,7 +80,9 @@ pub fn resolve(
             source: PlacementSource::StageLayout3d,
         };
     }
-    if patch_location.x != 0 || patch_location.y != 0 || patch_location.z != 0 {
+    if stage_position_set
+        .unwrap_or(patch_location.x != 0 || patch_location.y != 0 || patch_location.z != 0)
+    {
         return Placement {
             position: to_world(
                 patch_location.x as f32 / 1000.0,
@@ -151,6 +154,7 @@ mod tests {
             },
             Rotation::default(),
             None,
+            None,
             0,
         );
         assert_eq!(placement.source, PlacementSource::StageLayout3d);
@@ -167,6 +171,7 @@ mod tests {
                 z: 4_650,
             },
             Rotation::default(),
+            None,
             None,
             0,
         );
@@ -185,6 +190,7 @@ mod tests {
             None,
             Location::default(),
             Rotation::default(),
+            None,
             Some(&legacy),
             3,
         );
@@ -195,11 +201,67 @@ mod tests {
 
     #[test]
     fn unplaced_fixtures_fall_back_to_a_deterministic_grid() {
-        let first = resolve(None, Location::default(), Rotation::default(), None, 0);
-        let ninth = resolve(None, Location::default(), Rotation::default(), None, 8);
+        let first = resolve(
+            None,
+            Location::default(),
+            Rotation::default(),
+            None,
+            None,
+            0,
+        );
+        let ninth = resolve(
+            None,
+            Location::default(),
+            Rotation::default(),
+            None,
+            None,
+            8,
+        );
         assert_eq!(first.source, PlacementSource::DefaultGrid);
         assert_eq!(first.position.x, ninth.position.x);
         assert_ne!(first.position.z, ninth.position.z);
+    }
+
+    #[test]
+    fn explicit_origin_placement_wins_over_legacy_2d_while_unplaced_stays_on_grid() {
+        let legacy = StagePosition2d {
+            x: 75.0,
+            y: 60.0,
+            rotation: 0.0,
+        };
+        let placed = resolve(
+            None,
+            Location::default(),
+            Rotation::default(),
+            Some(true),
+            Some(&legacy),
+            4,
+        );
+        assert_eq!(placed.source, PlacementSource::PatchLocation);
+        assert_eq!(placed.position, Vec3::ZERO);
+        let unplaced = resolve(
+            None,
+            Location {
+                x: 3000,
+                y: 0,
+                z: 0,
+            },
+            Rotation::default(),
+            Some(false),
+            None,
+            4,
+        );
+        assert_eq!(unplaced.source, PlacementSource::DefaultGrid);
+        let stored = stored(1.0, 2.0, 3.0);
+        let stored_wins = resolve(
+            Some(&stored),
+            Location::default(),
+            Rotation::default(),
+            Some(false),
+            None,
+            4,
+        );
+        assert_eq!(stored_wins.source, PlacementSource::StageLayout3d);
     }
 }
 

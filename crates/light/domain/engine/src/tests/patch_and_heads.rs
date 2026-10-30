@@ -10,6 +10,7 @@ fn visual_only_profile_renders_without_a_dmx_encoding_plan() {
     let mode_id = profile.modes[0].id;
     let definition = profile.resolved_definition(mode_id).unwrap();
     let fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -65,6 +66,7 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
     let (mut fixture, logical) = fixture();
     fixture.multipatch = vec![
         MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: FixtureId::new().0,
             name: "Patched clone".into(),
@@ -82,6 +84,7 @@ fn patched_multipatch_instances_duplicate_output_while_visual_only_instances_do_
             installed_appearance: Default::default(),
         },
         MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: FixtureId::new().0,
             name: "Visualizer clone".into(),

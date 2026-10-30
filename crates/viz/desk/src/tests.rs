@@ -339,6 +339,30 @@ fn the_stage_layout_position_overrides_the_patch_location() {
 }
 
 #[test]
+fn explicit_origin_markers_reach_root_and_copy_scene_placements_independently() {
+    let mut input = models(
+        shipped_profile("claypaky--sharpy"),
+        StageLayoutBody::default(),
+    );
+    input.patch.fixtures[0].location = Default::default();
+    input.patch.fixtures[0].stage_position_set = Some(true);
+    input.patch.fixtures[0].multipatch.push(
+        serde_json::from_value(json!({
+            "id":"88888888-8888-4888-8888-888888888888",
+            "location":{"x":0,"y":0,"z":0}, "stage_position_set":true
+        }))
+        .unwrap(),
+    );
+    let placed = scene_build::build(&input);
+    assert_eq!(placed.scene.fixtures[0].position, glam::Vec3::ZERO);
+    assert_eq!(placed.scene.fixtures[1].position, glam::Vec3::ZERO);
+    input.patch.fixtures[0].multipatch[0].stage_position_set = Some(false);
+    let unplaced = scene_build::build(&input);
+    assert_eq!(unplaced.scene.fixtures[0].position, glam::Vec3::ZERO);
+    assert_ne!(unplaced.scene.fixtures[1].position, glam::Vec3::ZERO);
+}
+
+#[test]
 fn installed_appearance_from_the_patch_tints_the_compiled_scene() {
     let profile = shipped_profile("claypaky--sharpy");
     let mut models = models(profile.clone(), StageLayoutBody::default());

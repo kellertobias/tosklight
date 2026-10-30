@@ -19,6 +19,9 @@ pub(super) fn apply_vector_spreads(
             })?;
             let value = light_core::spread_position(&spread.points, selection_index, count);
             let fixture = &mut fixtures[index].patch;
+            if matches!(spread.kind, PatchVectorKind::Location) {
+                fixture.stage_position_set = true;
+            }
             match (spread.kind, spread.axis) {
                 (PatchVectorKind::Location, PatchVectorAxis::X) => {
                     fixture.location.x = location_coordinate(value)?

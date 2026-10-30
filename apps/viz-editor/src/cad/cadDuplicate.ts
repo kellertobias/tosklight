@@ -64,6 +64,7 @@ export function duplicateFixtures(
 				virtualFixtureNumber: claimAbove(virtuals, original.virtualFixtureNumber),
 				splitPatches: unpatched(original.splitPatches),
 				location: moved(original.location, offset),
+				stagePositionSet: true,
 				multipatch: original.multipatch.map((copy) => ({
 					...copy,
 					colorCalibration: null,
@@ -71,6 +72,7 @@ export function duplicateFixtures(
 					id: newId(),
 					splitPatches: unpatched(copy.splitPatches),
 					location: moved(copy.location, offset),
+					stagePositionSet: true,
 				})),
 				logicalHeads: [],
 			},

@@ -9,6 +9,7 @@ fn point() -> PatchedFixture {
         .join("../../../../assets/fixture-library/tosklight--3d-point.toskfixture");
     let profile = light_fixture::read_fixture_package(&std::fs::read(path).unwrap()).unwrap();
     PatchedFixture {
+        stage_position_set: false,
         fixture_id: FixtureId::new(),
         definition: profile.resolved_definition(profile.modes[0].id).unwrap(),
         name: "Point".into(),

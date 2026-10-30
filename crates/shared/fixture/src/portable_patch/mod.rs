@@ -5,6 +5,8 @@ mod identity;
 mod inline;
 mod merge;
 mod model;
+mod stage_placement;
+pub use stage_placement::migrate_legacy_stage_placement;
 
 pub use compiler::{
     FixtureProfileRevisionResolver, PatchedFixtureCompiler, ResolvedFixtureProfileRevision,

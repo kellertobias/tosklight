@@ -22,6 +22,7 @@ export function CommitText({
 	label,
 	value,
 	onCommit,
+	confirmUnchangedOnEnter = false,
 	ariaLabel,
 	placeholder,
 	accepts,
@@ -29,14 +30,15 @@ export function CommitText({
 	label: string;
 	value: string;
 	onCommit(value: string): void;
+	confirmUnchangedOnEnter?: boolean;
 	ariaLabel?: string;
 	placeholder?: string;
 	/** Whether a finished edit can be written; one that cannot is put back. */
 	accepts?(draft: string): boolean;
 }) {
 	const [draft, setDraft] = useDraft(value);
-	const commit = () => {
-		if (draft === value) return;
+	const commit = (confirmUnchanged = false) => {
+		if (!confirmUnchanged && draft === value) return;
 		if (accepts && !accepts(draft)) setDraft(value);
 		else onCommit(draft);
 	};
@@ -49,9 +51,9 @@ export function CommitText({
 				placeholder={placeholder}
 				value={draft}
 				onChange={(event) => setDraft(event.currentTarget.value)}
-				onBlur={commit}
+				onBlur={() => commit()}
 				onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-					if (event.key === "Enter") commit();
+					if (event.key === "Enter") commit(confirmUnchangedOnEnter);
 					if (event.key === "Escape") setDraft(value);
 				}}
 			/>
@@ -64,6 +66,7 @@ export function CommitNumber({
 	label,
 	value,
 	onCommit,
+	confirmUnchangedOnEnter = false,
 	ariaLabel,
 	digits = 3,
 	min,
@@ -73,6 +76,7 @@ export function CommitNumber({
 	label: string;
 	value: number;
 	onCommit(value: number): void;
+	confirmUnchangedOnEnter?: boolean;
 	ariaLabel?: string;
 	digits?: number;
 	/** The unit the number is typed in, shown inside the field after the value. */
@@ -82,8 +86,8 @@ export function CommitNumber({
 }) {
 	const shown = formatNumber(value, digits);
 	const [draft, setDraft] = useDraft(shown);
-	const commit = () => {
-		if (draft === shown) return;
+	const commit = (confirmUnchanged = false) => {
+		if (!confirmUnchanged && draft === shown) return;
 		const next = Number(draft.trim().replace(",", "."));
 		if (
 			draft.trim() === "" ||
@@ -106,9 +110,9 @@ export function CommitNumber({
 					aria-label={ariaLabel ?? label}
 					value={draft}
 					onChange={(event) => setDraft(event.currentTarget.value)}
-					onBlur={commit}
+					onBlur={() => commit()}
 					onKeyDown={(event: KeyboardEvent<HTMLInputElement>) => {
-						if (event.key === "Enter") commit();
+						if (event.key === "Enter") commit(confirmUnchangedOnEnter);
 						if (event.key === "Escape") setDraft(shown);
 					}}
 				/>

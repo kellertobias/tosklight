@@ -91,6 +91,7 @@ export function saveEdit(
 	}
 	if (edit === "location" || edit === "rotation")
 		void applyEdit(controller, {
+			...(edit === "location" ? { stage_position_set: true } : {}),
 			// A single-axis edit recomposes over the fixture's current siblings so it can
 			// never resubmit a stale value for an axis it did not touch.
 			[edit]: editAxis

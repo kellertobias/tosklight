@@ -171,7 +171,10 @@ export class PatchSession {
 					.getSnapshot()
 					.fixtures.find((candidate) => candidate.fixture_id === fixtureId);
 				if (!fixture) throw new Error("Patched fixture was not found");
-				return changedPatchFixtureCandidate(fixture, {});
+				return changedPatchFixtureCandidate(
+					fixture,
+					spread.kind === "location" ? { stage_position_set: true } : {},
+				);
 			});
 		return this.queuePatch(materialize(), [], materialize, [], [spread]);
 	}
@@ -736,6 +739,7 @@ function applyPhysicalAction(
 			return { position_calibration: action.calibration };
 		case "set_location_axis":
 			return {
+				stage_position_set: true,
 				location: {
 					...(physical.location ?? { x: 0, y: 0, z: 0 }),
 					[action.axis]: action.millimetres,

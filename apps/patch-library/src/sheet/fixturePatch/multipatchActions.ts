@@ -23,6 +23,7 @@ export async function addMultipatch(controller: PatchController) {
 			address: null,
 		})),
 		location: { x: 0, y: 0, z: 0 },
+		stage_position_set: false,
 		rotation: { x: 0, y: 0, z: 0 },
 	};
 	await controller.patch.updateFixture(selected.fixture_id, {
@@ -164,6 +165,7 @@ function multipatchChanges(
 	// A single-axis edit recomposes over the instance's current siblings so it can
 	// never resubmit a stale value for an axis it did not touch.
 	return {
+		...(edit.kind === "location" ? { stage_position_set: true } : {}),
 		[edit.kind]: edit.axis
 			? { ...instance[edit.kind], [edit.axis]: controller.ui.vector[edit.axis] }
 			: controller.ui.vector,

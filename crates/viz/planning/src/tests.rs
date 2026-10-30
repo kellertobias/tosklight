@@ -79,6 +79,7 @@ pub(crate) fn patch_one(
                     mode_id,
                 },
                 patch: PatchedFixturePatch {
+                    stage_position_set: true,
                     model_scale: None,
                     scenery_options: Default::default(),
                     scenery_size_metres: None,
@@ -681,6 +682,7 @@ fn preview_document_with(
                     mode_id,
                 },
                 patch: PatchedFixturePatch {
+                    stage_position_set: true,
                     model_scale: None,
                     scenery_options: Default::default(),
                     scenery_size_metres: None,

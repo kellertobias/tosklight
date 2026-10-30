@@ -581,6 +581,7 @@ fn fixture_candidate(
     PatchFixtureCandidate {
         profile,
         patch: PatchedFixturePatch {
+            stage_position_set: false,
             model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,

@@ -385,6 +385,7 @@ fn into_runtime_fixture(
         direct_control: patch.direct_control,
         internal_bindings: patch.internal_bindings,
         location: patch.location,
+        stage_position_set: patch.stage_position_set,
         scenery_size_metres: patch.scenery_size_metres,
         scenery_options: patch.scenery_options,
         model_scale: patch.model_scale,

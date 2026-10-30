@@ -382,6 +382,7 @@ pub(in crate::runtime) fn patched(
     address: u16,
 ) -> PatchedFixture {
     PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

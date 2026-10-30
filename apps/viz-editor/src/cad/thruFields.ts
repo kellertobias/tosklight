@@ -47,6 +47,7 @@ export const THRU_FIELDS: readonly ThruFieldSpec[] = [
 			write: (fixture, metres) => ({
 				...fixture,
 				location: { ...fixture.location, [axis]: Math.round((metres ?? 0) * 1000) },
+				stagePositionSet: true,
 			}),
 		}),
 	),

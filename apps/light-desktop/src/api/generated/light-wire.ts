@@ -1101,6 +1101,10 @@ export type PatchNativeColorValue = { channel_id: string, function_id: string, r
 export type PatchColorXyz = { x: number, y: number, z: number, };
 export type PatchMultiPatchInput = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation,
 /**
+ * Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.
+ */
+stage_position_set?: boolean | null,
+/**
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
  */
@@ -1115,6 +1119,10 @@ fixture_id: string, fixture_number: number | null, virtual_fixture_number: numbe
  * Canonical split assignments. An unpatched split has two `null` address fields.
  */
 split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation,
+/**
+ * Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.
+ */
+stage_position_set?: boolean | null,
 /**
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
@@ -1203,7 +1211,7 @@ export type PatchLogicalHeadProjection = {
  * Stable semantic head identity from the selected immutable profile revision.
  */
 profile_head_id: string | null, head_index: number, fixture_id: string, };
-export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation,
+export type PatchMultiPatchProjection = { id: string, name: string, split_patches: Array<PatchSplitAssignment>, location: PatchFixtureLocation, stage_position_set: boolean,
 /**
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.
@@ -1212,7 +1220,7 @@ scenery_size_metres?: PatchFixtureLocation | null, rotation: PatchFixtureRotatio
 export type PatchHighlightOverrideProjection = { channel_id: string, raw_value: number, };
 export type PatchFixtureFreezeFamily = "intensity" | "color" | "position" | "beam";
 export type PatchFixtureFreezeTargetProjection = { fixture_id: string, full: boolean, families: Array<PatchFixtureFreezeFamily>, };
-export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation,
+export type PatchFixtureProjection = { fixture_id: string, fixture_revision: number, fixture_number: number | null, virtual_fixture_number: number | null, name: string, profile_id: string, profile_revision: number, mode_id: string, split_patches: Array<PatchSplitAssignment>, layer_id: string, direct_control: PatchDirectControlEndpoint | null, internal_bindings: PatchInternalFixtureBindings, location: PatchFixtureLocation, stage_position_set: boolean,
 /**
  * The size a generated Venue object was placed at, in millimetres, like every other
  * measurement the patch carries. Absent means the profile's own default.

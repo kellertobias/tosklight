@@ -20,6 +20,7 @@ import type {
 	PatchSnapshot,
 } from "./contracts";
 import {
+	changedPatchFixtureCandidate,
 	createPatchDefinitionResolver,
 	newPatchFixtureCandidate,
 	patchedFixtureCandidate,
@@ -188,6 +189,7 @@ function wireFixtureProjection(fixtureId = FIXTURE_ID, fixtureNumber = 1) {
 		layer_id: fixture.layerId,
 		direct_control: null,
 		location: fixture.location,
+		stage_position_set: fixture.stagePositionSet ?? false,
 		rotation: fixture.rotation,
 		logical_heads: fixture.logicalHeads.map((head) => ({
 			profile_head_id: head.profileHeadId,
@@ -1099,6 +1101,8 @@ describe("Patch session repair lifecycle", () => {
 		);
 		const visible = session.store.getSnapshot().fixtures[0];
 		expect(visible.location).toEqual({ x: 10, y: 20, z: 30 });
+		expect(visible.stage_position_set).toBe(false);
+		expect(visible.multipatch?.map(copy => copy.stage_position_set)).toEqual([true, false]);
 		expect(visible.multipatch?.[0].location).toEqual({
 			x: 999,
 			y: 200,
@@ -1115,7 +1119,7 @@ describe("Patch session repair lifecycle", () => {
 			fixtureRevision: 2,
 			multipatch: withCopies.multipatch.map((copy) =>
 				copy.id === "copy-1"
-					? { ...copy, location: { ...copy.location, x: 999 } }
+					? { ...copy, stagePositionSet: true, location: { ...copy.location, x: 999 } }
 					: copy,
 			),
 		};
@@ -1132,6 +1136,7 @@ describe("Patch session repair lifecycle", () => {
 		await vi.waitFor(() =>
 			expect(transport.patchFixtureUpdate).toHaveBeenCalledTimes(2),
 		);
+		expect(session.store.getSnapshot().fixtures[0].stage_position_set).toBe(true);
 		expect(session.store.getSnapshot().fixtures[0].location).toEqual({
 			x: 10,
 			y: 777,
@@ -1495,5 +1500,37 @@ describe("TL738 native HTTP endpoint Patch round trip", () => {
 			},
 		});
 		expect(() => decodePatchSnapshot(value)).toThrow("http_port");
+	});
+});
+
+
+describe("explicit Stage placement", () => {
+	it("keeps new fixtures unplaced until location or a Point is explicitly authored", () => {
+		const fresh = newPatchFixtureCandidate({ name: "new", fixture_number: 1,
+			definition: definition(), universe: null, address: null });
+		expect(fresh.fixture.stage_position_set).toBe(false);
+		expect(fresh.input.stagePositionSet).toBe(false);
+		expect(changedPatchFixtureCandidate(fresh.fixture, { name: "renamed" }).input.stagePositionSet).toBe(false);
+		const origin = changedPatchFixtureCandidate(fresh.fixture, { location: { x: 0, y: 0, z: 0 } });
+		expect(origin.input.stagePositionSet).toBe(true);
+		expect(changedPatchFixtureCandidate(origin.fixture, { name: "retained" }).input.stagePositionSet).toBe(true);
+		expect(changedPatchFixtureCandidate(fresh.fixture, { position_master: FIXTURE_ID }).input.stagePositionSet).toBe(true);
+	});
+	it("round-trips independent root and multipatch markers and rejects malformed diagnostics state", () => {
+		const wire = wireSnapshot(1, 1, 10, [wireFixtureProjection()]);
+		const root = wire.fixtures[0];
+		Object.assign(root, { stage_position_set: false, multipatch: [{
+			id: CORRELATION_ID, name: "copy", split_patches: root.split_patches,
+			location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 },
+			stage_position_set: true, bracket_angle: 0, shaper_angle: null,
+			installed_appearance: root.installed_appearance,
+		}] });
+		const projection = decodePatchSnapshot(wire).fixtures[0];
+		const fixture = projectionToPatchedFixture(projection, profileProjection(), () => definition());
+		const saved = toWireFixture(patchedFixtureCandidate(fixture).input);
+		expect(saved.stage_position_set).toBe(false);
+		expect(saved.multipatch[0].stage_position_set).toBe(true);
+		Object.assign(root, { stage_position_set: "true" });
+		expect(() => decodePatchSnapshot(wire)).toThrow("stage_position_set");
 	});
 });

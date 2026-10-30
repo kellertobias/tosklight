@@ -484,6 +484,13 @@
           },
           "minItems": 1
         },
+        "stage_position_set": {
+          "description": "Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "virtual_fixture_number": {
           "type": [
             "integer",
@@ -965,6 +972,13 @@
             "$ref": "#/$defs/PatchSplitAssignment"
           },
           "minItems": 1
+        },
+        "stage_position_set": {
+          "description": "Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.",
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "required": [

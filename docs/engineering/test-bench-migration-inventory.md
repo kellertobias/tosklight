@@ -461,7 +461,7 @@ Default catalog: **449 root cases across 137 files**.
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 | show-health.spec.ts | @ui Show Health finds a broken Group, fixes once, undoes and opens the exact Group | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
-| show-health.spec.ts | @ui Show Health reveals Fixtures from a cached Media tab and opens the exact location editor | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
+| show-health.spec.ts | @ui Show Health navigates from cached Media and confirms an intentional Stage origin | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (software only) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (hardware connected) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 

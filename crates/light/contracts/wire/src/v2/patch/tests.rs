@@ -301,6 +301,7 @@ fn snapshot_carries_a_gap_repair_cursor_and_deduplicated_profile_metadata() {
 
 fn fixture_input() -> PatchFixtureInput {
     PatchFixtureInput {
+        stage_position_set: None,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -349,6 +350,7 @@ fn fixture_projection() -> PatchFixtureProjection {
 
 fn projection_from(input: PatchFixtureInput) -> PatchFixtureProjection {
     PatchFixtureProjection {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

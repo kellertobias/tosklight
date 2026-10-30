@@ -25,6 +25,7 @@ fn robin_dls_full_white_keeps_its_shutter_open_in_resolved_dmx() {
         .unwrap();
     let fixture_id = FixtureId::new();
     let fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -152,6 +153,7 @@ fn physical_axis_inversion_is_independent_for_root_and_multipatch() {
         schema_v2_fixture(&[("pan", false, false), ("tilt", false, false)]);
     fixture.invert_pan = true;
     fixture.multipatch = vec![MultiPatchInstance {
+        stage_position_set: false,
         scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
         name: "Opposite hang".into(),
@@ -277,6 +279,7 @@ fn patch_and_profile_axis_inversion_compose_exactly_once() {
         .channels[0]
         .invert = true;
     fixture.multipatch = vec![MultiPatchInstance {
+        stage_position_set: false,
         scenery_size_metres: None,
         id: uuid::Uuid::new_v4(),
         name: "Profile inversion only".into(),
@@ -487,6 +490,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
     let definition = profile.resolved_definition(mode_id).unwrap();
     let physical = FixtureId::new();
     let fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -518,6 +522,7 @@ fn schema_v2_renders_one_head_channels_to_independent_splits() {
         rotation: Default::default(),
         logical_heads: vec![],
         multipatch: vec![MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: uuid::Uuid::new_v4(),
             name: "Mirror".into(),

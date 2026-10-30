@@ -191,6 +191,7 @@ pub(super) fn patched_fixture(
     let mut patched = embedded
         .map(|embedded| embedded.fixture.clone())
         .unwrap_or_else(|| PatchedFixture {
+            stage_position_set: true,
             model_scale: None,
             scenery_options: Default::default(),
             scenery_size_metres: None,
@@ -276,6 +277,7 @@ pub(super) fn patched_fixture(
     patched.address = address.1;
     patched.layer_id = layer_id;
     patched.location = location;
+    patched.stage_position_set = true;
     patched.rotation = rotation;
     if let Some(existing_patch) = existing_patch {
         patched.move_in_black_enabled = existing_patch.move_in_black_enabled;

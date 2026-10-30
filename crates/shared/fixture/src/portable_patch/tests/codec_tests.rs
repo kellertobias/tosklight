@@ -878,3 +878,56 @@ fn manual_optics_preserve_legacy_and_independent_physical_installations() {
         );
     }
 }
+
+#[test]
+fn stage_placement_legacy_reader_preserves_old_undo_bodies_without_rewriting_them() {
+    let fixture = fixture(&profile());
+    for mut body in [
+        serde_json::to_value(&fixture).unwrap(),
+        PortablePatchedFixtureRecord::from_runtime_fixture(&fixture)
+            .unwrap()
+            .into_body(),
+    ] {
+        body.as_object_mut().unwrap().remove("stage_position_set");
+        body["location"] = json!({"x":0,"y":0,"z":0});
+        body["multipatch"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("stage_position_set");
+        body["multipatch"][0]["location"] = json!({"x":0.0,"y":1.2,"z":0.0});
+        let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+        assert!(
+            !record.patch().unwrap().stage_position_set,
+            "legacy origin retains its existing fallback"
+        );
+        assert!(record.patch().unwrap().multipatch[0].stage_position_set);
+        assert_eq!(
+            record.body(),
+            &body,
+            "history read must preserve the exact raw body"
+        );
+        body["stage_position_set"] = json!(true);
+        assert!(
+            PortablePatchedFixtureRecord::decode(body.clone())
+                .unwrap()
+                .patch()
+                .unwrap()
+                .stage_position_set,
+            "explicit origin is placed"
+        );
+        body["stage_position_set"] = json!(false);
+        body["multipatch"][0]["stage_position_set"] = json!(false);
+        let record = PortablePatchedFixtureRecord::decode(body.clone()).unwrap();
+        assert!(!record.patch().unwrap().stage_position_set);
+        assert!(!record.patch().unwrap().multipatch[0].stage_position_set);
+        body.as_object_mut().unwrap().remove("stage_position_set");
+        body.as_object_mut().unwrap().remove("location");
+        assert!(
+            !PortablePatchedFixtureRecord::decode(body)
+                .unwrap()
+                .patch()
+                .unwrap()
+                .stage_position_set
+        );
+    }
+}

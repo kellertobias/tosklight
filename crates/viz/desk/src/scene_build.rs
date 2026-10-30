@@ -88,6 +88,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
                 .get(&fixture.fixture_id.to_string()),
             fixture.location,
             fixture.rotation,
+            fixture.stage_position_set,
             models
                 .stage_layout
                 .positions
@@ -123,6 +124,7 @@ pub fn build(models: &DeskReadModels) -> ScenePlan {
                     .get(&multipatch.id.to_string()),
                 multipatch.location,
                 multipatch.rotation,
+                multipatch.stage_position_set,
                 None,
                 grid_index,
             );
@@ -305,6 +307,7 @@ fn build_crowds(
                 .get(&fixture.fixture_id.to_string()),
             fixture.location,
             fixture.rotation,
+            fixture.stage_position_set,
             models
                 .stage_layout
                 .positions

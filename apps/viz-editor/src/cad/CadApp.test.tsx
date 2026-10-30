@@ -549,6 +549,7 @@ describe("the CAD planning screen", () => {
 				{
 					id: fixtureId,
 			positionMillimetres: [1250, 0, 4000],
+					stagePositionSet: true,
 					rotationDegrees: [0, 0, 0],
 				},
 		]),
@@ -877,6 +878,7 @@ describe("the CAD planning screen", () => {
 				{
 					id: copyId,
 					positionMillimetres: [3500, 0, 4000],
+					stagePositionSet: true,
 					rotationDegrees: [0, 0, 0],
 				},
 			]),
@@ -1177,10 +1179,12 @@ describe("the CAD planning screen", () => {
 		await waitFor(() => expect(mocks.setNumericTransforms).toHaveBeenCalledWith(9, [
 				{ id: fixtureId,
 					positionMillimetres: [1000, 0, 4000],
+					stagePositionSet: true,
 					rotationDegrees: [0, 0, 0],
 				},
 				{ id: secondFixtureId,
 					positionMillimetres: [3000, 0, 4000],
+					stagePositionSet: true,
 					rotationDegrees: [0, 0, 0],
 				},
 			]),

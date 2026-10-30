@@ -5,6 +5,7 @@ import {
 	fixtureDefinitionsFromProfiles,
 } from "../sheet/fixtureProfileModel";
 import {
+	changedPatchFixtureCandidate,
 	newPatchFixtureCandidate,
 	patchedFixtureCandidate,
 	projectionToPatchedFixture,
@@ -69,4 +70,20 @@ describe("TL738 Architect shared Patch endpoint persistence", () => {
 		expect(moved.directControl?.httpPort).toBe(httpPort ?? null);
 		expect(moved.location.x).toBe(2000);
 	});
+});
+
+
+it("preserves explicit root/copy placement through projected rename, address and rotation writes", () => {
+	const { fixture, profile, definition } = arrange();
+	fixture.stage_position_set = false;
+	fixture.multipatch = [{ id: "copy", name: "Copy", universe: null, address: null,
+		location: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, stage_position_set: true }];
+	const input = patchedFixtureCandidate(fixture).input;
+	const read = projectionToPatchedFixture({ ...input, fixtureRevision: 1, logicalHeads: [] }, profile, () => definition);
+	const renamed = changedPatchFixtureCandidate(read, { name: "Renamed", address: 2, rotation: { x: 0, y: 0, z: 90 } });
+	expect(renamed.input.stagePositionSet).toBe(false);
+	expect(renamed.input.multipatch[0].stagePositionSet).toBe(true);
+	expect(renamed.fixture.multipatch?.[0].stage_position_set).toBe(true);
+	const placed = changedPatchFixtureCandidate(read, { location: { x: 0, y: 0, z: 0 } });
+	expect(placed.input.stagePositionSet).toBe(true);
 });

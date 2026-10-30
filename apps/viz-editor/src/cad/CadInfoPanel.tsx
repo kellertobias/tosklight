@@ -74,11 +74,12 @@ export function withPlacement(
 	copyId: string | null,
 	change: Partial<Placement>,
 ): PatchFixtureProjection {
-	if (!copyId) return { ...fixture, ...change };
+	const placed = change.location ? { ...change, stagePositionSet: true } : change;
+	if (!copyId) return { ...fixture, ...placed };
 	return {
 		...fixture,
 		multipatch: fixture.multipatch.map((copy) =>
-			copy.id === copyId ? { ...copy, ...change } : copy,
+			copy.id === copyId ? { ...copy, ...placed } : copy,
 		),
 	};
 }
@@ -181,6 +182,7 @@ function VectorFields({
 					key={axis}
 					label={axis.toUpperCase()}
 					ariaLabel={`${label} ${axis.toUpperCase()}`}
+					confirmUnchangedOnEnter={label === "Position"}
 					digits={digits}
 					unit={unit}
 					value={show(value[axis])}
@@ -296,12 +298,12 @@ export function CadInfoPanel({
 			</section>
 		);
 	const editedEntityId = entity.id;
-	async function write(next: PatchFixtureProjection, numeric = false) {
+	async function write(next: PatchFixtureProjection, numeric = false, confirmPosition = false) {
 		if (!fixture) return false;
 		const before = fixture;
 		setFixture(next);
 		try {
-			await persistInfoFixture(next, editedEntityId, sceneRevision, numeric);
+			await persistInfoFixture(next, editedEntityId, sceneRevision, numeric, confirmPosition);
 			return true;
 		} catch (reason) {
 			setFixture(before);
@@ -323,6 +325,7 @@ export function CadInfoPanel({
 			void write(
 				withPlacement(fixture, copyId, change),
 				!!(change.location || change.rotation),
+				!!change.location,
 			);
 	};
 	const shared = placements.length > 1 ? " (all copies)" : "";

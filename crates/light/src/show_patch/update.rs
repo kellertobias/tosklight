@@ -92,8 +92,14 @@ fn apply_update(
         }
         PatchFixtureUpdateAction::SetLocationAxis { axis, millimetres } => {
             match exact_copy(patch, update.multipatch_instance_id)? {
-                Some(instance) => set_location_axis(&mut instance.location, *axis, *millimetres),
-                None => set_location_axis(&mut patch.location, *axis, *millimetres),
+                Some(instance) => {
+                    set_location_axis(&mut instance.location, *axis, *millimetres);
+                    instance.stage_position_set = true;
+                }
+                None => {
+                    set_location_axis(&mut patch.location, *axis, *millimetres);
+                    patch.stage_position_set = true;
+                }
             }
         }
         PatchFixtureUpdateAction::SetRotationAxis { axis, degrees } => {

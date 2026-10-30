@@ -279,6 +279,9 @@ pub struct PatchedFixture {
     pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// Whether this physical instance has an authored Stage placement, including the origin.
+    #[serde(default)]
+    pub stage_position_set: bool,
     /// The size a generated Venue object was placed at, in metres. Absent means its profile's
     /// own default, which is what every one placed before this reads as.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -461,6 +464,9 @@ pub struct MultiPatchInstance {
     pub split_patches: Vec<SplitPatch>,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// Whether this physical instance has an authored Stage placement, including the origin.
+    #[serde(default)]
+    pub stage_position_set: bool,
     /// The size a generated Venue object was placed at, in metres. Absent means its profile's
     /// own default, which is what every one placed before this reads as.
     #[serde(default, skip_serializing_if = "Option::is_none")]

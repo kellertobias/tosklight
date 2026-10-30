@@ -162,6 +162,7 @@ mod tests {
                 mode_id: Uuid::new_v4(),
             },
             PatchedFixturePatch {
+                stage_position_set: false,
                 model_scale: None,
                 scenery_options: Default::default(),
                 scenery_size_metres: None,

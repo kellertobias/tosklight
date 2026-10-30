@@ -636,6 +636,8 @@ mod tests {
             })
             .unwrap();
         let after = vec![EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id: ids[0],
             position_millimetres: [500, 2000, 3000],
             rotation_degrees: [0., 0., 0.],
@@ -650,11 +652,15 @@ mod tests {
         let gizmo = pose_snapshot();
         let numeric = vec![
             EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: ids[0],
                 position_millimetres: [-2500, 2000, 3000],
                 rotation_degrees: [0., 0., 30.],
             },
             EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: ids[1],
                 position_millimetres: [7000, 2000, 3000],
                 rotation_degrees: [0., 0., 60.],
@@ -695,6 +701,8 @@ mod tests {
         .unwrap();
         assert_eq!(pose_snapshot(), gizmo);
         let no_op = vec![EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id: ids[0],
             position_millimetres: [500, 2000, 3000],
             rotation_degrees: [0., 0., 0.],
@@ -745,6 +753,8 @@ mod tests {
             &session,
             revision,
             &[EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: ids[0],
                 position_millimetres: [500, 2_000, 3_000],
                 rotation_degrees: [0.0, 0.0, 0.0],

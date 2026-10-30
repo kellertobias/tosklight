@@ -55,6 +55,7 @@ pub struct FixtureDto {
     pub mode_id: Uuid,
     pub split_patches: Vec<SplitDto>,
     pub location: LocationDto,
+    pub stage_position_set: bool,
     pub rotation: RotationDto,
     pub multipatch: Vec<MultiPatchDto>,
     pub invert_pan: bool,
@@ -104,6 +105,7 @@ pub struct MultiPatchDto {
     pub name: String,
     pub split_patches: Vec<SplitDto>,
     pub location: LocationDto,
+    pub stage_position_set: bool,
     pub rotation: RotationDto,
     pub invert_pan: bool,
     pub invert_tilt: bool,
@@ -174,6 +176,7 @@ fn fixture(
             y: patch.location.y,
             z: patch.location.z,
         },
+        stage_position_set: patch.stage_position_set,
         rotation: RotationDto {
             x: patch.rotation.x,
             y: patch.rotation.y,
@@ -207,6 +210,7 @@ fn multipatch(instance: &MultiPatchInstance) -> MultiPatchDto {
             y: instance.location.y,
             z: instance.location.z,
         },
+        stage_position_set: instance.stage_position_set,
         rotation: RotationDto {
             x: instance.rotation.x,
             y: instance.rotation.y,

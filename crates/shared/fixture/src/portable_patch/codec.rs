@@ -139,7 +139,9 @@ impl PortablePatchedFixtureRecord {
             let fixture = self.inline_fixture()?;
             Ok(PatchedFixturePatch::from_fixture(&fixture))
         } else {
-            serde_json::from_value(self.body.clone()).map_err(invalid_record)
+            let mut compatible = self.body.clone();
+            super::migrate_legacy_stage_placement(&mut compatible);
+            serde_json::from_value(compatible).map_err(invalid_record)
         }
     }
 
@@ -220,7 +222,9 @@ impl PortablePatchedFixtureRecord {
     }
 
     pub(crate) fn inline_fixture(&self) -> Result<PatchedFixture, PortablePatchError> {
-        serde_json::from_value(self.body.clone()).map_err(invalid_record)
+        let mut compatible = self.body.clone();
+        super::migrate_legacy_stage_placement(&mut compatible);
+        serde_json::from_value(compatible).map_err(invalid_record)
     }
 
     pub(crate) fn inline_profile_snapshot(&self) -> Result<&Value, PortablePatchError> {

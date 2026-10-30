@@ -606,6 +606,7 @@ fn current_reads_the_raw_level_so_a_current_dynamic_is_mastered_once() {
     .resolved_from_flat_layout()
     .unwrap();
     let patched = light_fixture::PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

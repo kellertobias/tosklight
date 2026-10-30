@@ -51,6 +51,9 @@ pub struct PatchedFixturePatch {
     pub internal_bindings: InternalFixtureBindings,
     #[serde(default)]
     pub location: FixtureLocation,
+    /// Whether this physical instance has an authored Stage placement, including the origin.
+    #[serde(default)]
+    pub stage_position_set: bool,
     /// The size a generated Venue object was placed at, in metres.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scenery_size_metres: Option<FixtureVector>,
@@ -131,6 +134,7 @@ impl PatchedFixturePatch {
             direct_control: fixture.direct_control.clone(),
             internal_bindings: fixture.internal_bindings.clone(),
             location: fixture.location,
+            stage_position_set: fixture.stage_position_set,
             rotation: fixture.rotation,
             note: fixture.note.clone(),
             position_master: fixture.position_master,

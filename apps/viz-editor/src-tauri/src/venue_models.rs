@@ -107,6 +107,7 @@ pub fn import_venue_model(
             "splitPatches": [{ "split": 1, "universe": null, "address": null }],
             "layerId": layer_id.filter(|layer| !layer.trim().is_empty()).unwrap_or_else(|| "default".into()),
             "location": { "x": 0, "y": 0, "z": 0 },
+            "stagePositionSet": false,
             "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
         }))
         .map_err(|error| error.to_string())?;

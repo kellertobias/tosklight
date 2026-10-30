@@ -93,6 +93,8 @@ pub(super) fn snap_attachments(
                 rig.id, local[0], local[1], local[2]
             ),
             local_transform: EntityTransform {
+                stage_position_set: None,
+                copy_stage_position_set: None,
                 id: fixture.id,
                 position_millimetres: std::array::from_fn(|axis| {
                     fixture.position_millimetres[axis] - rig.position_millimetres[axis]

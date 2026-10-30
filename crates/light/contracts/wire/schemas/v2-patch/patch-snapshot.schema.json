@@ -546,6 +546,9 @@
             "$ref": "#/$defs/PatchSplitAssignment"
           }
         },
+        "stage_position_set": {
+          "type": "boolean"
+        },
         "virtual_fixture_number": {
           "type": [
             "integer",
@@ -569,6 +572,7 @@
         "direct_control",
         "internal_bindings",
         "location",
+        "stage_position_set",
         "rotation",
         "logical_heads",
         "multipatch",
@@ -1101,6 +1105,9 @@
           "items": {
             "$ref": "#/$defs/PatchSplitAssignment"
           }
+        },
+        "stage_position_set": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1108,6 +1115,7 @@
         "name",
         "split_patches",
         "location",
+        "stage_position_set",
         "rotation",
         "invert_pan",
         "invert_tilt",

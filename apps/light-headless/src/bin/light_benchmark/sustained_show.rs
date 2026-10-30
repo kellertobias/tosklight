@@ -530,6 +530,7 @@ pub(super) fn patched_definition(
     definition: FixtureDefinition,
 ) -> PatchedFixture {
     PatchedFixture {
+        stage_position_set: true,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,

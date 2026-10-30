@@ -42,6 +42,7 @@ pub(super) fn write_poses(
                 ));
             }
             let mut before = Vec::new();
+            let mut after = Vec::new();
             let mut fixtures = Vec::new();
             for source in snapshot.fixtures {
                 let root = source.patch.fixture_id.0;
@@ -61,43 +62,25 @@ pub(super) fn write_poses(
                     );
                 }
                 if let Some(t) = desired.get(&root) {
-                    before.push(EntityTransform {
-                        id: root,
-                        position_millimetres: [
-                            fixture.location.x,
-                            fixture.location.y,
-                            fixture.location.z,
-                        ],
-                        rotation_degrees: [
-                            fixture.rotation.x,
-                            fixture.rotation.y,
-                            fixture.rotation.z,
-                        ],
-                    });
-                    fixture.location.x = t.position_millimetres[0];
-                    fixture.location.y = t.position_millimetres[1];
-                    fixture.location.z = t.position_millimetres[2];
-                    fixture.rotation.x = t.rotation_degrees[0];
-                    fixture.rotation.y = t.rotation_degrees[1];
-                    fixture.rotation.z = t.rotation_degrees[2];
+                    let (old, new) = apply_pose(
+                        t,
+                        &mut fixture.location,
+                        &mut fixture.rotation,
+                        &mut fixture.stage_position_set,
+                    );
+                    before.push(old);
+                    after.push(new);
                 }
                 for copy in &mut fixture.multipatch {
                     if let Some(t) = desired.get(&copy.id) {
-                        before.push(EntityTransform {
-                            id: copy.id,
-                            position_millimetres: [
-                                copy.location.x,
-                                copy.location.y,
-                                copy.location.z,
-                            ],
-                            rotation_degrees: [copy.rotation.x, copy.rotation.y, copy.rotation.z],
-                        });
-                        copy.location.x = t.position_millimetres[0];
-                        copy.location.y = t.position_millimetres[1];
-                        copy.location.z = t.position_millimetres[2];
-                        copy.rotation.x = t.rotation_degrees[0];
-                        copy.rotation.y = t.rotation_degrees[1];
-                        copy.rotation.z = t.rotation_degrees[2];
+                        let (old, new) = apply_pose(
+                            t,
+                            &mut copy.location,
+                            &mut copy.rotation,
+                            &mut copy.stage_position_set,
+                        );
+                        before.push(old);
+                        after.push(new);
                     }
                 }
                 fixtures.push(PatchFixtureCandidate {
@@ -111,13 +94,18 @@ pub(super) fn write_poses(
             // Retain operator order, including a multi-selection spread.
             let by_id: HashMap<_, _> = before.into_iter().map(|t| (t.id, t)).collect();
             let before: Vec<_> = transforms.iter().map(|t| by_id[&t.id].clone()).collect();
+            let after_by_id: HashMap<_, _> = after.into_iter().map(|t| (t.id, t)).collect();
             let record = NumericPoseRecord {
                 before,
-                after: transforms.to_vec(),
+                after: transforms
+                    .iter()
+                    .map(|t| after_by_id[&t.id].clone())
+                    .collect(),
             };
             if record.before.iter().zip(&record.after).all(|(a, b)| {
                 a.position_millimetres == b.position_millimetres
                     && a.rotation_degrees == b.rotation_degrees
+                    && a.stage_position_set == b.stage_position_set
             }) {
                 return Ok((None, record));
             }
@@ -142,6 +130,39 @@ pub(super) fn write_poses(
         };
         Ok((revision, record))
     })
+}
+
+fn apply_pose(
+    desired: &EntityTransform,
+    location: &mut light_fixture::FixtureLocation,
+    rotation: &mut light_fixture::FixtureVector,
+    placed: &mut bool,
+) -> (EntityTransform, EntityTransform) {
+    let before = EntityTransform {
+        id: desired.id,
+        position_millimetres: [location.x, location.y, location.z],
+        rotation_degrees: [rotation.x, rotation.y, rotation.z],
+        stage_position_set: Some(*placed),
+        copy_stage_position_set: None,
+    };
+    *placed = desired
+        .stage_position_set
+        .unwrap_or(*placed || before.position_millimetres != desired.position_millimetres);
+    *location = light_fixture::FixtureLocation {
+        x: desired.position_millimetres[0],
+        y: desired.position_millimetres[1],
+        z: desired.position_millimetres[2],
+    };
+    *rotation = light_fixture::FixtureVector {
+        x: desired.rotation_degrees[0],
+        y: desired.rotation_degrees[1],
+        z: desired.rotation_degrees[2],
+    };
+    let after = EntityTransform {
+        stage_position_set: Some(*placed),
+        ..desired.clone()
+    };
+    (before, after)
 }
 
 pub(super) fn commit_numeric(
@@ -204,6 +225,8 @@ mod tests {
     }
     fn transform(id: uuid::Uuid, x: i32, rotation: f32) -> EntityTransform {
         EntityTransform {
+            stage_position_set: None,
+            copy_stage_position_set: None,
             id,
             position_millimetres: [x, 2000, 3000],
             rotation_degrees: [0., 0., rotation],
@@ -307,10 +330,79 @@ mod tests {
         let mut expected = fresh.patch;
         expected.location.x = 0;
         expected.rotation.z = 0.;
+        expected.stage_position_set = false;
         assert_eq!(
             serde_json::to_value(restored.patch).unwrap(),
             serde_json::to_value(expected).unwrap()
         );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn explicit_zero_placement_and_undo_restore_root_and_copy_authorship() {
+        let (session, path, ids) = transform_session();
+        let initial = snapshot(&session);
+        let root = initial
+            .iter()
+            .find(|f| f["fixtureId"] == ids[0].to_string())
+            .unwrap();
+        let copy = uuid::Uuid::parse_str(root["multipatch"][0]["id"].as_str().unwrap()).unwrap();
+        for target in [ids[0], copy] {
+            // Set up an intentionally unplaced origin without authoring placement.
+            let origin = EntityTransform {
+                id: target,
+                position_millimetres: [0; 3],
+                rotation_degrees: [0.; 3],
+                stage_position_set: Some(false),
+                copy_stage_position_set: None,
+            };
+            write_poses(&session, revision(&session), &[origin.clone()]).unwrap();
+            let unplaced = snapshot(&session);
+            let old_revision = revision(&session);
+            let placed = EntityTransform {
+                stage_position_set: Some(true),
+                ..origin.clone()
+            };
+            let (new_revision, record) = write_poses(&session, old_revision, &[placed]).unwrap();
+            assert!(
+                new_revision > old_revision,
+                "confirming zero is a real placement write"
+            );
+            assert_eq!(record.before[0].stage_position_set, Some(false));
+            assert_eq!(record.after[0].stage_position_set, Some(true));
+            write_poses(&session, revision(&session), &record.before).unwrap();
+            assert_eq!(
+                snapshot(&session),
+                unplaced,
+                "Undo must restore placement authorship too"
+            );
+            let rotation = EntityTransform {
+                rotation_degrees: [0., 0., 30.],
+                stage_position_set: None,
+                ..origin
+            };
+            let (_, rotation_record) =
+                write_poses(&session, revision(&session), &[rotation]).unwrap();
+            assert_eq!(
+                rotation_record.after[0].stage_position_set,
+                Some(false),
+                "rotation does not place"
+            );
+            write_poses(&session, revision(&session), &rotation_record.before).unwrap();
+            assert_eq!(snapshot(&session), unplaced);
+            write_poses(&session, revision(&session), &record.after).unwrap();
+            let restored = snapshot(&session);
+            let root = restored
+                .iter()
+                .find(|f| f["fixtureId"] == ids[0].to_string())
+                .unwrap();
+            let marker = if target == ids[0] {
+                &root["stagePositionSet"]
+            } else {
+                &root["multipatch"][0]["stagePositionSet"]
+            };
+            assert_eq!(marker, &serde_json::json!(true));
+        }
         let _ = std::fs::remove_file(path);
     }
 

@@ -67,6 +67,7 @@ function wireSnapshot() {
 				layer_id: "default",
 				direct_control: null,
 				location: { x: 0, y: 0, z: 8000 },
+				stage_position_set: true,
 				rotation: { x: 0, y: 0, z: 0 },
 				scenery_size_metres: { x: 0, y: 0, z: 3000 },
 				scenery_options: {
@@ -83,6 +84,7 @@ function wireSnapshot() {
 						name: "Chain SR",
 						split_patches: [{ split: 1, universe: null, address: null }],
 						location: { x: 4000, y: 0, z: 8000 },
+						stage_position_set: true,
 						rotation: { x: 0, y: 0, z: 0 },
 						scenery_size_metres: { x: 0, y: 0, z: 5000 },
 						invert_pan: false,

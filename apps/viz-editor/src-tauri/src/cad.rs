@@ -73,6 +73,11 @@ pub struct EntityTransform {
     pub id: Uuid,
     pub position_millimetres: [i32; 3],
     pub rotation_degrees: [f32; 3],
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_position_set: Option<bool>,
+    /// Exact copy authorship belongs to in-memory gesture history, not client intent.
+    #[serde(skip)]
+    pub copy_stage_position_set: Option<HashMap<Uuid, bool>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -253,6 +258,7 @@ fn moved_transforms(
         .iter()
         .cloned()
         .map(|mut transform| {
+            let previous = transform.position_millimetres;
             let index = positions[&transform.id];
             let factor = if spread && ordered_ids.len() > 1 {
                 index as f64 / (ordered_ids.len() - 1) as f64
@@ -263,6 +269,12 @@ fn moved_transforms(
                 let delta = (delta_millimetres[axis] as f64 * factor).round() as i32;
                 transform.position_millimetres[axis] =
                     transform.position_millimetres[axis].saturating_add(delta);
+            }
+            transform.stage_position_set = Some(true);
+            if previous != transform.position_millimetres {
+                if let Some(copies) = transform.copy_stage_position_set.as_mut() {
+                    copies.values_mut().for_each(|placed| *placed = true);
+                }
             }
             transform
         })
@@ -568,6 +580,15 @@ fn selected_transforms(
         .iter()
         .filter(|fixture| ids.contains(&fixture.patch.fixture_id.0))
         .map(|fixture| EntityTransform {
+            stage_position_set: Some(fixture.patch.stage_position_set),
+            copy_stage_position_set: Some(
+                fixture
+                    .patch
+                    .multipatch
+                    .iter()
+                    .map(|copy| (copy.id, copy.stage_position_set))
+                    .collect(),
+            ),
             id: fixture.patch.fixture_id.0,
             position_millimetres: [
                 fixture.patch.location.x,
@@ -581,6 +602,10 @@ fn selected_transforms(
             ],
         })
         .collect())
+}
+
+fn authored_placement(previous: Option<bool>, moved: bool) -> Option<bool> {
+    if moved { Some(true) } else { previous }
 }
 
 fn apply_transforms(
@@ -614,6 +639,10 @@ fn apply_transforms(
                     transform.position_millimetres[1] - fixture.location.y,
                     transform.position_millimetres[2] - fixture.location.z,
                 ];
+                let moved = delta != [0; 3];
+                fixture.stage_position_set = transform
+                    .stage_position_set
+                    .or(authored_placement(fixture.stage_position_set, moved));
                 fixture.location.x = transform.position_millimetres[0];
                 fixture.location.y = transform.position_millimetres[1];
                 fixture.location.z = transform.position_millimetres[2];
@@ -621,6 +650,13 @@ fn apply_transforms(
                 fixture.rotation.y = transform.rotation_degrees[1];
                 fixture.rotation.z = transform.rotation_degrees[2];
                 for instance in &mut fixture.multipatch {
+                    instance.stage_position_set = transform
+                        .copy_stage_position_set
+                        .as_ref()
+                        .and_then(|copies| copies.get(&instance.id))
+                        .copied()
+                        .map(Some)
+                        .unwrap_or_else(|| authored_placement(instance.stage_position_set, moved));
                     instance.location.x = instance.location.x.saturating_add(delta[0]);
                     instance.location.y = instance.location.y.saturating_add(delta[1]);
                     instance.location.z = instance.location.z.saturating_add(delta[2]);

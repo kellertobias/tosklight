@@ -191,6 +191,8 @@ pub struct MultipatchDto {
     pub name: String,
     pub split_patches: Vec<SplitDto>,
     pub location: LocationDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_position_set: Option<bool>,
     pub rotation: VectorDto,
     #[serde(default)]
     pub invert_pan: bool,
@@ -231,6 +233,8 @@ pub struct FixtureDto {
     pub layer_id: String,
     pub direct_control: Option<DirectControlDto>,
     pub location: LocationDto,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_position_set: Option<bool>,
     pub rotation: VectorDto,
     #[serde(default)]
     pub multipatch: Vec<MultipatchDto>,
@@ -495,6 +499,7 @@ impl From<PatchFixtureProjection> for FixtureDto {
             layer_id: patch.layer_id,
             direct_control: patch.direct_control.as_ref().map(DirectControlDto::from),
             location: LocationDto::from(&patch.location),
+            stage_position_set: Some(patch.stage_position_set),
             rotation: VectorDto::from(&patch.rotation),
             multipatch: patch.multipatch.iter().map(MultipatchDto::from).collect(),
             group_masters_enabled: patch.group_masters_enabled,
@@ -628,6 +633,7 @@ impl From<&MultiPatchInstance> for MultipatchDto {
             name: value.name.clone(),
             split_patches: value.split_patches.iter().map(SplitDto::from).collect(),
             location: LocationDto::from(&value.location),
+            stage_position_set: Some(value.stage_position_set),
             rotation: VectorDto::from(&value.rotation),
             invert_pan: value.invert_pan,
             invert_tilt: value.invert_tilt,
@@ -750,6 +756,12 @@ impl From<FixtureDto> for PatchFixtureCandidate {
                     y: dto.location.y,
                     z: dto.location.z,
                 },
+                stage_position_set: dto.stage_position_set.unwrap_or(
+                    dto.position_master.is_some()
+                        || dto.location.x != 0
+                        || dto.location.y != 0
+                        || dto.location.z != 0,
+                ),
                 rotation: FixtureVector {
                     x: dto.rotation.x,
                     y: dto.rotation.y,
@@ -808,6 +820,9 @@ impl From<MultipatchDto> for MultiPatchInstance {
                 y: dto.location.y,
                 z: dto.location.z,
             },
+            stage_position_set: dto
+                .stage_position_set
+                .unwrap_or(dto.location.x != 0 || dto.location.y != 0 || dto.location.z != 0),
             rotation: FixtureVector {
                 x: dto.rotation.x,
                 y: dto.rotation.y,

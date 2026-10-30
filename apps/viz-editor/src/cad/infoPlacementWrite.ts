@@ -9,6 +9,7 @@ export async function persistInfoFixture(
 	editedEntityId: string,
 	sceneRevision: number,
 	numeric: boolean,
+	confirmPosition = false,
 ) {
 	if (numeric) {
 		const pose =
@@ -19,6 +20,7 @@ export async function persistInfoFixture(
 		await cadSession.setNumericTransforms(sceneRevision, [
 			{
 				id: editedEntityId,
+				...(confirmPosition ? { stagePositionSet: true } : {}),
 				positionMillimetres: [
 					pose.location.x,
 					pose.location.y,

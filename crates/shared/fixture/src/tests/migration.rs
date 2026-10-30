@@ -71,6 +71,7 @@ fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
     });
     let instance_id = Uuid::new_v4();
     let mut fixture = PatchedFixture {
+        stage_position_set: false,
         model_scale: None,
         scenery_options: Default::default(),
         scenery_size_metres: None,
@@ -91,6 +92,7 @@ fn a_flat_layout_becomes_a_portable_profile_with_explicit_split_assignments() {
         rotation: Default::default(),
         logical_heads: vec![],
         multipatch: vec![MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: instance_id,
             name: "Balcony".into(),

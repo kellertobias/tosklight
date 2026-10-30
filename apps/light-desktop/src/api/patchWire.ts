@@ -123,6 +123,7 @@ function mapFixtureProjection(
 			output: fixture.internal_bindings?.output ?? null,
 		},
 		location: { ...fixture.location },
+		stagePositionSet: fixture.stage_position_set,
 		rotation: { ...fixture.rotation },
 		logicalHeads: fixture.logical_heads.map((head) => ({
 			profileHeadId: head.profile_head_id,
@@ -134,6 +135,7 @@ function mapFixtureProjection(
 			name: instance.name,
 			splitPatches: instance.split_patches.map((split) => ({ ...split })),
 			location: { ...instance.location },
+			stagePositionSet: instance.stage_position_set,
 			rotation: { ...instance.rotation },
 			invertPan: instance.invert_pan,
 			invertTilt: instance.invert_tilt,

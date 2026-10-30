@@ -272,4 +272,15 @@ describe("CSV patch import", () => {
 			planCsvImport({ ...input, mappings: { [sourceTypes[0].key]: "skip" } })[0].status,
 		).toBe("skipped");
 	});
+	it("distinguishes absent CSV coordinates from an explicitly supplied zero", () => {
+		const rows = [
+			["1", "Dimmer", "Generic", "Dimmer", "", "", "", "", "", "", "", ""],
+			["2", "At origin", "Generic", "Dimmer", "", "", "0", "0", "0", "", "", ""],
+		];
+		const plans = plan(rows, []);
+		expect(plans.map(plan => plan.stagePositionSet)).toEqual([false, true]);
+		expect(csvImportCandidates(plans, "default").map(candidate => candidate.input.stagePositionSet))
+			.toEqual([false, true]);
+	});
+
 });

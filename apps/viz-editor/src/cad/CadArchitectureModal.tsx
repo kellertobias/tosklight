@@ -58,6 +58,7 @@ export function CadArchitectureModal({
 					...extras,
 					name: next.name,
 					location: next.position,
+					stagePositionSet: true,
 					rotation,
 				};
 				const scene = await cadSession.snapshot();

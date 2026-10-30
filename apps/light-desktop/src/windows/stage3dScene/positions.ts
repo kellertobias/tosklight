@@ -25,3 +25,31 @@ export function migrateStagePosition(
 		rotationZ: position.rotation,
 	};
 }
+
+
+/** One physical placement, preserving layout overrides and the old absent-marker heuristic. */
+export function physicalStagePosition(
+	instance: {
+		id: string;
+		location?: { x: number; y: number; z: number };
+		rotation?: { x: number; y: number; z: number };
+		stage_position_set?: boolean;
+	},
+	positions3d: Record<string, StagePosition3d>,
+	legacyPosition: { x: number; y: number; rotation: number } | undefined,
+	index: number,
+): StagePosition3d {
+	const override = positions3d[instance.id];
+	if (override) return override;
+	const location = instance.location;
+	const placed = instance.stage_position_set ?? Boolean(location && (location.x || location.y || location.z));
+	if (!placed || !location) return migrateStagePosition(legacyPosition, index);
+	return {
+		x: location.x / 1000,
+		y: location.y / 1000,
+		z: location.z / 1000,
+		rotationX: instance.rotation?.x ?? 0,
+		rotationY: instance.rotation?.y ?? 0,
+		rotationZ: instance.rotation?.z ?? 0,
+	};
+}

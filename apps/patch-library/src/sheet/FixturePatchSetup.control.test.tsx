@@ -2223,6 +2223,7 @@ describe("schema-v2 location and multi-patch editing", () => {
 		await waitFor(() =>
 			expect(patchFeature.updateFixture).toHaveBeenCalledWith("fixture-split", {
 				location: { x: 1000, y: 0, z: 0 },
+					stage_position_set: true,
 			}),
 		);
 	});

@@ -144,6 +144,7 @@ pub(super) fn migrate(
         "dynamic" => object.body().clone(),
         "group" => migrate_group(object)?,
         "playback_page" => object.body().clone(),
+        "patched_fixture" => super::stage_position::migrate(object.body()),
         "preset" => migrate_preset(object)?,
         "route" => migrate_route(object)?,
         "stage_layout" => migrate_stage_layout(object)?,

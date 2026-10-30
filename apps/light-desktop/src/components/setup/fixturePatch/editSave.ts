@@ -118,6 +118,8 @@ export function saveEdit(
 		void applyEdit(controller, { position_master: value.trim() || null });
 	if (edit === "crowd_width" || edit === "crowd_depth")
 		void saveCrowdFootprint(controller, edit, value);
+	if (edit === "location" && !editAxis)
+		void applyEdit(controller, { location: vector, stage_position_set: true });
 	if ((edit === "location" || edit === "rotation") && editAxis)
 		void applyFixtureIntent(
 			controller,

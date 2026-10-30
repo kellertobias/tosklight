@@ -251,6 +251,9 @@ fn normalized_patch(
     } else {
         reconcile_heads(mode.logical_heads(), existing_heads)?
     };
+    if patch.position_master.is_some() {
+        patch.stage_position_set = true;
+    }
     patch.position_master = references.resolve(
         patch.fixture_id,
         patch.position_master,

@@ -427,6 +427,10 @@ pub struct PatchFixtureInput {
     #[serde(default)]
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
+    /// Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_position_set: Option<bool>,
+
     /// The size a generated Venue object was placed at, in millimetres, like every other
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -578,6 +582,10 @@ pub struct PatchMultiPatchInput {
     #[schemars(length(min = 1))]
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
+    /// Explicit Stage placement; omitted by older clients that use the legacy nonzero-coordinate heuristic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage_position_set: Option<bool>,
+
     /// The size a generated Venue object was placed at, in millimetres, like every other
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -676,6 +684,8 @@ pub struct PatchFixtureProjection {
     #[serde(default)]
     pub internal_bindings: PatchInternalFixtureBindings,
     pub location: PatchFixtureLocation,
+    pub stage_position_set: bool,
+
     /// The size a generated Venue object was placed at, in millimetres, like every other
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -748,6 +758,8 @@ pub struct PatchMultiPatchProjection {
     pub name: String,
     pub split_patches: Vec<PatchSplitAssignment>,
     pub location: PatchFixtureLocation,
+    pub stage_position_set: bool,
+
     /// The size a generated Venue object was placed at, in millimetres, like every other
     /// measurement the patch carries. Absent means the profile's own default.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -54,6 +54,13 @@ fn vector_spread_resolves_ordered_fixture_locations_and_replays_exactly() {
         vec![-4_000, -3_667, -3_333, -3_000]
     );
 
+    assert!(
+        result
+            .change
+            .fixtures
+            .iter()
+            .all(|fixture| fixture.patch.stage_position_set)
+    );
     let replay = rig
         .service
         .handle(envelope(command, "location-spread", 0), &rig.ports)
@@ -369,6 +376,7 @@ fn sparse_updates_apply_paired_fields_to_the_exact_root_or_copy() {
         .patch
         .multipatch
         .push(light_fixture::MultiPatchInstance {
+            stage_position_set: false,
             scenery_size_metres: None,
             id: copy_id,
             name: "Copy".into(),
@@ -1994,5 +2002,68 @@ fn physical_axis_calibration_transaction_keeps_copy_scope_replay_and_stale_sourc
         cleared.change.fixtures[0].patch.multipatch[0]
             .position_calibration
             .is_none()
+    );
+}
+
+#[test]
+fn stage_placement_is_explicit_and_confirming_zero_marks_only_the_target_instance() {
+    let (profile, reference) = profile_with_modes(1);
+    let rig = TestRig::new(profile, FailurePoint::None);
+    let mut add = patch_batch(rig.ports.show_id(), reference, 1);
+    let fixture_id = add.fixtures[0].patch.fixture_id;
+    let copy_id = Uuid::new_v4();
+    add.fixtures[0]
+        .patch
+        .multipatch
+        .push(light_fixture::MultiPatchInstance {
+            id: copy_id,
+            split_patches: vec![light_fixture::SplitPatch {
+                split: 1,
+                universe: None,
+                address: None,
+            }],
+            ..Default::default()
+        });
+    let created = rig
+        .service
+        .handle(envelope(add, "placement-create", 0), &rig.ports)
+        .unwrap();
+    assert!(!created.change.fixtures[0].patch.stage_position_set);
+    let update = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        1,
+        1,
+        Some(copy_id),
+        PatchFixtureUpdateAction::SetLocationAxis {
+            axis: crate::PatchFixtureAxis::X,
+            millimetres: 0,
+        },
+    );
+    let placed = rig
+        .service
+        .handle(envelope(update, "placement-copy-zero", 1), &rig.ports)
+        .unwrap();
+    assert!(!placed.change.fixtures[0].patch.stage_position_set);
+    assert!(placed.change.fixtures[0].patch.multipatch[0].stage_position_set);
+    let update = sparse_update(
+        rig.ports.show_id(),
+        fixture_id,
+        2,
+        2,
+        None,
+        PatchFixtureUpdateAction::SetLocationAxis {
+            axis: crate::PatchFixtureAxis::X,
+            millimetres: 0,
+        },
+    );
+    let placed = rig
+        .service
+        .handle(envelope(update, "placement-root-zero", 2), &rig.ports)
+        .unwrap();
+    assert!(placed.change.fixtures[0].patch.stage_position_set);
+    assert_eq!(
+        placed.change.fixtures[0].patch.location,
+        light_fixture::FixtureLocation::default()
     );
 }

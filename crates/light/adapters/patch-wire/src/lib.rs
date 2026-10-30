@@ -24,6 +24,12 @@ use calibration::{
 pub fn application_fixture(
     input: wire::PatchFixtureInput,
 ) -> Result<application::PatchFixtureCandidate, String> {
+    let placed = input.stage_position_set.unwrap_or(
+        input.position_master.is_some()
+            || input.location.x != 0
+            || input.location.y != 0
+            || input.location.z != 0,
+    );
     Ok(application::PatchFixtureCandidate {
         profile: fixture::PatchedFixtureProfileReference {
             profile_id: FixtureId(input.profile_id),
@@ -54,6 +60,7 @@ pub fn application_fixture(
                 output: input.internal_bindings.output,
             },
             location: application_location(input.location),
+            stage_position_set: placed,
             scenery_size_metres: input.scenery_size_metres.map(application_vector),
             model_scale: input.model_scale,
             scenery_options: input
@@ -193,6 +200,9 @@ fn application_rotation(rotation: wire::PatchFixtureRotation) -> fixture::Fixtur
 }
 
 fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPatchInstance {
+    let placed = input
+        .stage_position_set
+        .unwrap_or(input.location.x != 0 || input.location.y != 0 || input.location.z != 0);
     fixture::MultiPatchInstance {
         scenery_size_metres: None,
         id: input.id,
@@ -205,6 +215,7 @@ fn application_multipatch(input: wire::PatchMultiPatchInput) -> fixture::MultiPa
             .map(application_split)
             .collect(),
         location: application_location(input.location),
+        stage_position_set: placed,
         rotation: application_rotation(input.rotation),
         invert_pan: input.invert_pan,
         invert_tilt: input.invert_tilt,
@@ -310,6 +321,7 @@ pub fn wire_fixture(input: &application::PatchFixtureProjection) -> wire::PatchF
             output: patch.internal_bindings.output.clone(),
         },
         location: wire_location(patch.location),
+        stage_position_set: patch.stage_position_set,
         scenery_size_metres: patch.scenery_size_metres.map(wire_vector),
         scenery_options: wire_scenery_options(&patch.scenery_options),
         model_scale: patch.model_scale,
@@ -421,6 +433,7 @@ fn wire_multipatch(instance: &fixture::MultiPatchInstance) -> wire::PatchMultiPa
         name: instance.name.clone(),
         split_patches: instance.split_patches.iter().map(wire_split).collect(),
         location: wire_location(instance.location),
+        stage_position_set: instance.stage_position_set,
         scenery_size_metres: instance.scenery_size_metres.map(wire_vector),
         rotation: wire_rotation(instance.rotation),
         invert_pan: instance.invert_pan,
@@ -559,6 +572,7 @@ pub fn patch_input(projection: wire::PatchFixtureProjection) -> wire::PatchFixtu
         direct_control: projection.direct_control,
         internal_bindings: projection.internal_bindings,
         location: projection.location,
+        stage_position_set: Some(projection.stage_position_set),
         scenery_size_metres: projection.scenery_size_metres,
         scenery_options: projection.scenery_options,
         model_scale: projection.model_scale,
@@ -573,6 +587,7 @@ pub fn patch_input(projection: wire::PatchFixtureProjection) -> wire::PatchFixtu
                 name: copy.name,
                 split_patches: copy.split_patches,
                 location: copy.location,
+                stage_position_set: Some(copy.stage_position_set),
                 scenery_size_metres: copy.scenery_size_metres,
                 rotation: copy.rotation,
                 invert_pan: copy.invert_pan,

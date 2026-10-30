@@ -445,3 +445,41 @@ fn legacy_architect_appearance_omits_manual_optics_without_inventing_defaults() 
     let returned = serde_json::to_value(InstalledAppearanceDto::from(&native)).unwrap();
     assert!(returned.get("manualOptics").is_none());
 }
+
+#[test]
+fn placement_authorship_roundtrips_and_legacy_payloads_keep_coordinate_fallback() {
+    let mut body = serde_json::json!({
+        "fixtureId":Uuid::new_v4(),"fixtureNumber":1,"virtualFixtureNumber":null,
+        "name":"Wash","profileId":Uuid::new_v4(),"profileRevision":1,"modeId":Uuid::new_v4(),
+        "splitPatches":[],"layerId":"default","location":{"x":0,"y":0,"z":0},
+        "rotation":{"x":0,"y":0,"z":0},"stagePositionSet":false,
+        "multipatch":[{"id":Uuid::new_v4(),"name":"Copy","splitPatches":[],
+            "location":{"x":0,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0},"stagePositionSet":true}]
+    });
+    let candidate =
+        PatchFixtureCandidate::from(serde_json::from_value::<FixtureDto>(body.clone()).unwrap());
+    assert!(!candidate.patch.stage_position_set);
+    assert!(candidate.patch.multipatch[0].stage_position_set);
+    let returned = serde_json::to_value(FixtureDto::from(PatchFixtureProjection {
+        fixture_revision: 1,
+        profile: candidate.profile,
+        patch: candidate.patch,
+    }))
+    .unwrap();
+    assert_eq!(returned["stagePositionSet"], false);
+    assert_eq!(returned["multipatch"][0]["stagePositionSet"], true);
+    body.as_object_mut().unwrap().remove("stagePositionSet");
+    body["multipatch"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("stagePositionSet");
+    let legacy =
+        PatchFixtureCandidate::from(serde_json::from_value::<FixtureDto>(body.clone()).unwrap());
+    assert!(!legacy.patch.stage_position_set);
+    assert!(!legacy.patch.multipatch[0].stage_position_set);
+    body["location"]["x"] = serde_json::json!(1000);
+    body["multipatch"][0]["location"]["x"] = serde_json::json!(500);
+    let legacy = PatchFixtureCandidate::from(serde_json::from_value::<FixtureDto>(body).unwrap());
+    assert!(legacy.patch.stage_position_set);
+    assert!(legacy.patch.multipatch[0].stage_position_set);
+}

@@ -33,6 +33,7 @@ export interface NewPatchFixture {
 	layer_id?: string;
 	/** Installed stage location in millimetres; defaults to the origin. */
 	location?: { x: number; y: number; z: number };
+	stage_position_set?: boolean;
 	/** Installed rotation in degrees; defaults to no rotation. */
 	rotation?: { x: number; y: number; z: number };
 }
@@ -84,6 +85,7 @@ export function newPatchFixtureCandidate(
 				? { library: "default", output: "default" }
 				: {},
 		location: { ...(fixture.location ?? { x: 0, y: 0, z: 0 }) },
+		stage_position_set: fixture.stage_position_set ?? (fixture.location !== undefined),
 		rotation: { ...(fixture.rotation ?? { x: 0, y: 0, z: 0 }) },
 		logical_heads: [],
 		multipatch: [],
@@ -106,7 +108,15 @@ export function changedPatchFixtureCandidate(
 	fixture: PatchedFixture,
 	changes: Partial<PatchedFixture>,
 ): PatchFixtureCandidate {
-	return patchedFixtureCandidate({ ...fixture, ...changes });
+	return patchedFixtureCandidate({
+		...fixture,
+		...changes,
+		stage_position_set:
+			changes.stage_position_set ??
+			(changes.location !== undefined || !!changes.position_master
+				? true
+				: fixture.stage_position_set ?? false),
+	});
 }
 
 export function patchedFixtureCandidate(
@@ -154,6 +164,7 @@ export function patchedFixtureCandidate(
 				output: fixture.internal_bindings?.output ?? null,
 			},
 			location: fixture.location ?? { x: 0, y: 0, z: 0 },
+			stagePositionSet: fixture.stage_position_set ?? false,
 			rotation: fixture.rotation ?? { x: 0, y: 0, z: 0 },
 			multipatch: (fixture.multipatch ?? []).map((instance) => ({
 				id: instance.id,
@@ -168,6 +179,7 @@ export function patchedFixtureCandidate(
 							},
 						],
 				location: instance.location,
+				stagePositionSet: instance.stage_position_set ?? false,
 				rotation: instance.rotation,
 				invertPan: instance.invert_pan ?? false,
 				invertTilt: instance.invert_tilt ?? false,
@@ -318,6 +330,7 @@ export function projectionToPatchedFixture(
 			output: projection.internalBindings?.output ?? null,
 		},
 		location: projection.location,
+		stage_position_set: projection.stagePositionSet ?? false,
 		rotation: projection.rotation,
 		logical_heads: projection.logicalHeads.map((head) => ({
 			profile_head_id: head.profileHeadId,
@@ -335,6 +348,7 @@ export function projectionToPatchedFixture(
 				address: instancePrimary?.address ?? null,
 				split_patches: [...instance.splitPatches],
 				location: instance.location,
+				stage_position_set: instance.stagePositionSet ?? false,
 				rotation: instance.rotation,
 				invert_pan: instance.invertPan ?? false,
 				invert_tilt: instance.invertTilt ?? false,

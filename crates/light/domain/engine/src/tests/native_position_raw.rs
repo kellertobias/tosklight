@@ -44,6 +44,7 @@ fn rig() -> Rig {
     fixture.invert_tilt = false;
     let copy = Uuid::new_v4();
     fixture.multipatch.push(MultiPatchInstance {
+        stage_position_set: false,
         id: copy,
         name: "Independent inversion".into(),
         universe: Some(1),

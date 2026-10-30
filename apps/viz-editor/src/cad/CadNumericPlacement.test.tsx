@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { CadEntity } from "./types";
-import { CadInfoPanel } from "./CadInfoPanel";
+import { CadInfoPanel, withPlacement } from "./CadInfoPanel";
 import { SeveralPlacement } from "./CadInfoSeveral";
 const mocks = vi.hoisted(() => ({
 	snapshot: vi.fn(),
@@ -84,6 +84,7 @@ it("literal single Position Enter records CAD history instead of a generic patch
 			{
 				id,
 				positionMillimetres: [-2500, 4000, 4150],
+				stagePositionSet: true,
 				rotationDegrees: [0, 0, 0],
 			},
 		]),
@@ -144,11 +145,13 @@ it("multi-selection Enter spreads poses in selected order as one history step", 
 			{
 				id: second,
 				positionMillimetres: [1000, 4000, 4150],
+				stagePositionSet: true,
 				rotationDegrees: [0, 0, 0],
 			},
 			{
 				id,
 				positionMillimetres: [2000, 4000, 4150],
+				stagePositionSet: true,
 				rotationDegrees: [0, 0, 0],
 			},
 		]),
@@ -175,4 +178,37 @@ it("keeps the selected element's point reference visible in Placement Info", asy
 	expect(await screen.findByRole("note")).toHaveTextContent(
 		"Follows 3D Point 950 · Rear flybar",
 	);
+});
+
+
+it("projected rename/address/rotation preserve unplaced root and placed copy markers", () => {
+	const source = fixture();
+	Object.assign(source, { stagePositionSet: false });
+	Object.assign(source.multipatch[0], { stagePositionSet: true });
+	const root = source as unknown as import("@tosklight/patch").PatchFixtureProjection;
+	for (const change of [{ name: "Rename" }, { splitPatches: [] }, { rotation: { x: 0, y: 0, z: 90 } }]) {
+		const next = withPlacement(root, null, change);
+		expect(next.stagePositionSet).toBe(false);
+		expect(next.multipatch[0].stagePositionSet).toBe(true);
+	}
+	const origin = { x: 0, y: 0, z: 0 };
+	expect(withPlacement(root, null, { location: origin }).stagePositionSet).toBe(true);
+	const unplacedCopy = { ...root, multipatch: [{ ...root.multipatch[0], stagePositionSet: false }] };
+	const copyPlaced = withPlacement(unplacedCopy, copy, { location: origin });
+	expect(copyPlaced.stagePositionSet).toBe(false);
+	expect(copyPlaced.multipatch[0].stagePositionSet).toBe(true);
+});
+
+
+it("Enter confirms an unplaced zero Position without a numeric change or blur rewrite", async () => {
+	const atOrigin = { ...fixture(), location: { x: 0, y: 0, z: 0 }, stagePositionSet: false };
+	mocks.snapshot.mockResolvedValue({ fixtures: [atOrigin], profileRevisions: [] });
+	render(<CadInfoPanel entity={entity} selectionCount={1} sceneRevision={9} tab="placement" onError={vi.fn()} />);
+	await waitFor(() => expect(screen.getByLabelText("Position X")).toHaveValue("0"));
+	const input = screen.getByLabelText("Position X");
+	fireEvent.keyDown(input, { key: "Enter" });
+	await waitFor(() => expect(mocks.numeric).toHaveBeenCalledWith(9, [{ id,
+		positionMillimetres: [0, 0, 0], rotationDegrees: [0, 0, 0], stagePositionSet: true }]));
+	fireEvent.blur(input);
+	expect(mocks.numeric).toHaveBeenCalledTimes(1);
 });
