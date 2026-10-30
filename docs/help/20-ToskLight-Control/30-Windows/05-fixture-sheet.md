@@ -27,6 +27,10 @@ During PREV/NEXT stepping, every row in the remembered base selection remains vi
 
 The **Columns** settings independently control ID, Icon, Name, Patch address, Intensity, Color, Position, Beam, Shapers, Focus, Control, and Media. At least one column remains visible. Existing saved **Dimmer** visibility migrates to **Intensity**; newly available group columns do not turn themselves on in an existing layout. Source styling distinguishes current Programmer, Playback, and profile-default bases.
 
+Use **Value sources** to inspect a fixture or logical head, including an unpatched one. The inspector captures each ordinary value's retained winning source: Programmer, Programmer Group, explicit Playback page and position, or direct Cuelist. It lists the current Cue separately from proven authored Cue information, because a current Cue can track values from earlier Cues. Equal values do not imply equal owners. Choose **Refresh sources** after changing the look; the inspector is a captured read, not a live monitor.
+
+Freeze appears as held output. Dynamic and fixed overrides are listed separately from ordinary bases. Grand Master, Blackout and Highlight status accompany the capture; full Freeze bypasses masters and Highlight. Attributes with no ordinary contribution use profile defaults. If retained authorship is unavailable, the inspector says so. Use DMX output for the final channel result after profile mapping and output controls.
+
 Freeze state appears in the Name cell as a blue snowflake status that is separate from selection,
 Highlight, Group-Master limitation, and patch state. `❄ FREEZE` is a full-output Freeze;
 `❄ FREEZE · Intensity · Color` (with the applicable family names) is a partial Freeze. A master row

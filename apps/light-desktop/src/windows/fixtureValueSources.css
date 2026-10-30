@@ -1,0 +1,38 @@
+.fixture-value-sources {
+	width: min(1000px, 95vw);
+	max-height: 90vh;
+	overflow: auto;
+}
+.fixture-source-controls {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	flex-wrap: wrap;
+}
+.fixture-source-controls select {
+	min-height: 40px;
+	max-width: 65vw;
+}
+.fixture-source-table {
+	overflow: auto;
+}
+.fixture-source-table table {
+	width: 100%;
+	border-collapse: collapse;
+}
+.fixture-source-table th,
+.fixture-source-table td {
+	padding: 10px;
+	text-align: left;
+	border-bottom: 1px solid var(--border, #555);
+	vertical-align: top;
+}
+.fixture-source-table code {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.fixture-source-toolbar {
+	display: flex;
+	justify-content: flex-end;
+	padding: 4px 8px;
+}

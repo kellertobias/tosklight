@@ -82,6 +82,25 @@ pub struct FixtureSheetColorPresetName {
     pub name: String,
 }
 
+/// Explicit, on-demand ordinary-source inspection. It is not a sampled DMX frame.
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureValueSource {
+    pub attribute: String,
+    pub value: ProgrammingPreloadAttributeValue,
+    pub sources: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
+pub struct FixtureValueSourcesSnapshot {
+    pub fixture_id: Uuid,
+    pub generated_at: String,
+    pub grand_master: f32,
+    pub blackout: bool,
+    pub highlighted: bool,
+    pub values: Vec<FixtureValueSource>,
+    pub dynamics: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize, TS)]
 pub struct VisualizationValue {
     pub fixture_id: Uuid,

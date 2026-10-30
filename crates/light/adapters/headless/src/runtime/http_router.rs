@@ -73,6 +73,7 @@ fn operator_routes() -> Router<AppState> {
 fn media_and_output_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v2/output/visualization", get(visualization_snapshot))
+        .route("/api/v2/output/value-sources", get(fixture_value_sources))
         .route("/api/v2/media-servers", get(media_servers))
         .route(
             "/api/v2/media-servers/discover",

@@ -13,6 +13,11 @@ import type {
  * configured output routes, for the DMX monitor surfaces.
  */
 export interface DmxDiagnostics {
+	readFixtureValueSources?: (
+		fixtureId: string,
+	) => Promise<
+		import("../../api/generated/light-wire").FixtureValueSourcesSnapshot
+	>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
 	/** TL-659: start every change lead time reading over; absent on surfaces without a server. */

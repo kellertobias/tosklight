@@ -1,4 +1,5 @@
 import { decodeOutputDmxSnapshot } from "../outputDmxWire";
+import { decodeFixtureValueSources } from "../fixtureValueSourcesWire";
 import type {
 	OutputDmxSnapshot,
 	RuntimeChangeLeadTime,
@@ -182,13 +183,27 @@ export interface MediaServerInspection {
 export class MediaOutputApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
 
+	async valueSources(fixtureId: string) {
+		return decodeFixtureValueSources(
+			await this.transport.request(
+				`/api/v2/output/value-sources?fixture_id=${encodeURIComponent(fixtureId)}`,
+			),
+		);
+	}
+
 	visualization(preload = false): Promise<VisualizationSnapshot> {
 		const query = preload ? "?preload=true" : "";
 		return this.transport.request(`/api/v2/output/visualization${query}`);
 	}
 
 	async dmx(): Promise<DmxSnapshot> {
-		return decodeOutputDmxSnapshot(await this.transport.request<OutputDmxSnapshot>("/api/v2/output/dmx", {}, false));
+		return decodeOutputDmxSnapshot(
+			await this.transport.request<OutputDmxSnapshot>(
+				"/api/v2/output/dmx",
+				{},
+				false,
+			),
+		);
 	}
 
 	/** Every Art-Net and sACN endpoint the desk sends to or hears from, with its status. */

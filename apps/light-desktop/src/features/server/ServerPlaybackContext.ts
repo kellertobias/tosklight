@@ -8,6 +8,11 @@ import type {
 } from "../../api/types";
 
 export interface ServerPlaybackContext {
+	readFixtureValueSources?: (
+		fixtureId: string,
+	) => Promise<
+		import("../../api/generated/light-wire").FixtureValueSourcesSnapshot
+	>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
 	/** TL-659: start every change lead time reading over; resolves with the fresh readings. */

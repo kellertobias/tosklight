@@ -1,4 +1,5 @@
 import { FixtureSheetTableView as FixtureSheetTable } from "@tosklight/ui/tables";
+import { FixtureSheetSources } from "./FixtureValueSourcesDialog";
 import {
 	type RowActivationModifiers,
 	WindowHeader,
@@ -132,7 +133,6 @@ export function FixtureSheetWindow({
 			? (fixtureSheetCueListId ?? "")
 			: state.fixtureSheetCueListId,
 	});
-	const cueListId = cuelistFilter.selectedCueListId;
 	const visibleColumnIds = compact
 		? (forcedColumns ?? DEFAULT_FIXTURE_SHEET_COLUMNS)
 		: state.fixtureSheetColumns;
@@ -184,11 +184,7 @@ export function FixtureSheetWindow({
 		refreshKey: deferredProgrammerValues,
 		...{ showType, presentStep, compactMode, visibleColumnIds },
 	});
-	const selectedFixtureIds = useMemo(
-		() => new Set(selection?.selected ?? []),
-		[selection?.selected],
-	);
-	const selectionActionStatus = resolveSelectionActionStatus(selectionActions);
+	const selectedFixtureIds = useSelectedFixtureIds(selection?.selected);
 	const selectionAnchor = useRef<string | null>(null);
 	const activateRow = (fixtureId: string, modifiers: RowActivationModifiers) =>
 		activateSheetRow(
@@ -202,8 +198,13 @@ export function FixtureSheetWindow({
 			compact={compact}
 			compactMode={compactMode}
 			selectionCount={selection ? selection.selected.length : null}
-			selectionActionStatus={selectionActionStatus}
+			selectionActionStatus={resolveSelectionActionStatus(selectionActions)}
 			info={<SourceLegend />}
+			sources={
+				<FixtureSheetSources
+					{...{ active, targets: rows, selected: selectedFixtureIds }}
+				/>
+			}
 			activeValuesLoading={activeValuesLoading}
 			groupRuntimeLoading={groupRuntimeLoading}
 			onSettings={(anchor) => setSettingsAnchor(anchor.getBoundingClientRect())}
@@ -232,7 +233,7 @@ export function FixtureSheetWindow({
 						compactMode={compactMode}
 						anchor={settingsAnchor}
 						cueLists={cuelistFilter.cueLists}
-						cueListId={cueListId}
+						cueListId={cuelistFilter.selectedCueListId}
 						fixtureOrder={fixtureOrder}
 						groupsVisible={groupsVisible}
 						includedHeads={includedHeads}
@@ -391,6 +392,10 @@ function useVisibleFixtureIds() {
 	return [fixtureIds, onChange] as const;
 }
 
+function useSelectedFixtureIds(ids: readonly string[] | undefined) {
+	return useMemo(() => new Set(ids ?? []), [ids]);
+}
+
 function resolveSelectionActionStatus(
 	actions: ReturnType<typeof useProgrammingSelectionActions>,
 ) {
@@ -404,6 +409,7 @@ export function FixtureSheetWindowView({
 	selectionCount,
 	selectionActionStatus,
 	info,
+	sources,
 	activeValuesLoading,
 	groupRuntimeLoading,
 	onSettings,
@@ -416,6 +422,7 @@ export function FixtureSheetWindowView({
 	selectionCount: number | null;
 	selectionActionStatus?: "ready" | "loading" | "scope-mismatch" | "stopped";
 	info?: ReactNode;
+	sources?: ReactNode;
 	activeValuesLoading?: boolean;
 	groupRuntimeLoading?: boolean;
 	onSettings?: (anchor: HTMLElement) => void;
@@ -453,6 +460,7 @@ export function FixtureSheetWindowView({
 					Group runtime loading…
 				</p>
 			)}
+			{sources}
 			{table}
 			{groups}
 			{settings}

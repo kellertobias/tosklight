@@ -242,6 +242,8 @@ fn visualization(config: &Config) -> Vec<String> {
         VisualizationValueKey::decl(config),
         VisualizationStackEntryType::decl(config),
         VisualizationDynamicStackEntry::decl(config),
+        FixtureValueSource::decl(config),
+        FixtureValueSourcesSnapshot::decl(config),
         VisualizationLaneSnapshot::decl(config),
         VisualizationLaneDelta::decl(config),
         VisualizationServerMessage::decl(config),

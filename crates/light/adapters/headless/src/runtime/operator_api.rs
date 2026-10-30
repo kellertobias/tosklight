@@ -1,6 +1,18 @@
 use super::*;
 use light_wire::v2::runtime as wire;
 mod fixture_sheet_color_sources;
+mod fixture_value_sources;
+
+pub(super) async fn fixture_value_sources(
+    State(state): State<AppState>,
+    show: ShowContext,
+    headers: HeaderMap,
+    Query(query): Query<fixture_value_sources::SourceQuery>,
+) -> Result<Json<light_wire::v2::visualization::FixtureValueSourcesSnapshot>, ApiError> {
+    let session = authenticate(&state, &headers)?;
+    show.verify(&state)?;
+    fixture_value_sources::snapshot(&state, &session, query.fixture_id).map(Json)
+}
 
 pub(super) async fn operator_ui() -> Response {
     embedded_asset("index.html")
