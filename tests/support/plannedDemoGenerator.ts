@@ -50,20 +50,46 @@ export async function installPlannedDemoOutputRoutes(
 ) {
 	for (const route of await api.showObjects<any>(showId, "route"))
 		await api.deleteSeededShowObject(showId, "route", route.id, route.revision);
-	const routes = Array.from({ length: 9 }, (_, index) => {
+	const routes = Array.from({ length: 10 }, (_, index) => {
 		const universe = index + 1;
 		return {
-			id: `planned-demo-artnet-${universe}`,
+			id: `planned-demo-sacn-${universe}`,
 			body: {
-				protocol: "art_net",
+				protocol: "sacn",
 				logical_universe: universe,
 				destination_universe: universe,
 				delivery_mode: "unicast",
-				destination: "127.0.0.1:6454",
+				destination: "127.0.0.1:5568",
 				enabled: true,
 				minimum_slots: 128,
 			},
 		};
+	});
+	// Pixel consumes only media blocks; sACN above keeps the Visualizer's receiver independent.
+	routes.push({
+		id: "planned-demo-media-output",
+		body: {
+			protocol: "art_net",
+			logical_universe: 9,
+			destination_universe: 9,
+			delivery_mode: "unicast",
+			destination: "127.0.0.1:6454",
+			enabled: true,
+			minimum_slots: 128,
+		},
+	});
+	// Header is a separate Pixel output; mirror projection controls without overlapping its receiver block.
+	routes.push({
+		id: "planned-demo-header-output",
+		body: {
+			protocol: "art_net",
+			logical_universe: 9,
+			destination_universe: 10,
+			delivery_mode: "unicast",
+			destination: "127.0.0.1:6454",
+			enabled: true,
+			minimum_slots: 128,
+		},
 	});
 	for (const route of routes)
 		await putPlannedDemoObject(api, showId, "route", route.id, route.body);

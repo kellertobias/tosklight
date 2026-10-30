@@ -125,6 +125,11 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
             .delete_object("patched_fixture", &hazer.id)
             .unwrap()
     );
+    let source_id = "00000000-0000-4005-8000-000000000012";
+    let source = working_store.object("media_source", source_id).unwrap().unwrap();
+    let mut custom_source = source.body;
+    custom_source["name"] = serde_json::json!("Operator custom wall feed");
+    working_store.put_object("media_source", source_id, &custom_source, source.revision).unwrap();
     state.installation.set_active_show(Some(working.id)).unwrap();
     state.active_show.replace_current(Some(working.clone()));
     state
@@ -142,6 +147,10 @@ async fn clean_default_load_creates_a_pristine_copy_without_replacing_manual_cha
     assert_eq!(opened["name"], "Default Stage Show Clean Copy");
     let clean_store = ShowStore::open(opened["path"].as_str().unwrap()).unwrap();
     let clean_fixtures = clean_store.objects("patched_fixture").unwrap();
+    let clean_source = clean_store.object("media_source", source_id).unwrap().unwrap();
+    assert_eq!(clean_source.body["advertisedSourceId"], 513);
+    assert_eq!(working_store.object("media_source", source_id).unwrap().unwrap().body, custom_source);
+
     assert_eq!(clean_fixtures.len(), 312);
     assert!(
         clean_fixtures

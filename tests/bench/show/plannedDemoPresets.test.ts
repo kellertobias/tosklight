@@ -13,6 +13,7 @@ describe("Plan 76 preset library", () => {
 		}));
 		const result = await installPlannedDemoPresets(
 			{
+                showObject: async (_show: string, _kind: string, id: string) => id === "2.1" ? {revision: 7, body: {instance_id: "retained-red"}} : null,
 				seedShowObject: async (
 					_showId: string,
 					_kind: string,
@@ -27,6 +28,7 @@ describe("Plan 76 preset library", () => {
 		);
 		expect(result).toEqual({ colors: 13, positions: 7, beam: 10 });
 		expect(writes).toHaveLength(30);
+        expect(writes.find(write => write.id === "2.1")?.body.instance_id).toBe("retained-red");
 		expect(
 			writes
 				.filter((write) => write.body.family === "Color")

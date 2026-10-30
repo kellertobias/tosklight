@@ -96,7 +96,7 @@ describe("overall demo show patch builder", () => {
 		expect(occupied.size).toBe(3_378);
 	});
 
-	it("configures exactly one local CITP media server", () => {
+	it("configures both media fixtures for the bundled local Pixel server", () => {
 		const built = createPlannedDemoPatchInputs(profiles, layers);
 		expect(
 			built.fixtures.find((fixture) => fixture.fixture_number === 1001)
@@ -109,7 +109,7 @@ describe("overall demo show patch builder", () => {
 		expect(
 			built.fixtures.find((fixture) => fixture.fixture_number === 1002)
 				?.direct_control,
-		).toBeNull();
+		).toEqual({ protocol: "citp", ip_address: "127.0.0.1", port: 4809 });
 	});
 
 	it("keeps Conventional, Stage, Audience, and Auxiliary bands separate", () => {
@@ -318,18 +318,25 @@ describe("overall demo show patch builder", () => {
 	});
 });
 
-
 it("keeps six front Fresnel identities and gives only that wash manual wide stage cuts", () => {
-    const built = createPlannedDemoPatchInputs(profiles, layers);
-    const front = built.fixtures.filter((fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 6);
-    expect(front).toHaveLength(6);
-    for (const fixture of front) {
-        expect(fixture.installed_appearance?.manual_optics?.zoom_degrees).toBe(48);
-        expect(fixture.installed_appearance?.manual_optics?.shaper_blades).toHaveLength(4);
-        expect(fixture.location.y).toBe(-3000);
-        expect(Math.abs(fixture.location.x)).toBeLessThan(4000);
-        expect(fixture.fixture_id).toBe(`00000000-0000-4001-8000-${fixture.fixture_number.toString(16).padStart(12, "0")}`);
-    }
-    for (const fixture of built.fixtures.filter((fixture) => [11, 12, 13].includes(fixture.fixture_number)))
-        expect(fixture.installed_appearance).toBeUndefined();
+	const built = createPlannedDemoPatchInputs(profiles, layers);
+	const front = built.fixtures.filter(
+		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 6,
+	);
+	expect(front).toHaveLength(6);
+	for (const fixture of front) {
+		expect(fixture.installed_appearance?.manual_optics?.zoom_degrees).toBe(48);
+		expect(
+			fixture.installed_appearance?.manual_optics?.shaper_blades,
+		).toHaveLength(4);
+		expect(fixture.location.y).toBe(-3000);
+		expect(Math.abs(fixture.location.x)).toBeLessThan(4000);
+		expect(fixture.fixture_id).toBe(
+			`00000000-0000-4001-8000-${fixture.fixture_number.toString(16).padStart(12, "0")}`,
+		);
+	}
+	for (const fixture of built.fixtures.filter((fixture) =>
+		[11, 12, 13].includes(fixture.fixture_number),
+	))
+		expect(fixture.installed_appearance).toBeUndefined();
 });

@@ -1,5 +1,13 @@
 # Media window
 
+## Default show media
+
+The default show includes a companion Pixel configuration for its projection screens and three rear LED walls. In a repository build, start it with `npm run demo:media` after building Pixel with `npm run build:media`. Run **Start** on Page 1, position 102 to select the bundled generated visuals and open the RGB Sunstrips. The standalone Visualizer shows the live media; embedded Stage shows the rig geometry. The companion needs no imported clips and preserves your normal Pixel configuration.
+
+Fresh defaults and **Load Clean Built-in Default** include this rig. Existing saved shows retain their programming and media settings. If the standalone Visualizer reports **Media offline**, start the companion and check its loopback CITP address `127.0.0.1:4809`. See the companion's README for ports and recovery steps.
+
+## Browse and program media
+
 The Media window is available from **Shift + Stage** in Built-ins and from **Open Window**. Without a configured CITP/MSEX connection it says that no CITP Media Server is available and still shows the complete 0-255 Content and Mask folder/file configuration ranges. Endpoint setup remains under **Show Patch > Media Servers**. When a server connects, its advertised names, thumbnails, status, and controls reconcile into the same stable configuration surface without hiding unadvertised values.
 
 Choose the physical master in **Server**, then choose one of its advertised logical layers. A layer touch replaces the desk's shared fixture selection with that exact logical head, so the Programmer, OSC, attached controls, and other panes continue to describe one authoritative selection. The Program output and layer thumbnails use the preview-source and layer identities advertised by the server; source number, layer number, and fixture sub-ID are not assumed to be interchangeable. Loading, stale, failed, unsupported, and offline states are shown beside the preview rather than drawn into the program image. An offline server reports a short reason - **Not responding**, **Connection refused**, **Unexpected reply**, or **Request rejected** - rather than the raw CITP protocol text; the underlying protocol error stays available as the status tooltip and in **Show Patch > Media Servers**.

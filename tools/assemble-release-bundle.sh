@@ -23,6 +23,8 @@ trap 'rm -rf -- "$stage_root"' EXIT
 asset_slug="${SLUG//-/_}"
 bundle="$stage_root/tosklight-bundle-$asset_slug"
 mkdir -p "$bundle"
+# Portable companion configuration for the shipped default show; operator Pixel settings stay separate.
+cp -R "$ROOT/assets/demo-media" "$bundle/demo-media"
 
 extract_archive() {
   local archive="$1"

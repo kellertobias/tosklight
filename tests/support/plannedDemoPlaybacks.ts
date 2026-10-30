@@ -71,6 +71,8 @@ export async function installPlannedDemoPlaybacks(
 				...intensity(groups, "LED Show", 1),
 				...intensity(groups, "LED Auxiliary", 1),
 				...intensity(groups, "Blinders", 1),
+				...intensity(groups, "Sunstrip", 1),
+				...demoMediaChanges(fixtures),
 				...attributes(
 					groups,
 					[
@@ -80,6 +82,7 @@ export async function installPlannedDemoPlaybacks(
 						"Wash Auxiliary",
 						"LED Show",
 						"LED Auxiliary",
+						"Sunstrip",
 					],
 					{ color: semanticColor("White") },
 				),
@@ -180,6 +183,30 @@ export async function installPlannedDemoPlaybacks(
 		assignments: { ...(existingPage?.body.assignments ?? {}), ...assignments },
 	});
 	return { cuelists, playbacks };
+}
+
+/** Native Pixel generated sources: portable, animated content without an external clip library. */
+function demoMediaChanges(fixtures: readonly PatchedTargetFixture[]) {
+	const changes: Array<readonly [string, string, number]> = [];
+	for (const [number, file] of [
+		[1001, 8],
+		[1002, 22],
+	]) {
+		const fixture = fixtures.find((item) => item.fixture_number === number);
+		if (!fixture) continue;
+		const layer = fixture.logical_heads?.[0]?.fixture_id;
+		if (!layer) throw new Error(`Media fixture ${number} has no first layer`);
+		changes.push(
+			[fixture.fixture_id, "intensity", 1],
+			[layer, "intensity", 1],
+			[layer, "media.folder", 250 / 255],
+			[layer, "media.file", file / 255],
+		);
+		const second = fixture.logical_heads?.[1]?.fixture_id;
+		if (second)
+			changes.push([second, "intensity", 0], [second, "media.file", 0]);
+	}
+	return changes;
 }
 
 function intensity(groups: Map<string, string[]>, name: string, value: number) {

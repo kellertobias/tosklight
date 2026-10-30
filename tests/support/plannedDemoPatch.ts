@@ -1,4 +1,7 @@
-import { frontWashAppearance, frontWashPlacement } from "./plannedDemoFrontWash";
+import {
+	frontWashAppearance,
+	frontWashPlacement,
+} from "./plannedDemoFrontWash";
 import type { FixtureProfile } from "../../apps/light-desktop/src/api/types";
 import type { ApiDriver } from "../bench/core/api";
 import { ensurePlannedDemoFixtureLibrary } from "./plannedDemoFixtureLibrary";
@@ -34,7 +37,7 @@ type PatchBand =
 	| "hazer"
 	| "other";
 
-const DEMO_MEDIA_SERVER_FIXTURE_NUMBER = 1001;
+const DEMO_MEDIA_SERVER_FIXTURE_NUMBERS = [1001, 1002];
 const DEMO_MEDIA_SERVER_CITP_PORT = 4809;
 
 export interface PlannedDemoPatchConfiguration {
@@ -100,13 +103,18 @@ export async function installPlannedDemoPatch(
 	const manifestByNumber = new Map(
 		PLANNED_DEMO_FIXTURES.map((fixture) => [fixture.number, fixture]),
 	);
+	const expectedInputsByNumber = new Map(
+		fixtures.map((fixture) => [fixture.fixture_number, fixture]),
+	);
 	const adopted = fixtures.map((fixture) => {
 		const existing = existingByNumber.get(fixture.fixture_number);
 		const expected = manifestByNumber.get(fixture.fixture_number);
 		return {
 			...fixture,
 			fixture_id:
-				existing && expected && matchesManifestProfile(existing, expected)
+				existing &&
+				expected &&
+				matchesManifestProfile(existing, expected, fixture)
 					? existing.fixture_id
 					: fixture.fixture_id,
 		};
@@ -136,7 +144,12 @@ export async function installPlannedDemoPatch(
 							const expected = manifestByNumber.get(fixture.fixture_number);
 							return fixture.fixture_number != null &&
 								(!expectedNumbers.has(fixture.fixture_number) ||
-									(expected && !matchesManifestProfile(fixture, expected)))
+									(expected &&
+										!matchesManifestProfile(
+											fixture,
+											expected,
+											expectedInputsByNumber.get(fixture.fixture_number),
+										)))
 								? [fixture.fixture_id]
 								: [];
 						}),
@@ -197,7 +210,12 @@ export async function installPlannedDemoPatch(
 function matchesManifestProfile(
 	fixture: any,
 	expected: DemoFixtureManifestEntry,
+	input?: { profile_id: string; mode_id: string },
 ) {
+	const profileId = fixture.profile_id ?? fixture.definition?.profile_id;
+	const modeId = fixture.mode_id ?? fixture.definition?.mode_id;
+	if (profileId && input)
+		return profileId === input.profile_id && modeId === input.mode_id;
 	return (
 		fixture.definition.manufacturer === expected.profile.manufacturer &&
 		fixture.definition.model === expected.profile.name &&
@@ -271,15 +289,28 @@ export function createPlannedDemoPatchInputs(
 				mode_id: mode.id,
 				split_patches: primaryPatches,
 				layer_id: layerFor(entry, layers),
-				direct_control:
-					entry.number === DEMO_MEDIA_SERVER_FIXTURE_NUMBER
-						? {
-								protocol: "citp",
-								ip_address: "127.0.0.1",
-								port: DEMO_MEDIA_SERVER_CITP_PORT,
-							}
-						: null,
-				installed_appearance: frontWashAppearance(entry.number, placement.primary.location, placement.primary.rotation),
+				direct_control: DEMO_MEDIA_SERVER_FIXTURE_NUMBERS.includes(entry.number)
+					? {
+							protocol: "citp",
+							ip_address: "127.0.0.1",
+							port: DEMO_MEDIA_SERVER_CITP_PORT,
+						}
+					: null,
+				internal_bindings: DEMO_MEDIA_SERVER_FIXTURE_NUMBERS.includes(
+					entry.number,
+				)
+					? {
+							output:
+								entry.number === 1001
+									? "01010000-0000-4000-8000-000000000001"
+									: "01020000-0000-4000-8000-000000000002",
+						}
+					: {},
+				installed_appearance: frontWashAppearance(
+					entry.number,
+					placement.primary.location,
+					placement.primary.rotation,
+				),
 				location: millimetres(placement.primary.location),
 				rotation: placement.primary.rotation,
 				multipatch,
@@ -674,7 +705,7 @@ function ordinaryLocation(entry: DemoFixtureManifestEntry): Point {
 	}
 	if (entry.roles.includes("Sunstrips"))
 		return {
-			x: -1.5 + Math.floor((entry.number - 501) / 2),
+			x: -4.5 + 3 * Math.floor((entry.number - 501) / 2),
 			y: 4.15,
 			z: 1.7 + ((entry.number - 501) % 2) * 1.15,
 		};

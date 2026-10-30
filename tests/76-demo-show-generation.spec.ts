@@ -20,19 +20,30 @@ const DEMO_SHOW_ASSET = process.env.LIGHT_DEMO_SHOW_OUTPUT
 	: fileURLToPath(new URL("../assets/demo.show", import.meta.url));
 
 function frontWashSnapshot(patch: { fixtures: any[] }) {
-	const fronts = patch.fixtures.filter((fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 6);
+	const fronts = patch.fixtures.filter(
+		(fixture) => fixture.fixture_number >= 1 && fixture.fixture_number <= 6,
+	);
 	expect(fronts).toHaveLength(6);
 	return fronts.map((fixture) => {
 		expect(fixture.definition.model).toBe("Dimmer Fresnel");
 		expect(fixture.installed_appearance).toMatchObject({
-			light_source: { type: "tungsten" }, color_temperature_kelvin: 3200,
+			light_source: { type: "tungsten" },
+			color_temperature_kelvin: 3200,
 			manual_optics: { zoom_degrees: 48 },
 		});
 		const blades = fixture.installed_appearance.manual_optics.shaper_blades;
 		expect(blades).toHaveLength(4);
-		expect(blades.every((blade: number) => Number.isFinite(blade) && blade >= 0 && blade <= 1)).toBe(true);
-		return { number: fixture.fixture_number, location: fixture.location,
-			rotation: fixture.rotation, installedAppearance: fixture.installed_appearance };
+		expect(
+			blades.every(
+				(blade: number) => Number.isFinite(blade) && blade >= 0 && blade <= 1,
+			),
+		).toBe(true);
+		return {
+			number: fixture.fixture_number,
+			location: fixture.location,
+			rotation: fixture.rotation,
+			installedAppearance: fixture.installed_appearance,
+		};
 	});
 }
 
@@ -44,7 +55,20 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	// interaction, and it runs close to the default budget on an unloaded machine.
 	test.setTimeout(90_000);
 	await loadCanonicalCopy(api, bench, "plan-76-generator", "default-stage");
+	// Regeneration adopts the shipped identities; the minimal fixture only bootstraps the bench.
+	const seed = await api.createShow<{ id: string }>({
+		name: `demo-identity-seed-${crypto.randomUUID()}`,
+		data_base64: (
+			await fs.readFile(new URL("../assets/demo.show", import.meta.url))
+		).toString("base64"),
+		overwrite: false,
+	});
+	await api.openShow(seed.id, { transition: "hold_current" });
 	const showId = await activeShowId(api);
+	const retainedPatch = await api.patch();
+	const retainedDynamics = await api.showObjects<any>(showId, "dynamic");
+	const retainedPresets = await api.showObjects<any>(showId, "preset");
+
 	const layerNames = [
 		"Stage & Venue",
 		"Trusses",
@@ -71,12 +95,12 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			"patch_layer",
 			id,
 			{ id, name, order: index },
-			0,
+			(await api.showObject(showId, "patch_layer", id))?.revision ?? 0,
 		);
 
 	const generatedShow = await generatePlannedDemo(api, showId, layers);
-	expect(generatedShow.outputRoutes).toHaveLength(9);
-	expect(await api.showObjects(showId, "route")).toHaveLength(9);
+	expect(generatedShow.outputRoutes).toHaveLength(12);
+	expect(await api.showObjects(showId, "route")).toHaveLength(12);
 	const generated = generatedShow.patch;
 	expect(generated).toMatchObject({
 		fixtureRecords: PLANNED_DEMO_CONTROL_FIXTURES,
@@ -84,6 +108,16 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		firstUniverse: 1,
 	});
 	expect(generated.lastUniverse).toBeGreaterThan(1);
+	const routed = new Set(
+		generatedShow.outputRoutes
+			.filter((route) => route.body.enabled)
+			.map((route) => route.body.logical_universe),
+	);
+	for (const fixture of generated.fixtures)
+		for (const split of fixture.split_patches)
+			if (split.universe !== null)
+				expect(routed.has(split.universe)).toBe(true);
+
 	// Includes the two 2-layer Media Servers at 158 slots each (59-slot layers and a 40-slot master).
 	expect(generated.occupiedSlots).toBe(3_544);
 	const frontLights = generated.fixtures.filter(
@@ -98,6 +132,34 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 	expect(generatedShow.scenery).toHaveLength(58);
 	const completePatch = await api.patch();
 	const frontWash = frontWashSnapshot(completePatch);
+	const wirePatch = await api.request<any>("GET", "/api/v2/patch");
+	for (const [number, output] of [
+		[1001, "01010000-0000-4000-8000-000000000001"],
+		[1002, "01020000-0000-4000-8000-000000000002"],
+	])
+		expect(
+			wirePatch.fixtures.find(
+				(fixture: any) => fixture.fixture_number === number,
+			)?.internal_bindings.output,
+		).toBe(output);
+
+	for (const fixture of retainedPatch.fixtures) {
+		const recalled = completePatch.fixtures.find(
+			(item: any) => item.fixture_id === fixture.fixture_id,
+		);
+		expect(recalled?.logical_heads).toEqual(fixture.logical_heads);
+	}
+	expect(
+		(await api.showObjects<any>(showId, "dynamic"))
+			.map((item) => item.id)
+			.sort(),
+	).toEqual(retainedDynamics.map((item) => item.id).sort());
+	for (const preset of retainedPresets)
+		expect(
+			(await api.showObject<any>(showId, "preset", preset.id))?.body
+				.instance_id,
+		).toBe(preset.body.instance_id);
+
 	expect(completePatch.fixtures).toHaveLength(
 		PLANNED_DEMO_CONTROL_FIXTURES + generatedShow.scenery.length,
 	);
@@ -126,7 +188,7 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 			port: 4809,
 			http_port: null,
 		},
-		null,
+		{ protocol: "citp", ip_address: "127.0.0.1", port: 4809, http_port: null },
 	]);
 	expect(demoFixtures(1101, 1103).map((fixture) => fixture.name)).toEqual([
 		"Laser Left",
@@ -249,9 +311,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		serverId: mediaSources.find(
 			(source) => source.id === projection.body.sourceId,
 		).body.serverId,
-		advertisedSourceId: 2,
-		width: 1920,
-		height: 1080,
+		advertisedSourceId: 769,
+		width: 640,
+		height: 360,
 	});
 	expect(header.body.sections).toMatchObject([
 		{
@@ -477,7 +539,9 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 				route.revision,
 			);
 		}
-		const assignments = (await api.showObject<any>(showId, "playback_page", "1"))?.body.assignments;
+		const assignments = (
+			await api.showObject<any>(showId, "playback_page", "1")
+		)?.body.assignments;
 		const generated = await api.downloadShow(showId);
 		const reopened = await api.createShow<{ id: string }>({
 			name: `demo-reopen-${crypto.randomUUID()}`,
@@ -486,10 +550,20 @@ test("DEMO-GENERATOR-001 @api › installs the one overall Desk and PreViz demo 
 		});
 		await api.openShow(reopened.id, { transition: "hold_current" });
 		expect(frontWashSnapshot(await api.patch())).toEqual(frontWash);
-		expect((await api.showObjects(reopened.id, "patched_fixture")).length).toBe(312);
-		expect((await api.showObject<any>(reopened.id, "playback_page", "1"))?.body.assignments).toEqual(
-			assignments,
+		const reopenedPatch = await api.request<any>("GET", "/api/v2/patch");
+		expect(
+			reopenedPatch.fixtures.find(
+				(fixture: any) => fixture.fixture_number === 1002,
+			)?.internal_bindings.output,
+		).toBe("01020000-0000-4000-8000-000000000002");
+
+		expect((await api.showObjects(reopened.id, "patched_fixture")).length).toBe(
+			312,
 		);
+		expect(
+			(await api.showObject<any>(reopened.id, "playback_page", "1"))?.body
+				.assignments,
+		).toEqual(assignments);
 		const temporary = `${DEMO_SHOW_ASSET}.${process.pid}.${crypto.randomUUID()}.tmp`;
 		await fs.mkdir(path.dirname(DEMO_SHOW_ASSET), { recursive: true });
 		await fs.writeFile(temporary, generated);

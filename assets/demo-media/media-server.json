@@ -1,0 +1,104 @@
+{
+  "version": 3,
+  "configuration": {
+    "instanceId": "tosklight-showcase",
+    "network": {
+      "sameComputerPreset": true,
+      "artNetListen": "127.0.0.1:6454",
+      "sacnListen": "127.0.0.1:5569",
+      "citpListen": "127.0.0.1:4809",
+      "httpListen": "127.0.0.1:8080",
+      "speedGroupEndpoint": null
+    },
+    "library": {
+      "root": "./library",
+      "targetCodec": "h264"
+    },
+    "outputs": [
+      {
+        "id": "01010000-0000-4000-8000-000000000001",
+        "name": "Projection panorama",
+        "enabled": true,
+        "target": {
+          "kind": "offScreen"
+        },
+        "resolution": {
+          "width": 1280,
+          "height": 360
+        },
+        "presentation": "display-synchronized",
+        "soundOutput": {
+          "kind": "disabled"
+        },
+        "personality": "two-layers",
+        "protocol": "art-net",
+        "universe": 9,
+        "startAddress": 177,
+        "citp": {
+          "layerBase": 0,
+          "sourceName": "Projection panorama"
+        },
+        "tempoSource": {
+          "kind": "playback-bpm-channel"
+        },
+        "statusOverlay": false
+      },
+      {
+        "id": "01020000-0000-4000-8000-000000000002",
+        "name": "LED panorama",
+        "enabled": true,
+        "target": {
+          "kind": "offScreen"
+        },
+        "resolution": {
+          "width": 1536,
+          "height": 512
+        },
+        "presentation": "display-synchronized",
+        "soundOutput": {
+          "kind": "disabled"
+        },
+        "personality": "two-layers",
+        "protocol": "art-net",
+        "universe": 9,
+        "startAddress": 335,
+        "citp": {
+          "layerBase": 0,
+          "sourceName": "LED panorama"
+        },
+        "tempoSource": {
+          "kind": "playback-bpm-channel"
+        },
+        "statusOverlay": false
+      },
+      {
+        "id": "01030000-0000-4000-8000-000000000003",
+        "name": "Header",
+        "enabled": true,
+        "target": {
+          "kind": "offScreen"
+        },
+        "resolution": {
+          "width": 640,
+          "height": 360
+        },
+        "presentation": "display-synchronized",
+        "soundOutput": {
+          "kind": "disabled"
+        },
+        "personality": "two-layers",
+        "protocol": "art-net",
+        "universe": 10,
+        "startAddress": 177,
+        "citp": {
+          "layerBase": 0,
+          "sourceName": "Header"
+        },
+        "tempoSource": {
+          "kind": "playback-bpm-channel"
+        },
+        "statusOverlay": false
+      }
+    ]
+  }
+}

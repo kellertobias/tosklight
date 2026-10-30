@@ -128,9 +128,10 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 		throw new Error(
 			"Plan 76 desktop generation requires an authenticated user",
 		);
-	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
-		(layout) => layout.id === sessionId,
-	);
+	const layouts = await api.showObjects<any>(showId, "user_layout");
+	// The canonical asset carries one portable layout; regeneration adopts it across bench sessions.
+	const existing =
+		layouts.find((layout) => layout.id === sessionId) ?? layouts[0];
 	await api.request(
 		"POST",
 		"/api/v2/playback-surfaces/pane%3Abusking-playbacks/update",
@@ -171,7 +172,7 @@ export async function installPlannedDemoLayout(api: ApiDriver, showId: string) {
 	await api.seedShowObject(
 		showId,
 		"user_layout",
-		sessionId,
+		existing?.id ?? sessionId,
 		body,
 		existing?.revision ?? 0,
 	);
@@ -185,15 +186,16 @@ export async function installPlannedDemoGroupProgrammingLayout(
 	const sessionId = api.session?.session_id;
 	if (!sessionId)
 		throw new Error("Group Programming desktop requires an authenticated user");
-	const existing = (await api.showObjects<any>(showId, "user_layout")).find(
-		(layout) => layout.id === sessionId,
-	);
+	const layouts = await api.showObjects<any>(showId, "user_layout");
+	// The canonical asset carries one portable layout; regeneration adopts it across bench sessions.
+	const existing =
+		layouts.find((layout) => layout.id === sessionId) ?? layouts[0];
 	const body = plannedDemoLayout();
 	body.activeDeskId = "group-programming";
 	await api.seedShowObject(
 		showId,
 		"user_layout",
-		sessionId,
+		existing?.id ?? sessionId,
 		body,
 		existing?.revision ?? 0,
 	);

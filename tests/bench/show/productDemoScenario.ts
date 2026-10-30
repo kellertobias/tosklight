@@ -1,3 +1,4 @@
+import { installPlannedDemoMedia } from "../../support/plannedDemoMedia";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -814,6 +815,7 @@ export class BrowserProductDemo {
 									)
 								: Promise.resolve(),
 					});
+					await installPlannedDemoMedia(api, showId);
 					return { patch, scenery, layers };
 				},
 			);

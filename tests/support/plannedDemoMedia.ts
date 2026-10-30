@@ -12,21 +12,7 @@ const LED_SURFACE_ID = "00000000-0000-4005-8000-000000000032";
 const HEADER_SURFACE_ID = "00000000-0000-4005-8000-000000000033";
 
 export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
-	for (const kind of [
-		"media_projector",
-		"media_surface",
-		"led_module_type",
-		"media_source",
-		"media_server",
-	] as const) {
-		for (const object of await api.showObjects<any>(showId, kind))
-			await api.deleteSeededShowObject(
-				showId,
-				kind,
-				object.id,
-				object.revision,
-			);
-	}
+	// Upsert canonical identities so regeneration preserves references and portable ownership.
 
 	const servers = [
 		{
@@ -39,7 +25,7 @@ export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 		{
 			id: LED_SERVER_ID,
 			name: "LED Media Server",
-			citp: { host: "127.0.0.1", port: 4810 },
+			citp: { host: "127.0.0.1", port: 4809 },
 			lastKnownEndpoint: null,
 			fixtureId: "00000000-0000-4001-8000-0000000003ea",
 		},
@@ -48,32 +34,32 @@ export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 		{
 			id: SCREEN_SOURCE_ID,
 			serverId: SCREEN_SERVER_ID,
-			advertisedSourceId: 1,
+			advertisedSourceId: 257,
 			name: "Projection Screens",
-			outputName: "Screens Left + Right",
-			width: 3840,
-			height: 1080,
+			outputName: "Projection panorama",
+			width: 1280,
+			height: 360,
 			aspectRatio: 32 / 9,
 		},
 		{
 			id: LED_SOURCE_ID,
 			serverId: LED_SERVER_ID,
-			advertisedSourceId: 1,
+			advertisedSourceId: 513,
 			name: "Stage LED Panels",
-			outputName: "LED Left + Center + Right",
-			width: 5760,
-			height: 1080,
-			aspectRatio: 16 / 3,
+			outputName: "LED panorama",
+			width: 1536,
+			height: 512,
+			aspectRatio: 3,
 		},
 		{
 			// The projection server's second advertised output: one server, two feeds.
 			id: HEADER_SOURCE_ID,
 			serverId: SCREEN_SERVER_ID,
-			advertisedSourceId: 2,
+			advertisedSourceId: 769,
 			name: "Upstage Header Screen",
-			outputName: "Header Screen",
-			width: 1920,
-			height: 1080,
+			outputName: "Header",
+			width: 640,
+			height: 360,
 			aspectRatio: 16 / 9,
 		},
 	];
@@ -116,17 +102,20 @@ export async function installPlannedDemoMedia(api: ApiDriver, showId: string) {
 				ledSection(
 					"00000000-0000-4005-8000-000000000051",
 					"LED Panel Left of Sunstrips",
-					-3.25,
+					-3,
+					0,
 				),
 				ledSection(
 					"00000000-0000-4005-8000-000000000052",
 					"LED Panel Between Sunstrips",
 					0,
+					1,
 				),
 				ledSection(
 					"00000000-0000-4005-8000-000000000053",
 					"LED Panel Right of Sunstrips",
-					3.25,
+					3,
+					2,
 				),
 			],
 		},
@@ -172,7 +161,7 @@ function projectionSection(id: string, name: string, x: number) {
 		},
 		widthMetres: 4,
 		heightMetres: 2.25,
-		crop: { left: 0, top: 0, width: 1, height: 1 },
+		crop: { left: x < 0 ? 0 : 0.5, top: 0, width: 0.5, height: 1 },
 		type: "projection_screen",
 		material: { type: "white" },
 		edge_feather: 0.02,
@@ -198,7 +187,7 @@ function headerSection(id: string) {
 	};
 }
 
-function ledSection(id: string, name: string, x: number) {
+function ledSection(id: string, name: string, x: number, segment: number) {
 	return {
 		id,
 		name,
@@ -208,7 +197,7 @@ function ledSection(id: string, name: string, x: number) {
 		},
 		widthMetres: 2,
 		heightMetres: 2,
-		crop: { left: 0, top: 0, width: 1, height: 1 },
+		crop: { left: segment / 3, top: 0, width: 1 / 3, height: 1 },
 		type: "led",
 		module_type_id: LED_MODULE_ID,
 		rows: 4,
