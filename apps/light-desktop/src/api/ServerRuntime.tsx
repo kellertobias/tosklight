@@ -356,6 +356,7 @@ function useProviderActionSources(
 	const dmxDiagnostics = useMemo(
 		() => ({
 			readDmx: value.readDmx,
+            readShowHealth: value.readShowHealth,
 			readFixtureValueSources: value.readFixtureValueSources,
 			readOutputHealth: value.readOutputHealth,
 			resetChangeLeadTime: value.resetChangeLeadTime,
@@ -368,6 +369,7 @@ function useProviderActionSources(
 		}),
 		[
 			value.readDmx,
+            value.readShowHealth,
 			value.readFixtureValueSources,
 			value.readOutputHealth,
 			value.resetChangeLeadTime,

@@ -13,10 +13,11 @@ import type {
  * configured output routes, for the DMX monitor surfaces.
  */
 export interface DmxDiagnostics {
+	readShowHealth?: () => Promise<import("../showHealth/contracts").ShowHealthSnapshot>;
 	readFixtureValueSources?: (
 		fixtureId: string,
 	) => Promise<
-		import("../../api/generated/light-wire").FixtureValueSourcesSnapshot
+		import("../dmxDiagnostics/fixtureValueSources").FixtureValueSourcesSnapshot
 	>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;

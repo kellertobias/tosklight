@@ -21,8 +21,25 @@ const GROUP_ID_LIMIT: usize = 256;
 pub(super) fn router() -> Router<AppState> {
     Router::new()
         .route("/api/v2/groups/manage", post(manage_group))
+        .route("/api/v2/groups/{group_id}/update", post(update_group))
         .route("/api/v2/groups/{group_id}", get(group_settings))
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
+}
+
+async fn update_group(
+    state: State<AppState>,
+    Path(group_id): Path<String>,
+    show: ShowContext,
+    headers: HeaderMap,
+    request: Result<TolerantJson<GroupManagementRequest>, JsonRejection>,
+) -> Result<Response, GroupManagementHttpError> {
+    let request = request.map_err(GroupManagementHttpError::json)?;
+    if group_id != request.0.group_id {
+        return Err(GroupManagementHttpError::api(ApiError::bad_request(
+            "Group path and body IDs must match",
+        )));
+    }
+    manage_group(state, show, headers, Ok(request)).await
 }
 
 async fn group_settings(

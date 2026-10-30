@@ -1,6 +1,9 @@
 export interface ObjectEditorRequest {
-	kind: "macro" | "timecode" | "cuelist" | "dynamic";
+	kind: "macro" | "timecode" | "cuelist" | "dynamic" | "group" | "preset" | "fixture";
 	objectId: string;
+    showId?: string;
+    field?: "location" | "address";
+    multipatchInstanceId?: string | null;
 }
 
 let current: ObjectEditorRequest | null = null;

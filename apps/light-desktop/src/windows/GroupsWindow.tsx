@@ -10,6 +10,7 @@ import {
 	RecordModeDialog,
 } from "../components/shared/RecordModeDialog";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
+import { useHealthObjectNavigation } from "../features/showHealth/objectNavigation";
 import type { GroupRecordOperation } from "../features/groupRecording/contracts";
 import { useGroupRecording } from "../features/groupRecording/GroupRecordingProvider";
 import type { GroupRecordingTarget } from "../features/groupRecording/target";
@@ -89,6 +90,11 @@ export function GroupsWindow({
 		setSettingsGroup(null);
 		setRecordGroup(null);
 	}, [groupScope, model.groupRuntimeReady]);
+
+    useHealthObjectNavigation("group", active && !compact && model.groupRuntimeReady, groupScope, (request) => {
+        if (!model.groups.some((group) => group.id === request.objectId)) return false;
+        setSettingsGroup(request.objectId); return true;
+    });
 
 	useEffect(() => {
 		if (!active) return;

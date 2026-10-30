@@ -1,7 +1,7 @@
 import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { useDmxDiagnostics } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
-import type { FixtureValueSourcesSnapshot } from "../api/generated/light-wire";
+import type { FixtureValueSourcesSnapshot } from "../features/dmxDiagnostics/fixtureValueSources";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import "./fixtureValueSources.css";
 

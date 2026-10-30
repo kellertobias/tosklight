@@ -1,5 +1,6 @@
 import { decodeOutputDmxSnapshot } from "../outputDmxWire";
 import { decodeFixtureValueSources } from "../fixtureValueSourcesWire";
+import { decodeShowHealth } from "../showHealthWire";
 import type {
 	OutputDmxSnapshot,
 	RuntimeChangeLeadTime,
@@ -182,6 +183,8 @@ export interface MediaServerInspection {
 
 export class MediaOutputApiClient {
 	constructor(private readonly transport: LiveClientTransport) {}
+
+    async showHealth() { return decodeShowHealth(await this.transport.request("/api/v2/show-health")); }
 
 	async valueSources(fixtureId: string) {
 		return decodeFixtureValueSources(

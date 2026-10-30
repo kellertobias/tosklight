@@ -6,6 +6,7 @@ import {
 	subscribeObjectEditorRequest,
 } from "../features/controlSurfaceInteraction/objectEditorRequest";
 import { useSpeedGroupsBpm } from "../features/configuration/ConfigurationState";
+import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
 import { usePlaybackDeskView } from "../features/playbackRuntime/PlaybackRuntimeView";
 import { useCueListTopologyWriter } from "../features/playbackTopology/useCueListTopologyWriter";
 import { useCueLists } from "../features/showObjects/ShowObjectsState";
@@ -38,6 +39,7 @@ export function CuelistWindow({
 }: WindowProps & { thumbnails?: Record<number, string> }) {
 	const saveCueList = useCueListTopologyWriter();
 	const { state, dispatch } = useApp();
+    const showId = useActiveShowId();
 	const pool = useCuelistPool();
 	const cueLists = useCueLists();
 	const playbackDesk = usePlaybackDeskView(
@@ -89,6 +91,8 @@ export function CuelistWindow({
 			request: NonNullable<ReturnType<typeof currentObjectEditorRequest>>,
 		) => {
 			if (request.kind !== "cuelist") return;
+            if (request.showId && !showId) return;
+            if (request.showId && request.showId !== showId) { consumeObjectEditorRequest(request); return; }
 			const entry = pool.find(
 				(candidate) => candidate.cueList.id === request.objectId,
 			);
@@ -99,7 +103,7 @@ export function CuelistWindow({
 		const request = currentObjectEditorRequest();
 		if (request) openRequested(request);
 		return subscribeObjectEditorRequest(openRequested);
-	}, [active, builtIn, dispatch, pool]);
+	}, [active, builtIn, dispatch, pool, showId]);
 	const openPool = () => {
 		if (builtIn) dispatch({ type: "SET_BUILTIN_CUELIST_VIEW", value: "pool" });
 		else setLocalTab("pool");

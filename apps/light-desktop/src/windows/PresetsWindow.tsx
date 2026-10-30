@@ -1,4 +1,5 @@
 import { poolCardSizing } from "../state/reducerHelpers";
+import { useHealthPresetNavigation } from "../features/showHealth/objectNavigation";
 import { useMemo, useState } from "react";
 import { useCommandLineSurface } from "../components/control/commandLine/useCommandLineSurface";
 import { requestUpdateTarget } from "../components/control/updateWorkflow";
@@ -357,6 +358,7 @@ function usePresetsWindowModel({
 			.setItem("preset", id, configureDraft)
 			.then(() => setConfigureIndex(null));
 	};
+    useHealthPresetNavigation(active, compact, activeShowId, cards, activate);
 	return {
 		active,
 		compact,

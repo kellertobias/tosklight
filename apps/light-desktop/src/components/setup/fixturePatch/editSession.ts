@@ -33,7 +33,7 @@ export function armEdit(
 	beginFixtureEdit(controller, fixture, kind, axis);
 }
 
-function beginFixtureEdit(
+export function beginFixtureEdit(
 	controller: PatchController,
 	fixture: PatchedFixture,
 	kind: Exclude<EditKind, null>,

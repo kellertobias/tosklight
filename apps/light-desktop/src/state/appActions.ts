@@ -246,6 +246,7 @@ export type Action =
 			type: "SET_MODAL";
 			modal:
 				| "setupOpen"
+                | "showHealthOpen"
 				| "specialDialogsOpen"
 				| "systemControlsOpen"
 				| "preloadStoreOpen"

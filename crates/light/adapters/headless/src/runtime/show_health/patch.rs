@@ -1,0 +1,251 @@
+use super::*;
+use light_core::FixtureId;
+use light_fixture::{PatchedFixture, SplitPatch};
+use std::collections::BTreeMap;
+
+type Slots = HashMap<(u16, u16), (String, String)>;
+
+pub(super) fn findings(
+    document: &PortableShowDocument,
+    runtime: &EngineSnapshot,
+) -> Vec<ShowHealthFinding> {
+    let records = document
+        .objects_of_kind("patched_fixture")
+        .filter_map(|object| {
+            let patch = light_fixture::PortablePatchedFixtureRecord::decode(object.body().clone())
+                .ok()?
+                .patch()
+                .ok()?;
+            Some((patch.fixture_id, object))
+        })
+        .collect::<HashMap<_, _>>();
+    let mut scanner = Scanner {
+        result: Vec::new(),
+        occupied: HashMap::new(),
+        overlaps: HashSet::new(),
+        routed: runtime
+            .routes
+            .iter()
+            .filter(|route| route.enabled)
+            .map(|route| route.logical_universe)
+            .collect(),
+    };
+    for fixture in runtime.fixtures.iter() {
+        if let Some(object) = records.get(&fixture.fixture_id) {
+            scanner.fixture(object, fixture);
+        }
+    }
+    scanner.result
+}
+
+struct Scanner {
+    result: Vec<ShowHealthFinding>,
+    occupied: Slots,
+    overlaps: HashSet<(String, String)>,
+    routed: HashSet<u16>,
+}
+
+impl Scanner {
+    fn fixture(&mut self, object: &PortableShowObject, fixture: &PatchedFixture) {
+        let label = format!(
+            "Fixture {} {}",
+            fixture
+                .fixture_number
+                .map(|n| n.to_string())
+                .unwrap_or_else(|| fixture.fixture_id.0.to_string()),
+            fixture.name
+        );
+        self.position(object, fixture, &label);
+        if matches!(
+            fixture.definition.patch_policy(),
+            light_fixture::PatchPolicy::VisualOnly | light_fixture::PatchPolicy::Internal
+        ) {
+            return;
+        }
+        let footprints = fixture.definition.split_footprints();
+        self.instance(
+            object,
+            fixture.fixture_id,
+            &label,
+            None,
+            &normalized(
+                &fixture.split_patches,
+                fixture.universe,
+                fixture.address,
+                &footprints,
+            ),
+            &footprints,
+        );
+        for instance in &fixture.multipatch {
+            self.instance(
+                object,
+                fixture.fixture_id,
+                &label,
+                Some(instance.id),
+                &normalized(
+                    &instance.split_patches,
+                    instance.universe,
+                    instance.address,
+                    &footprints,
+                ),
+                &footprints,
+            );
+        }
+    }
+
+    fn position(&mut self, object: &PortableShowObject, fixture: &PatchedFixture, label: &str) {
+        let body = object.body();
+        if body.get("location").is_none_or(|location| {
+            !["x", "y", "z"]
+                .iter()
+                .all(|axis| location[*axis].is_number())
+        }) {
+            self.result.push(finding(
+                object,
+                "position-missing",
+                ShowHealthSeverity::Warning,
+                format!("{label} has no valid stored Stage position."),
+                Some(fixture.fixture_id.0),
+                false,
+            ));
+        } else if fixture.location == light_fixture::FixtureLocation::default()
+            && fixture.position_master.is_none()
+        {
+            self.result.push(finding(
+                object,
+                "position-origin",
+                ShowHealthSeverity::Info,
+                format!(
+                    "{label} is at the Stage origin; verify placement. Origin can be intentional."
+                ),
+                Some(fixture.fixture_id.0),
+                false,
+            ));
+        }
+    }
+
+    fn instance(
+        &mut self,
+        object: &PortableShowObject,
+        owner: FixtureId,
+        label: &str,
+        instance: Option<Uuid>,
+        patches: &[SplitPatch],
+        footprints: &BTreeMap<u16, u16>,
+    ) {
+        let instance_label = instance.map_or_else(|| "primary".into(), |id| id.to_string());
+        let mut push = |key: String, severity, message| {
+            let mut row = finding(object, &key, severity, message, Some(owner.0), false);
+            row.multipatch_instance_id = instance;
+            self.result.push(row);
+        };
+        let mut assigned = HashSet::new();
+        for patch in patches {
+            let key = format!("{instance_label}:{}", patch.split);
+            if !assigned.insert(patch.split) {
+                push(
+                    format!("duplicate:{key}"),
+                    ShowHealthSeverity::Error,
+                    format!("{label} repeats split {} in {instance_label}.", patch.split),
+                );
+            }
+            let Some(footprint) = footprints.get(&patch.split) else {
+                push(
+                    format!("split:{key}"),
+                    ShowHealthSeverity::Error,
+                    format!("{label} has an unknown patch split {}.", patch.split),
+                );
+                continue;
+            };
+            let (Some(universe), Some(address)) = (patch.universe, patch.address) else {
+                let (severity, message) = if patch.universe.is_some() || patch.address.is_some() {
+                    (
+                        ShowHealthSeverity::Error,
+                        format!(
+                            "{label} · {instance_label} split {} needs both universe and address, or neither.",
+                            patch.split
+                        ),
+                    )
+                } else {
+                    (
+                        ShowHealthSeverity::Info,
+                        format!(
+                            "{label} · {instance_label} split {} is unpatched; it remains programmable in the show.",
+                            patch.split
+                        ),
+                    )
+                };
+                push(format!("unpatched:{key}"), severity, message);
+                continue;
+            };
+            let end = u32::from(address) + u32::from(*footprint).saturating_sub(1);
+            if address == 0 || end > 512 {
+                push(
+                    format!("bounds:{key}"),
+                    ShowHealthSeverity::Error,
+                    format!(
+                        "{label} patch {universe}.{address} extends outside DMX slots 1 to 512."
+                    ),
+                );
+            }
+            if !self.routed.contains(&universe) {
+                push(
+                    format!("route:{key}"),
+                    ShowHealthSeverity::Warning,
+                    format!("{label} uses universe {universe}, which has no enabled output route."),
+                );
+            }
+            let identity = format!("{}:{key}", object.key().id());
+            for channel in address.max(1)..=end.min(512) as u16 {
+                if let Some((previous, previous_label)) =
+                    self.occupied.get(&(universe, channel)).cloned()
+                {
+                    if self.overlaps.insert((previous.clone(), identity.clone())) {
+                        push(
+                            format!("overlap:{previous}:{key}"),
+                            ShowHealthSeverity::Warning,
+                            format!(
+                                "DMX overlap on universe {universe}, slot {channel}: {label} ({instance_label}) and {previous_label}."
+                            ),
+                        );
+                    }
+                } else {
+                    self.occupied.insert(
+                        (universe, channel),
+                        (identity.clone(), format!("{label} ({instance_label})")),
+                    );
+                }
+            }
+        }
+        for split in footprints.keys().filter(|split| !assigned.contains(split)) {
+            push(
+                format!("missing-split:{instance_label}:{split}"),
+                ShowHealthSeverity::Error,
+                format!(
+                    "{label} has no assignment for expected split {split} in {instance_label}."
+                ),
+            );
+        }
+    }
+}
+
+fn normalized(
+    patches: &[SplitPatch],
+    universe: Option<u16>,
+    address: Option<u16>,
+    footprints: &BTreeMap<u16, u16>,
+) -> Vec<SplitPatch> {
+    if !patches.is_empty() {
+        return patches.to_vec();
+    }
+    let split = if footprints.len() == 1 {
+        *footprints.keys().next().unwrap()
+    } else {
+        1
+    };
+    vec![SplitPatch {
+        split,
+        universe,
+        address,
+    }]
+}

@@ -189,6 +189,7 @@ pub enum GroupManagementOperation {
     /// Declared as an empty struct variant so `deny_unknown_fields` still applies; serde does not
     /// enforce it for an internally tagged unit variant.
     Undo {},
+    RemoveMissingFixtures {},
     RefreshFrozen {
         #[ts(optional = nullable)]
         expected_source: Option<GroupSourceExpectation>,

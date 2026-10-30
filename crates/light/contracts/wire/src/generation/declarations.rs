@@ -43,6 +43,7 @@ use crate::v2::runtime::*;
 use crate::v2::schedules::*;
 use crate::v2::screen_configuration::*;
 use crate::v2::selective_import::*;
+use crate::v2::show_health::*;
 use crate::v2::show_library::*;
 use crate::v2::show_network::*;
 use crate::v2::show_objects::*;
@@ -244,6 +245,9 @@ fn visualization(config: &Config) -> Vec<String> {
         VisualizationDynamicStackEntry::decl(config),
         FixtureValueSource::decl(config),
         FixtureValueSourcesSnapshot::decl(config),
+        ShowHealthSeverity::decl(config),
+        ShowHealthFinding::decl(config),
+        ShowHealthSnapshot::decl(config),
         VisualizationLaneSnapshot::decl(config),
         VisualizationLaneDelta::decl(config),
         VisualizationServerMessage::decl(config),

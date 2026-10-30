@@ -1,0 +1,31 @@
+.show-health-window {
+	width: min(1000px, 95vw);
+	max-height: 90vh;
+	overflow: auto;
+}
+.show-health-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+}
+.show-health-window ul {
+	list-style: none;
+	padding: 0;
+}
+.show-health-window li {
+	border: 1px solid var(--border, #555);
+	border-left: 4px solid #6c9ebf;
+	padding: 10px;
+	margin: 8px 0;
+}
+.show-health-window li[data-severity="error"] {
+	border-left-color: #ef6868;
+}
+.show-health-window li[data-severity="warning"] {
+	border-left-color: #e7b758;
+}
+.show-health-badge {
+	display: block;
+	font-size: 11px;
+	opacity: 0.85;
+}

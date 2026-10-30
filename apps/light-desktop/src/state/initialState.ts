@@ -33,6 +33,7 @@ export const initialState: AppState = {
 	cueListSetTarget: null,
 	playbackSetArmed: false,
 	setupOpen: false,
+    showHealthOpen: false,
 	specialDialogsOpen: false,
 	specialDialogFamily: "Position",
 	systemControlsOpen: false,

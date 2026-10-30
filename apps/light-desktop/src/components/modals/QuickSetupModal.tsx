@@ -27,6 +27,7 @@ import { useApp } from "../../state/AppContext";
 import { saveAuthoredScreen, screenForAddAction } from "../setup/screenConfiguration";
 import { useShowIndicator } from "../shell/showIndicator";
 import { QuickSetupDialogs } from "./QuickSetupDialogs";
+import { ShowHealthEntry } from "../../features/showHealth/ShowHealthEntry";
 import { subscribeShowLoadRequest } from "./showLoadRequest";
 import { showPatchSummary } from "./showSummary";
 
@@ -648,6 +649,7 @@ function QuickSetupNavigation({ model }: { model: QuickSetupModel }) {
 	return (
 		<>
 			<div className="show-navigation-primary">
+                <ShowHealthEntry onOpen={() => { close(); dispatch({type:"SET_MODAL",modal:"showHealthOpen",value:true}); }} />
 				<Button onClick={() => openBuiltIn("patch")}>
 					<span className="show-navigation-icon" aria-hidden="true">
 						▦

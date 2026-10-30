@@ -69,11 +69,52 @@ fn apply_operation(
             group.mapping = None;
             Ok((group, None))
         }
+        GroupManagementOperation::RemoveMissingFixtures => {
+            remove_missing_fixtures(document, current).map(|group| (group, None))
+        }
         GroupManagementOperation::Undo => Err(ActionError::new(
             ActionErrorKind::Internal,
             "Undo is prepared from adapter-owned object history",
         )),
     }
+}
+
+fn remove_missing_fixtures(
+    document: &PortableShowDocument,
+    current: &GroupDefinition,
+) -> Result<GroupDefinition, ActionError> {
+    if current.frozen_from.is_some()
+        || matches!(current.source, Some(GroupFixtureSource::References { .. }))
+        || (current.source.is_none() && current.derived_from.is_some())
+    {
+        return Err(invalid(
+            "Only explicit, non-frozen Group membership can be cleaned automatically",
+        ));
+    }
+    let mut known = std::collections::HashSet::new();
+    for object in document.objects_of_kind("patched_fixture") {
+        let record = light_fixture::PortablePatchedFixtureRecord::decode(object.body().clone())
+            .map_err(|error| invalid(error.to_string()))?;
+        let patch = record.patch().map_err(|error| invalid(error.to_string()))?;
+        known.insert(patch.fixture_id);
+        known.extend(patch.logical_heads.iter().map(|head| head.fixture_id));
+    }
+    let mut group = current.clone();
+    let members = match &current.source {
+        Some(GroupFixtureSource::Explicit { fixture_ids }) => fixture_ids,
+        _ => &current.fixtures,
+    };
+    group.fixtures = members
+        .iter()
+        .copied()
+        .filter(|id| known.contains(id))
+        .collect();
+    if current.source.is_some() {
+        group.source = Some(GroupFixtureSource::Explicit {
+            fixture_ids: group.fixtures.clone(),
+        });
+    }
+    Ok(group)
 }
 
 fn validate_spatial_mapping(

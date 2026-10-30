@@ -46,7 +46,7 @@ export class HttpGroupManagementTransport implements GroupManagementTransport {
 		const headers = this.headers();
 		headers.set("content-type", "application/json");
 		headers.set("x-tosk-show", showId);
-		const url = `${this.baseUrl}/api/v2/groups/manage`;
+		const url = `${this.baseUrl}/api/v2/groups/${encodeURIComponent(request.groupId)}/update`;
 		let response: Response;
 		try {
 			response = await this.fetchImplementation(url, {

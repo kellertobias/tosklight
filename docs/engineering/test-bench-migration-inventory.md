@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **445 root cases across 134 files**.
+Default catalog: **449 root cases across 137 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -236,6 +236,7 @@ Default catalog: **445 root cases across 134 files**.
 | 134-screen-fullscreen-layout.spec.ts | TL714 fullscreen Screen fills width with compact unobstructed exit, normal chrome remains | repository contract | none | screen-fullscreen-layout | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 135-pool-tile-layout-geometry.spec.ts | @ui pool layouts switch between automatic squares and a viewport-filling fixed grid without hiding later addresses | repository contract | @ui | pool-tile-layout-geometry | standard failure evidence | parallel | pending-semantic-migration |
 | 136-pane-presentation-settings.spec.ts | PANE-001 @ui pane titles and square/fixed tile layouts are available in the catalog and survive a real server restart | repository contract | @ui | pane-presentation-settings | standard failure evidence | parallel | pending-semantic-migration |
+| 136-recorded-pane-scroll.spec.ts | @ui recorded Desktop pools restore independent slots after resize, delayed content and layout reload | repository contract | @ui | recorded-pane-scroll | standard failure evidence | parallel | pending-semantic-migration |
 | 137-playback-tile-modes.spec.ts | Playback tile modes retain authored sparse addresses, scroll and Solo outlines @ui | repository contract | @ui | playback-tile-modes | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
@@ -456,8 +457,11 @@ Default catalog: **445 root cases across 134 files**.
 | 98-media-settings-short-height.spec.ts | TL-455 @ui › switching sections starts the chosen section at its top (short and wide) | repository contract | @ui | media-settings-short-height | standard failure evidence | parallel | pending-semantic-migration |
 | 99-media-server-discovery.spec.ts | MEDIA-006 @api discovery describes every server by the current Media contract | repository contract | @api | media-server-discovery | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 99-media-server-discovery.spec.ts | MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Media Server apart | repository contract | @ui | media-server-discovery | standard failure evidence | parallel | pending-semantic-migration |
+| fixture-value-sources.spec.ts | @ui Fixture Sheet touch inspection reports the retained Programmer source | repository contract | @ui | fixture-value-sources | standard failure evidence | parallel | pending-semantic-migration |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
+| show-health.spec.ts | @ui Show Health finds a broken Group, fixes once, undoes and opens the exact Group | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
+| show-health.spec.ts | @ui Show Health reveals Fixtures from a cached Media tab and opens the exact location editor | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (software only) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 | show-load-browser.spec.ts | TL-542 @ui › folder browser and revision actions preserve source shows (hardware connected) | repository contract | @ui | show-load-browser | standard failure evidence | parallel | pending-semantic-migration |
 

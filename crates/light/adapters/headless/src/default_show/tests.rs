@@ -295,7 +295,10 @@ fn installs_the_generated_product_demo_as_the_default_show() {
     assert_eq!(store.objects("cue_list").unwrap().len(), 8);
     let media = store.objects("media_source").unwrap();
     assert_eq!(media.len(), 3);
-    let wall = media.iter().find(|object| object.body["name"] == "Stage LED Panels").unwrap();
+    let wall = media
+        .iter()
+        .find(|object| object.body["name"] == "Stage LED Panels")
+        .unwrap();
     assert_eq!(wall.body["advertisedSourceId"], 513);
     assert_eq!(wall.body["width"], 1536);
     assert_eq!(wall.body["height"], 512);

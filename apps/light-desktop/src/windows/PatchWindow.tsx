@@ -23,6 +23,7 @@ import {
 } from "../components/setup/useMediaServerDiscovery";
 import { PatchFeatureBoundary } from "../features/patch/PatchFeatureBoundary";
 import { useDesktopBridge } from "../platform/desktop";
+import { useHealthPatchTab } from "../features/showHealth/objectNavigation";
 import type { WindowProps } from "./windowTypes";
 
 export function PatchWindow({
@@ -34,6 +35,7 @@ export function PatchWindow({
 	paneId,
 }: WindowProps) {
 	const [tab, setTabState] = useState<ShowPatchView>(patchView);
+    useHealthPatchTab(active, compact, setTabState);
 	// A pending Import CSV; cleared on every view change so a remount never reopens it.
 	const [csvImportRequest, setCsvImportRequest] = useState(0);
 	// A pending Create Point from the Point encoder (TL-651); cleared the same way.

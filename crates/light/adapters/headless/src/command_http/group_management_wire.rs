@@ -16,6 +16,9 @@ pub(super) fn operation(
             )
         }
         wire::GroupManagementOperation::Undo {} => application::GroupManagementOperation::Undo,
+        wire::GroupManagementOperation::RemoveMissingFixtures {} => {
+            application::GroupManagementOperation::RemoveMissingFixtures
+        }
         wire::GroupManagementOperation::RefreshFrozen { expected_source } => {
             application::GroupManagementOperation::RefreshFrozen {
                 expected_source: expected_source.map(source_expectation),

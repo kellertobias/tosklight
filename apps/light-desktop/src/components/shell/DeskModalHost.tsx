@@ -9,6 +9,7 @@ import { StoreSettingsModal } from "../modals/StoreSettingsModal";
 import { RecordChoiceHost } from "../modals/RecordChoiceHost";
 import { SystemControlsModal } from "../modals/SystemControlsModal";
 import { UpdateWorkflow } from "../modals/UpdateWorkflow";
+import { ShowHealthModal } from "../../features/showHealth/ShowHealthModal";
 
 /** Shared desk workflows for Main and attached Screen surfaces. */
 export function DeskModalHost() {
@@ -16,6 +17,7 @@ export function DeskModalHost() {
 		<>
 			<PlaybackConfigurationRequestHost />
 			<QuickSetupModal />
+            <ShowHealthModal />
 			<DebugModal />
 			<SpecialDialogsModal />
 			<SystemControlsModal />

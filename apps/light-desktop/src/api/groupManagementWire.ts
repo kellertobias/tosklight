@@ -77,6 +77,7 @@ function encodeOperation(
 		};
 	}
 	if (operation.type === "undo") return { type: "undo" };
+    if (operation.type === "remove_missing_fixtures") return { type: "remove_missing_fixtures" };
 	if (operation.type === "set_spatial_mapping")
 		return { type: "set_spatial_mapping", mapping: operation.mapping };
 	if (operation.type === "remove_spatial_mapping")

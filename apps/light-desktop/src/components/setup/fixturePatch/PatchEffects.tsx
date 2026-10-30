@@ -2,10 +2,23 @@ import { useEffect } from "react";
 import type { PatchController } from "./controller";
 import { usePatchController } from "./controller";
 import { ensureSelectedSplitEdit } from "./editSession";
+import { beginFixtureEdit } from "./editSession";
+import { useHealthObjectNavigation } from "../../../features/showHealth/objectNavigation";
+import { useActiveShowId } from "../../../features/deskSnapshot/DeskSnapshotState";
+import { beginMultipatchEditFromContextMenu } from "./multipatchActions";
 import { deleteFixture, requestFixtureDelete } from "./fixtureActions";
 
 export function PatchEffects() {
 	const controller = usePatchController();
+    useHealthObjectNavigation("fixture", controller.props.active && !controller.props.compact, useActiveShowId(), (request) => {
+        const fixture = controller.data.all.find((fixture) => fixture.fixture_id === request.objectId);
+        if (!fixture) return false;
+        controller.ui.setActiveLayer(fixture.layer_id || "default");
+        const instance = fixture.multipatch?.find((instance) => instance.id === request.multipatchInstanceId);
+        controller.patch.selectPatchInstance({fixtureId: fixture.fixture_id, multipatchInstanceId: instance?.id ?? null});
+        if (instance) beginMultipatchEditFromContextMenu(controller, fixture, instance, request.field ?? "address");
+        else beginFixtureEdit(controller, fixture, request.field ?? "location"); return true;
+    });
 	useSelectedSplitSetEffect(controller);
 	usePatchDeleteKeys(controller);
 	return null;

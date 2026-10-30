@@ -19,6 +19,7 @@ export interface GroupSourceExpectation {
 export type GroupManagementOperation =
 	| { type: "update_properties"; properties: GroupPropertiesUpdate }
 	| { type: "undo" }
+	| { type: "remove_missing_fixtures" }
 	| { type: "refresh_frozen"; expectedSource: GroupSourceExpectation | null }
 	| { type: "detach_derived"; expectedSource: GroupSourceExpectation | null }
 	| { type: "set_spatial_mapping"; mapping: SpatialSelectionMapping }

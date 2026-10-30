@@ -1,4 +1,4 @@
-import type { FixtureValueSourcesSnapshot } from "./generated/light-wire";
+import type { FixtureValueSourcesSnapshot } from "../features/dmxDiagnostics/fixtureValueSources";
 import {
 	arrayAt,
 	booleanAt,

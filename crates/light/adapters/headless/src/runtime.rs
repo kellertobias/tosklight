@@ -236,6 +236,7 @@ mod show_commands;
 mod show_compile;
 mod show_compile_migrations;
 mod show_description;
+mod show_health;
 mod show_library;
 mod show_library_mutations;
 mod show_library_v2;

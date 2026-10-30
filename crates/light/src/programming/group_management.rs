@@ -26,6 +26,7 @@ pub enum GroupManagementOperation {
     UpdateProperties(GroupPropertiesUpdate),
     /// Restores the exact previous stored body from adapter-owned object history.
     Undo,
+    RemoveMissingFixtures,
     /// Recaptures the frozen membership from the current source Group.
     RefreshFrozen {
         expected_source: Option<GroupSourceExpectation>,
@@ -68,6 +69,7 @@ impl GroupManagementOperation {
             }
             Self::UpdateProperties(_)
             | Self::Undo
+            | Self::RemoveMissingFixtures
             | Self::SetSpatialMapping(_)
             | Self::RemoveSpatialMapping => None,
         }
@@ -82,6 +84,7 @@ impl GroupManagementOperation {
         match self {
             Self::UpdateProperties(_) => "update-group-properties",
             Self::Undo => "undo-group",
+            Self::RemoveMissingFixtures => "remove-missing-group-fixtures",
             Self::RefreshFrozen { .. } => "refresh-frozen-group",
             Self::DetachDerived { .. } => "detach-derived-group",
             Self::SetSpatialMapping(_) => "set-group-spatial-mapping",

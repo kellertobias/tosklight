@@ -25,6 +25,16 @@ Send rows are the show's network routes plus the desk's own announcements (ArtPo
 
 ![DMX output pane](../../assets/screenshots/panes/dmx.png)
 
+## Show Health
+
+Open the show menu and choose **Show Health** to inspect the active show. The menu entry shows a fresh count of errors, warnings, and information when opened, including after loading or saving. **Run check** captures the current stored show again; the timestamp identifies that capture. Checking does not change programming or output.
+
+Findings are grouped by severity and each has a **Go to** action. Patch findings open the relevant fixture or physical instance in Show Patch. Group findings open Group settings; Cuelist findings open that Cuelist; Preset findings open its button settings. The current checks cover DMX overlaps, split assignments, bounds and routing, position metadata, and Group, Cue and Preset references. A missing Preset source can retain recorded fallback values, and a frozen Group can retain its captured members after its source Group is deleted.
+
+Unpatched fixtures remain in the show and are information, not errors. Intentionally empty Groups are valid. A fixture at the Stage origin receives an informational **verify placement** note because origin can be an intentional position; missing or malformed stored position metadata receives a warning. Address overlaps receive warnings because shared addresses can be intentional.
+
+**Remove missing fixtures** is offered only for explicit, non-frozen Group membership. It removes deleted fixture references while retaining existing members in order, including unpatched fixtures and heads. One cleanup is one Group history step. **Undo last cleanup** restores its previous body; it refuses a changed Group rather than undoing another edit. Run the check again after an error or another show edit. Other findings require an operator decision in the relevant editor.
+
 ## Help
 
 The Help pane renders the same numbered Markdown catalog used to build this manual. Folder navigation selects a topic, safe relative images are loaded from Help assets, and desk buttons, keyboard keys, tables, and links receive their documentation styling. When live Help is enabled, the catalog refreshes automatically.

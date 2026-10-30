@@ -517,6 +517,7 @@ function useFixturePatchController(props: FixturePatchSetupProps) {
 		ui,
 		data,
 		props: {
+			active: props.active ?? true,
 			onView: props.onView,
 			stagePreviewOpen: props.stagePreviewOpen ?? false,
 			stagePreviewClearance: props.stagePreviewClearance ?? 0,

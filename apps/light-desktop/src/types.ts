@@ -264,6 +264,7 @@ export interface AppState {
 	cueListSetTarget: number | null;
 	playbackSetArmed: boolean;
 	setupOpen: boolean;
+    showHealthOpen: boolean;
 	specialDialogsOpen: boolean;
 	specialDialogFamily:
 		| "Color"

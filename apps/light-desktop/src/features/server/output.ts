@@ -8,6 +8,7 @@ export function createOutputActions(
 ): Pick<
 	ServerCapabilities,
 	| "readDmx"
+    | "readShowHealth"
 	| "readFixtureValueSources"
 	| "readOutputHealth"
 	| "resetChangeLeadTime"
@@ -21,6 +22,7 @@ export function createOutputActions(
 	const { api, setError, bootstrap, setOutputRoutes } = model;
 	return {
 		readDmx: () => api.mediaOutput.dmx(),
+        readShowHealth: () => api.mediaOutput.showHealth(),
 		readFixtureValueSources: (fixtureId) =>
 			api.mediaOutput.valueSources(fixtureId),
 		readOutputHealth: () => api.runtime.outputHealth(),

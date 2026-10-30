@@ -152,6 +152,7 @@ include!("citp_support.rs");
 include!("fixture_startup_tests.rs");
 include!("runtime_support.rs");
 include!("fixture_value_sources_tests.rs");
+include!("show_health_tests.rs");
 include!("startup_tests.rs");
 include!("highlight_schema_tests.rs");
 include!("highlight_timing_support.rs");

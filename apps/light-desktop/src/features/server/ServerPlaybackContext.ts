@@ -8,10 +8,11 @@ import type {
 } from "../../api/types";
 
 export interface ServerPlaybackContext {
+	readShowHealth?: () => Promise<import("../showHealth/contracts").ShowHealthSnapshot>;
 	readFixtureValueSources?: (
 		fixtureId: string,
 	) => Promise<
-		import("../../api/generated/light-wire").FixtureValueSourcesSnapshot
+		import("../dmxDiagnostics/fixtureValueSources").FixtureValueSourcesSnapshot
 	>;
 	readDmx: () => Promise<DmxSnapshot>;
 	readOutputHealth: () => Promise<OutputHealth>;
