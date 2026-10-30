@@ -4,7 +4,7 @@ Open **CAD** to prepare plans and elevations of the rig. Use **Elements > Drawin
 
 ## Prepare a print page
 
-Open **Plans**, then add a plan page from the viewport you want to print. Each page keeps that viewport's orientation and cut planes. Use the **+** menu in Plans to add a **Fixture list**. Tick the pages to include, then choose **Export to PDF**.
+Open **Plans**, then add a plan page from the viewport you want to print. Each page keeps that viewport's orientation and cut planes. Use the **+** menu in Plans to add a **Fixture list**. Tick the pages to include, then choose **Export to PDF**. For a channel hookup, instrument schedule, DMX sheet, pull lists or symbol key, use **Paperwork** in the patch sheet; see [Lighting paperwork](02-Fixtures-and-Patch/17-paperwork.md).
 
 The page's cogwheel controls fixture IDs, DMX patch labels, mounting hardware, drawings, and cut planes for that page. Drawing tools are unavailable while print pages are open.
 

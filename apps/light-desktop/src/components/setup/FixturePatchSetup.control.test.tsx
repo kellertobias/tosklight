@@ -1449,7 +1449,7 @@ describe("installed light-source appearance", () => {
 });
 
 describe("selected split selection and SET editing", () => {
-	it("keeps the four Patch title-action groups ordered and supports additive and range selection", () => {
+	it("keeps the Patch title-action groups ordered, Paperwork before the views, and supports additive and range selection", () => {
 		const second = splitFixture();
 		second.fixture_id = "fixture-18";
 		second.fixture_number = 18;
@@ -1507,6 +1507,7 @@ describe("selected split selection and SET editing", () => {
 			["Open Stage Renderer"],
 			["+ Add layer", "+ Add fixture", "+ Add multi-patch"],
 			["Delete"],
+			["Paperwork"],
 			["Fixtures", "Points", "Media Servers", "Tracking"],
 		]);
 		fireEvent.click(screen.getByRole("button", { name: "Open Stage Renderer" }));

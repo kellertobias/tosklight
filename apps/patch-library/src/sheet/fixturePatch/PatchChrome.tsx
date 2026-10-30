@@ -1,6 +1,7 @@
 import { CopyErrorButton, formatErrorDetails } from "@tosklight/ui";
 import { isVisualOnly } from "../patchUtils";
 import { Button, SelectField, SwitchField } from "@tosklight/ui";
+import { PaperworkDialog } from "../paperwork/PaperworkDialog";
 import { WindowHeader, WindowSettings } from "@tosklight/ui/window-kit";
 import { useState } from "react";
 import { TrashIcon } from "../../library/trashIcon";
@@ -62,8 +63,12 @@ export function PatchHeader() {
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
 	// Reading and checking a large model takes a moment, and its refusal says why: neither is silent.
 	const [importStatus, setImportStatus] = useState("");
+	const [paperworkOpen, setPaperworkOpen] = useState(false);
 	return (
 		<>
+		{paperworkOpen && (
+			<PaperworkDialog fixtures={controller.patch.fixtures} onClose={() => setPaperworkOpen(false)} />
+		)}
 		<WindowHeader
 			title={props.title}
 			settings
@@ -163,6 +168,16 @@ export function PatchHeader() {
 							active: ui.deleteArmed,
 							disabled: data.visible.length === 0,
 							onPress: () => ui.setDeleteArmed((armed) => !armed),
+						},
+					],
+				},
+				{
+					id: "paperwork",
+					actions: [
+						{
+							id: "paperwork",
+							label: "Paperwork",
+							onPress: () => setPaperworkOpen(true),
 						},
 					],
 				},

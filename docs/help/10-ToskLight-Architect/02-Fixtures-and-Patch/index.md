@@ -10,5 +10,6 @@ Build and patch the rig in either Architect or Control. Both use the same fixtur
 - [Inspect and configure the patch](06-patch-settings.md).
 - [Discover and patch Pixel outputs](07-media-server-connections.md).
 - [Edit the Architect patch views](08-architect-patch-views.md).
+- [Print lighting paperwork](17-paperwork.md): channel hookup, instrument schedule, DMX sheet, pull lists and symbol key.
 
 For a fixture that needs a new or corrected profile, use [Create and revise fixture profiles](10-edit-fixture-profiles.md). Calibration belongs either to the profile or to one installed unit; the linked chapters explain which to use.

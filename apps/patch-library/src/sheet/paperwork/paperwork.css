@@ -1,0 +1,115 @@
+.ui-modal-stack-layer > .paperwork-modal[role="dialog"] {
+	width: min(1180px, calc(100vw - 32px));
+	max-height: calc(100vh - 48px);
+	padding: 0;
+}
+
+.paperwork-body {
+	display: grid;
+	min-height: 0;
+	gap: 12px;
+	padding: 16px 24px 24px;
+}
+
+.paperwork-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 16px;
+}
+
+.paperwork-toolbar .ui-field {
+	min-width: 240px;
+}
+
+.paperwork-toolbar p,
+.paperwork-status,
+.paperwork-empty {
+	margin: 0;
+	color: var(--muted, #84919b);
+}
+
+.paperwork-scroll {
+	max-height: 60vh;
+	overflow: auto;
+	border: 1px solid var(--line, #29313a);
+	border-radius: 6px;
+}
+
+.paperwork-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-variant-numeric: tabular-nums;
+}
+
+.paperwork-table th,
+.paperwork-table td {
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line, #29313a);
+	text-align: left;
+	white-space: nowrap;
+}
+
+.paperwork-table th {
+	position: sticky;
+	top: 0;
+	background: var(--panel2, #141920);
+	color: var(--muted, #84919b);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+}
+
+.paperwork-table td.is-unpatched {
+	color: var(--amber, #ffb30f);
+	font-weight: 700;
+}
+
+.paperwork-print {
+	display: none;
+}
+
+@media print {
+	body > :not(.paperwork-print) {
+		display: none !important;
+	}
+
+	.paperwork-print {
+		display: block;
+		color: #000;
+		background: #fff;
+		font: 10pt/1.35 Inter, system-ui, sans-serif;
+	}
+
+	.paperwork-print h1 {
+		margin: 0 0 2mm;
+		font-size: 16pt;
+	}
+
+	.paperwork-print header p {
+		margin: 0 0 5mm;
+		color: #444;
+	}
+
+	.paperwork-print .paperwork-table th {
+		position: static;
+		background: #eee;
+		color: #000;
+	}
+
+	.paperwork-print .paperwork-table th,
+	.paperwork-print .paperwork-table td {
+		padding: 1.5mm 2.5mm;
+		border-bottom: 0.2mm solid #999;
+		white-space: normal;
+	}
+
+	.paperwork-print .paperwork-table td.is-unpatched {
+		color: #000;
+		font-style: italic;
+	}
+
+	.paperwork-print tr {
+		break-inside: avoid;
+	}
+}

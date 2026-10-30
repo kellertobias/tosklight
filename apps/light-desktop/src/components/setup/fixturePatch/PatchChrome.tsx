@@ -1,3 +1,4 @@
+import { PaperworkDialog } from "@tosklight/patch/paperwork";
 import { Button } from "@tosklight/ui";
 import { WindowHeader } from "@tosklight/ui/window-kit";
 import { useState } from "react";
@@ -13,8 +14,15 @@ export function PatchHeader() {
 	const { data, ui, server, appState, props } = controller;
 	const selected = data.selected;
 	const [settingsAnchor, setSettingsAnchor] = useState<DOMRect | null>(null);
+	const [paperworkOpen, setPaperworkOpen] = useState(false);
 	return (
 		<>
+			{paperworkOpen && (
+				<PaperworkDialog
+					fixtures={controller.patch.fixtures}
+					onClose={() => setPaperworkOpen(false)}
+				/>
+			)}
 			<WindowHeader
 				title="Show Patch"
 				settings={!props.compact}
@@ -86,6 +94,16 @@ export function PatchHeader() {
 										},
 									]
 								: []),
+						],
+					},
+					{
+						id: "paperwork",
+						actions: [
+							{
+								id: "paperwork",
+								label: "Paperwork",
+								onPress: () => setPaperworkOpen(true),
+							},
 						],
 					},
 					...(props.onView
