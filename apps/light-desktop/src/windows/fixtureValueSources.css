@@ -9,7 +9,7 @@
 	align-items: center;
 	flex-wrap: wrap;
 }
-.fixture-source-controls select {
+.fixture-source-controls .ui-select-trigger {
 	min-height: 40px;
 	max-width: 65vw;
 }

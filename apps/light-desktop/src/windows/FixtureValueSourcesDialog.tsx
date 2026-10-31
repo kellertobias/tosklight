@@ -1,4 +1,9 @@
-import { Button, ModalPortal, ModalTitleBar } from "@tosklight/ui";
+import {
+	Button,
+	ModalPortal,
+	ModalTitleBar,
+	SelectField,
+} from "@tosklight/ui";
 import { useEffect, useState } from "react";
 import { useDmxDiagnostics } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import type { FixtureValueSourcesSnapshot } from "../features/dmxDiagnostics/fixtureValueSources";
@@ -117,20 +122,17 @@ export function FixtureValueSourcesDialog({
 				>
 					<ModalTitleBar title="Fixture value sources" onClose={onClose} />
 					<div className="fixture-source-controls">
-						<label>
-							Fixture{" "}
-							<select
-								aria-label="Inspect fixture"
-								value={fixtureId}
-								onChange={(event) => setFixtureId(event.target.value)}
-							>
-								{targets.map((target) => (
-									<option key={target.fixtureId} value={target.fixtureId}>
-										{target.id} · {target.name}
-									</option>
-								))}
-							</select>
-						</label>
+						<SelectField
+							label="Fixture"
+							ariaLabel="Inspect fixture"
+							labelPlacement="side"
+							value={fixtureId}
+							onChange={setFixtureId}
+							options={targets.map((target) => ({
+								value: target.fixtureId,
+								label: `${target.id} · ${target.name}`,
+							}))}
+						/>
 						<Button
 							disabled={loading || !fixtureId}
 							onClick={() => setRefresh((value) => value + 1)}

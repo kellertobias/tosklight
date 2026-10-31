@@ -31,7 +31,7 @@ test("@ui Fixture Sheet touch inspection reports the retained Programmer source"
 	).toBeVisible();
 	await page.setViewportSize({ width: 1024, height: 768 });
 	await expect(
-		dialog.getByRole("combobox", { name: "Inspect fixture" }),
+		dialog.getByRole("button", { name: "Inspect fixture" }),
 	).toBeVisible();
 	await expect(
 		dialog.getByRole("button", { name: "Refresh sources" }),
