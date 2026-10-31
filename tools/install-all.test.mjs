@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { artifactPaths } from "./artifact-paths.mjs";
 import {
+	assembleArchitectMac,
 	installLocations,
 	keepPreviousVersion,
 	PRODUCTS,
@@ -11,6 +13,57 @@ import {
 	revertToPreviousVersion,
 	selectedProducts,
 } from "./install-all.mjs";
+
+test("Architect installation assembles matching helpers and retains its packaged resources", {
+	skip: process.platform !== "darwin",
+}, (t) => {
+	fs.mkdirSync(artifactPaths.tmp, { recursive: true });
+	const root = fs.mkdtempSync(path.join(artifactPaths.tmp, "install-architect-"));
+	t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+	const release = path.join(root, "release");
+	const tmp = path.join(root, "staging");
+	const app = path.join(release, "bundle/macos/ToskLight Architect.app");
+	const macos = path.join(app, "Contents/MacOS");
+	const resources = path.join(app, "Contents/Resources");
+	const mcp = path.join(root, ".artifacts/build/patch-mcp/tosklight-patch-mcp.mjs");
+	for (const directory of [macos, tmp, path.dirname(mcp),
+		path.join(resources, "fixture-library"), path.join(resources, "demo-show")])
+		fs.mkdirSync(directory, { recursive: true });
+	fs.writeFileSync(path.join(macos, "viz-editor"), "matching editor");
+	fs.writeFileSync(path.join(release, "viz-renderer"), "matching renderer");
+	fs.writeFileSync(path.join(release, "light-headless"), "matching private show server");
+	fs.writeFileSync(mcp, "export const matchingMcp = true;\n");
+	fs.writeFileSync(path.join(resources, "fixture-library/lamp.toskfixture"), "matching profile");
+	fs.writeFileSync(path.join(resources, "demo-show/demo-show.show"), "matching demo");
+	const expected = [
+		["Contents/MacOS/ToskLight Architect", "matching editor"],
+		["Contents/MacOS/viz-renderer", "matching renderer"],
+		["Contents/MacOS/light-headless", "matching private show server"],
+		["Contents/Resources/tosklight-patch-mcp.mjs", "export const matchingMcp = true;\n"],
+		["Contents/Resources/fixture-library/lamp.toskfixture", "matching profile"],
+		["Contents/Resources/demo-show/demo-show.show", "matching demo"],
+	];
+	const assertComplete = () => {
+		for (const [relative, contents] of expected)
+			assert.equal(fs.readFileSync(path.join(app, relative), "utf8"), contents, relative);
+	};
+	let sealed = false;
+	const run = (command, args) => {
+		assert.equal(command, "bash");
+		if (args[0] === "tools/seal-macos-app.sh") {
+			assert.deepEqual(args.slice(1), [app]);
+			assertComplete();
+			sealed = true;
+			return;
+		}
+		assert.equal(args[0], "tools/bundle-visualizer-macos.sh");
+		const result = spawnSync(command, args, { encoding: "utf8" });
+		assert.equal(result.status, 0, result.stderr);
+	};
+	assert.equal(assembleArchitectMac(run, release, tmp, mcp), app);
+	assertComplete();
+	assert.equal(sealed, true, "the complete app is sealed after its resources are restored");
+});
 
 test("macOS installs each product as an app in the user's Applications folder", () => {
 	const locations = installLocations("darwin", { home: "/Users/operator" });

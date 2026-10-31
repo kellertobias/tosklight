@@ -238,14 +238,15 @@ async function main() {
 	run("node", ["tools/ensure-workspace-dependencies.mjs"]);
 
 	const built = {};
-	if (products.includes("control") || products.includes("architect"))
+	if (products.includes("control") || products.includes("architect")) {
+		run("node", ["tools/ensure-control-frontend.mjs"]);
 		cargo([
 			["light-headless", "light-headless"],
 			["viz-renderer", "viz-renderer"],
 		]);
+	}
 
 	if (products.includes("control")) {
-		run("node", ["tools/ensure-control-frontend.mjs"]);
 		const sidecars = path.join(tmp, "desktop-sidecars");
 		fs.mkdirSync(sidecars, { recursive: true });
 		for (const binary of ["light-headless", "viz-renderer"])
@@ -377,7 +378,12 @@ function hostTarget() {
 }
 
 /** Architect is one bundle: the editor as its executable and the renderer as the helper it starts. */
-function assembleArchitectMac(run, release, tmp) {
+export function assembleArchitectMac(
+	run,
+	release,
+	tmp,
+	mcpServer = path.join(repositoryRoot, ".artifacts", "build", "patch-mcp", "tosklight-patch-mcp.mjs"),
+) {
 	const bundles = path.join(release, "bundle", "macos");
 	const app = path.join(bundles, "ToskLight Architect.app");
 	const accessory = fs.mkdtempSync(path.join(tmp, "architect-"));
@@ -387,7 +393,8 @@ function assembleArchitectMac(run, release, tmp) {
 		"tools/bundle-visualizer-macos.sh",
 		path.join(accessory, "viz-editor"),
 		path.join(release, "viz-renderer"),
-		path.join(repositoryRoot, ".artifacts", "build", "patch-mcp", "tosklight-patch-mcp.mjs"),
+		path.join(release, "light-headless"),
+		mcpServer,
 		bundles,
 	]);
 	fs.copyFileSync(path.join(release, "light-headless"), path.join(app, "Contents", "MacOS", "light-headless"));
