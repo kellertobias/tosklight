@@ -26,6 +26,7 @@ pub mod programming;
 pub mod scheduling;
 pub mod selective_import;
 pub mod show_compiler;
+pub mod show_merge;
 pub mod show_patch;
 pub mod show_sync;
 pub mod speed_group;

@@ -3,6 +3,7 @@ mod cue_thumbnail;
 mod document;
 mod lossless_body;
 mod lossless_json;
+mod merge_base;
 mod migration;
 mod profile_revision;
 mod repository;
@@ -20,6 +21,7 @@ pub use document::{
 };
 pub use lossless_body::{LosslessBody, PortableJson};
 pub use lossless_json::{apply_delta, merge_typed, merge_typed_request, strip_zero_u64_echo};
+pub use merge_base::{MergeBaseObject, MergeLineage};
 pub use profile_revision::{
     FixtureProfileDigest, FixtureProfileRevision, FixtureProfileRevisionId,
     FixtureProfileRevisionInsertResult, FixtureProfileRevisionInsertStatus,
@@ -47,6 +49,8 @@ pub(crate) use store::{
 
 #[cfg(test)]
 mod candidate_tests;
+#[cfg(test)]
+mod merge_base_tests;
 #[cfg(test)]
 mod migration_tests;
 #[cfg(test)]
