@@ -103,6 +103,7 @@ export function Pane({
 			toolbar={
 				pane.kind === "file_manager" ||
 				pane.kind === "text_editor" ||
+				pane.kind === "fixtures" ||
 				pane.kind === "playbacks" ? (
 					<span className="pane-chrome-toolbar-target" ref={setChromeToolbar} />
 				) : undefined

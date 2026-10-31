@@ -156,14 +156,25 @@ for (const hardwareConnected of [false, true]) {
 			await save.getByRole("textbox", { name: "Show name", exact: true }).fill(copyName);
 			const base = save.getByRole("switch", { name: "Save as Template", exact: true });
 			await expect(base).not.toBeChecked();
-            const template = save.locator(".show-save-template");
-            const labelBox = await template.locator(":scope > label[for]").boundingBox();
-            const toggleBox = await template.locator(".ui-switch-track").boundingBox();
-            const fieldsBox = await save.locator(".show-save-fields").boundingBox();
-            if (!labelBox || !toggleBox || !fieldsBox) throw new Error("Template toggle must be visible");
-            expect(labelBox.x + labelBox.width).toBeLessThan(toggleBox.x);
-            expect(Math.abs(toggleBox.y + toggleBox.height / 2 - labelBox.y - labelBox.height / 2)).toBeLessThanOrEqual(1);
-            expect(Math.abs(fieldsBox.x + fieldsBox.width - 16 - toggleBox.x - toggleBox.width)).toBeLessThanOrEqual(1);
+			const template = save.locator(".show-save-template");
+			await expect(async () => {
+				// Folder loading can recenter the dialog; measure all bounds in one frame.
+				const bounds = await template.evaluate(node => {
+					const label = node.querySelector("label[for]")?.getBoundingClientRect();
+					const toggle = node.querySelector(".ui-switch-track")?.getBoundingClientRect();
+					const fields = node.closest(".show-save-fields")?.getBoundingClientRect();
+					if (!label || !toggle || !fields) throw new Error("Template toggle must be visible");
+					return {
+						labelRight: label.right,
+						toggleLeft: toggle.left,
+						centerOffset: Math.abs(toggle.y + toggle.height / 2 - label.y - label.height / 2),
+						rightInset: Math.abs(fields.right - 16 - toggle.right),
+					};
+				});
+				expect(bounds.labelRight).toBeLessThan(bounds.toggleLeft);
+				expect(bounds.centerOffset).toBeLessThanOrEqual(1);
+				expect(bounds.rightInset).toBeLessThanOrEqual(1);
+			}).toPass();
 			await base.locator("..").click();
 			await expect(base).toBeChecked();
 			await save.getByRole("button", { name: "Save as New Show", exact: true }).click();

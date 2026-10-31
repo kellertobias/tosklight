@@ -447,6 +447,7 @@ export function FixtureSheetWindowView({
 						secondary: info,
 					}}
 					settings
+					toolbar={sources}
 					onSettings={onSettings}
 				/>
 			)}
@@ -460,7 +461,7 @@ export function FixtureSheetWindowView({
 					Group runtime loading…
 				</p>
 			)}
-			{sources}
+			{compact && sources}
 			{table}
 			{groups}
 			{settings}

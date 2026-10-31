@@ -5,6 +5,8 @@ import {
 	SelectField,
 } from "@tosklight/ui";
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePaneChromeTargets } from "../components/shell/PaneChromeContext";
 import { useDmxDiagnostics } from "../features/dmxDiagnostics/DmxDiagnosticsContext";
 import type { FixtureValueSourcesSnapshot } from "../features/dmxDiagnostics/fixtureValueSources";
 import { useActiveShowId } from "../features/deskSnapshot/DeskSnapshotState";
@@ -25,20 +27,26 @@ export function FixtureSheetSources({
 	targets: SourceTargets;
 	selected: ReadonlySet<string>;
 }) {
+	const chrome = usePaneChromeTargets();
 	const [open, setOpen] = useState(false);
 	useEffect(() => {
 		if (!active) setOpen(false);
 	}, [active]);
+	const controls = (
+		<div className="fixture-source-toolbar">
+			<Button
+				disabled={!active || !targets.length}
+				onClick={() => setOpen(true)}
+			>
+				Value sources
+			</Button>
+		</div>
+	);
 	return (
 		<>
-			<div className="fixture-source-toolbar">
-				<Button
-					disabled={!active || !targets.length}
-					onClick={() => setOpen(true)}
-				>
-					Value sources
-				</Button>
-			</div>
+			{chrome
+				? chrome.toolbar && createPortal(controls, chrome.toolbar)
+				: controls}
 			{open && active && (
 				<FixtureValueSourcesDialog
 					targets={targets}
