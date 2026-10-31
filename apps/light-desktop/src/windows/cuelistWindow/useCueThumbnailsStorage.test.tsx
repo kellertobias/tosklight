@@ -38,7 +38,7 @@ const { PATCHED, EMPTY, STAGE_POSITION } = vi.hoisted(() => ({
 const mocks = vi.hoisted(() => ({
 	canDraw: true,
 	cueVisualization: vi.fn(),
-	migrateStagePosition: vi.fn(() => STAGE_POSITION),
+	physicalStagePosition: vi.fn(() => STAGE_POSITION),
 	previews: {
 		available: true,
 		canStore: true,
@@ -65,7 +65,7 @@ vi.mock("../../features/cueThumbnails/CueThumbnailActions", () => ({
 }));
 vi.mock("../stage3dScene", () => ({
 	cueVisualization: mocks.cueVisualization,
-	migrateStagePosition: mocks.migrateStagePosition,
+	physicalStagePosition: mocks.physicalStagePosition,
 	renderStageThumbnail: mocks.renderStageThumbnail,
 }));
 

@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => {
 		cueVisualization: vi.fn(),
 		desktopAvailable: true,
 		legacyPlaybackAccess,
-		migrateStagePosition: vi.fn(() => ({ x: 0, y: 0, z: 0 })),
+		physicalStagePosition: vi.fn(() => ({ x: 0, y: 0, z: 0 })),
 		renderStageThumbnail: vi.fn(),
 		server,
 	};
@@ -63,7 +63,7 @@ vi.mock("../../platform/desktop", () => ({
 }));
 vi.mock("../stage3dScene", () => ({
 	cueVisualization: mocks.cueVisualization,
-	migrateStagePosition: mocks.migrateStagePosition,
+	physicalStagePosition: mocks.physicalStagePosition,
 	renderStageThumbnail: mocks.renderStageThumbnail,
 }));
 
@@ -140,7 +140,7 @@ function wrapper(store: ShowObjectsStore) {
 beforeEach(() => {
 	mocks.cueVisualization.mockReset().mockImplementation((state) => state);
 	mocks.renderStageThumbnail.mockReset().mockReturnValue("thumbnail");
-	mocks.migrateStagePosition.mockClear();
+	mocks.physicalStagePosition.mockClear();
 	mocks.server.readVisualization.mockReset();
 	mocks.legacyPlaybackAccess.mockClear();
 	mocks.desktopAvailable = true;

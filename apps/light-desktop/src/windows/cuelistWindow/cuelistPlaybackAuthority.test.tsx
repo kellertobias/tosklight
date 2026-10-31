@@ -161,7 +161,7 @@ vi.mock("../../components/control/commandLine/useCommandLineSurface", () => ({
 }));
 vi.mock("../stage3dScene", () => ({
 	cueVisualization: vi.fn(),
-	migrateStagePosition: vi.fn(),
+	physicalStagePosition: vi.fn(),
 	renderStageThumbnail: vi.fn(),
 }));
 

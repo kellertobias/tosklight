@@ -3,6 +3,7 @@ export { mountFixtureModel } from "./stage3dScene/fixtureModel";
 export {
 	defaultStagePosition,
 	migrateStagePosition,
+	physicalStagePosition,
 } from "./stage3dScene/positions";
 export { buildFixtureProfileGeometryPreview } from "./stage3dScene/profileGeometry";
 export {

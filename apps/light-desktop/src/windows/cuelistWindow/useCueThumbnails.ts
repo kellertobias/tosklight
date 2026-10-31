@@ -21,10 +21,9 @@ import { useCueThumbnailActions } from "../../features/cueThumbnails/CueThumbnai
 import { useDesktopBridge } from "../../platform/desktop";
 import {
 	cueVisualization,
-
+	physicalStagePosition,
 	renderStageThumbnail,
 } from "../stage3dScene";
-import { physicalStagePosition } from "../stage3dScene/positions";
 import { cueStateHash, stageGeometryTag } from "./cueThumbnailState";
 
 const EMPTY_THUMBNAILS: Record<number, string> = {};
