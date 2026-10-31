@@ -687,6 +687,9 @@ export function ServerRuntime({
 		catalog: state.api.selectiveImport.catalog.bind(state.api.selectiveImport),
 		preview: state.api.selectiveImport.preview.bind(state.api.selectiveImport),
 		apply: state.api.selectiveImport.apply.bind(state.api.selectiveImport),
+		takeOfflineCopy: state.api.showMerge.takeOfflineCopy.bind(state.api.showMerge),
+		previewMerge: state.api.showMerge.preview.bind(state.api.showMerge),
+		applyMerge: state.api.showMerge.apply.bind(state.api.showMerge),
 		refreshCompatibilityState: refresh,
 		reportError: state.setError,
 	};

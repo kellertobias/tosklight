@@ -11,6 +11,7 @@ export { MvrImportPreview } from "./MvrImportPreview";
 
 import type { QuickSetupModel } from "./QuickSetupModal";
 import { SelectiveShowImportModal } from "./SelectiveShowImportModal";
+import { OfflineCopyDialog, ShowMergeModal } from "./ShowMergeDialogs";
 import { StackedModal } from "./StackedModal";
 
 interface ModelProps {
@@ -190,6 +191,29 @@ function SelectiveImportDialog({ model }: ModelProps) {
 			/>
 		</StackedModal>
 	);
+}
+
+function OfflineCopyDialogs({ model }: ModelProps) {
+	const { activeShow } = model.view;
+	const { lifecycle } = model.authorities;
+	const dialogs = model.dialogs;
+	if (!activeShow) return null;
+	if (dialogs.offlineCopyOpen)
+		return (
+			<OfflineCopyDialog
+				activeShow={activeShow}
+				onClose={() => dialogs.setOfflineCopyOpen(false)}
+			/>
+		);
+	if (dialogs.mergeOpen)
+		return (
+			<ShowMergeModal
+				activeShow={activeShow}
+				shows={lifecycle?.shows ?? []}
+				onClose={() => dialogs.setMergeOpen(false)}
+			/>
+		);
+	return null;
 }
 
 function MvrShowPicker({ model }: ModelProps) {
@@ -383,6 +407,7 @@ export function QuickSetupDialogs({ model }: ModelProps) {
 			<OverwriteDialog model={model} />
 			<LoadDialog model={model} />
 			<SelectiveImportDialog model={model} />
+			<OfflineCopyDialogs model={model} />
 			<NewShowDialog model={model} />
 			<MvrDialog model={model} />
 			<ShutdownDialog model={model} />

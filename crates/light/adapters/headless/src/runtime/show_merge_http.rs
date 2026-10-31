@@ -308,24 +308,49 @@ fn preview_wire(
 }
 
 fn conflict_wire(conflict: &MergeConflict, copy: &MergeObjects) -> wire::ShowMergeConflict {
-    let name = |body: Option<&serde_json::Value>| {
-        body.and_then(|body| body.get("name"))
-            .and_then(serde_json::Value::as_str)
-            .filter(|name| !name.is_empty())
-            .map(str::to_owned)
+    let text = |body: Option<&serde_json::Value>, field: &str| {
+        body.and_then(|body| body.get(field))
+            .and_then(|value| match value {
+                serde_json::Value::String(text) if !text.is_empty() => Some(text.clone()),
+                serde_json::Value::Number(number) => Some(number.to_string()),
+                _ => None,
+            })
     };
-    let whole = conflict.path.is_empty();
+    let body = copy.get(&conflict.key).or(conflict.mine.as_ref());
+    let number = ["pool_number", "fixture_number", "number"]
+        .into_iter()
+        .find_map(|field| text(body, field));
     wire::ShowMergeConflict {
         id: conflict.id.clone(),
         kind: conflict.key.kind().to_owned(),
         object_id: conflict.key.id().to_owned(),
-        object_name: name(copy.get(&conflict.key))
-            .or_else(|| whole.then(|| name(conflict.mine.as_ref())).flatten()),
-        path: conflict.path.clone(),
+        object_number: number,
+        object_name: text(body, "name"),
+        path: conflict
+            .path
+            .iter()
+            .map(|segment| readable_segment(segment, copy))
+            .collect(),
         base: conflict.base.clone(),
         mine: conflict.mine.clone(),
         theirs: conflict.theirs.clone(),
     }
+}
+
+/// A list element is identified by ids such as `fixture_id|attribute`; the operator reads
+/// "Fixture 12 intensity".
+fn readable_segment(segment: &str, copy: &MergeObjects) -> String {
+    segment
+        .split('|')
+        .map(|part| {
+            let fixture = PortableShowObjectKey::new("patched_fixture", part);
+            copy.get(&fixture)
+                .and_then(|body| body.get("fixture_number"))
+                .and_then(serde_json::Value::as_u64)
+                .map_or_else(|| part.to_owned(), |number| format!("Fixture {number}"))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn context(session: &Session) -> ActionContext {

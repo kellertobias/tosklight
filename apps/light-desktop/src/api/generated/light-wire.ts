@@ -1892,6 +1892,10 @@ export type ShowMergeLineage = { copy_show_id: string, copy_name: string, source
 export type ShowMergeKindSummary = { kind: string, added: number, changed: number, deleted: number, conflicts: number, };
 export type ShowMergeConflict = { id: string, kind: string, object_id: string,
 /**
+ * The number the operator knows the object by (pool, fixture or Macro number), when it has one.
+ */
+object_number: string | null,
+/**
  * The object's name in either version, when it has one.
  */
 object_name: string | null,

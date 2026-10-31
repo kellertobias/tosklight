@@ -306,6 +306,8 @@ function useQuickSetupDialogState() {
 	const usbShowPickerTrigger = useRef<(() => void) | null>(null);
 	const osShowPickerInput = useRef<HTMLInputElement | null>(null);
 	const [newShowOpen, setNewShowOpen] = useState(false);
+	const [offlineCopyOpen, setOfflineCopyOpen] = useState(false);
+	const [mergeOpen, setMergeOpen] = useState(false);
 	const [confirmShutdown, setConfirmShutdown] = useState(false);
 	const saveDestinationSubmit = useRef<{save(): Promise<void>; busy: boolean} | null>(null);
 	const [destination, setDestination] = useState<"local" | "flash">("local");
@@ -318,6 +320,10 @@ function useQuickSetupDialogState() {
 		destination,
 		loadOpen,
 		newShowOpen,
+		offlineCopyOpen,
+		setOfflineCopyOpen,
+		mergeOpen,
+		setMergeOpen,
 		osShowPickerInput,
 		overwriteBusy,
 		overwriteTarget,
@@ -405,6 +411,8 @@ function useQuickSetupModel() {
 			dialogs.selectiveImportClose.current?.();
 		else if (dialogs.loadOpen) dialogs.setLoadOpen(false);
 		else if (dialogs.newShowOpen) dialogs.setNewShowOpen(false);
+		else if (dialogs.offlineCopyOpen) dialogs.setOfflineCopyOpen(false);
+		else if (dialogs.mergeOpen) dialogs.setMergeOpen(false);
 		else if (dialogs.confirmShutdown) dialogs.setConfirmShutdown(false);
 		else close();
 	}
@@ -644,6 +652,16 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 				<Button onClick={() => dialogs.setNewShowOpen(true)}>
 					<span aria-hidden="true">＋</span> New Show
 				</Button>
+				{activeShow && (
+					<>
+						<Button onClick={() => dialogs.setOfflineCopyOpen(true)}>
+							<span aria-hidden="true">⇣</span> Take Offline Copy
+						</Button>
+						<Button onClick={() => dialogs.setMergeOpen(true)}>
+							<span aria-hidden="true">⇡</span> Merge Offline Copy
+						</Button>
+					</>
+				)}
 			</div>
 		</div>
 	);

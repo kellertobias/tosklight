@@ -13,6 +13,12 @@ import type {
 	SelectiveImportPreview,
 	SelectiveImportSelection,
 } from "../../api/selectiveImportModels";
+import type {
+	ShowMergeApplyResult,
+	ShowMergePreview,
+	ShowMergeResolution,
+} from "../../api/client/showMerge";
+import type { ShowEntry } from "../../api/types";
 import { useStableCallback } from "../shared/useStableCallback";
 
 export interface SelectiveImportSource {
@@ -32,13 +38,36 @@ export interface SelectiveImportSource {
 		sourceShowId: string,
 		request: SelectiveImportApplyRequest,
 	) => Promise<SelectiveImportOutcome>;
+	/** Offline copies of the open show and merging them back (TL-858). */
+	takeOfflineCopy?: (
+		name: string,
+		rootId: string,
+		path: string,
+	) => Promise<ShowEntry>;
+	previewMerge?: (
+		targetShowId: string,
+		copyShowId: string,
+		resolutions: ShowMergeResolution[],
+		signal?: AbortSignal,
+	) => Promise<ShowMergePreview>;
+	applyMerge?: (
+		targetShowId: string,
+		copyShowId: string,
+		expectedTargetRevision: number,
+		resolutions: ShowMergeResolution[],
+	) => Promise<ShowMergeApplyResult>;
 	refreshCompatibilityState: () => Promise<void>;
 	reportError: (error: string | null) => void;
 }
 
 export type SelectiveImportCapability = Pick<
 	SelectiveImportSource,
-	"catalog" | "preview" | "apply"
+	| "catalog"
+	| "preview"
+	| "apply"
+	| "takeOfflineCopy"
+	| "previewMerge"
+	| "applyMerge"
 >;
 
 const SelectiveImportContext = createContext<SelectiveImportCapability | null>(
@@ -70,9 +99,22 @@ export function SelectiveImportProvider({
 		},
 		[applyCommand, refresh, reportError],
 	);
+	const takeOfflineCopy = source.takeOfflineCopy;
+	const previewMerge = source.previewMerge;
+	const applyMergeCommand = source.applyMerge;
+	const applyMerge = useMemo(
+		() =>
+			applyMergeCommand &&
+			(async (...args: Parameters<typeof applyMergeCommand>) => {
+				const result = await applyMergeCommand(...args);
+				if (result.changed) await refresh();
+				return result;
+			}),
+		[applyMergeCommand, refresh],
+	);
 	const value = useMemo(
-		() => ({ catalog, preview, apply }),
-		[catalog, preview, apply],
+		() => ({ catalog, preview, apply, takeOfflineCopy, previewMerge, applyMerge }),
+		[catalog, preview, apply, takeOfflineCopy, previewMerge, applyMerge],
 	);
 	return (
 		<SelectiveImportContext.Provider value={value}>

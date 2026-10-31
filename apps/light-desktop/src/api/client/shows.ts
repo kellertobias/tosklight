@@ -270,7 +270,7 @@ export class ShowApiClient {
 	}
 }
 
-function showEntry(show: RuntimeShowEntry): ShowEntry {
+export function showEntry(show: RuntimeShowEntry): ShowEntry {
 	return {
 		...show,
 		revision_copy: show.revision_copy ?? undefined,

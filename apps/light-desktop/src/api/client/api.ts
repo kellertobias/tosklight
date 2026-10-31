@@ -16,6 +16,7 @@ import { ProgrammingApiClient } from "./programming";
 import { LightClientRuntime } from "./runtime";
 import { SchedulesApiClient } from "./schedules";
 import { SelectiveImportApiClient } from "./selectiveImport";
+import { ShowMergeApiClient } from "./showMerge";
 import { ShowObjectsApiClient } from "./showObjects";
 import { ShowApiClient } from "./shows";
 import { StageLayoutApiClient } from "./stageLayout";
@@ -51,6 +52,7 @@ export function createLightApi(baseUrl?: string) {
 		psn: new PsnApiClient(transport),
 		selectiveImport: new SelectiveImportApiClient(transport),
 		schedules: new SchedulesApiClient(transport),
+		showMerge: new ShowMergeApiClient(transport),
 		showObjects: new ShowObjectsApiClient(transport),
 		shows: new ShowApiClient(transport),
 		stageLayout: new StageLayoutApiClient(transport),

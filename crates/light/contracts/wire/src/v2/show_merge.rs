@@ -64,6 +64,8 @@ pub struct ShowMergeConflict {
     pub id: String,
     pub kind: String,
     pub object_id: String,
+    /// The number the operator knows the object by (pool, fixture or Macro number), when it has one.
+    pub object_number: Option<String>,
     /// The object's name in either version, when it has one.
     pub object_name: Option<String>,
     /// Where inside the object, outermost first; empty when the whole object conflicts.
