@@ -8,9 +8,15 @@ import { promisify } from "node:util";
 import { artifactPaths } from "./artifact-paths.mjs";
 
 const target = process.env.LIGHT_DESKTOP_SMOKE_TARGET;
+const executableOverride = process.env.LIGHT_DESKTOP_SMOKE_EXECUTABLE;
+if (executableOverride && process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR)
+	throw new Error(
+		"Choose either LIGHT_DESKTOP_SMOKE_EXECUTABLE or LIGHT_DESKTOP_SMOKE_PORTABLE_DIR.",
+	);
 if (
 	process.env.GITHUB_ACTIONS === "true" &&
 	!target &&
+	!executableOverride &&
 	!process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR
 )
 	throw new Error("LIGHT_DESKTOP_SMOKE_TARGET is required in CI.");
@@ -23,12 +29,14 @@ const buildDirectory = target
 const portableDirectory = process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR
 	? path.resolve(process.env.LIGHT_DESKTOP_SMOKE_PORTABLE_DIR)
 	: undefined;
-const executable = portableDirectory
-	? path.join(
-			portableDirectory,
-			process.platform === "win32" ? "ToskLight.exe" : "ToskLight",
-		)
-	: await packagedExecutable(buildDirectory);
+const executable = executableOverride
+	? path.resolve(executableOverride)
+	: portableDirectory
+		? path.join(
+				portableDirectory,
+				process.platform === "win32" ? "ToskLight.exe" : "ToskLight",
+			)
+		: await packagedExecutable(buildDirectory);
 const perUserDataDirectory = portableDirectory
 	? perUserApplicationData()
 	: undefined;
@@ -50,15 +58,22 @@ await fs.mkdir(artifactPaths.tmp, { recursive: true });
 const dataDirectory = portableDirectory
 	? path.join(portableDirectory, "data")
 	: await fs.mkdtemp(path.join(artifactPaths.tmp, "tosklight-ci-launch-"));
+const frontendReadyPath = path.join(dataDirectory, "frontend-ready.json");
+await fs.rm(frontendReadyPath, { force: true });
 const port = await freePort();
 const output = [];
+const {
+	LIGHT_DESKTOP_TEST_AUTO_EXIT: _ignoredAutoExit,
+	...desktopEnvironment
+} = process.env;
 const child = spawn(executable, [], {
 	cwd: path.resolve(import.meta.dirname, ".."),
 	detached: process.platform !== "win32",
 	env: {
-		...process.env,
+		...desktopEnvironment,
 		...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {}),
 		LIGHT_DESKTOP_TEST_BIND: `127.0.0.1:${port}`,
+		LIGHT_DESKTOP_TEST_READY_FILE: frontendReadyPath,
 		...(portableDirectory
 			? {}
 			: { LIGHT_DESKTOP_TEST_DATA_DIR: dataDirectory }),
@@ -76,7 +91,7 @@ for (const stream of [child.stdout, child.stderr]) {
 try {
 	await waitForReadiness(child, port);
 	console.log(
-		`Packaged ToskLight reached healthy readiness on ${process.platform}.`,
+		`Packaged ToskLight reached healthy readiness and mounted its native frontend on ${process.platform}.`,
 	);
 	if (portableDirectory) await verifyPortableState();
 } catch (error) {
@@ -173,14 +188,22 @@ async function waitForReadiness(child, port) {
 			);
 			if (response.ok) {
 				const readiness = await response.json();
-				if (readiness.status === "ready" && readiness.recovery_mode === false)
+				const frontend = JSON.parse(
+					await fs.readFile(frontendReadyPath, "utf8"),
+				);
+				if (
+					readiness.status === "ready" &&
+					readiness.recovery_mode === false &&
+					frontend.ready === true &&
+					frontend.server === `127.0.0.1:${port}`
+				)
 					return;
 			}
 		} catch {}
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
 	throw new Error(
-		"ToskLight did not reach healthy readiness within 60 seconds.",
+		"ToskLight did not reach healthy readiness and report its mounted frontend within 60 seconds.",
 	);
 }
 

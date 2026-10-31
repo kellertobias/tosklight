@@ -1,23 +1,34 @@
 ToskLight for macOS - first start
 =================================
 
-These testing builds are ad-hoc signed so macOS can verify that the application bundle is intact.
-They are not yet signed with an Apple Developer ID or notarized by Apple.
+Releases built with Apple distribution credentials are Developer ID signed and notarized.
+Testing builds made without these credentials are ad-hoc signed.
 
-After expanding the archive, first apply a fresh local ad-hoc signature on the Mac that will run
-the applications. This does not need an Apple Developer identity and does not publish anything:
+1. Expand the ZIP and move the application you want to use to Applications.
+2. Open the application. If macOS blocks a testing build, check that this archive came from the
+   expected GitHub release. Open System Settings > Privacy & Security, choose Open Anyway for
+   the application, and confirm Open. On macOS Sequoia and later, Control-click does not bypass
+   this approval.
+
+Optional local signing for testing builds
+----------------------------------------
+
+In Terminal, change into the expanded bundle and run:
 
   cd /path/to/tosklight-bundle-macos_arm64
   bash sign-macos-apps-locally.sh
 
-The script signs Desk, PreVIZ, and Media and verifies every completed bundle. It does not remove
-the download quarantine or disable Gatekeeper.
+For an individual app, pass its path instead:
 
-1. Move the application you want to use to Applications.
-2. In Finder, Control-click the application and choose Open.
-3. Confirm Open in the dialog. If macOS instead directs you to System Settings, open Privacy &
-   Security and use Open Anyway for ToskLight after checking that this archive came from the
-   expected GitHub release.
+  bash sign-macos-apps-locally.sh "/Applications/ToskLight.app"
 
-Do not remove quarantine attributes. If signing or verification fails, verify the archive against
-report-checksums.txt and download the newest release rather than overriding macOS security checks.
+The script recognizes Control, Architect, Pixel, and Hardware Controls when present. It keeps
+verified Developer ID signatures and applies local ad-hoc signatures to testing builds, including
+their helpers. It does not remove download quarantine or disable Gatekeeper. Local signing does
+not replace the Open Anyway approval. To undo local signing, replace the app with a fresh download.
+
+If signing or verification fails, verify the archive against report-checksums.txt and download a
+fresh release. Do not bypass an invalid-signature or damaged-application error.
+
+Pixel media import requires separately installed, working ffmpeg and ffprobe executables. They
+are not included in these downloads. A successful startup does not prove media import is available.

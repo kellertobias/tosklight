@@ -5,15 +5,19 @@ ToskLight ships as a desktop application with its own Light server, and as stand
 ## Desktop application
 
 1. Download `tosklight-bundle-macos_arm64.zip` from the matching GitHub release.
-2. Expand the ZIP. In Terminal, change into the expanded bundle and run `bash sign-macos-apps-locally.sh`. This applies and verifies fresh local ad-hoc signatures for ToskLight Control, ToskLight Architect, and ToskLight Pixel without an Apple Developer identity.
-3. Move the application you want to use to Applications.
-4. The testing build is not Developer-ID signed or notarized. Verify that the archive came from the expected GitHub release, then Control-click the application in Finder, choose **Open**, and confirm **Open**. If directed to System Settings, use **Privacy & Security > Open Anyway** for ToskLight.
+2. Expand the ZIP and move the application you want to use to Applications.
+3. Open the application. A release built with Apple distribution credentials is Developer ID signed and notarized. Testing builds use ad-hoc signatures instead. If macOS blocks a testing build, verify its download source, then open **System Settings > Privacy & Security**, choose **Open Anyway**, and confirm **Open**. On macOS Sequoia and later, Control-click does not bypass this approval.
+4. For optional local signing of a testing build, open Terminal in the expanded bundle and run `bash sign-macos-apps-locally.sh`. For an individually downloaded application, pass its path, for example `bash sign-macos-apps-locally.sh "/Applications/ToskLight.app"`. The script verifies existing Developer ID signatures and keeps them; other recognized ToskLight apps receive fresh ad-hoc signatures. Local signing does not replace macOS approval.
 5. Control's bundled server uses `127.0.0.1:5000`; open **Desk Setup > Network & Inputs** and confirm the active server URL.
 
 The signing script does not remove quarantine or disable Gatekeeper. If it fails, verify the ZIP
 against `report-checksums.txt` and use the newest release instead of overriding macOS security
 checks. The archive also includes `macos-first-start.txt` beside the applications for offline
 reference.
+
+Pixel media import requires separately installed, working `ffmpeg` and `ffprobe` executables. These
+dependencies are not included in the application downloads. Existing playback and application
+startup checks do not prove that importing new media is available on a machine without them.
 
 Double-click **tosklight-media-macos_arm64.app** to start ToskLight Pixel on the first display. Before the
 first valid DMX frame it shows the browser address and projector-alignment marks; its persistent

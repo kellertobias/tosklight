@@ -127,7 +127,6 @@ jobs:
           components: rustfmt, clippy
 
       - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
-        if: matrix.desktop
         with:
           version: v0.17.0
 
@@ -1063,6 +1062,18 @@ jobs:
         shell: bash
         run: npm ci
 
+      - name: Configure optional Apple distribution signing
+        if: runner.os == 'macOS' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY || secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: bash tools/macos-signing-credentials.sh setup
+
       - name: Resolve generated Help gallery path
         id: help-gallery
         shell: bash
@@ -1287,6 +1298,12 @@ jobs:
           if [[ "$SLUG" == "linux-amd64" ]]; then
             cp ".artifacts/build/cargo/$TARGET/release/light-benchmark" "$stage/"
           fi
+          if [[ "$RUNNER_OS" == "macOS" && "${LIGHT_MACOS_SIGNING_MODE:-adhoc}" == developer-id ]]; then
+            codesign --force --sign "$LIGHT_MACOS_SIGNING_IDENTITY" --keychain "$LIGHT_MACOS_KEYCHAIN" \
+              --timestamp --options runtime --entitlements tools/macos-audio.entitlements.plist \
+              "$stage/$HEADLESS_BINARY"
+            codesign --verify --strict "$stage/$HEADLESS_BINARY"
+          fi
           cp -R assets/fixture-library "$stage/fixture-library"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             (cd "$(dirname "$stage")" && 7z a -tzip "$OLDPWD/$out/light-headless-$version-$SLUG.zip" "$(basename "$stage")")
@@ -1402,8 +1419,10 @@ jobs:
             exit "$status"
           fi
 
+      # macOS verifies the editor from the extracted final download below. The hosted runner's
+      # clean app-data directory belongs to that check; do not populate it with a bare binary first.
       - name: Smoke-test the ToskLight Viz Editor application
-        if: matrix.viz
+        if: matrix.viz && runner.os != 'macOS'
         shell: bash
         env:
           TARGET: ${{ matrix.target }}
@@ -1552,6 +1571,38 @@ jobs:
           ${{ needs.metadata.outputs.version }}
           .artifacts/release
           .artifacts/release
+
+      - name: Notarize and staple macOS downloads when Apple credentials are configured
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID || secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+        run: bash tools/notarize-macos-release.sh .artifacts/release
+
+      - name: Verify extracted macOS download signatures and application startup
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          node --test tools/sign-macos-apps-locally.test.mjs tools/macos-signing.test.mjs tools/ci-smoke-macos-download.test.mjs
+          node tools/ci-smoke-macos-download.mjs .artifacts/release/tosklight-bundle-macos_arm64.zip
+
+      - name: Remove temporary Apple signing keychain
+        if: always() && runner.os == 'macOS'
+        shell: bash
+        run: bash tools/macos-signing-credentials.sh cleanup
+
+      - name: Preserve macOS download verification evidence
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-download-verification
+          path: |
+            .artifacts/release/macos-notarization*.json
+            .artifacts/tmp/macos-download-smoke-*/report.json
+            .artifacts/tmp/macos-download-smoke-*/*.log
+          if-no-files-found: ignore
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

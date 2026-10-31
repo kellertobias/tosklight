@@ -7,16 +7,19 @@ import { promisify } from "node:util";
 import { artifactPaths } from "./artifact-paths.mjs";
 
 const target = process.env.LIGHT_MEDIA_SMOKE_TARGET;
+const executableOverride = process.env.LIGHT_MEDIA_SMOKE_EXECUTABLE;
 const healthPort = Number(process.env.LIGHT_MEDIA_SMOKE_PORT ?? "8080");
 const configuration = process.env.LIGHT_MEDIA_SMOKE_CONFIG;
-if (process.env.GITHUB_ACTIONS === "true" && !target)
+if (process.env.GITHUB_ACTIONS === "true" && !target && !executableOverride)
 	throw new Error("LIGHT_MEDIA_SMOKE_TARGET is required in CI.");
 
 const suffix = process.platform === "win32" ? ".exe" : "";
 const buildDirectory = target
 	? path.join(artifactPaths.cargo, target, "release")
 	: path.join(artifactPaths.cargo, "release");
-const executable = path.join(buildDirectory, `media-server${suffix}`);
+const executable = executableOverride
+	? path.resolve(executableOverride)
+	: path.join(buildDirectory, `media-server${suffix}`);
 await fs.access(executable);
 await fs.mkdir(artifactPaths.tmp, { recursive: true });
 const runtimeDirectory = await fs.mkdtemp(
@@ -44,7 +47,9 @@ for (const stream of [child.stdout, child.stderr]) {
 
 try {
 	await waitForHealth(child);
-	console.log(`ToskLight Pixel reached healthy startup on ${process.platform}.`);
+	console.log(
+		`ToskLight Pixel reached healthy startup on ${process.platform}.`,
+	);
 } catch (error) {
 	const detail = output.join("").trim();
 	throw new Error(
@@ -92,16 +97,14 @@ async function waitForHealth(child) {
 			const interfaceResponse = await fetch(`http://127.0.0.1:${healthPort}/`, {
 				signal: AbortSignal.timeout(2_000),
 			});
-			if (
-				health?.status === "ok" &&
-				health.outputs > 0 &&
-				interfaceResponse.ok
-			)
+			if (health?.status === "ok" && health.outputs > 0 && interfaceResponse.ok)
 				return;
 		} catch {}
 		await new Promise((resolve) => setTimeout(resolve, 250));
 	}
-	throw new Error("Media Server did not reach healthy startup within 60 seconds.");
+	throw new Error(
+		"Media Server did not reach healthy startup within 60 seconds.",
+	);
 }
 
 async function terminateProcessTree(pid) {
