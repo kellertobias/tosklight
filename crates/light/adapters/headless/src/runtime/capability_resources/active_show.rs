@@ -178,6 +178,11 @@ impl ActiveShowResource {
         self.selective_import.undo(context, target, ports)
     }
 
+    /// Merges offline copies through the same ordered gate as every other show mutation.
+    pub(in crate::runtime) fn show_merge(&self) -> light_application::show_merge::ShowMergeService {
+        light_application::show_merge::ShowMergeService::new(self.service.clone())
+    }
+
     pub(in crate::runtime) fn apply_mvr_import<P: light_application::ShowPatchPorts>(
         &self,
         action: light_application::ActionEnvelope<light_application::ApplyActiveMvrImportCommand>,

@@ -240,6 +240,7 @@ mod show_health;
 mod show_library;
 mod show_library_mutations;
 mod show_library_v2;
+mod show_merge_http;
 mod show_mutation_backup;
 mod show_network;
 mod show_object_intents_v2;

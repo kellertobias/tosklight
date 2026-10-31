@@ -1850,7 +1850,7 @@ export type ShowLibraryAction = { "type": "create", name: string, data_base64: s
 /**
  * Replace an existing show file at the destination. The open show is never replaced.
  */
-overwrite: boolean, } | { "type": "export_mvr_file", show_id: string | null, data_base64: string | null, name: string, root_id: string, path: string, } | { "type": "save_copy_to_peer", instance: string, source_show_id: string, name: string, root_id: string, path: string, is_base_show: boolean, overwrite: boolean, } | { "type": "export_mvr_to_peer", instance: string, show_id: string, name: string, root_id: string, path: string, } | { "type": "set_base_show", show_id: string, is_base_show: boolean, } | { "type": "set_description", show_id: string, description: string, } | { "type": "create_from_base", show_id: string, name: string, } | { "type": "prepare_revision", show_id: string, revision: number, } | { "type": "import_from_desk", instance: string, show_id: string, revision: number | null, open: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "update_document", destination_show_id: string, expected_revision: number, data_base64: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "import_from_visualizer", instance: string, open: boolean, } | { "type": "apply_mvr", copy_conflicting_profiles: boolean, token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
+overwrite: boolean, } | { "type": "take_offline_copy", name: string, root_id: string, path: string, } | { "type": "export_mvr_file", show_id: string | null, data_base64: string | null, name: string, root_id: string, path: string, } | { "type": "save_copy_to_peer", instance: string, source_show_id: string, name: string, root_id: string, path: string, is_base_show: boolean, overwrite: boolean, } | { "type": "export_mvr_to_peer", instance: string, show_id: string, name: string, root_id: string, path: string, } | { "type": "set_base_show", show_id: string, is_base_show: boolean, } | { "type": "set_description", show_id: string, description: string, } | { "type": "create_from_base", show_id: string, name: string, } | { "type": "prepare_revision", show_id: string, revision: number, } | { "type": "import_from_desk", instance: string, show_id: string, revision: number | null, open: boolean, } | { "type": "open", show_id: string, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "open_default", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rollback", transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "rename", show_id: string, name: string, } | { "type": "overwrite", source_show_id: string, destination_show_id: string, } | { "type": "update_document", destination_show_id: string, expected_revision: number, data_base64: string, } | { "type": "save_revision", show_id: string, name: string, } | { "type": "open_revision", show_id: string, revision: number, transition: ShowOpenTransition, transition_millis: bigint | null, } | { "type": "import_from_visualizer", instance: string, open: boolean, } | { "type": "apply_mvr", copy_conflicting_profiles: boolean, token: string, destination: MvrImportDestination, resolutions: Array<MvrImportResolution>, };
 export type ShowOpenTransition = "hold_current" | "timed_fade" | "safe_blackout";
 export type MvrImportDestination = { "type": "new_show", name: string, open_after_import: boolean, } | { "type": "existing_show", show_id: string, };
 export type MvrImportResolution = { fixture_id: string, action: MvrImportResolutionAction, };
@@ -1880,6 +1880,37 @@ export type PreloadRecordAction = { "type": "preset", target_id: string, expecte
 export type PreloadPresetMode = "merge" | "overwrite" | "add_missing_fixtures";
 export type PreloadPresetFamily = "mixed" | "intensity" | "color" | "position" | "beam";
 export type ShowObjectActionOutcome = { request_id: string, replayed: boolean, show_id: string, show_revision: number, object: ShowObjectRecord, event_sequence?: number | null, };
+export type ShowMergeChoice = "mine" | "theirs";
+export type ShowMergeResolution = { conflict_id: string, choice: ShowMergeChoice, };
+export type ShowMergePreviewRequest = { resolutions: Array<ShowMergeResolution>, };
+export type ShowMergeApplyRequest = { request_id: string,
+/**
+ * The show revision the operator previewed; a changed show must be previewed again.
+ */
+expected_target_revision: number, resolutions: Array<ShowMergeResolution>, };
+export type ShowMergeLineage = { copy_show_id: string, copy_name: string, source_show_id: string, source_show_name: string, taken_at: string, };
+export type ShowMergeKindSummary = { kind: string, added: number, changed: number, deleted: number, conflicts: number, };
+export type ShowMergeConflict = { id: string, kind: string, object_id: string,
+/**
+ * The object's name in either version, when it has one.
+ */
+object_name: string | null,
+/**
+ * Where inside the object, outermost first; empty when the whole object conflicts.
+ */
+path: Array<string>, base: unknown, mine: unknown, theirs: unknown, };
+export type ShowMergeRenumber = { kind: string, from: string, to: string, name: string | null, };
+export type ShowMergeMacroWarning = { macro_id: string, name: string, mentions: Array<string>, };
+export type ShowMergePreview = { lineage: ShowMergeLineage, target_revision: number, summary: Array<ShowMergeKindSummary>,
+/**
+ * Objects both sides changed that merged without a conflict.
+ */
+auto_merged: number, write_count: number, conflicts: Array<ShowMergeConflict>, renumbers: Array<ShowMergeRenumber>, macro_warnings: Array<ShowMergeMacroWarning>, };
+export type ShowMergeApplyResult = { changed: boolean, show_revision: number,
+/**
+ * The named revision saved before the merge, so the show can be restored to it.
+ */
+safety_revision: number, written_objects: number, };
 export type ShowSyncTransactionRequest = {
 /**
  * Client-generated identity, kept by the client's journal across retries and restarts.

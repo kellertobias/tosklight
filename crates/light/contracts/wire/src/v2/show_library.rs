@@ -70,6 +70,13 @@ pub enum ShowLibraryAction {
         #[serde(default)]
         overwrite: bool,
     },
+    /// Saves a named revision of the open show and a copy of it that records the revision as its
+    /// merge base, so programming done offline in the copy can be merged back (TL-858).
+    TakeOfflineCopy {
+        name: String,
+        root_id: String,
+        path: String,
+    },
     ExportMvrFile {
         #[serde(default)]
         show_id: Option<Uuid>,

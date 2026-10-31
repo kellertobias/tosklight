@@ -18,6 +18,16 @@ pub(super) async fn save_show_revision(
             "revision name must contain 1-120 characters",
         ));
     }
+    let revision = store_named_revision(&state, &entry, input.name.trim())?;
+    Ok((StatusCode::CREATED, Json(revision)))
+}
+
+/// Saves the show as it is now as a named revision and announces it.
+pub(super) fn store_named_revision(
+    state: &AppState,
+    entry: &ShowEntry,
+    name: &str,
+) -> Result<ShowRevision, ApiError> {
     let directory = state
         .installation
         .data_dir()
@@ -31,7 +41,7 @@ pub(super) async fn save_show_revision(
         .map_err(ApiError::store)?;
     let revision = match state.installation.add_show_revision(
         entry.id,
-        input.name.trim(),
+        name,
         &destination.display().to_string(),
     ) {
         Ok(revision) => revision,
@@ -41,12 +51,13 @@ pub(super) async fn save_show_revision(
         }
     };
     emit(
-        &state,
+        state,
         "show_revision_saved",
         serde_json::json!({"show_id":entry.id,"revision":revision}),
     );
-    Ok((StatusCode::CREATED, Json(revision)))
+    Ok(revision)
 }
+
 pub(super) async fn open_show_revision(
     State(state): State<AppState>,
     Path((id, revision)): Path<(Uuid, u64)>,

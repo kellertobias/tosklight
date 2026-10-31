@@ -61,6 +61,24 @@ impl ActiveShowRepository {
         self.store.revision_copy_source()
     }
 
+    /// Records this file as an offline copy whose current objects are the merge base (TL-858).
+    pub(crate) fn record_merge_base(
+        &self,
+        lineage: &light_show::MergeLineage,
+    ) -> Result<usize, StoreError> {
+        self.store.record_merge_base(lineage)
+    }
+
+    pub(crate) fn merge_lineage(&self) -> Result<Option<light_show::MergeLineage>, StoreError> {
+        self.store.merge_lineage()
+    }
+
+    pub(crate) fn merge_base_objects(
+        &self,
+    ) -> Result<Vec<light_show::MergeBaseObject>, StoreError> {
+        self.store.merge_base_objects()
+    }
+
     pub(crate) fn portable_document(&self) -> Result<PortableShowDocument, StoreError> {
         self.store.portable_document()
     }

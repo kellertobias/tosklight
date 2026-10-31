@@ -42,6 +42,7 @@ pub(super) fn build(state: AppState) -> Router {
         .merge(psn_http::router())
         .merge(stage_layout_http::router())
         .merge(selective_import_http::router())
+        .merge(show_merge_http::router())
         .merge(operator_routes())
         .merge(fixture_api::router())
         .merge(media_and_output_routes())

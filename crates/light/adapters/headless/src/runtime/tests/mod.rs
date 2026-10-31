@@ -198,6 +198,8 @@ include!("spread_compatibility_tests.rs");
 #[path = "show_revision_source_tests.rs"]
 mod show_revision_source_tests;
 
+#[path = "show_merge_route_tests.rs"]
+mod show_merge_route_tests;
 #[path = "show_save_destination_tests.rs"]
 mod show_save_destination_tests;
 

@@ -48,6 +48,7 @@ pub mod screen_configuration;
 pub mod selective_import;
 pub mod show_health;
 pub mod show_library;
+pub mod show_merge;
 pub mod show_network;
 pub mod show_objects;
 pub mod show_sync;

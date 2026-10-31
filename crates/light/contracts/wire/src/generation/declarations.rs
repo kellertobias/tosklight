@@ -45,6 +45,7 @@ use crate::v2::screen_configuration::*;
 use crate::v2::selective_import::*;
 use crate::v2::show_health::*;
 use crate::v2::show_library::*;
+use crate::v2::show_merge::*;
 use crate::v2::show_network::*;
 use crate::v2::show_objects::*;
 use crate::v2::show_sync::*;
@@ -91,6 +92,7 @@ pub(super) fn all(config: &Config) -> Vec<String> {
     declarations.extend(visualizer_view(config));
     declarations.extend(selective_import(config));
     declarations.extend(show_library(config));
+    declarations.extend(show_merge(config));
     declarations.extend(show_sync(config));
     declarations.extend(interaction(config));
     declarations.extend(internal_audio(config));
@@ -990,6 +992,22 @@ fn stage_layout(config: &Config) -> Vec<String> {
         StageLayoutActionRequest::decl(config),
         StageLayoutActionOutcome::decl(config),
         StageLayoutErrorResponse::decl(config),
+    ]
+}
+
+fn show_merge(config: &Config) -> Vec<String> {
+    vec![
+        ShowMergeChoice::decl(config),
+        ShowMergeResolution::decl(config),
+        ShowMergePreviewRequest::decl(config),
+        ShowMergeApplyRequest::decl(config),
+        ShowMergeLineage::decl(config),
+        ShowMergeKindSummary::decl(config),
+        ShowMergeConflict::decl(config),
+        ShowMergeRenumber::decl(config),
+        ShowMergeMacroWarning::decl(config),
+        ShowMergePreview::decl(config),
+        ShowMergeApplyResult::decl(config),
     ]
 }
 

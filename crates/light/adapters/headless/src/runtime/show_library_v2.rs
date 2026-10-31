@@ -182,6 +182,13 @@ async fn execute_action(
             is_base_show,
             overwrite,
         ),
+        Action::TakeOfflineCopy {
+            name,
+            root_id,
+            path,
+        } => super::show_merge_http::take_offline_copy(state, headers, name, root_id, path)
+            .await
+            .map(show_result),
         Action::ExportMvrFile {
             show_id,
             data_base64,
