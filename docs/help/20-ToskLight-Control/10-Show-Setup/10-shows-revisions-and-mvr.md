@@ -39,6 +39,32 @@ For established internal shows, selecting an existing show as the destination op
 
 **Save Named Revision** creates an immutable restore point; ordinary edits continue to autosave. Create a revision before a large repatch or programming change.
 
+## Program offline and merge back
+
+Two programmers can work on one show at the same time on different desks and bring the work
+together afterwards.
+
+1. In the Show menu, press **Take Offline Copy**, name the copy and choose **Internal** or a USB
+   drive. The desk saves a named revision **Offline copy: <name>** of the open show and writes
+   the copy next to your other shows.
+2. Open and program the copy on another desk. Keep programming the original here if you like.
+3. Back on this desk, with the original open, press **Merge Offline Copy** and choose the copy.
+
+The merge compares the copy with the show as it was when the copy was taken:
+
+- Changes made on only one side are taken over without questions. A Cue changed on both sides for
+  different fixtures merges fixture by fixture.
+- Where both sides changed the same value differently, the list shows both values. Choose
+  **Keep Mine** or **Take Theirs** for each, or decide all at once.
+- When both sides stored the same Group or Preset number, both are kept: the copy's moves to the
+  next free number and everything in the copy that used it follows. Macros whose command text
+  names a moved number are listed so you can check them.
+
+**Merge** first saves a named revision **Before merging <copy>** and then applies every change in
+one step, so **[UND]** takes the whole merge back. If the show changes after you opened the
+preview, preview again. A show that is not an offline copy of the open show cannot be merged; use
+**Partial Load** to copy objects from it instead.
+
 ## Load a rig from Architect
 
 Choose **Network** in Load Show to find documents offered by Architect and other desks. Load the intended document to make it the active local show. An independently opened or saved `.show` copy stays independent.

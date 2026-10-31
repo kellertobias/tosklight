@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **454 root cases across 141 files**.
+Default catalog: **455 root cases across 142 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -242,6 +242,7 @@ Default catalog: **454 root cases across 141 files**.
 | 142-programming-mcp.spec.ts | TL-854 @api › the programming MCP tools select, color, aim and record a Cue on the shared desk command line | repository contract | @api | programming-mcp | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 143-patch-paperwork.spec.ts | TL-853 @ui › Patch Paperwork lists hookup and DMX sheet, marks unpatched fixtures and exports CSV | repository contract | @ui | patch-paperwork | standard failure evidence | parallel | pending-semantic-migration |
 | 144-timecode-song-analysis.spec.ts | TL-856 @ui › song analysis shows progress, a beat grid and suggested sections that become markers, and is cached | repository contract | @ui | timecode-song-analysis | standard failure evidence | parallel | pending-semantic-migration |
+| 145-show-merge.spec.ts | TL-858 @ui › an offline copy merges back: separate edits merge, a conflict is decided, a shared Group number is kept twice, and Undo reverts it | repository contract | @ui | show-merge | standard failure evidence | parallel | pending-semantic-migration |
 | 16-file-manager.spec.ts | FILE-017 @api › the selected Audio Player media library is browsable beside Shows | docs/testing/09-file-manager-and-text-editor.md | @api | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 16-file-manager.spec.ts | FILE-016 @api @failure-mode › confined file services authenticate, stream ranges, expose native capabilities, and resolve conflicts | docs/testing/09-file-manager-and-text-editor.md | @api @failure-mode | file-manager | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 19-manual-review-software-corrections.spec.ts | POOL-SQUARE @ui › Group Pool cards remain square through pane resize and maximize | docs/testing/10-desk-lock-and-operator-ui.md | @ui | manual-review-software-corrections | standard failure evidence | parallel | pending-semantic-migration |
