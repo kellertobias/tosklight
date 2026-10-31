@@ -1,5 +1,6 @@
 mod attribute_aliases;
 mod control_mappings;
+pub(crate) mod identity;
 mod objects;
 mod patch;
 mod patch_heads;
@@ -37,6 +38,7 @@ pub(super) fn stage_touched_object_migrations(
         .collect::<Vec<_>>();
     let mut staged = transaction.clone();
     super::dynamic_presets::stage_retention(document, &mut staged, None)?;
+    stage_written_identities(document, &mut staged, None)?;
     let updates = {
         let candidate = candidate(document, &staged)?;
         keys.iter()
@@ -47,6 +49,33 @@ pub(super) fn stage_touched_object_migrations(
     stage_updates(&mut staged, updates, None);
     candidate(document, &staged)?;
     *transaction = staged;
+    Ok(())
+}
+
+/// Keeps or assigns the instance identity of every Group and Preset the transaction writes.
+fn stage_written_identities(
+    document: &PortableShowDocument,
+    transaction: &mut PortableShowTransaction,
+    preserved: Option<&PortableShowObjectKey>,
+) -> Result<(), ActionError> {
+    let written = transaction
+        .object_writes()
+        .map(|(key, _)| key.clone())
+        .collect();
+    let updates = identity::collect(document, transaction, Some(&written))?;
+    stage_updates(transaction, updates, preserved);
+    Ok(())
+}
+
+/// Gives every Group and Preset in the show an instance identity. Written objects get theirs as
+/// they are staged; this stamps the objects nobody has written since identities were introduced,
+/// before a show is forked for offline programming.
+pub(crate) fn stage_instance_identities(
+    document: &PortableShowDocument,
+    transaction: &mut PortableShowTransaction,
+) -> Result<(), ActionError> {
+    let updates = identity::collect(document, transaction, None)?;
+    stage_updates(transaction, updates, None);
     Ok(())
 }
 
@@ -68,6 +97,7 @@ fn stage_candidate_migrations_preserving(
     let mut staged = transaction.clone();
     super::dynamic_presets::stage_retention(document, &mut staged, preserved)?;
     control_mappings::stage_removal_report(document, &mut staged)?;
+    stage_written_identities(document, &mut staged, preserved)?;
     stage_object_migrations(document, &mut staged, preserved)?;
     patch::stage_inline_migrations(document, &mut staged, preserved)?;
     patch::stage_lean_migrations(document, &mut staged, preserved)?;

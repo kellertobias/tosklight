@@ -14,7 +14,7 @@ pub use spatial_positions::compile_show_spatial_positions;
 mod tests;
 
 #[cfg(test)]
-pub(crate) use migrations::stage_candidate_migrations;
+pub(crate) use migrations::{stage_candidate_migrations, stage_instance_identities};
 pub use prepare::{
     PreparedShowCandidate, prepare_normalized_show_candidate_incremental, prepare_show_candidate,
 };
