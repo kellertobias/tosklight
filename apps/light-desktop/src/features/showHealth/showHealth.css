@@ -29,3 +29,9 @@
 	font-size: 11px;
 	opacity: 0.85;
 }
+.show-details > .show-health-entry {
+	display: grid;
+}
+.show-health-entry .ui-button {
+	justify-content: space-between;
+}

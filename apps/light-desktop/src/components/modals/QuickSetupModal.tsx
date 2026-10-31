@@ -608,6 +608,18 @@ function QuickSetupShowDetails({ model }: { model: QuickSetupModel }) {
 				</span>
 			</div>
 			<div className="show-status-line"><strong>Status</strong><span>Server {showIndicator.connected ? "connected" : "disconnected"} · Hardware {bootstrap?.hardware_connected ? "connected" : "disconnected"}</span></div>
+			<div className="show-health-entry">
+				<ShowHealthEntry
+					onOpen={() => {
+						model.actions.close();
+						model.app.dispatch({
+							type: "SET_MODAL",
+							modal: "showHealthOpen",
+							value: true,
+						});
+					}}
+				/>
+			</div>
 			<div className="show-facts">
 				<span>DMX universes <strong>{patchSummary.universes}</strong></span>
 				<span>IP address <strong>{serverAddress}</strong></span>
@@ -649,7 +661,6 @@ function QuickSetupNavigation({ model }: { model: QuickSetupModel }) {
 	return (
 		<>
 			<div className="show-navigation-primary">
-                <ShowHealthEntry onOpen={() => { close(); dispatch({type:"SET_MODAL",modal:"showHealthOpen",value:true}); }} />
 				<Button onClick={() => openBuiltIn("patch")}>
 					<span className="show-navigation-icon" aria-hidden="true">
 						▦

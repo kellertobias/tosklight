@@ -1,5 +1,6 @@
 import { Button } from "@tosklight/ui";
 import { healthCounts, useShowHealth } from "./useShowHealth";
+import "./showHealth.css";
 
 export function ShowHealthEntry({ onOpen }: { onOpen: () => void }) {
 	const check = useShowHealth();
