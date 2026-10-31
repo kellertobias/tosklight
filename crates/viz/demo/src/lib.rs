@@ -49,21 +49,50 @@ pub fn generate(_library: FixtureLibrary, destination: &Path) -> Result<Generate
     let bytes = std::fs::read(&source).map_err(|error| {
         DemoError::Document(format!("reading canonical {}: {error}", source.display()))
     })?;
-    if let Some(parent) = destination.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| DemoError::Document(error.to_string()))?;
-    }
-    std::fs::write(destination, bytes).map_err(|error| DemoError::Document(error.to_string()))?;
-    let document = PlanningDocument::open(destination)
+    // Opening a supported older show can migrate it. Validate a disposable copy so the
+    // delivered demo retains the canonical bytes, including its original revisions.
+    let validation = ValidationCopy::new(&bytes)?;
+    let document = PlanningDocument::open(validation.directory.join(DEMO_SHOW_FILE_NAME))
         .map_err(|error| DemoError::Document(error.to_string()))?;
     let snapshot = document
         .patch_snapshot()
         .map_err(|error| DemoError::Document(error.to_string()))?;
+    if let Some(parent) = destination.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| DemoError::Document(error.to_string()))?;
+    }
+    std::fs::write(destination, bytes).map_err(|error| DemoError::Document(error.to_string()))?;
     Ok(GeneratedShow {
         path: destination.to_owned(),
         name: DEMO_SHOW_NAME.to_owned(),
         fixtures: snapshot.fixtures.len(),
         profile_revisions: BTreeMap::new(),
     })
+}
+
+struct ValidationCopy {
+    directory: PathBuf,
+}
+
+impl ValidationCopy {
+    fn new(bytes: &[u8]) -> Result<Self, DemoError> {
+        let root = std::env::var_os("LIGHT_TMP_DIR").map_or_else(
+            || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp"),
+            PathBuf::from,
+        );
+        let directory = root.join(format!("viz-demo-validation-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory)
+            .map_err(|error| DemoError::Document(error.to_string()))?;
+        let validation = Self { directory };
+        std::fs::write(validation.directory.join(DEMO_SHOW_FILE_NAME), bytes)
+            .map_err(|error| DemoError::Document(error.to_string()))?;
+        Ok(validation)
+    }
+}
+
+impl Drop for ValidationCopy {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.directory);
+    }
 }
 
 #[cfg(test)]

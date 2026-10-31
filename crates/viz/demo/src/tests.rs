@@ -22,9 +22,10 @@ fn compatibility_generator_copies_the_canonical_asset_byte_for_byte() {
     let generated = generate(library_in(&directory), &destination).expect("canonical demo copies");
     assert_eq!(generated.fixtures, 312);
     assert_eq!(generated.name, DEMO_SHOW_NAME);
-    assert_eq!(
-        std::fs::read(destination).expect("copied demo"),
-        std::fs::read(canonical_demo_show()).expect("canonical demo")
+    assert!(
+        std::fs::read(destination).expect("copied demo")
+            == std::fs::read(canonical_demo_show()).expect("canonical demo"),
+        "demo validation must preserve the canonical SQLite bytes"
     );
 }
 

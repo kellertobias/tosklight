@@ -11,6 +11,7 @@ path = "src/bin/viz-demo-show.rs"
 [dependencies]
 light-fixture = { path = "../../shared/fixture" }
 viz-document = { path = "../document" }
+uuid.workspace = true
 
 [lints]
 workspace = true
