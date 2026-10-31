@@ -6,6 +6,7 @@ export interface LabelRequest {
 	lines: string[];
 	width: number;
 	height: number;
+	symbolBounds?: LabelBounds;
 }
 export interface PlacedLabel extends LabelRequest {
 	box: LabelBounds;
@@ -63,6 +64,15 @@ function placed(request: LabelRequest, box: LabelBounds): PlacedLabel {
 }
 function* candidates(request: LabelRequest, gap: number) {
 	const [x, y] = request.anchor;
+	const body = request.symbolBounds;
+	if (body) {
+		const right = body.x + body.width + gap, left = body.x - gap - request.width;
+		const above = body.y - gap - request.height, below = body.y + body.height + gap;
+		for (const [cx, cy] of [[right, y - request.height / 2], [left, y - request.height / 2],
+			[x - request.width / 2, above], [x - request.width / 2, below],
+			[right, above], [left, above], [right, below], [left, below]])
+			yield { x: cx, y: cy, width: request.width, height: request.height };
+	}
 	for (let ring = 0; ring < 7; ring++) {
 		const distance = 3 + ring * (request.height + gap);
 		for (const [cx, cy] of [
@@ -88,36 +98,19 @@ function nearestGridBox(request: LabelRequest, bounds: LabelBounds, index: Label
 	return best;
 }
 
-/** If a dense cluster exhausts nearby candidates, re-pack whole rows rather than hide its IDs. */
-function shelfLayout(requests: LabelRequest[], bounds: LabelBounds, gap: number): LabelLayout {
-	const labels: PlacedLabel[] = [];
-	const unplaced: LabelRequest[] = [];
-	let x = bounds.x, y = bounds.y, rowHeight = 0;
-	for (const request of requests) {
-		if (x + request.width > bounds.x + bounds.width) { x = bounds.x; y += rowHeight + gap; rowHeight = 0; }
-		const box = { x, y, width: request.width, height: request.height };
-		if (!contains(bounds, box)) { unplaced.push(request); continue; }
-		labels.push(placed(request, box));
-		x += request.width + gap;
-		rowHeight = Math.max(rowHeight, request.height);
-	}
-	return { labels, unplaced, intersectionChecks: 0 };
-}
-
-export function placeLabels(requests: readonly LabelRequest[], bounds: LabelBounds, gap = 1.5): LabelLayout {
+export function placeLabels(requests: readonly LabelRequest[], bounds: LabelBounds, gap = 1.5, obstacles: readonly LabelBounds[] = []): LabelLayout {
 	const ordered = [...requests].sort((a, b) => a.anchor[1] - b.anchor[1] || a.anchor[0] - b.anchor[0] || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
 	const index = new LabelIndex();
+	for (const obstacle of obstacles) index.add(obstacle);
 	const labels: PlacedLabel[] = [];
+	const unplaced: LabelRequest[] = [];
 	for (const request of ordered) {
 		const box = Array.from(candidates(request, gap)).find((candidate) => contains(bounds, candidate) && !index.collides(candidate, gap))
 			?? nearestGridBox(request, bounds, index, gap);
-		if (!box) {
-			const fallback = shelfLayout(ordered, bounds, gap);
-			return { ...fallback, intersectionChecks: index.checks };
-		}
+		if (!box) { unplaced.push(request); continue; }
 		index.add(box); labels.push(placed(request, box));
 	}
-	return { labels, unplaced: [], intersectionChecks: index.checks };
+	return { labels, unplaced, intersectionChecks: index.checks };
 }
 
 /** Conservative Helvetica-bold advances, plus a clear pad around the complete label. */

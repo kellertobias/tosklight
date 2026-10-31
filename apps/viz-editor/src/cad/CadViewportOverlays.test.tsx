@@ -7,6 +7,8 @@ afterEach(cleanup);
 const reference = "950 · Rear flybar · position reference";
 const entity = {
 	id: "fixture",
+	kind: "fixture", fixtureType: "moving_head", rotationDegrees: [0, 0, 0],
+	sizeMillimetres: [400, 400, 600], drawingId: "drawing",
 	logicalFixtureId: "fixture",
 	fixtureDisplayId: "117",
 	dmxAddress: "1.1",

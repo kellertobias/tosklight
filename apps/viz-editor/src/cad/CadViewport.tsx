@@ -438,6 +438,7 @@ export function CadViewport({
 			<CadEntityLabels
 				{...{
 					entities,
+					drawings,
 					preview,
 					view,
 					rotationQuarterTurns,
@@ -466,6 +467,7 @@ export function CadViewport({
 				{...{
 					printMode,
 					printPages,
+					drawings,
 					entities,
 					underlays,
 					camera,
@@ -482,6 +484,7 @@ export function CadViewport({
 }
 
 function CadViewportPrintFrames({
+	drawings,
 	printMode,
 	printPages = [],
 	entities,
@@ -497,6 +500,7 @@ function CadViewportPrintFrames({
 	CadViewportProps,
 	| "printMode"
 	| "printPages"
+	| "drawings"
 	| "rotationQuarterTurns"
 	| "entities"
 	| "underlays"
@@ -515,6 +519,7 @@ function CadViewportPrintFrames({
 					underlays={underlays}
 					page={page}
 					entities={entities}
+					drawings={drawings}
 					camera={camera}
 					viewportRotation={rotationQuarterTurns}
 					selected={page.id === selectedPrintPageId}

@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { CadDepthMenu } from "./CadDepthMenu";
 import { PRINT_BORDER_MM } from "./print";
 import {
-	type CadEntity,
+	type CadDrawing, type CadEntity,
 	type CadPrintPage,
 	type TileCamera,
 } from "./types";
@@ -112,6 +112,7 @@ export function PrintPageSettings({
 
 /// The fixture identities a page prints over its drawing, for the ones that land on the sheet.
 export function PrintPageLabels({
+	drawings = [],
 	page,
 	entities,
 	camera,
@@ -119,12 +120,13 @@ export function PrintPageLabels({
 	millimetrePixels,
 }: {
 	page: CadPrintPage;
+	drawings?: readonly CadDrawing[];
 	entities: readonly CadEntity[];
 	camera: TileCamera;
 	height: number;
 	millimetrePixels: number;
 }) {
-	const layout = useMemo(() => printFixtureLabelLayout(page, entities), [page, entities]);
+	const layout = useMemo(() => printFixtureLabelLayout(page, entities, drawings), [page, entities, drawings]);
 	if (!page.showFixtureIds && !page.showDmxAddresses) return null;
 	return <>
 		<svg className="cad-print-labels" aria-label="Fixture labels"
@@ -134,7 +136,6 @@ export function PrintPageLabels({
 				{layout.labels.map((label) => <line key={label.key} x1={label.leader[0][0]} y1={label.leader[0][1]} x2={label.leader[1][0]} y2={label.leader[1][1]} />)}
 			</g>
 			{layout.labels.map((label) => <g key={label.key} data-fixture-instance={label.key}>
-				<rect x={label.box.x} y={label.box.y} width={label.box.width} height={label.box.height} fill="#0b0d10" />
 				{label.lines.map((line, index) => <text key={index}
 					x={label.box.x + FIXTURE_LABEL_PADDING} y={label.box.y + FIXTURE_LABEL_PADDING + FIXTURE_LABEL_SIZE + index * FIXTURE_LABEL_LINE_HEIGHT}
 					fontFamily="Helvetica, Arial, sans-serif" fontSize={FIXTURE_LABEL_SIZE} fontWeight="bold" fill="#00b6eb">{line}</text>)}

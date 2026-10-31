@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { PrintPageLabels } from "./CadPrintPageParts";
 import { LABEL_CAPACITY_MESSAGE, boundsOverlap } from "./labelPlacement";
+import { fixtureLabelCommands } from "./printFixtureLabelCommands";
 import { buildCadPdf } from "./print";
 import { FIXTURE_LABEL_SIZE, printFixtureLabelLayout } from "./printFixtureLabels";
 import { printPageHeight } from "./types";
@@ -31,7 +32,10 @@ describe("complete fixture labels shared by paper and CAD", () => {
 		expect(layout.unplaced).toEqual([]);
 		expect(layout.labels).toHaveLength(157);
 		for (let i = 0; i < layout.labels.length; i++) for (const next of layout.labels.slice(i + 1)) expect(boundsOverlap(layout.labels[i].box, next.box)).toBe(false);
-		for (const { box } of layout.labels) expect(box.y + box.height).toBeLessThanOrEqual(layout.bounds.y + layout.bounds.height + 0.001);
+		for (const { box } of layout.labels) {
+			expect(box.y + box.height).toBeLessThanOrEqual(layout.bounds.y + layout.bounds.height + 0.001);
+			for (const obstacle of layout.obstacles) expect(boundsOverlap(box, obstacle)).toBe(false);
+		}
 		const pdf = new TextDecoder().decode(buildCadPdf(scene(entities), [page]));
 		expect([...pdf.matchAll(/\(ID \d+\) Tj/g)]).toHaveLength(157);
 		expect([...pdf.matchAll(/\(DMX 1\.\d+\) Tj/g)]).toHaveLength(157);
@@ -39,7 +43,20 @@ describe("complete fixture labels shared by paper and CAD", () => {
 		const { container } = render(<PrintPageLabels page={page} entities={entities} camera={{ pan: [0, 0], zoom: 0.05 }} height={printPageHeight(page)} millimetrePixels={3} />);
 		expect(container.querySelectorAll("[data-fixture-instance]")).toHaveLength(157);
 		expect(container.querySelectorAll("line")).toHaveLength(157);
+		expect(container.querySelector("rect")).toBeNull();
+		expect(fixtureLabelCommands(page, entities, (point) => point).some((command) => /re f/.test(command))).toBe(false);
 		expect(screen.queryByRole("status")).toBeNull();
+	});
+
+	it("keeps labels clear of neighbouring rotated lamp drawings, without blanking the drawing below", () => {
+		const entities = Array.from({ length: 24 }, (_, i) => fixture(i, {
+			positionMillimetres: [(i % 8 - 4) * 550, Math.floor(i / 8) * 450, 4000],
+			rotationDegrees: [0, 0, i * 15], sizeMillimetres: [500, 700, 600],
+		}));
+		const layout = printFixtureLabelLayout(page, entities);
+		expect(layout.unplaced).toEqual([]);
+		for (const label of layout.labels) for (const obstacle of layout.obstacles)
+			expect(boundsOverlap(label.box, obstacle, 1)).toBe(false);
 	});
 
 	it("keeps multi-patch copies as separate labels and excludes off-page or cut-away fixtures", () => {

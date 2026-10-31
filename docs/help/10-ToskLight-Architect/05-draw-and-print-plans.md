@@ -36,8 +36,8 @@ The default vector logo retains its blue accent in both.
 
 PDF plans retain vector fixture outlines and text, so zooming or printing does not depend on a
 bitmap export resolution. A supplied company logo retains the resolution of its uploaded image.
-Fixture IDs and DMX labels use collision-aware placement, with leader lines back to their lamps
-when needed. Print mode shows labels for the selected sheet, or the first included sheet when
+Fixture IDs and DMX labels use transparent, collision-aware placement that keeps text clear of
+the lamp drawings as well as other labels, with leader lines back to their lamps when needed. Print mode shows labels for the selected sheet, or the first included sheet when
 none is selected, while retaining the other page frames. If labels cannot fit at a readable size,
 the preview warns and export asks you to use closer framing or split the plan into pages.
 
