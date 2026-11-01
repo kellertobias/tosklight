@@ -485,7 +485,12 @@ describe("QuickSetupModal show workflows", () => {
     mocks.server.saveShowCopy.mockReset()
       .mockRejectedValueOnce(new Error("a file with that name already exists"))
       .mockResolvedValueOnce({name:"Encore"});
-    mocks.files.fileEntries.mockImplementation(async (_root: string, path: string) => ({entries:path ? [] : [{kind:"folder",name:"Tour folder",path:"Tour folder"}]}));
+    const refresh = loadDeferred<{entries: never[]}>();
+    let folderReads = 0;
+    mocks.files.fileEntries.mockImplementation(async (_root: string, path: string) => {
+      if (path === "Tour folder" && ++folderReads > 1) return refresh.promise;
+      return {entries:path ? [] : [{kind:"folder",name:"Tour folder",path:"Tour folder"}]};
+    });
     render(<QuickSetupModal />);
     fireEvent.click(screen.getByRole("button", {name:"Save As"}));
     const dialog = screen.getByRole("dialog", {name:"Save show"});
@@ -495,7 +500,16 @@ describe("QuickSetupModal show workflows", () => {
     await waitFor(() => expect(within(dialog).getByRole("button", {name:"Save as New Show"})).toBeEnabled());
     fireEvent.click(within(dialog).getByRole("button",{name:"Save as New Show"}));
     const confirm = await screen.findByRole("dialog",{name:"Confirm replace show"});
-    fireEvent.click(within(confirm).getByRole("button",{name:"Replace Show"}));
+    const replace = within(confirm).getByRole("button",{name:"Replace Show"});
+    await waitFor(() => expect(folderReads).toBe(2));
+    expect(replace).toBeDisabled();
+    expect(within(confirm).getByRole("button",{name:"Cancel"})).toBeEnabled();
+    expect(within(confirm).getByRole("status")).toHaveTextContent("Checking folder");
+    fireEvent.click(replace);
+    expect(mocks.server.saveShowCopy).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve({entries:[]}));
+    await waitFor(() => expect(replace).toBeEnabled());
+    fireEvent.click(replace);
     await waitFor(() => expect(mocks.server.saveShowCopy).toHaveBeenLastCalledWith("Encore",{rootId:"shows",path:"Tour folder"},false,true));
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
   });

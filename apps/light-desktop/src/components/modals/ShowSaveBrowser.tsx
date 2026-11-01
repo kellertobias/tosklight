@@ -143,7 +143,7 @@ export function ShowSaveBrowser({model}: {model: QuickSetupModel}) {
             </div>
         </div>
     </ModalFrame>
-    {replaceTarget && <ReplaceShowConfirmation name={replaceTarget.name} location={`${peer?.name ?? root?.label ?? ""} / ${path || ""}`} saving={saving} onCancel={()=>setReplaceTarget(null)} onReplace={()=>void save(true)} />}
+    {replaceTarget && <ReplaceShowConfirmation name={replaceTarget.name} location={`${peer?.name ?? root?.label ?? ""} / ${path || ""}`} saving={saving} busy={busy} onCancel={()=>setReplaceTarget(null)} onReplace={()=>void save(true)} />}
     </>;
 }
 
@@ -190,11 +190,12 @@ function SaveDestinationPanel({panel}: {panel: DestinationPanel}) {
             </div>;
 }
 
-function ReplaceShowConfirmation({name, location, saving, onCancel, onReplace}: {name: string; location: string; saving: boolean; onCancel: () => void; onReplace: () => void}) {
+function ReplaceShowConfirmation({name, location, saving, busy, onCancel, onReplace}: {name: string; location: string; saving: boolean; busy: boolean; onCancel: () => void; onReplace: () => void}) {
     return <ModalFrame title={`Replace ${name}?`} ariaLabel="Confirm replace show" dialogClassName="nested-modal show-replace-modal"
         closeLabel="Keep existing show" closeDisabled={saving} policy={{escape:!saving,backdrop:!saving}} onClose={onCancel}>
         <p>{`${name} in ${location} will be replaced by the current show. A show this desk knows keeps its name and gets a backup copy first.`}</p>
-        <footer><Button disabled={saving} onClick={onCancel}>Cancel</Button><Button variant="primary" disabled={saving} onClick={onReplace}>Replace Show</Button></footer>
+        {busy && !saving && <p role="status">Checking folder…</p>}
+        <footer><Button disabled={saving} onClick={onCancel}>Cancel</Button><Button variant="primary" disabled={busy} onClick={onReplace}>Replace Show</Button></footer>
     </ModalFrame>;
 }
 
