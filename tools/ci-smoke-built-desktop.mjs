@@ -247,6 +247,38 @@ async function terminateProcessTree(pid) {
 			"/T",
 			"/F",
 		]).catch(() => undefined);
+		// A crashed desktop no longer exists for taskkill /T to walk. Its server still owns
+		// SQLite, so identify that exact child by parent PID, executable and data argument.
+		await promisify(execFile)(
+			"powershell.exe",
+			[
+				"-NoProfile",
+				"-NonInteractive",
+				"-Command",
+				String.raw`
+$spec = $env:LIGHT_DESKTOP_SMOKE_CLEANUP | ConvertFrom-Json
+$data = [regex]::Escape($spec.dataDirectory)
+$argument = '(?:^|\s)--data-dir\s+(?:"' + $data + '"|' + $data + ')(?=\s|$)'
+Get-CimInstance Win32_Process -Filter "Name = 'light-headless.exe'" |
+  Where-Object {
+    $_.ParentProcessId -eq $spec.parentPid -and
+    $_.ExecutablePath -eq $spec.executable -and
+    $_.CommandLine -match $argument
+  } | ForEach-Object { & taskkill.exe /PID $_.ProcessId /T /F | Out-Null }
+`,
+			],
+			{
+				timeout: 15_000,
+				env: {
+					...process.env,
+					LIGHT_DESKTOP_SMOKE_CLEANUP: JSON.stringify({
+						parentPid: pid,
+						executable: path.join(executableDirectory, "light-headless.exe"),
+						dataDirectory,
+					}),
+				},
+			},
+		);
 		return;
 	}
 	try {

@@ -201,7 +201,7 @@ impl StageCompositor {
             generation: 0,
             measurement,
         };
-        compositor.configure();
+        compositor.configure()?;
         // Behind the interface, which is the whole point of drawing here rather than in a window
         // of its own: a menu, a dialog or the pane's own settings must be able to open across the
         // Stage. Done after configuring, so the layer exists to be ordered.
@@ -524,7 +524,7 @@ impl StageCompositor {
             Err(outcome) => return Ok(outcome),
         };
         if self.needs_configure {
-            self.configure();
+            self.configure()?;
         }
         let acquired_at = std::time::Instant::now();
         let acquired = self.surface.get_current_texture();
@@ -541,7 +541,7 @@ impl StageCompositor {
             // A surface goes out of date while a display is reconfigured or the window moves
             // between screens. Reconfiguring and skipping one frame is the whole recovery.
             CurrentSurfaceTexture::Lost | CurrentSurfaceTexture::Outdated => {
-                self.configure();
+                self.configure()?;
                 self.schedule.retry(self.clock.elapsed());
                 if probe {
                     self.schedule.acquired_occluded(now);
@@ -682,28 +682,55 @@ impl StageCompositor {
         })
     }
 
-    fn configure(&mut self) {
+    fn configure(&mut self) -> Result<(), String> {
+        configure_surface(&self.device, || {
+            self.surface.configure(
+                &self.device,
+                &wgpu::SurfaceConfiguration {
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                    format: self.format,
+                    width: self.surface_size.0,
+                    height: self.surface_size.1,
+                    present_mode: wgpu::PresentMode::AutoVsync,
+                    // Whatever the display is already showing the interface in. The pane must match
+                    // the chrome around it, and the desk does not manage colour itself.
+                    color_space: wgpu::SurfaceColorSpace::Auto,
+                    alpha_mode: self.alpha_mode,
+                    view_formats: Vec::new(),
+                    desired_maximum_frame_latency: 2,
+                },
+            )
+        })?;
         self.needs_configure = false;
         self.schedule.dirty();
         self.generation = self.generation.saturating_add(1);
         if let Some(measurement) = self.measurement.as_mut() {
             measurement.stats.reconfigures += 1;
         }
-        self.surface.configure(
-            &self.device,
-            &wgpu::SurfaceConfiguration {
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                format: self.format,
-                width: self.surface_size.0,
-                height: self.surface_size.1,
-                present_mode: wgpu::PresentMode::AutoVsync,
-                // Whatever the display is already showing the interface in. The pane must match
-                // the chrome around it, and the desk does not manage colour itself.
-                color_space: wgpu::SurfaceColorSpace::Auto,
-                alpha_mode: self.alpha_mode,
-                view_formats: Vec::new(),
-                desired_maximum_frame_latency: 2,
-            },
-        );
+        Ok(())
     }
 }
+
+// A platform may advertise a surface but refuse its swapchain, including a second pane on
+// one Windows HWND. Keep that refusal in the existing web fallback instead of panicking
+// across a native UI callback. The same boundary also protects later reconfiguration.
+fn configure_surface(device: &wgpu::Device, configure: impl FnOnce()) -> Result<(), String> {
+    let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+    let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+    let memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+    configure();
+    let errors = [
+        pollster::block_on(memory.pop()),
+        pollster::block_on(internal.pop()),
+        pollster::block_on(validation.pop()),
+    ];
+    if let Some(error) = errors.into_iter().flatten().next() {
+        return Err(format!(
+            "the desk's window could not configure its Stage surface: {error}"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod surface_tests;

@@ -87,6 +87,19 @@ describe("useNativeStagePane", () => {
 		expect(openStagePane).not.toHaveBeenCalled();
 	});
 
+	it("keeps the web renderer active and reports a refused native surface without retrying", async () => {
+		const detail = "the desk's window could not configure its Stage surface: Invalid surface";
+		const openStagePane = vi.fn(async () => { throw new Error(detail); });
+		bridge.current = stubBridge({ openStagePane });
+		const view = render(<Probe />);
+		await waitFor(() => expect(view.getByTestId("pane").getAttribute("data-trouble")).toContain(detail));
+		expect(view.getByTestId("pane")).toHaveAttribute("data-active", "no");
+		await act(async () => { resizeCallbacks.forEach((callback) => callback()); });
+		expect(openStagePane).toHaveBeenCalledOnce();
+		view.unmount();
+		await waitFor(() => expect(bridge.current!.closeStagePane).toHaveBeenCalledOnce());
+	});
+
 	/** A browser has no window to draw underneath, and must not be asked. */
 	it("never asks a bridge that is not a desktop", async () => {
 		const stagePaneAvailable = vi.fn(async () => true);
