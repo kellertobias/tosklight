@@ -3,6 +3,29 @@ use super::{Application, still};
 use winit::{event::ElementState, event_loop::ActiveEventLoop};
 
 impl Application {
+    pub(super) fn still_shortcut(
+        &mut self,
+        key: &winit::keyboard::Key,
+        state: ElementState,
+        repeat: bool,
+    ) -> bool {
+        if !still::shortcut(key, self.modifiers) {
+            return false;
+        }
+        if state == ElementState::Pressed
+            && still::shortcut_allowed(
+                key,
+                self.modifiers,
+                repeat,
+                self.ime_composing,
+                self.quick_settings.open,
+            )
+        {
+            self.render_4k_image();
+        }
+        true
+    }
+
     /// Route a complete native key event before converting it into typed UI commands. Repeats,
     /// IME/modal ownership and held movement keys must share this one ordered input path.
     pub(super) fn keyboard_event(
@@ -10,18 +33,7 @@ impl Application {
         event_loop: &ActiveEventLoop,
         event: winit::event::KeyEvent,
     ) {
-        if still::shortcut(&event.logical_key, self.modifiers) {
-            if event.state == ElementState::Pressed
-                && still::shortcut_allowed(
-                    &event.logical_key,
-                    self.modifiers,
-                    event.repeat,
-                    self.ime_composing,
-                    self.quick_settings.open,
-                )
-            {
-                self.render_4k_image();
-            }
+        if self.still_shortcut(&event.logical_key, event.state, event.repeat) {
             return;
         }
         let pressed = event.state == ElementState::Pressed;

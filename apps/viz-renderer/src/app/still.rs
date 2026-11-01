@@ -20,7 +20,68 @@ pub(super) struct ResolvedFrame {
     pub time: f32,
     pub scene_revision: u64,
     pub show_id: Option<uuid::Uuid>,
-    pub values_frame: u64,
+    pub values: viz_scene::SceneValues,
+    pub source_view: ViewConfiguration,
+    pub source_view_epoch: u64,
+    pub scene_epoch: u64,
+}
+
+impl ResolvedFrame {
+    pub(super) fn new(
+        session: &crate::session::Session,
+        values: &viz_scene::SceneValues,
+        view: ViewConfiguration,
+        time: f32,
+    ) -> Self {
+        Self {
+            view,
+            time,
+            scene_revision: session.scene.revision,
+            show_id: session.scene.show_id,
+            values: values.clone(),
+            source_view: session.source_view,
+            source_view_epoch: session.source_view_epoch,
+            scene_epoch: session.scene_epoch,
+        }
+    }
+
+    fn freeze(
+        &self,
+        session: &crate::session::Session,
+        view: &ViewConfiguration,
+        media: viz_render::media::FrozenMedia,
+        crowd_amount: f32,
+    ) -> Result<FrozenStill, String> {
+        self.validate(session)?;
+        FrozenStill::new_with_crowd_amount(
+            &session.scene,
+            &self.values,
+            view,
+            self.time,
+            media,
+            StillOrigin {
+                pane_id: "architect".into(),
+                follow_preload: false,
+            },
+            crowd_amount,
+        )
+    }
+
+    pub(super) fn validate(&self, session: &crate::session::Session) -> Result<(), String> {
+        if !session.still_scene_ready()
+            || self.scene_epoch != session.scene_epoch
+            || self.scene_revision != session.scene.revision
+            || self.show_id != session.scene.show_id
+            || self.source_view_epoch != session.source_view_epoch
+            || self.source_view != session.source_view
+        {
+            return Err(
+                "Wait for the newly selected show/view to resolve before rendering a 4K image"
+                    .into(),
+            );
+        }
+        Ok(())
+    }
 }
 
 pub(super) fn shortcut(key: &Key, modifiers: ModifiersState) -> bool {
@@ -60,6 +121,19 @@ fn invocation_view(
 }
 
 impl Application {
+    pub(super) fn remember_still_frame(
+        &mut self,
+        session: &crate::session::Session,
+        values: &viz_scene::SceneValues,
+        view: ViewConfiguration,
+        time: f32,
+        result: &Option<Result<viz_render::FrameStats, viz_render::RenderError>>,
+    ) {
+        if matches!(result, Some(Ok(_))) {
+            self.last_still_frame = Some(ResolvedFrame::new(session, values, view, time));
+        }
+    }
+
     /// Observe the native image job without changing live scene or quality.
     pub(super) fn observe_still(&mut self) {
         self.apply_still_status(self.still_jobs.status());
@@ -82,16 +156,7 @@ impl Application {
                 .last_still_frame
                 .as_ref()
                 .ok_or("Wait for the first resolved frame before rendering a 4K image")?;
-            if resolved.scene_revision != session.scene.revision
-                || resolved.show_id != session.scene.show_id
-                || resolved.values_frame != session.values.frame
-                || resolved.view.mode != session.source_view.mode
-            {
-                return Err(
-                    "Wait for the newly selected show/view to resolve before rendering a 4K image"
-                        .into(),
-                );
-            }
+            resolved.validate(session)?;
             let view = invocation_view(
                 &resolved.view,
                 &self.camera,
@@ -104,16 +169,10 @@ impl Application {
                 .renderer
                 .as_ref()
                 .ok_or("Renderer is not ready for a 4K image")?;
-            FrozenStill::new_with_crowd_amount(
-                &session.scene,
-                &session.values,
+            resolved.freeze(
+                session,
                 &view,
-                resolved.time,
                 renderer.frozen_media(),
-                StillOrigin {
-                    pane_id: "architect".into(),
-                    follow_preload: false,
-                },
                 renderer.crowd_amount(),
             )
         })();

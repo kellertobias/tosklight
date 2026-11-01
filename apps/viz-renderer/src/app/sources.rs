@@ -65,6 +65,7 @@ impl Application {
                 .as_ref()
                 .map(|window| window.input_monitor()),
         );
+        self.last_still_frame = None;
         self.session = Some(session);
     }
 
@@ -250,6 +251,7 @@ impl Application {
 
     /// Stage a new connection. The current scene stays on screen until the candidate validates.
     pub(super) fn reconnect(&mut self) {
+        self.last_still_frame = None;
         let (provider, kind) = self.build_provider();
         if let Some(session) = self.session.as_mut() {
             session.replace_provider(provider, kind);

@@ -72,9 +72,7 @@ impl Application {
             view.theme = viz_scene::Theme::LightOnDark;
         }
 
-        session.pump(Instant::now());
-        // The final provider poll can replace bindings. Reconcile against the exact scene
-        // drawn and frozen below, never a scene from the earlier poll.
+        // Resolve media against the same provider poll as the view and values above.
         self.pump_media(session);
         let atmosphere = self.preferences.atmosphere.resolve();
         let waiting_for_dmx = session.waiting_for_dmx();
@@ -135,13 +133,9 @@ impl Application {
             time,
             motion_was_active,
         );
-        self.last_still_frame = Some(super::still::ResolvedFrame {
-            view: view.clone(),
-            time,
-            scene_revision: session.scene.revision,
-            show_id: session.scene.show_id,
-            values_frame: values.frame,
-        });
+        // Provider values can arrive between this draw and a native shortcut. Retain the
+        // resolved VM/physics/motion result, never the next unresolved input packet.
+        self.remember_still_frame(session, &values, view, time, &result);
         session.values = values;
         let Some(result) = result else {
             return None;

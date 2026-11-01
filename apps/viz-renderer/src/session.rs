@@ -20,6 +20,7 @@ pub struct Session {
     child_input_monitor: Option<crate::input_monitor::InputMonitor>,
     pub kind: ProviderKind,
     pub scene: Scene,
+    pub(crate) scene_epoch: u64,
     pub values: SceneValues,
     /// The source's authoritative view; the local quality override is applied on top.
     pub source_view: ViewConfiguration,
@@ -64,6 +65,7 @@ impl Session {
             provider,
             kind,
             scene: Scene::default(),
+            scene_epoch: 0,
             values: SceneValues::default(),
             source_view: ViewConfiguration::default(),
             source_view_epoch: 0,
@@ -89,6 +91,7 @@ impl Session {
         );
         self.provider.shutdown();
         self.provider = provider;
+        self.scene_epoch += 1;
         self.kind = kind;
         // Values, diagnostics, and revisions belong to the previous provider and are dropped.
         self.values = SceneValues::default();
@@ -103,6 +106,17 @@ impl Session {
         self.connection = ConnectionState::Idle;
         self.source_view_epoch = 0;
         self.pending_renderer_settings = None;
+    }
+
+    pub(crate) fn still_scene_ready(&self) -> bool {
+        !self.awaiting_snapshot
+            && !matches!(
+                self.connection,
+                ConnectionState::Resolving { .. }
+                    | ConnectionState::Authenticating { .. }
+                    | ConnectionState::LoadingScene { .. }
+                    | ConnectionState::WaitingForShow { .. }
+            )
     }
 
     pub fn capabilities(&self) -> viz_scene::ProviderCapabilities {
@@ -153,6 +167,7 @@ impl Session {
                             scene.recompute_bounds();
                             let emitters = scene.emitters.len();
                             self.scene = scene;
+                            self.scene_epoch += 1;
                             self.values = SceneValues::default();
                             self.latency.clear();
                             self.last_presented_input_micros = 0;
@@ -183,6 +198,7 @@ impl Session {
                         scene.recompute_bounds();
                         self.values.carry_over(&self.scene, &scene);
                         self.scene = scene;
+                        self.scene_epoch += 1;
                     }
                 }
                 ProviderEvent::Values(values) => {
