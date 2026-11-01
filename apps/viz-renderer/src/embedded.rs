@@ -60,7 +60,7 @@ pub fn run(mut source: HelperSource) -> Result<(), String> {
     let mut state = match PaneState::new(&embedding) {
         Ok(state) => state,
         Err(detail) => {
-            source.report(&detail);
+            source.report_terminal(&detail)?;
             return Ok(());
         }
     };

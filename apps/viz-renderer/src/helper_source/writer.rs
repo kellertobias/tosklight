@@ -46,10 +46,15 @@ impl Writer {
                             viz_helper::framing::write_frame(&mut output, &payload)
                                 .map_err(|error| error.to_string())
                         });
-                    worker_bytes.fetch_sub(cost, Ordering::AcqRel);
-                    if let Err(error) = result {
+                    let failed = if let Err(error) = result {
                         let _ = worker_failure
                             .set(format!("the desk's channel writer failed: {error}"));
+                        true
+                    } else {
+                        false
+                    };
+                    worker_bytes.fetch_sub(cost, Ordering::AcqRel);
+                    if failed {
                         break;
                     }
                 }
@@ -65,6 +70,25 @@ impl Writer {
 
     pub(super) fn failure(&self) -> Option<&str> {
         self.failure.get().map(String::as_str)
+    }
+
+    /// Only terminal process exits wait for delivery; neither frame sends nor Drop can wait.
+    pub(super) fn drain_before_exit(&self, timeout: std::time::Duration) -> Result<(), String> {
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            // A completed write publishes its failure before releasing its byte count.
+            let pending = self.bytes.load(Ordering::Acquire);
+            if let Some(error) = self.failure() {
+                return Err(error.to_owned());
+            }
+            if pending == 0 {
+                return Ok(());
+            }
+            if std::time::Instant::now() >= deadline {
+                return Err("the desk's channel writer did not drain before process exit".into());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
     }
 
     pub(super) fn send(&self, message: FromHelper) {

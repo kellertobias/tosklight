@@ -96,7 +96,7 @@ fn start() -> Renderer {
         .arg("--embed")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+        .stderr(Stdio::inherit());
     if let Ok(backend) = std::env::var("TOSKLIGHT_EMBEDDED_PANE_WGPU_BACKEND") {
         command.env("WGPU_BACKEND", backend);
     }

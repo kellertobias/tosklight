@@ -171,3 +171,58 @@ fn surface_frame_and_ready_keep_fifo_order_and_move_pixels() {
     }
     assert!(reader.is_empty());
 }
+
+#[test]
+fn terminal_error_is_written_and_flushed_before_exit_is_acknowledged() {
+    let bytes = Arc::new(Mutex::new(Vec::new()));
+    let (flushed, _observed) = channel();
+    let writer = Writer::start(Recorder(bytes.clone(), flushed)).unwrap();
+    writer.send(FromHelper::Error {
+        detail: "no GPU adapter".into(),
+    });
+    writer.drain_before_exit(Duration::from_secs(1)).unwrap();
+    let mut input = std::io::Cursor::new(bytes.lock().unwrap().clone());
+    let payload = viz_helper::framing::read_frame(&mut input).unwrap();
+    assert!(
+        matches!(viz_helper::protocol::decode::<FromHelper>(&payload).unwrap(),
+        FromHelper::Error { detail } if detail == "no GPU adapter")
+    );
+}
+
+#[test]
+fn terminal_drain_is_bounded_when_the_parent_stops_reading() {
+    let (started, entered) = channel();
+    let (release, gate) = channel();
+    let writer = Writer::start(Gated {
+        started,
+        release: gate,
+    })
+    .unwrap();
+    writer.send(ready(1));
+    entered.recv_timeout(Duration::from_secs(1)).unwrap();
+    let (done, observed) = channel();
+    std::thread::spawn(move || {
+        done.send(writer.drain_before_exit(Duration::from_millis(10)))
+            .unwrap();
+    });
+    assert!(
+        observed
+            .recv_timeout(Duration::from_secs(1))
+            .unwrap()
+            .unwrap_err()
+            .contains("did not drain")
+    );
+    drop(release);
+}
+
+#[test]
+fn terminal_drain_reports_write_failure_instead_of_acknowledging_zero_pending_bytes() {
+    let writer = Writer::start(Broken).unwrap();
+    writer.send(ready(1));
+    assert!(
+        writer
+            .drain_before_exit(Duration::from_secs(1))
+            .unwrap_err()
+            .contains("writer failed")
+    );
+}

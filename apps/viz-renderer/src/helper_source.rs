@@ -307,6 +307,13 @@ impl HelperSource {
         });
     }
 
+    /// A startup failure must reach the desk before main exits and kills detached workers.
+    pub fn report_terminal(&mut self, detail: &str) -> Result<(), String> {
+        self.report(detail);
+        self.to_desk
+            .drain_before_exit(std::time::Duration::from_secs(1))
+    }
+
     /// The operator's picture settings, if they have set any.
     pub fn picture(&self) -> Option<&viz_helper::protocol::ToHelper> {
         self.picture.as_ref()
