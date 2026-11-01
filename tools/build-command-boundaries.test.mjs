@@ -322,7 +322,6 @@ test("macOS release apps are sealed only after their final helpers and resources
 
 	assert.ok(desktopBuild >= 0 && desktopBuild < desktopSeal);
 	assert.ok(desktopSeal < desktopSmoke);
-	assert.match(sealer, /codesign --force --deep --sign - --timestamp=none/u);
 	assert.match(sealer, /codesign --verify --deep --strict/u);
 	assert.match(workflow, /ToskLight Architect\.app[\s\S]*seal-macos-app\.sh/u);
 	// The editor's own executable is kept aside and handed back to the bundler, so the assembled

@@ -88,6 +88,7 @@ for (const stream of [child.stdout, child.stderr]) {
 	});
 }
 
+let failure;
 try {
 	await waitForReadiness(child, port);
 	console.log(
@@ -99,14 +100,30 @@ try {
 	const serverLog = await fs
 		.readFile(path.join(dataDirectory, "light-headless.log"), "utf8")
 		.catch(() => "");
-	throw new Error(
+	failure = new Error(
 		`${error instanceof Error ? error.message : String(error)}${detail ? `\nRecent application output:\n${detail}` : ""}${serverLog.trim() ? `\nBundled Light server log:\n${serverLog.trim()}` : ""}`,
 	);
 } finally {
-	await terminateProcessTree(child.pid);
-	if (!portableDirectory)
-		await fs.rm(dataDirectory, { recursive: true, force: true });
+	try {
+		await terminateProcessTree(child.pid);
+		// taskkill can finish before Windows releases the child's SQLite handles.
+		if (!portableDirectory)
+			await fs.rm(dataDirectory, {
+				recursive: true,
+				force: true,
+				maxRetries: 10,
+				retryDelay: 200,
+			});
+	} catch (error) {
+		failure = failure
+			? new AggregateError(
+					[failure, error],
+					"Packaged ToskLight smoke failed and cleanup also failed",
+				)
+			: error;
+	}
 }
+if (failure) throw failure;
 
 async function verifyPortableState() {
 	const expected = [

@@ -357,7 +357,7 @@ jobs:
       matrix:
         include:
           - label: macOS
-            runner: macos-14
+            runner: macos-15
           - label: Windows
             runner: windows-2022
     steps:
@@ -395,7 +395,7 @@ jobs:
           - label: Linux
             runner: ubuntu-22.04
           - label: macOS
-            runner: macos-14
+            runner: macos-15
           - label: Windows
             runner: windows-2022
     steps:
@@ -935,7 +935,7 @@ jobs:
       matrix:
         include:
           - label: macOS (Apple Silicon)
-            runner: macos-14
+            runner: macos-15
             target: aarch64-apple-darwin
             slug: macos-arm64
             headless_binary: light-headless

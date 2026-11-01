@@ -46,15 +46,17 @@ impl Fonts {
         if database.is_empty() {
             return Err(FontError::NoFonts);
         }
-        // A generic family resolves through names this machine may not carry, so a rack with
-        // fonts installed can still answer "no sans-serif". Any real face beats drawing nothing.
+        Ok(Self::from_database(database))
+    }
+
+    fn from_database(database: fontdb::Database) -> Self {
         let fallback = pick(&database, &["sans-serif"])
             .or_else(|| database.faces().next().map(|face| face.id));
-        Ok(Self {
+        Self {
             database,
             parsed: HashMap::new(),
             fallback,
-        })
+        }
     }
 
     /// Builds from explicit font data. Used by tests, which must not depend on what a build
@@ -65,12 +67,7 @@ impl Fonts {
         if database.is_empty() {
             return Err(FontError::NoFonts);
         }
-        let fallback = database.faces().next().map(|face| face.id);
-        Ok(Self {
-            database,
-            parsed: HashMap::new(),
-            fallback,
-        })
+        Ok(Self::from_database(database))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -83,14 +80,47 @@ impl Fonts {
     /// their font was substituted instead of leaving them wondering why it looks wrong.
     pub fn resolve(&mut self, family: &str) -> Result<(Arc<fontdue::Font>, bool), FontError> {
         let requested = pick(&self.database, &[family]);
-        let exact = requested.is_some();
-        let id = requested.or(self.fallback).ok_or(FontError::NoFonts)?;
-
-        let key = format!("{id:?}");
-        if let Some(font) = self.parsed.get(&key) {
-            return Ok((Arc::clone(font), exact));
+        let generic = matches!(family, "sans-serif" | "serif" | "monospace");
+        if let Some(id) = requested
+            && let Some(font) = self.parse(id)
+            && (!generic || supports_text(&font))
+        {
+            return Ok((font, true));
         }
 
+        if let Some(id) = self.fallback
+            && let Some(font) = self.parse(id)
+            && supports_text(&font)
+        {
+            return Ok((font, false));
+        }
+
+        // Generic aliases can name an uninstalled family. The first installed face may
+        // instead be emoji/symbol-only. Prefer actual text coverage for default fallback;
+        // explicitly selected symbol or non-Latin families remain valid above.
+        let candidates = self
+            .fallback
+            .into_iter()
+            .chain(self.database.faces().map(|face| face.id))
+            .collect::<Vec<_>>();
+        let mut readable = None;
+        for id in candidates {
+            if let Some(font) = self.parse(id) {
+                if supports_text(&font) {
+                    self.fallback = Some(id);
+                    return Ok((font, false));
+                }
+                readable.get_or_insert(font);
+            }
+        }
+        readable.map(|font| (font, false)).ok_or(FontError::NoFonts)
+    }
+
+    fn parse(&mut self, id: fontdb::ID) -> Option<Arc<fontdue::Font>> {
+        let key = format!("{id:?}");
+        if let Some(font) = self.parsed.get(&key) {
+            return Some(Arc::clone(font));
+        }
         let font = self
             .database
             .with_face_data(id, |data, index| {
@@ -103,15 +133,17 @@ impl Fonts {
                 )
                 .ok()
             })
-            .flatten()
-            .ok_or_else(|| FontError::Unreadable {
-                family: family.to_owned(),
-            })?;
-
+            .flatten()?;
         let font = Arc::new(font);
         self.parsed.insert(key, Arc::clone(&font));
-        Ok((font, exact))
+        Some(font)
     }
+}
+
+fn supports_text(font: &fontdue::Font) -> bool {
+    ['A', 'W', '0']
+        .into_iter()
+        .all(|glyph| font.lookup_glyph_index(glyph) != 0)
 }
 
 /// The first face matching any of these families.
@@ -129,4 +161,46 @@ fn pick(database: &fontdb::Database, families: &[&str]) -> Option<fontdb::ID> {
         ..fontdb::Query::default()
     };
     database.query(&query)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn normal_font() -> Vec<u8> {
+        std::fs::read("/System/Library/Fonts/Helvetica.ttc")
+            .or_else(|_| std::fs::read("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"))
+            .or_else(|_| std::fs::read("C:/Windows/Fonts/arial.ttf"))
+            .expect("the text test fixture requires Helvetica, DejaVu Sans or Arial")
+    }
+
+    #[test]
+    fn missing_generic_skips_symbol_only_fallback_but_explicit_symbols_still_work() {
+        let mut database = fontdb::Database::new();
+        database.load_font_data(include_bytes!("../tests/fixtures/symbol-only.ttf").to_vec());
+        database.load_font_data(normal_font());
+        database.set_sans_serif_family("Missing generic family");
+        let mut fonts = Fonts::from_database(database);
+        let first = fonts.resolve("Fallback Symbol Fixture").unwrap().0;
+        assert_eq!(
+            first.lookup_glyph_index('W'),
+            0,
+            "symbol face really is first"
+        );
+        for family in ["sans-serif", "Absent Cue Font"] {
+            let (font, exact) = fonts.resolve(family).unwrap();
+            assert!(!exact);
+            assert!(font.lookup_glyph_index('W') != 0);
+            assert!(
+                font.rasterize('W', 48.0)
+                    .1
+                    .iter()
+                    .any(|coverage| *coverage > 0)
+            );
+        }
+        let (symbols, exact) = fonts.resolve("Fallback Symbol Fixture").unwrap();
+        assert!(exact);
+        assert_eq!(symbols.lookup_glyph_index('W'), 0);
+        assert_ne!(symbols.lookup_glyph_index('★'), 0);
+    }
 }
