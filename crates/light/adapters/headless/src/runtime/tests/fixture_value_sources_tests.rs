@@ -79,6 +79,16 @@ async fn fixture_value_sources_reports_actual_playback_programmer_and_freeze() {
             .contains("Programmer"),
         "same numeric value still changes its source"
     );
+    // TL-889: a lower explicit Programmer level masks normal-priority HTP output.
+    // Inspect the retained ordinary source, not merely an equal-looking fixture.
+    state.programming.set_many_immediate_with_delay(
+        session.id,
+        [(fixture_id, light_core::AttributeKey::intensity(), light_core::AttributeValue::Normalized(0.3))],
+        Some(0),
+    );
+    let lowered = read().await;
+    assert_eq!(lowered["values"][0]["value"], serde_json::json!({"kind":"normalized", "value":0.3}));
+    assert!(lowered["values"][0]["sources"].to_string().contains("Programmer"));
     state.programming.clear_normal_values(session.id);
     assert!(
         read().await["values"][0]["sources"]

@@ -527,6 +527,7 @@ mod masters;
 mod group_colors;
 
 mod programmer_groups;
+mod programmer_htp_priority;
 
 mod snapshot_groups;
 
