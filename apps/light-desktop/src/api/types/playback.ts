@@ -2,6 +2,7 @@ import type { ReplacementProgramProjection } from "./replacementProjection";
 import type {
 	CueTimingRuntimeProjection,
 	PlaybackCueTransition as GeneratedPlaybackCueTransition,
+	PlaybackTopologyFootprint,
 } from "../generated/light-wire";
 import type { SpeedSnapshot } from "./configuration";
 import type { ControlDesk } from "./desk";
@@ -226,19 +227,8 @@ export interface PlaybackDefinition {
 		| { type: "cue_fade" }
 		| { type: "grand_master" };
 	buttons: [PlaybackButtonAction, PlaybackButtonAction, PlaybackButtonAction];
-	/** Show-persisted expanded footprint; surface topology only affects whether it is effective. */
-	footprint?:
-		| { type: "normal" }
-		| { type: "taller"; upper_button: PlaybackButtonAction }
-		| {
-				type: "wider";
-				right_buttons: [
-					PlaybackButtonAction,
-					PlaybackButtonAction,
-					PlaybackButtonAction,
-				];
-				right_fader: PlaybackDefinition["fader"];
-		  };
+	/** Show-persisted footprint. Surface topology determines the visible controls. */
+	footprint?: PlaybackTopologyFootprint;
 	/** Missing only on legacy show files; every save writes an explicit topology. */
 	button_count?: 0 | 1 | 2 | 3;
 	fader:

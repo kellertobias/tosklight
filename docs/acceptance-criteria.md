@@ -101,3 +101,7 @@ the applicable compatibility and recovery path above.
   mode retain HTP. The first stored LoTP mode promotes the portable reader floor to 12 in the same
   transaction. Switching the mode back to HTP or removing the Group keeps that floor. Older readers
   refuse the show before writable use.
+
+- **Playbacks pane footprints, reader capability schema 13.** Existing Playback layouts retain
+  their presentation. The first explicitly stored pane footprint promotes the portable reader
+  floor to 13 in the same transaction. Older readers refuse the show before writable use.

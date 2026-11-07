@@ -13,23 +13,30 @@ export function ExpandedPlaybackControls({
 	controller: PlaybackBankController;
 	slotData: PlaybackSlotProjection;
 }) {
-	const { playback, footprint, row } = slotData;
-	if (!playback || !footprint || footprint.effective === "normal") return null;
-	const stored = playback.footprint;
-	if (!stored || stored.type !== footprint.effective) return null;
-	const visibleButtonCount = Math.min(
-		row?.button_count ?? 3,
-		playback.button_count ?? 3,
-	);
-	const buttons =
-		stored.type === "taller"
-			? [stored.upper_button]
-			: stored.right_buttons.slice(0, visibleButtonCount);
+	const { playback, footprint, paneFootprint, row } = slotData;
+	const stored = playback?.footprint;
+	const effective = paneFootprint?.type ?? footprint?.effective;
+	if (!playback || !stored || stored.type !== effective) return null;
+	const taller = stored.type === "taller" || stored.type === "pane_taller";
+	const wider = stored.type === "wider" || stored.type === "pane_wider";
+	if (!taller && !wider) return null;
+	const visibleButtonCount = paneFootprint
+		? 3
+		: Math.min(row?.button_count ?? 3, playback.button_count ?? 3);
+	const buttons = taller
+		? [stored.upper_button]
+		: stored.right_buttons.slice(0, visibleButtonCount);
+	const hasRightFader =
+		wider &&
+		(!paneFootprint ||
+			(row?.presentation !== "buttons" && (playback.has_fader ?? true))) &&
+		playback.target.type !== "macro" &&
+		playback.target.type !== "timecode";
 	return (
 		<fieldset
 			className={`expanded-playback-controls ${stored.type}`}
 			data-playback-footprint={stored.type}
-			aria-label={`${stored.type === "taller" ? "Upper" : "Right"} controls for Playback ${slotData.slot}`}
+			aria-label={`${taller ? "Upper" : "Right"} controls for Playback ${slotData.slot}`}
 		>
 			{buttons.map((action, index) => (
 				<ExpandedButton
@@ -40,9 +47,7 @@ export function ExpandedPlaybackControls({
 					key={`${index}-${action}`}
 				/>
 			))}
-			{stored.type === "wider" &&
-				playback.target.type !== "macro" &&
-				playback.target.type !== "timecode" && (
+			{hasRightFader && (
 				<label className="expanded-playback-fader">
 					<span>Right fader · {stored.right_fader.replaceAll("_", " ")}</span>
 					<Input

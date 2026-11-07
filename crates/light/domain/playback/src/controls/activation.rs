@@ -418,7 +418,7 @@ impl PlaybackEngine {
             .get(&number)
             .ok_or("playback does not exist")?;
         let available = (definition.has_fader && definition.fader == mode)
-            || matches!(&definition.footprint, PlaybackFootprint::Wider { right_fader, .. } if *right_fader == mode);
+            || definition.footprint.right_fader() == Some(mode);
         if !available {
             return Err("fader is not present on this playback".into());
         }

@@ -75,6 +75,7 @@ function PlaybackPaneBank({
 			<ScreenPlaybackFit className="screen-bank-fit">
 				<PlaybackFaderBank
 					surfaceId={surfaceId}
+					paneFootprints
 					tilePresentation={!pane?.playbackShowControls}
 					tileLayout={
 						pane?.playbackShowControls ? undefined : pane?.poolTileLayout
@@ -94,6 +95,7 @@ function PlaybackPaneBank({
 		<ScreenPlaybackFit className="screen-bank-fit">
 			<PlaybackFaderBank
 				surfaceId={surfaceId}
+				paneFootprints
 				tilePresentation={!pane.playbackShowControls}
 				layoutSourceSurfaceId={screen}
 				hardwareConnected={Boolean(bootstrap?.hardware_connected)}

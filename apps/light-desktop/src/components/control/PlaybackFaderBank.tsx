@@ -180,6 +180,7 @@ function equalPlaybackFaderBankProps(
 				left.tileLayout.columns === right.tileLayout.columns)) &&
 		Boolean(left.scrollable) === Boolean(right.scrollable) &&
 		Boolean(left.tilePresentation) === Boolean(right.tilePresentation) &&
+		Boolean(left.paneFootprints) === Boolean(right.paneFootprints) &&
 		(left.pageNumber ?? null) === (right.pageNumber ?? null) &&
 		(left.firstSlot ?? 1) === (right.firstSlot ?? 1) &&
 		(left.count ?? null) === (right.count ?? null) &&

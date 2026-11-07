@@ -51,12 +51,12 @@
 
 /* Narrow Main tracks retain every authored action rather than overprinting side by side. */
 .screen-bank-fit .playback-fader-bank.touch-layout
-	.vertical-touch-fader-stack.has-actions {
+	article:not(.pane-playback-controls) > .vertical-touch-fader-stack.has-actions {
 	grid-template-rows: minmax(44px, 1fr) auto;
 }
 .screen-bank-fit
 	.playback-fader-bank.touch-layout
-	article
+	article:not(.pane-playback-controls)
 	> .vertical-touch-fader-stack.has-actions
 	> .vertical-touch-fader-actions {
 	grid-template-columns: minmax(0, 1fr);
@@ -65,7 +65,7 @@
 }
 .screen-bank-fit
 	.playback-fader-bank.touch-layout
-	article
+	article:not(.pane-playback-controls)
 	> .vertical-touch-fader-stack.has-actions
 	> .vertical-touch-fader-actions
 	> .ui-button:nth-child(n) {

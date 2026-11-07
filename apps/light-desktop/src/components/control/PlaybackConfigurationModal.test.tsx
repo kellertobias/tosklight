@@ -14,6 +14,7 @@ import { encodePlaybackTopologyRequest } from "../../api/playbackTopologyWire";
 import {
 	normalizePlaybackTopology,
 	PlaybackConfigurationDialog,
+	type PlaybackConfigurationDialogProps,
 	playbackImageDataUrl,
 	withFunctionDefaults,
 } from "./PlaybackConfigurationModal";
@@ -151,7 +152,7 @@ beforeEach(() => {
 
 function show(
 	playback: PlaybackDefinition = base,
-	props: { empty?: boolean } = {},
+	props: Pick<PlaybackConfigurationDialogProps, "empty" | "paneFootprintDefault"> = {},
 ) {
 	const close = vi.fn();
 	render(
@@ -187,6 +188,55 @@ function choose(label: string, option: string) {
 }
 
 describe("PlaybackConfigurationModal function and behavior", () => {
+	it("expands a compact pane assignment without losing its configured button", async () => {
+		show({
+			...base,
+			button_count: 1,
+			buttons: ["pause", "none", "none"],
+			has_fader: false,
+		}, { paneFootprintDefault: "single_button" });
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		const single = screen.getByRole("radio", { name: "Single button" });
+		expect(single).toHaveAttribute("aria-checked", "true");
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+		fireEvent.click(screen.getByRole("radio", { name: "Normal" }));
+		expect(selectTrigger("Top button")).toHaveTextContent("Pause");
+		expect(selectTrigger("Middle button")).toHaveTextContent("GO +");
+		expect(selectTrigger("Bottom button")).toHaveTextContent("Flash");
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() =>
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				2, 4, expect.objectContaining({
+					footprint: { type: "pane_normal" },
+					button_count: 3,
+					buttons: ["pause", "go", "flash"],
+					has_fader: false,
+				}),
+			),
+		);
+	});
+
+	it("saves Single button as a presentation choice and retains all configured actions", async () => {
+		show({
+			...base,
+			button_count: 3,
+			footprint: { type: "pane_normal" },
+		});
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		fireEvent.click(screen.getByRole("radio", { name: "Single button" }));
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() =>
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				2, 4, expect.objectContaining({
+					footprint: { type: "single_button" },
+					button_count: 3,
+					buttons: base.buttons,
+					has_fader: base.has_fader,
+				}),
+			),
+		);
+	});
+
 	it("persists shared Cuelist Auto-off options independently", async () => {
 		mocks.scopedCueLists[0] = {
 			...mocks.scopedCueLists[0],

@@ -2320,6 +2320,71 @@
             "right_buttons",
             "right_fader"
           ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "single_button"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "pane_normal"
+            }
+          },
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "pane_taller"
+            },
+            "upper_button": {
+              "$ref": "#/$defs/PlaybackTopologyButtonAction"
+            }
+          },
+          "required": [
+            "type",
+            "upper_button"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "right_buttons": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/PlaybackTopologyButtonAction"
+              },
+              "maxItems": 3,
+              "minItems": 3
+            },
+            "right_fader": {
+              "$ref": "#/$defs/PlaybackTopologyFaderMode"
+            },
+            "type": {
+              "type": "string",
+              "const": "pane_wider"
+            }
+          },
+          "required": [
+            "type",
+            "right_buttons",
+            "right_fader"
+          ]
         }
       ]
     },

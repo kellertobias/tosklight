@@ -2699,6 +2699,68 @@ textarea,
 .expanded-playback-fader input {
 	width: 100%;
 }
+.playback-fader-bank .pane-playback-controls {
+	grid-template-columns: minmax(0, 1fr);
+}
+.playback-fader-bank .pane-playback-controls.pane_taller {
+	grid-template-rows: 25% 20px 16px minmax(0, 1fr);
+}
+.pane-playback-controls.pane_taller > .playback-identity {
+	grid-row: 2;
+}
+.pane-playback-controls.pane_taller > .playback-top-widget {
+	grid-row: 3;
+}
+.playback-fader-bank article.pane-playback-controls.pane_taller
+	> :is(.vertical-touch-fader-stack, .faderless-playback-actions, .playback-empty-body) {
+	grid-row: 4;
+}
+.playback-fader-bank .pane-playback-controls.pane_wider {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.pane-playback-controls.pane_wider
+	> :is(.playback-identity, .playback-top-widget, .vertical-touch-fader-stack, .faderless-playback-actions, .playback-empty-body) {
+	grid-column: 1;
+}
+.pane-playback-controls > .expanded-playback-controls {
+	position: relative;
+	min-height: 0;
+}
+.pane-playback-controls > .expanded-playback-controls.pane_taller {
+	grid-row: 1;
+	grid-column: 1;
+}
+.pane-playback-controls > .expanded-playback-controls.pane_wider {
+	display: flex;
+	flex-direction: column;
+	grid-row: 1 / -1;
+	grid-column: 2;
+}
+.pane-playback-controls > .expanded-playback-controls.pane_wider > button {
+	flex: 1;
+}
+.pane-playback-controls > .expanded-playback-controls > button,
+.playback-fader-bank .pane-playback-controls .faderless-playback-actions > button,
+.playback-fader-bank .pane-playback-controls .vertical-touch-fader-actions > button {
+	min-width: 0;
+	min-height: 0;
+	height: auto;
+}
+.playback-fader-bank:is(.touch-layout, .hardware-layout)
+	article.pane-playback-controls > .vertical-touch-fader-stack.has-actions {
+	grid-template-rows: minmax(0, 1fr) min(50%, 102px);
+}
+.playback-fader-bank:is(.touch-layout, .hardware-layout)
+	article.pane-playback-controls
+	> .vertical-touch-fader-stack.action-count-3 > .vertical-touch-fader-actions {
+	grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.playback-fader-bank:is(.touch-layout, .hardware-layout)
+	article.pane-playback-controls > .faderless-playback-actions {
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: repeat(var(--playback-action-count), minmax(0, 1fr));
+	gap: 2px;
+}
 .playback-fader-bank article:not(.playback-card) {
 	position: relative;
 	min-width: 0;

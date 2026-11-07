@@ -117,6 +117,33 @@ describe("Unified page topology wire", () => {
 		});
 	});
 	it.each([
+		{ type: "single_button" },
+		{ type: "pane_normal" },
+		{ type: "pane_taller", upper_button: "pause" },
+		{
+			type: "pane_wider",
+			right_buttons: ["go_minus", "pause", "flash"],
+			right_fader: "x_fade",
+		},
+	] satisfies NonNullable<PlaybackDefinition["footprint"]>[])(
+		"round-trips an authored $type footprint",
+		(footprint) => {
+			const q = request();
+			if (!("definition" in q.action)) throw Error("fixture");
+			q.action.definition.footprint = footprint;
+			expect(encodePlaybackTopologyRequest(q)).toMatchObject({
+				action: { definition: { footprint } },
+			});
+			const object = pageObject();
+			object.body.assignments[680].footprint = footprint;
+			expect(
+				decodePlaybackTopologyOutcome(outcome({ objects: [object] }), q, 11),
+			).toMatchObject({
+				objects: [{ body: { assignments: { 680: { footprint } } } }],
+			});
+		},
+	);
+	it.each([
 		{ page: 0, position: 1 },
 		{ page: 100, position: 1 },
 		{ page: 1, position: 0 },
