@@ -47,7 +47,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 					<PlaybackPaneBank pane={pane} surfaceId={surfaceId} />
 				</>
 			) : (
-				<>
+				<div className="playback-pane-empty">
 					<p>
 						Configure this playback surface to use positions 401–680 in a 20 ×
 						14 layout.
@@ -55,7 +55,7 @@ export function VirtualPlaybacksWindow({ paneId, active = true }: WindowProps) {
 					<Button disabled={!registry || saving} onClick={() => void create()}>
 						{saving ? "Creating surface…" : "Create playback surface"}
 					</Button>
-				</>
+				</div>
 			)}
 			{error && <ErrorAlert role="alert">{error}</ErrorAlert>}
 		</section>
