@@ -1,5 +1,5 @@
 import type { PlaybackSoloRegion } from "../../../features/playbackSolo/contracts";
-import { playbackCellKey } from "./projection";
+import { playbackCellFootprint, playbackCellKey } from "./projection";
 import type { PlaybackSlotProjection } from "./types";
 
 export interface SoloFenceCell {
@@ -101,7 +101,7 @@ function perimeter(cell: SoloFenceCell, peers: readonly SoloFenceCell[]) {
 }
 
 export function soloFenceCell(cell: PlaybackSlotProjection): SoloFenceCell {
-	const footprint = cell.footprint;
+	const footprint = playbackCellFootprint(cell);
 	const left = footprint ? footprint.columnStart - 1 : cell.columnIndex;
 	const top = footprint ? footprint.rowStart - 1 : cell.rowIndex;
 	return {

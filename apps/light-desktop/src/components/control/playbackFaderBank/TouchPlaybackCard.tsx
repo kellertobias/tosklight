@@ -72,8 +72,15 @@ export function TouchPlaybackCard({
 	interceptPointer,
 	interceptClick,
 }: TouchPlaybackCardProps) {
-	const { playback, cue, slot, row, rowIndex } = slotData;
-	const rowUnits = controller.tilePresentation ? 1 : row ? playbackRowUnits(row, controller.hardware) : 1;
+	const { playback, cue, slot, row, rowIndex, paneFootprint } = slotData;
+	const tilePresentation = paneFootprint
+		? paneFootprint.type === "single_button"
+		: controller.tilePresentation;
+	const paneExpanded =
+		paneFootprint?.type !== "single_button" ? paneFootprint : undefined;
+	const rowUnits =
+		paneExpanded?.rowSpan ??
+		(tilePresentation ? 1 : row ? playbackRowUnits(row, controller.hardware) : 1);
 	const display = playbackFaderReadout(
 		playback,
 		active,
@@ -92,11 +99,18 @@ export function TouchPlaybackCard({
 		kind,
 		selected,
 		selectionPending: controller.selectionPending,
-		className:
-			`${className} ${rowUnits === 1 ? "playback-row-compact" : ""}`.trim(),
+		className: [
+			className,
+			rowUnits === 1 && "playback-row-compact",
+			paneExpanded && `pane-playback-controls ${paneExpanded.type}`,
+		]
+			.filter(Boolean)
+			.join(" "),
 		style: cardStyle,
 		color,
-		presentation: row?.presentation,
+		presentation: paneExpanded && row?.presentation === "push_encoder"
+			? "fader"
+			: row?.presentation,
 		hasFader,
 		faderValue: value,
 		faderLabel: playback?.target.type === "dynamic"
@@ -112,7 +126,7 @@ export function TouchPlaybackCard({
 			controller.assignmentPending || (!playback && commandTarget !== "record") || !controller.runtimeActions,
 		actions: touchActions,
 	};
-	const Card = controller.tilePresentation ? PlaybackTileView : TouchPlaybackCardView;
+	const Card = tilePresentation ? PlaybackTileView : TouchPlaybackCardView;
 	return (
 		<Card
 			action={primaryAction}
@@ -125,7 +139,7 @@ export function TouchPlaybackCard({
 						{commandTarget === "record" ? (
 							<PlaybackCommandTargetBadge command="record" />
 						) : null}
-						{!controller.tilePresentation && <ExpandedPlaybackControls
+						{!tilePresentation && <ExpandedPlaybackControls
 							controller={controller}
 							slotData={slotData}
 						/>}

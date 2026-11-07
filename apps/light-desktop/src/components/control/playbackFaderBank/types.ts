@@ -15,6 +15,18 @@ export type AssignedPlayback = PlaybackDefinition & {
 export type PlaybackSnapshotActive = PlaybackControlRuntime;
 export type PlaybackGroup = ShowObject<"group">;
 
+export type PlaybackPaneShape = "pane_normal" | "pane_taller" | "pane_wider";
+
+export type PlaybackPaneFootprintProjection =
+	| { type: "single_button" }
+	| {
+			type: PlaybackPaneShape;
+			rowStart: number;
+			columnStart: number;
+			rowSpan: 3 | 4;
+			columnSpan: 1 | 2;
+	  };
+
 export type PlaybackSlotProjection = {
 	playback: AssignedPlayback | null;
 	cue: CueList | null;
@@ -27,7 +39,10 @@ export type PlaybackSlotProjection = {
 		PlaybackFootprintCellProjection,
 		{ state: "anchor" }
 	> | null;
+	paneFootprint?: PlaybackPaneFootprintProjection;
 };
+
+export type PaneFootprintDefault = "single_button" | "pane_normal";
 
 export type PlaybackConfigurationState = {
 	playback: PlaybackDefinition;
@@ -35,6 +50,7 @@ export type PlaybackConfigurationState = {
 	slot: number;
 	empty: boolean;
 	fallbackButtons: number;
+	paneFootprintDefault?: PaneFootprintDefault;
 	expectedPageRevision: number;
 	expectedPageObjectId: string | null;
 };

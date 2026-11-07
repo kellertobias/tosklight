@@ -124,11 +124,16 @@ function decodeFootprint(
 	const footprint = recordAt(value, path);
 	const type = enumAt(footprint.type, `${path}.type`, [
 		"normal",
+		"single_button",
+		"pane_normal",
 		"taller",
+		"pane_taller",
 		"wider",
+		"pane_wider",
 	]);
-	if (type === "normal") return { type };
-	if (type === "taller")
+	if (type === "normal" || type === "single_button" || type === "pane_normal")
+		return { type };
+	if (type === "taller" || type === "pane_taller")
 		return {
 			type,
 			upper_button: enumAt(

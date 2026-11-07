@@ -2447,6 +2447,108 @@ describe("PlaybackFaderBank action dispatch and persistence", () => {
 	});
 });
 
+describe("PlaybackFaderBank pane footprints", () => {
+	beforeEach(resetPlaybackFaderMocks);
+
+	const rows = [1, 3, 5].map((first_position) => ({
+		first_position,
+		count: 2,
+		presentation: "buttons" as const,
+		button_count: 1,
+	}));
+
+	it("expands three authored actions in a one-button layout, including on a hardware-linked pane", () => {
+		assignPlayback({ footprint: { type: "pane_normal" } });
+		const { container, rerender } = render(
+			<PlaybackFaderBank paneFootprints tilePresentation playbackLayout={{ rows }} />,
+		);
+		const anchor = () => container.querySelector<HTMLElement>('[data-playback-slot="1"]')!;
+		expect(anchor()).toHaveStyle({ gridRow: "1 / span 3" });
+		expect(anchor()).toHaveAttribute("data-has-fader", "false");
+		expect(anchor()).toHaveAttribute("data-button-count", "3");
+		expect(container.querySelector('[data-playback-slot="3"]')).toBeNull();
+		expect(container.querySelector('[data-playback-slot="5"]')).toBeNull();
+		expect(container.querySelector('[data-playback-slot="2"]')).toBeInTheDocument();
+		rerender(
+			<PlaybackFaderBank paneFootprints hardwareConnected playbackLayout={{ rows }} />,
+		);
+		expect(anchor()).toHaveAttribute("data-ui-component", "touch-playback-card");
+		fireEvent.click(anchor().querySelector<HTMLButtonElement>('[data-playback-button-index="2"]')!);
+		expect(mocks.poolPlaybackAction).toHaveBeenCalledWith(
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 2,
+				pressed: true,
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 2,
+				},
+			},
+		);
+	});
+
+	it("shows an explicit Single Button or an unfit expansion as one action in a controls pane", () => {
+		assignPlayback({ footprint: { type: "pane_normal" } });
+		const { container, rerender } = render(
+			<PlaybackFaderBank paneFootprints playbackLayout={{ rows: rows.slice(0, 2) }} />,
+		);
+		expect(screen.getByRole("button", { name: "Playback 1.1: Front Wash" })).toBeInTheDocument();
+		expect(container.querySelector('[data-playback-slot="3"]')).toBeInTheDocument();
+		assignPlayback({ footprint: { type: "single_button" } });
+		rerender(<PlaybackFaderBank paneFootprints playbackLayout={{ rows }} />);
+		expect(screen.getByRole("button", { name: "Playback 1.1: Front Wash" })).toBeInTheDocument();
+		expect(container.querySelector('[data-playback-slot="5"]')).toBeInTheDocument();
+	});
+
+	it("routes Wider controls to the anchor and respects the pane row's fader capability", () => {
+		assignPlayback({
+			footprint: {
+				type: "pane_wider",
+				right_buttons: ["pause", "none", "none"],
+				right_fader: "master",
+			},
+		});
+		const { rerender } = render(
+			<PlaybackFaderBank
+				paneFootprints
+				tilePresentation
+				playbackLayout={{ rows: rows.map((row) => ({ ...row, presentation: "fader" })) }}
+			/>,
+		);
+		const rightControls = () =>
+			within(screen.getByRole("group", { name: "Right controls for Playback 1" }));
+		fireEvent.click(rightControls().getByRole("button", { name: "PAUSE" }));
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 },
+			"button",
+			{
+				button: 4,
+				pressed: true,
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 4,
+				},
+			},
+		);
+		fireEvent.change(rightControls().getByRole("slider"), { target: { value: "75" } });
+		expect(mocks.poolPlaybackAction).toHaveBeenLastCalledWith(
+			{ page: 1, position: 1 },
+			"configured-fader-absolute",
+			{
+				fader: 2,
+				value: 0.75,
+				control_source: {
+					surface_id: expect.stringMatching(/^software:/),
+					control_id: 8,
+				},
+			},
+		);
+		rerender(<PlaybackFaderBank paneFootprints tilePresentation playbackLayout={{ rows }} />);
+		expect(rightControls().queryByRole("slider")).not.toBeInTheDocument();
+	});
+});
+
 describe("PlaybackFaderBank faderless controls and runtime feedback", () => {
 	beforeEach(resetPlaybackFaderMocks);
 

@@ -27,10 +27,10 @@ pub(super) fn configured_control_definition(
         }
         PlaybackAction::ConfiguredFader { number: 1, level } => PlaybackAction::Master(level),
         PlaybackAction::ConfiguredFader { number: 2, level } => {
-            let PlaybackFootprint::Wider { right_fader, .. } = &definition.footprint else {
+            let Some(right_fader) = definition.footprint.right_fader() else {
                 return Err(invalid("fader is not present on this playback"));
             };
-            resolved.fader = *right_fader;
+            resolved.fader = right_fader;
             resolved.has_fader = true;
             PlaybackAction::Master(level)
         }
@@ -38,10 +38,10 @@ pub(super) fn configured_control_definition(
             PlaybackAction::MasterAbsolute(level)
         }
         PlaybackAction::ConfiguredFaderAbsolute { number: 2, level } => {
-            let PlaybackFootprint::Wider { right_fader, .. } = &definition.footprint else {
+            let Some(right_fader) = definition.footprint.right_fader() else {
                 return Err(invalid("fader is not present on this playback"));
             };
-            resolved.fader = *right_fader;
+            resolved.fader = right_fader;
             resolved.has_fader = true;
             PlaybackAction::MasterAbsolute(level)
         }
@@ -61,10 +61,16 @@ fn expanded_button(
     number: u8,
 ) -> Result<PlaybackButtonAction, ActionError> {
     match (&definition.footprint, number) {
-        (PlaybackFootprint::Taller { upper_button }, 4) => Ok(*upper_button),
-        (PlaybackFootprint::Wider { right_buttons, .. }, 4..=6) => {
-            Ok(right_buttons[usize::from(number - 4)])
-        }
+        (
+            PlaybackFootprint::Taller { upper_button }
+            | PlaybackFootprint::PaneTaller { upper_button },
+            4,
+        ) => Ok(*upper_button),
+        (
+            PlaybackFootprint::Wider { right_buttons, .. }
+            | PlaybackFootprint::PaneWider { right_buttons, .. },
+            4..=6,
+        ) => Ok(right_buttons[usize::from(number - 4)]),
         _ => Err(invalid("button is not present on this playback")),
     }
 }
@@ -187,6 +193,36 @@ mod tests {
         assert!(super::super::semantics::may_trigger_auto_off(
             action, &resolved
         ));
+    }
+
+    #[test]
+    fn pane_footprints_dispatch_extra_controls_at_the_anchor() {
+        let mut definition = definition();
+        definition.footprint = PlaybackFootprint::PaneTaller {
+            upper_button: PlaybackButtonAction::Go,
+        };
+        let (resolved, _) = configured_control_definition(
+            &definition,
+            PlaybackAction::ConfiguredButton {
+                number: 4,
+                pressed: true,
+            },
+        )
+        .unwrap();
+        assert_eq!(resolved.buttons[0], PlaybackButtonAction::Go);
+
+        definition.footprint = PlaybackFootprint::PaneWider {
+            right_buttons: [PlaybackButtonAction::None; 3],
+            right_fader: PlaybackFaderMode::XFade,
+        };
+        let level = PlaybackLevel::new(0.375);
+        let (resolved, action) = configured_control_definition(
+            &definition,
+            PlaybackAction::ConfiguredFaderAbsolute { number: 2, level },
+        )
+        .unwrap();
+        assert_eq!(resolved.fader, PlaybackFaderMode::XFade);
+        assert_eq!(action, PlaybackAction::MasterAbsolute(level));
     }
 
     #[test]

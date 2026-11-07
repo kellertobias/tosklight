@@ -98,11 +98,16 @@ export function projectPlaybackSlots({
 
 /** Every displayed cell owns a row/column, including holes in sparse show pages. */
 export function playbackCellGridStyle(cell: PlaybackSlotProjection) {
-	const column = cell.columnIndex;
+	const footprint = playbackCellFootprint(cell);
 	return {
-		gridRow: `${cell.rowIndex + 1} / span 1`,
-		gridColumn: `${column + 1} / span 1`,
+		gridRow: `${footprint?.rowStart ?? cell.rowIndex + 1} / span ${footprint?.rowSpan ?? 1}`,
+		gridColumn: `${footprint?.columnStart ?? cell.columnIndex + 1} / span ${footprint?.columnSpan ?? 1}`,
 	};
+}
+
+export function playbackCellFootprint(cell: PlaybackSlotProjection) {
+	const pane = cell.paneFootprint;
+	return pane ? (pane.type === "single_button" ? null : pane) : cell.footprint;
 }
 
 export function playbackCellKey(cell: {

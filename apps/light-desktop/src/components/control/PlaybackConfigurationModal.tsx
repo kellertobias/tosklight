@@ -28,6 +28,7 @@ import {
 	type PlaybackFamily,
 	type PlaybackAutomationOption,
 } from "./PlaybackConfigurationTabs";
+import type { PaneFootprintDefault } from "./playbackFaderBank/types";
 
 export { playbackImageDataUrl } from "./PlaybackConfigurationTabs";
 
@@ -40,6 +41,7 @@ export interface PlaybackConfigurationModalProps {
 	page: number;
 	slot: number;
 	empty?: boolean;
+	paneFootprintDefault?: PaneFootprintDefault;
 	onClose: () => void;
 }
 
@@ -61,6 +63,7 @@ export function PlaybackConfigurationDialog({
 	page,
 	slot,
 	empty = false,
+	paneFootprintDefault,
 	fallbackButtons,
 	save,
 	clear,
@@ -171,6 +174,7 @@ export function PlaybackConfigurationDialog({
 			page={page}
 			slot={slot}
 			topology={topology}
+			paneFootprintDefault={paneFootprintDefault}
 			busy={busy}
 			isDirty={isDirty}
 			targetValid={targetValid}
@@ -206,6 +210,7 @@ type DialogViewProps = {
 	page: number;
 	slot: number;
 	topology: string;
+	paneFootprintDefault?: PaneFootprintDefault;
 	busy: boolean;
 	isDirty: boolean;
 	targetValid: boolean;
@@ -238,6 +243,7 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 		page,
 		slot,
 		topology,
+		paneFootprintDefault,
 		busy,
 		isDirty,
 		targetValid,
@@ -362,6 +368,7 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 										<PlaybackLayoutTab
 											draft={draft}
 											options={options}
+											paneFootprintDefault={paneFootprintDefault}
 											onDraftChange={onDraftChange}
 										/>
 									)}
@@ -628,12 +635,18 @@ export function withFunctionDefaults(
 		buttons = ["blackout", "pause_dynamics", "flash"];
 		fader = "master";
 	}
-	const footprint =
-		playback.footprint?.type === "taller"
-			? { type: "taller" as const, upper_button: "none" as const }
-			: playback.footprint?.type === "wider"
-				? { type: "wider" as const, right_buttons: buttons, right_fader: fader }
-				: { type: "normal" as const };
+	const currentFootprint = playback.footprint;
+	let footprint = currentFootprint ?? { type: "normal" as const };
+	if (
+		currentFootprint?.type === "taller" ||
+		currentFootprint?.type === "pane_taller"
+	)
+		footprint = { ...currentFootprint, upper_button: "none" };
+	if (
+		currentFootprint?.type === "wider" ||
+		currentFootprint?.type === "pane_wider"
+	)
+		footprint = { ...currentFootprint, right_buttons: buttons, right_fader: fader };
 	const has_fader =
 		type === "macro" || type === "timecode" ? false : playback.has_fader;
 	return normalizePlaybackTopology(

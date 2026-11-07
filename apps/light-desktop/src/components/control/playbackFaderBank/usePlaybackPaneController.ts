@@ -4,6 +4,7 @@ import {
 	type PlaybackFaderBankProps,
 	usePlaybackBankController,
 } from "./controller";
+import { projectPlaybackPaneFootprints } from "./paneFootprints";
 import { reflowPlaybackCells } from "./paneTileGeometry";
 import { usePaneTileGeometry } from "./usePaneTileGeometry";
 
@@ -19,19 +20,21 @@ export function usePlaybackPaneController(props: PlaybackFaderBankProps) {
 		sourceController.slots.length,
 		poolCardSizing(sourceController.state),
 	);
-	const reflowedSlots = useMemo(
-		() =>
-			paneGeometry
-				? reflowPlaybackCells(sourceController.slots, paneGeometry.columns)
-				: sourceController.slots,
-		[sourceController.slots, paneGeometry?.columns],
-	);
-	const controller = paneGeometry
+	const paneColumns = paneGeometry?.columns;
+	const slots = useMemo(() => {
+		const cells = paneColumns
+			? reflowPlaybackCells(sourceController.slots, paneColumns)
+			: sourceController.slots;
+		return sourceController.paneFootprints
+			? projectPlaybackPaneFootprints(cells)
+			: cells;
+	}, [sourceController.slots, sourceController.paneFootprints, paneColumns]);
+	const controller = paneGeometry || slots !== sourceController.slots
 		? {
 				...sourceController,
-				slots: reflowedSlots,
-				columns: paneGeometry.columns,
-				rowCount: paneGeometry.rows,
+				slots,
+				columns: paneGeometry?.columns ?? sourceController.columns,
+				rowCount: paneGeometry?.rows ?? sourceController.rowCount,
 			}
 		: sourceController;
 	return { controller, paneGeometry, viewport, bankElement, setBankElement };

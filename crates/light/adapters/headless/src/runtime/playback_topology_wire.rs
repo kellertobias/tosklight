@@ -262,6 +262,20 @@ fn application_footprint(value: wire::PlaybackTopologyFootprint) -> playback::Pl
             right_buttons: right_buttons.map(application_button),
             right_fader: application_fader(right_fader),
         },
+        wire::PlaybackTopologyFootprint::SingleButton => playback::PlaybackFootprint::SingleButton,
+        wire::PlaybackTopologyFootprint::PaneNormal => playback::PlaybackFootprint::PaneNormal,
+        wire::PlaybackTopologyFootprint::PaneTaller { upper_button } => {
+            playback::PlaybackFootprint::PaneTaller {
+                upper_button: application_button(upper_button),
+            }
+        }
+        wire::PlaybackTopologyFootprint::PaneWider {
+            right_buttons,
+            right_fader,
+        } => playback::PlaybackFootprint::PaneWider {
+            right_buttons: right_buttons.map(application_button),
+            right_fader: application_fader(right_fader),
+        },
     }
 }
 

@@ -24,6 +24,11 @@ Assign each available button, fader, or push encoder in **Layout**. The choice d
 
 Choose **Empty Button** beside Close to leave one button unassigned. **Apply** saves the changed draft; Close discards it. Macro and Timecode assignments use buttons only, without a fader value.
 
+In a Playbacks pane, **Single button** uses one cell. **Normal** uses the anchor and two cells below
+it for the standard controls. **Taller** adds an upper cell. **Wider** adds a column on the right.
+The larger layouts use empty neighbors and fall back to one cell when the space is unavailable.
+The Playback keeps its address and stored layout when it falls back.
+
 Choosing a different playback type immediately loads its standard layout. Cue List uses Go Minus, Go Plus, Flash, and Master. Group Master uses Select, Select dereferenced, Flash, and Master. Speed Master uses Double, Half, Learn, and Learned-speed percentage. Programmer Fade and Cue Fade use Double, Half, and Off above their time fader; Off sets the time to zero. Grand Master uses Blackout, Pause Dynamics, and Flash above its fixed master fader.
 
 The desk timing strip exposes **Programmer Fade**, **Cue Fade**, and **Release** together on touch and attached control surfaces. Release is the authoritative fallback for Cues whose Out Fade is linked to Release; changing it updates those linked Cues without rewriting their remembered explicit Out Fade values.

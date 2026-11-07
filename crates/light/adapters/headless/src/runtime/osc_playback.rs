@@ -834,6 +834,21 @@ mod playback_address_tests {
             None,
             "two expanded claims are ambiguous"
         );
+        let pane_wider = playback(light_playback::PlaybackFootprint::PaneWider {
+            right_buttons: [light_playback::PlaybackButtonAction::Go; 3],
+            right_fader: light_playback::PlaybackFaderMode::Master,
+        });
+        let pane_taller = playback(light_playback::PlaybackFootprint::PaneTaller {
+            upper_button: light_playback::PlaybackButtonAction::Flash,
+        });
+        assert_eq!(
+            expanded_osc_binding(&state, &snapshot(vec![(31, pane_wider)]), 1, &desk, 32),
+            None
+        );
+        assert_eq!(
+            expanded_osc_binding(&state, &snapshot(vec![(32, pane_taller)]), 1, &desk, 12),
+            None
+        );
         let _ = std::fs::remove_dir_all(data_dir);
     }
 }

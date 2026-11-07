@@ -16,6 +16,8 @@ import {
 } from "@tosklight/ui/window-kit";
 import { useDynamics } from "../../features/showObjects/ShowObjectsState";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
+import { PlaybackFootprintField } from "./PlaybackFootprintField";
+import type { PaneFootprintDefault } from "./playbackFaderBank/types";
 
 export type PlaybackFamily =
 	| "cue_list"
@@ -792,6 +794,7 @@ function PlaybackAutoOffSettings({
 export function PlaybackLayoutTab({
 	draft,
 	options,
+	paneFootprintDefault,
 	onDraftChange,
 }: {
 	draft: PlaybackDefinition;
@@ -800,6 +803,7 @@ export function PlaybackLayoutTab({
 		label: string;
 		description: string;
 	}>;
+	paneFootprintDefault?: PaneFootprintDefault;
 	onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
 	const footprint = draft.footprint ?? { type: "normal" as const };
@@ -807,7 +811,11 @@ export function PlaybackLayoutTab({
 		draft.target.type === "macro" || draft.target.type === "timecode";
 	return (
 		<FormLayout labelPlacement="side">
-			<PlaybackFootprintField draft={draft} onDraftChange={onDraftChange} />
+			<PlaybackFootprintField
+				draft={draft}
+				paneFootprintDefault={paneFootprintDefault}
+				onDraftChange={onDraftChange}
+			/>
 			{Array.from({ length: draft.button_count ?? 3 }, (_, index) => (
 				<LayoutChoiceField
 					kind="button"
@@ -851,7 +859,7 @@ export function PlaybackLayoutTab({
 						: "No fader on this playback."}
 				</p>
 			)}
-			{footprint.type === "taller" && (
+			{(footprint.type === "taller" || footprint.type === "pane_taller") && (
 				<LayoutChoiceField
 					kind="button"
 					label="Additional upper button"
@@ -861,17 +869,20 @@ export function PlaybackLayoutTab({
 						onDraftChange({
 							...draft,
 							footprint: {
-								type: "taller",
+								...footprint,
 								upper_button: upper_button as PlaybackButtonAction,
 							},
 						})
 					}
 				/>
 			)}
-			{footprint.type === "wider" && (
+			{(footprint.type === "wider" || footprint.type === "pane_wider") && (
 				<>
 					{footprint.right_buttons
-						.slice(0, draft.button_count ?? 3)
+						.slice(
+							0,
+							footprint.type === "pane_wider" ? 3 : (draft.button_count ?? 3),
+						)
 						.map((value, index) => (
 							<LayoutChoiceField
 								kind="button"
@@ -924,43 +935,6 @@ export function PlaybackLayoutTab({
 					</p>
 				)}
 		</FormLayout>
-	);
-}
-
-function PlaybackFootprintField({
-	draft,
-	onDraftChange,
-}: {
-	draft: PlaybackDefinition;
-	onDraftChange: (playback: PlaybackDefinition) => void;
-}) {
-	const footprint = draft.footprint ?? { type: "normal" as const };
-	const choose = (type: "normal" | "taller" | "wider") => {
-		if (type === "normal") onDraftChange({ ...draft, footprint: { type } });
-		else if (type === "taller")
-			onDraftChange({ ...draft, footprint: { type, upper_button: "none" } });
-		else
-			onDraftChange({
-				...draft,
-				footprint: {
-					type,
-					right_buttons: defaultButtons(draft.target.type),
-					right_fader: defaultFader(draft.target.type),
-				},
-			});
-	};
-	return (
-		<MultiValueToggleField
-			label="Footprint"
-			value={footprint.type}
-			onChange={(value) => choose(value as "normal" | "taller" | "wider")}
-			options={[
-				{ value: "normal", label: "Normal" },
-				{ value: "taller", label: "Taller" },
-				{ value: "wider", label: "Wider" },
-			]}
-			description="Expanded controls remain saved when this surface cannot expose them."
-		/>
 	);
 }
 
@@ -1070,25 +1044,6 @@ export function InactivePlaybackDetail() {
 			</span>
 		</div>
 	);
-}
-
-function defaultButtons(
-	type: PlaybackDefinition["target"]["type"],
-): PlaybackDefinition["buttons"] {
-	if (type === "cue_list") return ["go_minus", "go", "flash"];
-	if (type === "macro") return ["go", "none", "none"];
-	if (type === "timecode") return ["go", "pause", "off"];
-	if (type === "dynamic") return ["off", "pause", "flash"];
-	if (type === "group") return ["select", "select_dereferenced", "flash"];
-	if (type === "speed_group") return ["double", "half", "learn"];
-	if (type === "grand_master") return ["blackout", "pause_dynamics", "flash"];
-	return ["double", "half", "off"];
-}
-
-function defaultFader(
-	type: PlaybackDefinition["target"]["type"],
-): PlaybackDefinition["fader"] {
-	return type === "speed_group" ? "learned_percentage" : "master";
 }
 
 export function familyFromTarget(

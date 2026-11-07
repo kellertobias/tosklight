@@ -48,16 +48,9 @@ function playbackCardStyle(
 	color: string,
 	presentationStyle?: CSSProperties,
 ): CSSProperties {
-	const footprint = cell.footprint;
 	return {
 		...playbackCellGridStyle(cell),
 		...(cell.playback ? { "--playback-color": color } : {}),
-		...(footprint
-			? {
-					gridColumn: `${footprint.columnStart} / span ${footprint.columnSpan}`,
-					gridRow: `${footprint.rowStart} / span ${footprint.rowSpan}`,
-				}
-			: {}),
 		...presentationStyle,
 	} as CSSProperties;
 }
@@ -90,8 +83,10 @@ export function PlaybackSlot({
 	soloMember = false,
 }: PlaybackSlotProps) {
 	const [controlSourceId] = useState(() => `software:${crypto.randomUUID()}`);
-	const controller = { ...bankController, controlSourceId };
-	const { playback, cue, group, slot, row } = slotData;
+	const { playback, cue, group, slot, row, paneFootprint } = slotData;
+	const hardware = !paneFootprint && bankController.hardware;
+	const controller = { ...bankController, controlSourceId, hardware };
+	const paneExpanded = paneFootprint && paneFootprint.type !== "single_button";
 	const poolPresentation = usePoolPresentationConfiguration();
 	const showId = useActiveShowId() ?? "unresolved";
 	const runtimeProjection = playback
@@ -99,12 +94,12 @@ export function PlaybackSlot({
 		: undefined;
 	const active = playbackControlRuntime(runtimeProjection);
 	const selected = isSelectedPlayback(controller, playback);
-	const configuredButtons =
-		row?.button_count ?? (controller.hardware ? 3 : (controller.buttons ?? 3));
+	const rowButtons = row?.button_count ?? (hardware ? 3 : (controller.buttons ?? 3));
+	const configuredButtons = paneExpanded ? 3 : rowButtons;
 	const buttonCount = playback
 		? Math.min(configuredButtons, playback.button_count ?? configuredButtons)
 		: configuredButtons;
-	const hasFader =
+	const hasFader = paneFootprint?.type !== "single_button" &&
 		row?.presentation !== "buttons" && (playback?.has_fader ?? true);
 	const value = playbackFaderValue(
 		playback,

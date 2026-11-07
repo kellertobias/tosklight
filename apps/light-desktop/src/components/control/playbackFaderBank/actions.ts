@@ -54,6 +54,11 @@ export function openPlaybackConfiguration(
 		slot,
 		empty: !playback,
 		fallbackButtons,
+		paneFootprintDefault: controller.paneFootprints
+			? controller.tilePresentation
+				? "single_button"
+				: "pane_normal"
+			: undefined,
 		expectedPageRevision: controller.pageObject?.revision ?? 0,
 		expectedPageObjectId: controller.pageObject?.id ?? null,
 	});

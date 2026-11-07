@@ -166,17 +166,72 @@ fn lotp_group_master_promotes_reader_floor_and_survives_history_and_reopen() {
 }
 
 #[test]
+fn explicit_pane_playback_footprints_promote_the_reader_floor_and_survive_reopen() {
+    let (path, store) = create();
+    let legacy = json!({
+        "number": 1,
+        "name": "Page 1",
+        "assignments": {
+            "1": {
+                "name": "Legacy",
+                "target": {"type": "grand_master"},
+                "footprint": {
+                    "type": "wider",
+                    "right_buttons": ["none", "none", "none"],
+                    "right_fader": "master"
+                }
+            }
+        }
+    });
+    store.put_object("playback_page", "1", &legacy, 0).unwrap();
+    assert_eq!(schema(&store), 10);
+
+    let mut pane = legacy.clone();
+    let assignments = pane["assignments"].as_object_mut().unwrap();
+    for (position, footprint) in [
+        ("2", json!({"type": "single_button"})),
+        ("3", json!({"type": "pane_normal"})),
+        ("4", json!({"type": "pane_taller", "upper_button": "none"})),
+        (
+            "5",
+            json!({
+                "type": "pane_wider",
+                "right_buttons": ["none", "none", "none"],
+                "right_fader": "master"
+            }),
+        ),
+    ] {
+        let mut definition = legacy["assignments"]["1"].clone();
+        definition["footprint"] = footprint;
+        assignments.insert(position.into(), definition);
+    }
+    let mut edit = store.portable_document().unwrap().transaction();
+    edit.put("playback_page", "1", pane.clone());
+    store.apply_portable_transaction(edit).unwrap();
+    assert_eq!(schema(&store), 13);
+    drop(store);
+
+    let store = ShowStore::open(&path).unwrap();
+    assert_eq!(schema(&store), 13);
+    assert_eq!(store.objects("playback_page").unwrap()[0].body, pane);
+    store.put_object("playback_page", "1", &legacy, 2).unwrap();
+    assert_eq!(schema(&store), 13);
+    drop(store);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn future_schema_refusal_keeps_original_content_and_separate_recovery_is_available() {
     let (path, store) = create();
     store
         .conn
-        .execute("UPDATE schema_info SET version=13", [])
+        .execute("UPDATE schema_info SET version=14", [])
         .unwrap();
     drop(store);
     let before = std::fs::read(&path).unwrap();
     let error = ShowStore::open(&path).err().unwrap().to_string();
     assert!(
-        error.contains("show schema 13 is newer than supported schema 12"),
+        error.contains("show schema 14 is newer than supported schema 13"),
         "{error}"
     );
     assert_eq!(std::fs::read(&path).unwrap(), before);
@@ -230,7 +285,7 @@ fn reader_version_preflight_preserves_sql_errors_for_malformed_or_missing_schema
 
 #[test]
 fn reader_version_preflight_rejects_only_newer_versions_without_touching_the_show() {
-    for version in [10, 11, 12, 13] {
+    for version in [10, 11, 12, 13, 14] {
         let (path, store) = create();
         store
             .conn
@@ -239,9 +294,9 @@ fn reader_version_preflight_rejects_only_newer_versions_without_touching_the_sho
         drop(store);
         let original = std::fs::read(&path).unwrap();
         let result = crate::validate_show_reader_version(&path);
-        if version > 12 {
+        if version > 13 {
             assert!(
-                matches!(result,Err(crate::StoreError::Invalid(message)) if message.contains("show schema 13 is newer than supported schema 12"))
+                matches!(result,Err(crate::StoreError::Invalid(message)) if message.contains("show schema 14 is newer than supported schema 13"))
             );
         } else {
             result.unwrap();

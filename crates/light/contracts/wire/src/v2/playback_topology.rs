@@ -301,6 +301,15 @@ pub enum PlaybackTopologyFootprint {
         right_buttons: [PlaybackTopologyButtonAction; 3],
         right_fader: PlaybackTopologyFaderMode,
     },
+    SingleButton,
+    PaneNormal,
+    PaneTaller {
+        upper_button: PlaybackTopologyButtonAction,
+    },
+    PaneWider {
+        right_buttons: [PlaybackTopologyButtonAction; 3],
+        right_fader: PlaybackTopologyFaderMode,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

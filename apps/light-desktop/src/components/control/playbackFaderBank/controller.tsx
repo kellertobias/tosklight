@@ -44,6 +44,8 @@ export interface PlaybackFaderBankProps {
 	tileLayout?: { mode: "automatic" } | { mode: "fixed"; rows: number; columns: number };
 	/** Single-action software pane tiles that fill their authored grid. */
 	tilePresentation?: boolean;
+	/** Honor explicitly authored Playback pane footprints. */
+	paneFootprints?: boolean;
 	/** Live screen layout reference; page and control ownership stay on this pane. */
 	layoutSourceSurfaceId?: string;
 	/** Preserve readable touch geometry by scrolling fixed pane rows. */
@@ -60,6 +62,7 @@ export interface PlaybackFaderBankProps {
 export function usePlaybackBankController({
 	surfaceId = "main",
 	tilePresentation = false,
+	paneFootprints = false,
 	layoutSourceSurfaceId,
 	pageNumber,
 	firstSlot = 1,
@@ -142,6 +145,7 @@ export function usePlaybackBankController({
 	return {
 		surfaceId,
 		tilePresentation,
+		paneFootprints,
 		controlSourceId,
 		selectSurface: () => surfaces?.selectSurface(surfaceId),
 		topology,

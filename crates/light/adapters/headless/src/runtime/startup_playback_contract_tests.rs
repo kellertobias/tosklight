@@ -123,7 +123,7 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .unwrap(),
         11
     );
-    conn.execute("UPDATE schema_info SET version=13", [])
+    conn.execute("UPDATE schema_info SET version=14", [])
         .unwrap();
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
         .unwrap();
@@ -135,7 +135,7 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .active_show_error
             .as_deref()
             .unwrap()
-            .contains("newer than supported schema 12")
+            .contains("newer than supported schema 13")
     );
     drop(started);
     assert_eq!(std::fs::read(&active.path).unwrap(), before);
@@ -147,7 +147,7 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .active_show_error
             .as_deref()
             .unwrap()
-            .contains("newer than supported schema 12")
+            .contains("newer than supported schema 13")
     );
     drop(started);
     assert_eq!(std::fs::read(&active.path).unwrap(), before);
@@ -196,5 +196,63 @@ fn group_master_mode_loads_legacy_htp_and_authored_lotp_at_startup() {
             .unwrap();
     }
     assert_mode(GroupMasterMode::Lotp);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn pane_playback_footprints_load_alongside_legacy_footprints_at_startup() {
+    use light_playback::{PlaybackButtonAction, PlaybackFaderMode, PlaybackFootprint};
+
+    let dir = directory();
+    let initial = StartupState::load(options(&dir)).unwrap();
+    assert!(initial.active_show_error.is_none());
+    let active = initial.persistent.active_show.as_ref().unwrap().clone();
+    drop(initial);
+    let body = serde_json::json!({
+        "number": 99,
+        "name": "Footprints",
+        "assignments": {
+            "1": {"name": "Legacy", "target": {"type": "grand_master"}},
+            "2": {
+                "name": "Pane Wider",
+                "target": {"type": "grand_master"},
+                "footprint": {
+                    "type": "pane_wider",
+                    "right_buttons": ["blackout", "none", "flash"],
+                    "right_fader": "master"
+                }
+            }
+        }
+    });
+    light_show::ShowStore::open(&active.path)
+        .unwrap()
+        .put_object("playback_page", "99", &body, 0)
+        .unwrap();
+
+    let restarted = StartupState::load(options(&dir)).unwrap();
+    assert!(
+        restarted.active_show_error.is_none(),
+        "{:?}",
+        restarted.active_show_error
+    );
+    let snapshot = restarted.engine.snapshot();
+    let page = snapshot
+        .playback_pages
+        .iter()
+        .find(|page| page.number == 99)
+        .unwrap();
+    assert_eq!(page.assignments[&1].footprint, PlaybackFootprint::Normal);
+    assert_eq!(
+        page.assignments[&2].footprint,
+        PlaybackFootprint::PaneWider {
+            right_buttons: [
+                PlaybackButtonAction::Blackout,
+                PlaybackButtonAction::None,
+                PlaybackButtonAction::Flash,
+            ],
+            right_fader: PlaybackFaderMode::Master,
+        }
+    );
+    drop(restarted);
     std::fs::remove_dir_all(dir).unwrap();
 }

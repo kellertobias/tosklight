@@ -345,6 +345,26 @@ pub enum PlaybackFootprint {
         right_buttons: [PlaybackButtonAction; 3],
         right_fader: PlaybackFaderMode,
     },
+    SingleButton,
+    PaneNormal,
+    PaneTaller {
+        upper_button: PlaybackButtonAction,
+    },
+    PaneWider {
+        right_buttons: [PlaybackButtonAction; 3],
+        right_fader: PlaybackFaderMode,
+    },
+}
+
+impl PlaybackFootprint {
+    pub fn right_fader(self) -> Option<PlaybackFaderMode> {
+        match self {
+            Self::Wider { right_fader, .. } | Self::PaneWider { right_fader, .. } => {
+                Some(right_fader)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -463,11 +483,20 @@ impl PlaybackDefinition {
         self.buttons = Self::default_buttons(&self.target);
         self.fader = Self::default_fader(&self.target);
         self.footprint = match self.footprint {
-            PlaybackFootprint::Normal => PlaybackFootprint::Normal,
+            footprint @ (PlaybackFootprint::Normal
+            | PlaybackFootprint::SingleButton
+            | PlaybackFootprint::PaneNormal) => footprint,
             PlaybackFootprint::Taller { .. } => PlaybackFootprint::Taller {
                 upper_button: PlaybackButtonAction::None,
             },
             PlaybackFootprint::Wider { .. } => PlaybackFootprint::Wider {
+                right_buttons: Self::default_buttons(&self.target),
+                right_fader: Self::default_fader(&self.target),
+            },
+            PlaybackFootprint::PaneTaller { .. } => PlaybackFootprint::PaneTaller {
+                upper_button: PlaybackButtonAction::None,
+            },
+            PlaybackFootprint::PaneWider { .. } => PlaybackFootprint::PaneWider {
                 right_buttons: Self::default_buttons(&self.target),
                 right_fader: Self::default_fader(&self.target),
             },
@@ -594,9 +623,18 @@ impl PlaybackDefinition {
 
     fn footprint_is_compatible(&self) -> bool {
         match self.footprint {
-            PlaybackFootprint::Normal => true,
-            PlaybackFootprint::Taller { upper_button } => self.button_is_compatible(upper_button),
+            PlaybackFootprint::Normal
+            | PlaybackFootprint::SingleButton
+            | PlaybackFootprint::PaneNormal => true,
+            PlaybackFootprint::Taller { upper_button }
+            | PlaybackFootprint::PaneTaller { upper_button } => {
+                self.button_is_compatible(upper_button)
+            }
             PlaybackFootprint::Wider {
+                right_buttons,
+                right_fader,
+            }
+            | PlaybackFootprint::PaneWider {
                 right_buttons,
                 right_fader,
             } => {
