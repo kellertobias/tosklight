@@ -79,6 +79,17 @@ independent captures; a compact route retains its capture across selected-page c
 control ID identifies the same physical control across route changes. Ordinary permanent button
 actions keep their normal semantics.
 
+### Speed Group BPM
+
+Send `/light/{desk}/speed-group/{group}/encoder` with one OSC integer (`i`) or float (`f`) in
+absolute BPM. Groups `1`, `2`, `3`, `4`, and `5` address A, B, C, D, and E, respectively. For
+example, send `/light/desk/speed-group/2/encoder` with float `127.5` to set Group B to 127.5 BPM.
+
+The desk clamps finite values to 0.1 through 999 BPM. A direct entry returns the addressed group to
+independent manual tempo and resumes its phase. The runtime retains fractional BPM, while
+`/light/{desk}/feedback/speed-group/{group}` reports effective BPM rounded to a whole number as its
+first argument. See the [input and feedback handlers](../../../crates/light/adapters/headless/src/runtime/osc_feedback.rs).
+
 ### Dynamics
 
 Dynamics OSC requires a desk-button surface; it is programming, so the guest path does not accept it. Pool actions take one pressed Boolean or numeric
