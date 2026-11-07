@@ -1,4 +1,26 @@
 .playback-pane { display: flex; flex-direction: column; }
+.pane-chrome-toolbar-target:has(> .playback-pane-title-controls) {
+	justify-content: flex-end;
+}
+.playback-pane-empty {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	justify-content: safe center;
+	gap: 12px;
+	min-height: 0;
+	overflow: auto;
+	padding: 20px 24px;
+	text-align: center;
+}
+.playback-pane-empty > p {
+	max-inline-size: 38ch;
+	margin: 0;
+	color: var(--muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
 .playback-pane-title-controls { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .playback-pane-title-controls .ui-form-field { margin: 0; min-width: 80px; max-width: 140px; }
 .playback-pane-title-controls .ui-form-field > label { display: none; }
