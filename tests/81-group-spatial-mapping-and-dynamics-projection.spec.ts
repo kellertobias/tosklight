@@ -78,6 +78,7 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByRole("tab")).toHaveText([
 		"General",
+		"Master",
 		"Projection",
 		"Phase",
 	]);
@@ -85,7 +86,6 @@ test("GROUP-SPATIAL-010 @ui › Group settings author ranked output without reti
 		dialog.getByRole("button", { name: "Close settings" }),
 	).toBeVisible();
 	for (const retired of [
-		"Master",
 		"Select live group",
 		"Select frozen group",
 		"Replace membership with selection",

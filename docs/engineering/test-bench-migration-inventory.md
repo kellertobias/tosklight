@@ -11,7 +11,7 @@ Status meanings:
   are themselves part of the acceptance contract.
 - `generated-boundary`: intentionally excluded from the default catalog and kept serial.
 
-Default catalog: **455 root cases across 142 files**.
+Default catalog: **456 root cases across 143 files**.
 
 | Source | Scenario and intent | Contract | Surfaces | Helper family | Artifacts | Constraint | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -463,6 +463,7 @@ Default catalog: **455 root cases across 142 files**.
 | 99-media-server-discovery.spec.ts | MEDIA-006 @api discovery describes every server by the current Media contract | repository contract | @api | media-server-discovery | standard failure evidence | parallel | reviewed-low-level-boundary |
 | 99-media-server-discovery.spec.ts | MEDIA-006 @ui Show Patch tells a configured, outdated, and unavailable Media Server apart | repository contract | @ui | media-server-discovery | standard failure evidence | parallel | pending-semantic-migration |
 | fixture-value-sources.spec.ts | @ui Fixture Sheet touch inspection reports the retained Programmer source | repository contract | @ui | fixture-value-sources | standard failure evidence | parallel | pending-semantic-migration |
+| osc-speed-group-bpm.spec.ts | OSC Speed Groups A–E accept absolute integer and fractional BPM @api | repository contract | @api | osc-speed-group-bpm | standard failure evidence | parallel | reviewed-low-level-boundary |
 | playwright-react-tsx-transform.spec.tsx | Playwright transforms repository React TSX with the React runtime | repository contract | none | playwright-react-tsx-transform.spec.tsx | standard failure evidence | parallel | reviewed-low-level-boundary |
 | product-demo.spec.ts | BENCH-PRODUCT-DEMO-001 @bench @ui @demo › narrates the complete Full HD product demo surface in one regression run | repository contract | @bench @ui @demo | product-demo | generated show/video | serial | migrated-semantic-world |
 | show-health.spec.ts | @ui Show Health finds a broken Group, fixes once, undoes and opens the exact Group | repository contract | @ui | show-health | standard failure evidence | parallel | pending-semantic-migration |
