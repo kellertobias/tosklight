@@ -2,7 +2,7 @@ use crate::{EngineSnapshot, ProfileEncodingIndex, ProfileProjectionIndex, profil
 use light_core::{AttributeKey, AttributeValue, FixtureId};
 use light_output::OutputRoute;
 use light_playback::{PlaybackEngine, PlaybackTarget};
-use light_programmer::{GroupDefinition, resolve_group, resolve_group_spatial};
+use light_programmer::{GroupDefinition, GroupMasterMode, resolve_group, resolve_group_spatial};
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
@@ -586,6 +586,7 @@ pub(crate) struct GroupMasterIndex {
 #[derive(Clone, Debug)]
 struct GroupMasterBinding {
     group_id: String,
+    mode: GroupMasterMode,
     master: f32,
 }
 
@@ -618,6 +619,7 @@ impl GroupMasterIndex {
             let master_index = index.masters.len();
             index.masters.push(GroupMasterBinding {
                 group_id: definition.id.clone(),
+                mode: definition.group_master_mode,
                 master: preserved
                     .and_then(|current| current.master(&definition.id))
                     .or_else(|| initial_masters.get(&definition.id).copied())
@@ -640,23 +642,25 @@ impl GroupMasterIndex {
     }
 
     pub(crate) fn scale(&self, fixture_id: FixtureId, flashes: &HashMap<String, f32>) -> f32 {
-        // A show with no Group Master assigned asks this for every head of every frame.
-        if self.fixtures.is_empty() {
+        let Some(indices) = self.fixtures.get(&fixture_id) else {
             return 1.0;
+        };
+        let mut highest_htp: Option<f32> = None;
+        let mut lowest_lotp: f32 = 1.0;
+        for &index in indices {
+            let binding = &self.masters[index];
+            let level = binding
+                .master
+                .max(flashes.get(&binding.group_id).copied().unwrap_or(0.0))
+                .clamp(0.0, 1.0);
+            match binding.mode {
+                GroupMasterMode::Htp => {
+                    highest_htp = Some(highest_htp.map_or(level, |highest| highest.max(level)));
+                }
+                GroupMasterMode::Lotp => lowest_lotp = lowest_lotp.min(level),
+            }
         }
-        self.fixtures
-            .get(&fixture_id)
-            .into_iter()
-            .flatten()
-            .map(|index| &self.masters[*index])
-            .map(|binding| {
-                binding
-                    .master
-                    .max(flashes.get(&binding.group_id).copied().unwrap_or(0.0))
-                    .clamp(0.0, 1.0)
-            })
-            .reduce(f32::max)
-            .unwrap_or(1.0)
+        highest_htp.unwrap_or(1.0).min(lowest_lotp)
     }
 
     /// The index a Release-policy installation compiles: portable seeds only, no Live levels.

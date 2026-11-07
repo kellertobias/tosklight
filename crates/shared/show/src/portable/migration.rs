@@ -2,7 +2,7 @@ use super::profile_revision::materialize_legacy_fixture_profile_revisions;
 use crate::{StoreError, set_schema_version};
 use rusqlite::{Connection, TransactionBehavior};
 
-pub(crate) const SHOW_SCHEMA_VERSION: i64 = 11;
+pub(crate) const SHOW_SCHEMA_VERSION: i64 = 12;
 pub(crate) const BASE_SHOW_SCHEMA_VERSION: i64 = 10;
 
 pub(crate) fn migrate_show(conn: &mut Connection) -> Result<(), StoreError> {

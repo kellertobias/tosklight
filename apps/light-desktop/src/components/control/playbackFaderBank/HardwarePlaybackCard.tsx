@@ -140,7 +140,9 @@ export function HardwarePlaybackCard({
 				) : group ? (
 					<div className="hardware-cue-list single">
 						<div className="hardware-cue-row current">
-							<span>GRP</span>
+							<span>
+								{group.body.group_master_mode === "lotp" ? "LoTP" : "GRP"}
+							</span>
 							<b>{group.body.name ?? `Group ${group.id}`}</b>
 							<small>{value}% master</small>
 						</div>

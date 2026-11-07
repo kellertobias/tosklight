@@ -9,7 +9,9 @@ import {
 	SelectField as UiSelectField,
 } from "@tosklight/ui";
 import { WindowSettings } from "@tosklight/ui/window-kit";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import type { GroupMasterMode } from "../../api/types";
+import type { GroupManagementOperation } from "../../features/groupManagement/contracts";
 import { useGroupManagement } from "../../features/groupManagement/GroupManagementProvider";
 import type { ResolvedSpatialMapping } from "../../features/spatialMapping/contracts";
 import { PhaseOrderPreview } from "../../features/spatialMapping/PhaseOrderPreview";
@@ -46,10 +48,12 @@ export function GroupSettingsDialog({
 	const [name, setName] = useState(group.body.name ?? `Group ${group.id}`);
 	const [color, setColor] = useState(group.body.color ?? "#718596");
 	const [icon, setIcon] = useState(group.body.icon ?? "◇");
-	const [status, setStatus] = useState<string | null>(null);
-	const [saving, setSaving] = useState(false);
 	const {
 		groupManagement,
+		saving,
+		setSaving,
+		status,
+		setStatus,
 		expectedRevision,
 		setExpectedRevision,
 		expectedShowRevision,
@@ -58,8 +62,10 @@ export function GroupSettingsDialog({
 		setMappingPresentation,
 		mapping,
 		setMapping,
+		masterMode,
 		resolvedSpatial,
 		refreshSettings,
+		saveSetting,
 	} = useGroupSettingsAuthority(group, groups);
 
 	const saveProperties = async (next: {
@@ -67,40 +73,12 @@ export function GroupSettingsDialog({
 		color: string;
 		icon: string;
 	}) => {
-		const trimmed = next.name.trim();
-		if (!trimmed) return setStatus("Group name must not be empty.");
-		if (!groupManagement || saving) return;
-		setSaving(true);
-		setStatus("Saving Group settings…");
-		const authority =
-			expectedShowRevision == null ? await refreshSettings() : null;
-		const objectRevision = authority?.group.revision ?? expectedRevision;
-		const showRevision = authority?.showRevision ?? expectedShowRevision;
-		if (showRevision == null) {
-			setSaving(false);
-			setStatus("Authoritative Group settings are still loading.");
-			return;
-		}
-		const outcome = await groupManagement.manage({
-			objectId: group.id,
-			expectedObjectRevision: objectRevision,
-			expectedShowRevision: showRevision,
-			operation: {
-				type: "update_properties",
-				properties: { name: trimmed, color: next.color, icon: next.icon },
-			},
+		const name = next.name.trim();
+		if (!name) return setStatus("Group name must not be empty.");
+		await saveSetting({
+			type: "update_properties",
+			properties: { ...next, name },
 		});
-		setSaving(false);
-		if (!outcome) {
-			await refreshSettings();
-			setStatus(
-				"Change was not accepted. Authoritative Group values were reloaded; review and retry.",
-			);
-			return;
-		}
-		setExpectedRevision(outcome.group.revision);
-		setExpectedShowRevision(outcome.showRevision);
-		setStatus(outcome.persistenceWarning ?? null);
 	};
 
 	const commitMapping = async (next: SpatialSelectionMapping | null) => {
@@ -180,16 +158,32 @@ export function GroupSettingsDialog({
 			saveProperties={saveProperties}
 			commonPanelProps={commonPanelProps}
 			editingUnavailable={editingUnavailable}
+			masterPanel={
+				<GroupMasterSettingsPanel
+					mode={masterMode}
+					saving={saving}
+					status={status}
+					editable={Boolean(groupManagement)}
+					onChange={(mode) =>
+						void saveSetting({ type: "set_master_mode", mode })
+					}
+				/>
+			}
 		/>
 	);
 }
 
 function useGroupSettingsAuthority(group: Group, groups: readonly Group[]) {
 	const groupManagement = useGroupManagement();
+	const [status, setStatus] = useState<string | null>(null);
+	const [saving, setSaving] = useState(false);
 	const [expectedRevision, setExpectedRevision] = useState(group.revision);
 	const [expectedShowRevision, setExpectedShowRevision] = useState<
 		number | null
 	>(null);
+	const [masterMode, setMasterMode] = useState<GroupMasterMode>(
+		group.body.group_master_mode ?? "htp",
+	);
 	const [mappingPresentation, setMappingPresentation] = useState(() =>
 		resolveMappingPresentation(group, groups),
 	);
@@ -204,6 +198,7 @@ function useGroupSettingsAuthority(group: Group, groups: readonly Group[]) {
 		if (!snapshot) return null;
 		setExpectedRevision(snapshot.group.revision);
 		setExpectedShowRevision(snapshot.showRevision);
+		setMasterMode(snapshot.group.object.body.group_master_mode ?? "htp");
 		setResolvedSpatial(snapshot.resolvedSpatial);
 		setMappingPresentation(
 			resolvedMappingPresentation(snapshot.resolvedSpatial),
@@ -218,8 +213,47 @@ function useGroupSettingsAuthority(group: Group, groups: readonly Group[]) {
 	useEffect(() => {
 		void refreshSettings();
 	}, [refreshSettings]);
+	const saveSetting = async (operation: GroupManagementOperation) => {
+		if (!groupManagement || saving) return;
+		setSaving(true);
+		setStatus("Saving Group settings…");
+		const authority =
+			expectedShowRevision == null ? await refreshSettings() : null;
+		const showRevision = authority?.showRevision ?? expectedShowRevision;
+		if (showRevision == null) {
+			setSaving(false);
+			setStatus("Authoritative Group settings are still loading.");
+			return;
+		}
+		const outcome = await groupManagement.manage({
+			objectId: group.id,
+			expectedObjectRevision: authority?.group.revision ?? expectedRevision,
+			expectedShowRevision: showRevision,
+			operation,
+		});
+		if (!outcome) {
+			const current = await refreshSettings();
+			setSaving(false);
+			setStatus(
+				current
+					? "Change was not accepted. Group settings were reloaded. Review and retry."
+					: "Change was not accepted. Reopen Group settings and retry.",
+			);
+			return;
+		}
+		setExpectedRevision(outcome.group.revision);
+		setExpectedShowRevision(outcome.showRevision);
+		if (operation.type === "set_master_mode")
+			setMasterMode(outcome.group.object.body.group_master_mode ?? "htp");
+		setSaving(false);
+		setStatus(outcome.persistenceWarning ?? null);
+	};
 	return {
 		groupManagement,
+		saving,
+		setSaving,
+		status,
+		setStatus,
 		expectedRevision,
 		setExpectedRevision,
 		expectedShowRevision,
@@ -228,8 +262,10 @@ function useGroupSettingsAuthority(group: Group, groups: readonly Group[]) {
 		setMappingPresentation,
 		mapping,
 		setMapping,
+		masterMode,
 		resolvedSpatial,
 		refreshSettings,
+		saveSetting,
 	};
 }
 
@@ -247,6 +283,7 @@ function GroupSettingsWindow({
 	saveProperties,
 	commonPanelProps,
 	editingUnavailable,
+	masterPanel,
 }: {
 	group: Group;
 	onClose(): void;
@@ -265,6 +302,7 @@ function GroupSettingsWindow({
 	}): Promise<void>;
 	commonPanelProps: MappingPanelProps;
 	editingUnavailable: string | null;
+	masterPanel: ReactNode;
 }) {
 	return (
 		<WindowSettings
@@ -289,6 +327,11 @@ function GroupSettingsWindow({
 					),
 				},
 				{
+					id: "master",
+					label: "Master",
+					content: masterPanel,
+				},
+				{
 					id: "projection",
 					label: "Projection",
 					content: (
@@ -305,6 +348,39 @@ function GroupSettingsWindow({
 				},
 			]}
 		/>
+	);
+}
+
+function GroupMasterSettingsPanel({
+	mode,
+	saving,
+	status,
+	editable,
+	onChange,
+}: {
+	mode: GroupMasterMode;
+	saving: boolean;
+	status: string | null;
+	editable: boolean;
+	onChange(mode: GroupMasterMode): void;
+}) {
+	return (
+		<section className="group-settings-panel group-settings-general">
+			<MultiValueToggleField
+				label="Group Master mode"
+				value={mode}
+				options={[
+					{ value: "htp", label: "HTP" },
+					{ value: "lotp", label: "LoTP" },
+				]}
+				onChange={(next) => {
+					if (next !== mode) onChange(next);
+				}}
+				disabled={!editable || saving}
+				description="HTP uses the highest HTP master level. LoTP limits the master level on this Group’s fixtures. The lowest LoTP limit wins. Every Playback assigned to the Group shares this setting."
+			/>
+			<SaveStatus status={status} saving={saving} />
+		</section>
 	);
 }
 

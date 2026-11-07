@@ -8,8 +8,11 @@ fn create() -> (std::path::PathBuf, ShowStore) {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../.artifacts/tmp")
         });
     std::fs::create_dir_all(&scratch).unwrap();
-    let path = scratch.join(format!("venue-compatibility-{}.show", uuid::Uuid::new_v4()));
-    let (store, _) = ShowStore::create(&path, "Venue persistence").unwrap();
+    let path = scratch.join(format!(
+        "reader-compatibility-{}.show",
+        uuid::Uuid::new_v4()
+    ));
+    let (store, _) = ShowStore::create(&path, "Reader compatibility").unwrap();
     (path, store)
 }
 fn schema(store: &ShowStore) -> i64 {
@@ -130,17 +133,50 @@ fn unrelated_extension_metadata_does_not_promote_legacy_show() {
 }
 
 #[test]
+fn lotp_group_master_promotes_reader_floor_and_survives_history_and_reopen() {
+    let (path, store) = create();
+    let legacy = json!({"id": "balcony", "name": "Balcony", "fixtures": []});
+    let mut lotp = legacy.clone();
+    lotp["group_master_mode"] = json!("lotp");
+    store.put_object("group", "balcony", &legacy, 0).unwrap();
+    assert_eq!(schema(&store), 10);
+
+    let mut edit = store.portable_document().unwrap().transaction();
+    edit.put("group", "balcony", lotp.clone());
+    store.apply_portable_transaction(edit).unwrap();
+    assert_eq!(schema(&store), 12);
+    drop(store);
+
+    let store = ShowStore::open(&path).unwrap();
+    assert_eq!(schema(&store), 12);
+    assert_eq!(store.objects("group").unwrap()[0].body, lotp);
+    let mut undo = store.portable_document().unwrap().transaction();
+    undo.undo_object(store.prepare_object_undo("group", "balcony", 2).unwrap());
+    store.apply_portable_transaction(undo).unwrap();
+    assert_eq!(store.objects("group").unwrap()[0].body, legacy);
+    assert_eq!(schema(&store), 12);
+    let mut redo = store.portable_document().unwrap().transaction();
+    redo.redo_object(store.prepare_object_redo("group", "balcony", 3).unwrap());
+    store.apply_portable_transaction(redo).unwrap();
+    assert_eq!(store.objects("group").unwrap()[0].body, lotp);
+    store.delete_object("group", "balcony").unwrap();
+    assert_eq!(schema(&store), 12);
+    drop(store);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
 fn future_schema_refusal_keeps_original_content_and_separate_recovery_is_available() {
     let (path, store) = create();
     store
         .conn
-        .execute("UPDATE schema_info SET version=12", [])
+        .execute("UPDATE schema_info SET version=13", [])
         .unwrap();
     drop(store);
     let before = std::fs::read(&path).unwrap();
     let error = ShowStore::open(&path).err().unwrap().to_string();
     assert!(
-        error.contains("show schema 12 is newer than supported schema 11"),
+        error.contains("show schema 13 is newer than supported schema 12"),
         "{error}"
     );
     assert_eq!(std::fs::read(&path).unwrap(), before);
@@ -194,7 +230,7 @@ fn reader_version_preflight_preserves_sql_errors_for_malformed_or_missing_schema
 
 #[test]
 fn reader_version_preflight_rejects_only_newer_versions_without_touching_the_show() {
-    for version in [10, 11, 12] {
+    for version in [10, 11, 12, 13] {
         let (path, store) = create();
         store
             .conn
@@ -203,9 +239,9 @@ fn reader_version_preflight_rejects_only_newer_versions_without_touching_the_sho
         drop(store);
         let original = std::fs::read(&path).unwrap();
         let result = crate::validate_show_reader_version(&path);
-        if version > 11 {
+        if version > 12 {
             assert!(
-                matches!(result,Err(crate::StoreError::Invalid(message)) if message.contains("show schema 12 is newer than supported schema 11"))
+                matches!(result,Err(crate::StoreError::Invalid(message)) if message.contains("show schema 13 is newer than supported schema 12"))
             );
         } else {
             result.unwrap();

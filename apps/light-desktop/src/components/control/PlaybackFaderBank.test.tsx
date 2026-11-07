@@ -395,10 +395,7 @@ vi.mock("../../features/showObjects/ShowObjectsState", () => ({
 	useDynamics: () => [],
 	useMacros: () => [],
 	useTimecodes: () => [],
-	usePortableGroups: (enabled: boolean) => {
-		mocks.portableGroups(enabled);
-		return [];
-	},
+	usePortableGroups: (enabled: boolean) => mocks.portableGroups(enabled) ?? [],
 	useShowObjectCollectionsReady: () => mocks.groupReady,
 	useCueLists: () =>
 		mocks.scopedCueLists.map((body) => ({
@@ -1886,6 +1883,24 @@ describe("PlaybackFaderBank Record targets", () => {
 
 describe("PlaybackFaderBank action dispatch and persistence", () => {
 	beforeEach(resetPlaybackFaderMocks);
+	it.each([false, true])(
+		"labels LoTP Group Masters with hardware %s",
+		(hardware) => {
+			assignPlayback({ target: { type: "group", group_id: "group-front" } });
+			mocks.hardwareConnected = hardware;
+			mocks.portableGroups.mockReturnValue([
+				{
+					id: "group-front",
+					body: { fixtures: ["one", "two"], group_master_mode: "lotp" },
+				},
+			]);
+			render(<PlaybackFaderBank count={1} />);
+			expect(
+				screen.getByText(hardware ? "LoTP" : "LoTP · 2 Fixtures"),
+			).toBeInTheDocument();
+		},
+	);
+
 	it.each([
 		false,
 		true,

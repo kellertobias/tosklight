@@ -96,3 +96,8 @@ the applicable compatibility and recovery path above.
   reader without rewriting history. Explicit saved Stage layout transforms remain authoritative;
   otherwise a true marker honors even the patch origin in Stage and Visualizer. Native CAD Undo
   restores the prior independent root/copy flags. No SQL schema or reader-floor change is required.
+
+- **LoTP Group Masters, reader capability schema 12.** Supported shows without a Group Master
+  mode retain HTP. The first stored LoTP mode promotes the portable reader floor to 12 in the same
+  transaction. Switching the mode back to HTP or removing the Group keeps that floor. Older readers
+  refuse the show before writable use.

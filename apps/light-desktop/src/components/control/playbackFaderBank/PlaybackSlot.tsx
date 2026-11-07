@@ -120,7 +120,7 @@ export function PlaybackSlot({
 		? playbackSummary({
 				target: playback.target.type,
 				currentCue,
-				groupFixtureCount: group?.body.fixtures.length,
+				group,
 				projection: runtimeProjection,
 				value,
 			})
@@ -257,13 +257,13 @@ function playbackKind(
 function playbackSummary({
 	target,
 	currentCue,
-	groupFixtureCount,
+	group,
 	projection,
 	value,
 }: {
 	target: PlaybackDefinition["target"]["type"];
 	currentCue: Cue | null;
-	groupFixtureCount?: number;
+	group: PlaybackSlotProjection["group"];
 	projection: PlaybackRuntimeProjection | undefined;
 	value: number;
 }): PlaybackCardSummary {
@@ -282,11 +282,17 @@ function playbackSummary({
 		};
 	if (target === "macro") return { label: "Ready", detail: "GO runs Macro" };
 	if (target === "timecode") return { label: "Loading transport…" };
-	if (target === "group")
+	if (target === "group") {
+		const fixtureCount = group?.body.fixtures.length ?? 0;
+		const fixtures = `${fixtureCount} Fixture${fixtureCount === 1 ? "" : "s"}`;
 		return {
-			label: `${groupFixtureCount ?? 0} Fixture${groupFixtureCount === 1 ? "" : "s"}`,
+			label:
+				group?.body.group_master_mode === "lotp"
+					? `LoTP · ${fixtures}`
+					: fixtures,
 			detail: value === 0 ? undefined : `${Math.round(value)}%`,
 		};
+	}
 	if (target === "dynamic" && projection?.target === "dynamic") {
 		return dynamicPlaybackSummary(projection);
 	}

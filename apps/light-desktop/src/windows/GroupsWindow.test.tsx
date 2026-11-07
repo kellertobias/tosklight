@@ -288,7 +288,7 @@ describe("GroupsWindow action routing", () => {
 		expect(mocks.selectLive).not.toHaveBeenCalled();
 	});
 
-	it("opens the three-tab Group settings modal on a touch hold", () => {
+	it("opens Group settings with the Master tab on a touch hold", () => {
 		vi.useFakeTimers();
 		render(<GroupsWindow />);
 		const card = buttonForText("Stored Empty");
@@ -301,6 +301,7 @@ describe("GroupsWindow action routing", () => {
 		expect(dialog).toBeInTheDocument();
 		expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
 			"General",
+			"Master",
 			"Projection",
 			"Phase",
 		]);

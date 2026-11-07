@@ -6,12 +6,12 @@ mod lossless_json;
 mod merge_base;
 mod migration;
 mod profile_revision;
+mod reader_compatibility;
 mod repository;
 mod schedule_occurrence;
 mod store;
 mod sync_requests;
 mod transaction;
-mod venue_compatibility;
 mod venue_copies;
 
 pub use cue_thumbnail::{CueThumbnail, CueThumbnailEntry};

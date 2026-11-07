@@ -147,6 +147,7 @@ pub(super) fn programming(config: &Config) -> Vec<String> {
         PresetRecallErrorKind::decl(config),
         PresetRecallErrorResponse::decl(config),
         GroupPropertiesUpdate::decl(config),
+        GroupMasterMode::decl(config),
         GroupSourceExpectation::decl(config),
         GroupMappingPosition3d::decl(config),
         GroupMappingVector3::decl(config),

@@ -19,10 +19,16 @@ washes and profiles reaches the washes, and the profiles keep whatever they alre
 the Fixture Sheet are unchanged either way, because neither has ever shown an attribute a fixture
 does not have.
 
-Group settings never contain a master. To create a Group Master, press `[SET]`, choose the explicit
-Group, then press the destination Playback. Every Playback targeting the same
-Group controls one shared master; Playbacks targeting different Groups remain independent HTP
-contributors. Changing a Playback to **None** removes that assignment without changing the Group.
+To assign a Group Master, press `[SET]`, choose the explicit Group, then press the destination
+Playback. Every Playback targeting that Group controls one shared level. Changing a Playback to
+**None** removes that assignment without changing the Group.
+
+Open **Master** in Group settings to choose how that Group Master combines with overlapping
+masters. **HTP** (highest takes precedence) uses the highest HTP fader level for each fixture.
+**LoTP** (lowest takes precedence) sets an upper bound on the master level for the Group's fixtures.
+If several LoTP masters overlap, the lowest sets the bound. A LoTP master can control a Group on
+its own. At full it applies no reduction, and at zero it takes its fixtures to zero intensity.
+**Flash** temporarily raises that master while the other masters stay in effect.
 
 ![Group pool with populated ordered Groups](../../assets/screenshots/panes/groups.png)
 

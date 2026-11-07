@@ -123,7 +123,7 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .unwrap(),
         11
     );
-    conn.execute("UPDATE schema_info SET version=12", [])
+    conn.execute("UPDATE schema_info SET version=13", [])
         .unwrap();
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
         .unwrap();
@@ -135,7 +135,7 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .active_show_error
             .as_deref()
             .unwrap()
-            .contains("newer than supported schema 11")
+            .contains("newer than supported schema 12")
     );
     drop(started);
     assert_eq!(std::fs::read(&active.path).unwrap(), before);
@@ -147,9 +147,54 @@ fn venue_reader_capability_preserves_legacy_and_authored_show_startup_and_future
             .active_show_error
             .as_deref()
             .unwrap()
-            .contains("newer than supported schema 11")
+            .contains("newer than supported schema 12")
     );
     drop(started);
     assert_eq!(std::fs::read(&active.path).unwrap(), before);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn group_master_mode_loads_legacy_htp_and_authored_lotp_at_startup() {
+    use light_programmer::GroupMasterMode;
+
+    let dir = directory();
+    let initial = StartupState::load(options(&dir)).unwrap();
+    assert!(initial.active_show_error.is_none());
+    let active = initial.persistent.active_show.as_ref().unwrap().clone();
+    drop(initial);
+    let group_id = "lotp-startup";
+    let body = serde_json::json!({"name":"Balcony", "fixtures":[]});
+    light_show::ShowStore::open(&active.path)
+        .unwrap()
+        .put_object("group", group_id, &body, 0)
+        .unwrap();
+
+    let assert_mode = |mode| {
+        let started = StartupState::load(options(&dir)).unwrap();
+        assert!(
+            started.active_show_error.is_none(),
+            "{:?}",
+            started.active_show_error
+        );
+        let snapshot = started.engine.snapshot();
+        let group = snapshot
+            .groups
+            .iter()
+            .find(|group| group.id == group_id)
+            .unwrap();
+        assert_eq!(group.group_master_mode, mode);
+    };
+    assert_mode(GroupMasterMode::Htp);
+
+    {
+        let store = light_show::ShowStore::open(&active.path).unwrap();
+        let mut group = store.object("group", group_id).unwrap().unwrap();
+        group.body["group_master_mode"] = serde_json::json!("lotp");
+        store
+            .put_object("group", group_id, &group.body, group.revision)
+            .unwrap();
+    }
+    assert_mode(GroupMasterMode::Lotp);
     std::fs::remove_dir_all(dir).unwrap();
 }

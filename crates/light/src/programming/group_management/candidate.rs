@@ -51,6 +51,11 @@ fn apply_operation(
         GroupManagementOperation::UpdateProperties(update) => {
             Ok((updated_properties(current, update), None))
         }
+        GroupManagementOperation::SetMasterMode(mode) => {
+            let mut group = current.clone();
+            group.group_master_mode = *mode;
+            Ok((group, None))
+        }
         GroupManagementOperation::RefreshFrozen { expected_source } => {
             refresh_frozen(document, commit, current, groups, expected_source.as_ref())
         }

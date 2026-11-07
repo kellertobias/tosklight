@@ -76,6 +76,11 @@ function encodeOperation(
 			},
 		};
 	}
+	if (operation.type === "set_master_mode")
+		return {
+			type: operation.type,
+			mode: enumAt(operation.mode, "$.operation.mode", ["htp", "lotp"]),
+		};
 	if (operation.type === "undo") return { type: "undo" };
     if (operation.type === "remove_missing_fixtures") return { type: "remove_missing_fixtures" };
 	if (operation.type === "set_spatial_mapping")
@@ -126,6 +131,12 @@ export function decodeGroupManagementOutcome(
 	if (requestId !== expectedRequest.requestId)
 		invalid("$.request_id", `request ${expectedRequest.requestId}`, requestId);
 	const group = decodeProjection(response.group, expectedRequest);
+	const operation = expectedRequest.operation;
+	if (operation.type === "set_master_mode") {
+		const mode = group.object.body.group_master_mode ?? "htp";
+		if (mode !== operation.mode)
+			invalid("$.group.body.group_master_mode", operation.mode, mode);
+	}
 	validateRevision(status, group.revision, expectedRequest);
 	const base = {
 		requestId,

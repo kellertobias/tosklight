@@ -28,6 +28,9 @@ Choosing a different playback type immediately loads its standard layout. Cue Li
 
 The desk timing strip exposes **Programmer Fade**, **Cue Fade**, and **Release** together on touch and attached control surfaces. Release is the authoritative fallback for Cues whose Out Fade is linked to Release; changing it updates those linked Cues without rewriting their remembered explicit Out Fade values.
 
+To change the shared HTP or LoTP mode, open the **Master** tab in
+[Group settings](03-groups-and-presets.md).
+
 For a direct Group Master assignment, press `[^SET]`, touch the source Group tile, then touch the destination Playback. The visible command line remains armed with the explicit Group until that destination completes the assignment.
 
 The [command reference](01-command-line.md#assigning-objects-to-playbacks) gives source and destination forms. Continue with [playback operation and pages](10-cues-and-playbacks.md).

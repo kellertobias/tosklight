@@ -16,6 +16,11 @@ export function decodeRecordedGroupBody(
 	if ("name" in body) stringValueAt(body.name, "$.group.body.name");
 	if ("color" in body) nullableStringAt(body.color, "$.group.body.color");
 	if ("icon" in body) nullableStringAt(body.icon, "$.group.body.icon");
+	if ("group_master_mode" in body)
+		enumAt(body.group_master_mode, "$.group.body.group_master_mode", [
+			"htp",
+			"lotp",
+		]);
 	const fixtures =
 		"fixtures" in body
 			? arrayAt(body.fixtures, "$.group.body.fixtures").map((fixture, index) =>

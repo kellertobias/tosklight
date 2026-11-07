@@ -314,19 +314,18 @@ describe("Group settings modal", () => {
 		expect(manage).toHaveBeenCalledOnce();
 	});
 
-	it("has only General, Projection, and Phase plus an X close control", () => {
+	it("has General, Master, Projection, and Phase plus an X close control", () => {
 		renderDialog();
 		const dialog = screen.getByRole("dialog", { name: "Group 4 settings" });
 		expect(
 			within(dialog)
 				.getAllByRole("tab")
 				.map((tab) => tab.textContent),
-		).toEqual(["General", "Projection", "Phase"]);
+		).toEqual(["General", "Master", "Projection", "Phase"]);
 		expect(
 			within(dialog).getByRole("button", { name: "Close settings" }),
 		).toBeInTheDocument();
 		for (const retired of [
-			"Master",
 			"Select live group",
 			"Select frozen group",
 			"Replace membership with selection",
@@ -336,6 +335,44 @@ describe("Group settings modal", () => {
 		expect(
 			within(dialog).queryByRole("button", { name: /Apply|Save|Cancel/ }),
 		).toBeNull();
+	});
+
+	it("defaults legacy Groups to HTP and saves LoTP through a revisioned mode edit", async () => {
+		const saved = { ...group({ group_master_mode: "lotp" }), revision: 8 };
+		const savedSettings = settingsSnapshot(saved);
+		manage.mockResolvedValue({
+			status: "changed",
+			group: savedSettings.group,
+			showRevision: 13,
+			persistenceWarning: null,
+		});
+		const dialog = renderDialog();
+		fireEvent.click(screen.getByRole("tab", { name: "Master" }));
+		const htp = screen.getByRole("radio", { name: "HTP" });
+		const lotp = screen.getByRole("radio", { name: "LoTP" });
+		expect(htp).toHaveAttribute("aria-checked", "true");
+		fireEvent.click(htp);
+		expect(manage).not.toHaveBeenCalled();
+		fireEvent.click(lotp);
+		await waitFor(() => expect(lotp).toHaveAttribute("aria-checked", "true"));
+		expect(manage).toHaveBeenCalledExactlyOnceWith({
+			objectId: "4",
+			expectedObjectRevision: 7,
+			expectedShowRevision: 12,
+			operation: { type: "set_master_mode", mode: "lotp" },
+		});
+
+		dialog.unmount();
+		settings.mockResolvedValue(savedSettings);
+		renderDialog();
+		fireEvent.click(screen.getByRole("tab", { name: "Master" }));
+		await waitFor(() =>
+			expect(screen.getByRole("radio", { name: "LoTP" })).toHaveAttribute(
+				"aria-checked",
+				"true",
+			),
+		);
+		expect(manage).toHaveBeenCalledOnce();
 	});
 
 	it("saves a General field immediately with the observed revision", async () => {

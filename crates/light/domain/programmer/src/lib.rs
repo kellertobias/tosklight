@@ -65,7 +65,7 @@ pub use family_alignment::*;
 pub use group_recording::{GroupRecordingCapture, group_delete_blocker};
 pub use groups::{
     DerivedGroup, FrozenGroup, GroupDefinition, GroupFixtureSource, GroupMappingProvenance,
-    GroupProgrammerValue, GroupReference, MAX_GROUP_REFERENCE_DEPTH,
+    GroupMasterMode, GroupProgrammerValue, GroupReference, MAX_GROUP_REFERENCE_DEPTH,
     MAX_GROUP_REFERENCE_EVALUATIONS, MAX_GROUP_RESOLVED_FIXTURES, ResolvedGroup,
     merge_ordered_group_membership, resolve_group, resolve_group_spatial,
 };

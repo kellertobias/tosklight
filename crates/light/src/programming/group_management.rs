@@ -3,6 +3,7 @@ use crate::{
 };
 use light_core::{FixtureId, Revision, ShowId};
 use light_dynamics::SpatialSelectionMapping;
+use light_programmer::GroupMasterMode;
 use light_show::PortableShowRevision;
 use std::sync::Arc;
 
@@ -24,6 +25,7 @@ pub struct GroupManagementRequest {
 pub enum GroupManagementOperation {
     /// Replaces the operator-visible label fields, retaining every other stored field.
     UpdateProperties(GroupPropertiesUpdate),
+    SetMasterMode(GroupMasterMode),
     /// Restores the exact previous stored body from adapter-owned object history.
     Undo,
     RemoveMissingFixtures,
@@ -68,6 +70,7 @@ impl GroupManagementOperation {
                 expected_source.as_ref()
             }
             Self::UpdateProperties(_)
+            | Self::SetMasterMode(_)
             | Self::Undo
             | Self::RemoveMissingFixtures
             | Self::SetSpatialMapping(_)
@@ -83,6 +86,7 @@ impl GroupManagementOperation {
     pub const fn backup_label(&self) -> &'static str {
         match self {
             Self::UpdateProperties(_) => "update-group-properties",
+            Self::SetMasterMode(_) => "set-group-master-mode",
             Self::Undo => "undo-group",
             Self::RemoveMissingFixtures => "remove-missing-group-fixtures",
             Self::RefreshFrozen { .. } => "refresh-frozen-group",

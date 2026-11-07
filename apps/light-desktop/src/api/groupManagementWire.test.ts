@@ -45,6 +45,28 @@ function changed(overrides: Record<string, unknown> = {}) {
 }
 
 describe("group management wire", () => {
+	it("validates the returned master mode against the typed edit", () => {
+		const operation = { type: "set_master_mode", mode: "lotp" } as const;
+		const modeRequest = request({ operation });
+		expect(encodeGroupManagementRequest(modeRequest).operation).toEqual(
+			operation,
+		);
+		expect(() => decodeGroupManagementOutcome(changed(), modeRequest)).toThrow(
+			"$.group.body.group_master_mode",
+		);
+		const response = changed({
+			group: {
+				object_id: "front",
+				object_revision: 2,
+				body: { fixtures: [], group_master_mode: "lotp" },
+			},
+		});
+		expect(
+			decodeGroupManagementOutcome(response, modeRequest).group.object.body
+				.group_master_mode,
+		).toBe("lotp");
+	});
+
 	it("encodes each operation without inventing scope", () => {
 		expect(encodeGroupManagementRequest(request())).toEqual({
 			request_id: "manage-1",

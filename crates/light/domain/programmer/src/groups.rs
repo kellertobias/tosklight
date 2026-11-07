@@ -73,6 +73,20 @@ impl<'de> Deserialize<'de> for GroupProgrammerValue {
 pub(crate) type GroupProgrammerValues =
     HashMap<String, HashMap<AttributeKey, GroupProgrammerValue>>;
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupMasterMode {
+    #[default]
+    Htp,
+    Lotp,
+}
+
+impl GroupMasterMode {
+    fn is_htp(&self) -> bool {
+        matches!(self, Self::Htp)
+    }
+}
+
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub struct GroupDefinition {
@@ -81,6 +95,9 @@ pub struct GroupDefinition {
     pub color: Option<String>,
     pub icon: Option<String>,
     pub fixtures: Vec<FixtureId>,
+    /// Merge rule shared by every Group Master assignment targeting this Group.
+    #[serde(skip_serializing_if = "GroupMasterMode::is_htp")]
+    pub group_master_mode: GroupMasterMode,
     /// Canonical live membership authority. Legacy files without this field are interpreted from
     /// `fixtures` and `derived_from` without changing their observable membership.
     #[serde(default, skip_serializing_if = "Option::is_none")]

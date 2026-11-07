@@ -1,4 +1,5 @@
 use super::*;
+use light_programmer::GroupMasterMode;
 
 fn group_playback(number: u16, group_id: &str, initial_master: f32) -> PlaybackDefinition {
     let mut playback = test_group_playback(number, group_id);
@@ -482,6 +483,83 @@ fn group_masters_follow_real_assignments_and_resolve_overlap_by_htp() {
             .universes[&1][..6],
         &[32, 96, 32, 96, 32, 96]
     );
+}
+
+#[test]
+fn lotp_group_masters_limit_htp_levels_and_work_independently() {
+    let programmers = ProgrammerRegistry::default();
+    let session = light_core::SessionId::new();
+    programmers.start(session);
+    let fixtures = (1..=4)
+        .map(|address| {
+            let (mut fixture, logical) = fixture();
+            fixture.address = Some(address);
+            programmers.set(
+                session,
+                logical,
+                AttributeKey::intensity(),
+                AttributeValue::Normalized(0.8),
+            );
+            (fixture, logical)
+        })
+        .collect::<Vec<_>>();
+    let group = |id: &str, members: &[usize], group_master_mode| GroupDefinition {
+        id: id.into(),
+        fixtures: members.iter().map(|&member| fixtures[member].1).collect(),
+        group_master_mode,
+        ..Default::default()
+    };
+    let groups = vec![
+        group("audience", &[0, 1], GroupMasterMode::Htp),
+        group("balcony", &[1, 2], GroupMasterMode::Lotp),
+        group("back", &[1], GroupMasterMode::Lotp),
+    ];
+    let mut snapshot = EngineSnapshot {
+        fixtures: fixtures
+            .into_iter()
+            .map(|(fixture, _)| fixture)
+            .collect::<Vec<_>>()
+            .into(),
+        groups: groups.into(),
+        playback_pages: vec![playback_page(
+            1,
+            [
+                (1, group_playback(1, "audience", 0.75)),
+                (2, group_playback(2, "balcony", 0.5)),
+                (3, group_playback(3, "back", 0.25)),
+                (4, group_playback(4, "balcony", 1.0)),
+            ],
+        )]
+        .into(),
+        ..Default::default()
+    };
+    let engine = Engine::new(programmers);
+    engine.replace_snapshot(snapshot.clone()).unwrap();
+    let assert_output = |levels: [u8; 4]| {
+        let frame = engine.render(RenderOptions::default()).unwrap();
+        assert_eq!(&frame.universes[&1][..4], &levels);
+    };
+
+    // Floor, overlap with two limits, Balcony on its own, and an unmastered fixture.
+    assert_output([153, 51, 102, 204]);
+    assert!(engine.set_group_master("back", 1.0).unwrap());
+    assert_output([153, 102, 102, 204]);
+    assert!(engine.set_group_master("audience", 0.25).unwrap());
+    assert_output([51, 51, 102, 204]);
+    assert!(engine.set_group_master("balcony", 0.0).unwrap());
+    assert_output([51, 0, 0, 204]);
+
+    // Flash temporarily releases only Balcony's limit and leaves its shared fader at zero.
+    engine.set_group_master_flash("balcony".into(), 1.0);
+    assert_output([51, 51, 204, 204]);
+    assert_eq!(engine.group_master("balcony"), Some(0.0));
+    engine.set_group_master_flash("balcony".into(), 0.0);
+    assert_output([51, 0, 0, 204]);
+
+    // A live mode edit changes the merge without resetting existing faders to their seeds.
+    Arc::make_mut(&mut snapshot.groups)[1].group_master_mode = GroupMasterMode::Htp;
+    engine.replace_snapshot(snapshot).unwrap();
+    assert_output([51, 51, 0, 204]);
 }
 
 #[test]

@@ -15,6 +15,12 @@ pub(super) fn operation(
                 },
             )
         }
+        wire::GroupManagementOperation::SetMasterMode { mode } => {
+            application::GroupManagementOperation::SetMasterMode(match mode {
+                wire::GroupMasterMode::Htp => light_programmer::GroupMasterMode::Htp,
+                wire::GroupMasterMode::Lotp => light_programmer::GroupMasterMode::Lotp,
+            })
+        }
         wire::GroupManagementOperation::Undo {} => application::GroupManagementOperation::Undo,
         wire::GroupManagementOperation::RemoveMissingFixtures {} => {
             application::GroupManagementOperation::RemoveMissingFixtures

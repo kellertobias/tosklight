@@ -374,10 +374,13 @@ export interface VersionedObject<T = Record<string, unknown>> {
 
 export * from "./types/configuration";
 
+export type GroupMasterMode = import("./generated/light-wire").GroupMasterMode;
+
 export interface StoredGroup {
 	name?: string;
 	color?: string;
 	icon?: string;
+	group_master_mode?: GroupMasterMode;
 	/**
 	 * Compatibility cache for legacy readers. Canonical live membership is owned by `source` when
 	 * it is present; show-object decoding still supplies this array for source-only bodies.

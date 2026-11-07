@@ -56,6 +56,22 @@
           ]
         },
         {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/GroupMasterMode"
+            },
+            "type": {
+              "type": "string",
+              "const": "set_master_mode"
+            }
+          },
+          "required": [
+            "type",
+            "mode"
+          ]
+        },
+        {
           "description": "Declared as an empty struct variant so `deny_unknown_fields` still applies; serde does not\nenforce it for an internally tagged unit variant.",
           "type": "object",
           "properties": {
@@ -360,6 +376,13 @@
         "x",
         "y",
         "z"
+      ]
+    },
+    "GroupMasterMode": {
+      "type": "string",
+      "enum": [
+        "htp",
+        "lotp"
       ]
     },
     "GroupPropertiesUpdate": {

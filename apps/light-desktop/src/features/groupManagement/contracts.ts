@@ -1,3 +1,4 @@
+import type { GroupMasterMode } from "../../api/types";
 import type { ShowObject } from "../showObjects/contracts";
 import type {
 	ResolvedSpatialMapping,
@@ -18,6 +19,7 @@ export interface GroupSourceExpectation {
 
 export type GroupManagementOperation =
 	| { type: "update_properties"; properties: GroupPropertiesUpdate }
+	| { type: "set_master_mode"; mode: GroupMasterMode }
 	| { type: "undo" }
 	| { type: "remove_missing_fixtures" }
 	| { type: "refresh_frozen"; expectedSource: GroupSourceExpectation | null }

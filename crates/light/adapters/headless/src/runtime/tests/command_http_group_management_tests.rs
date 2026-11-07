@@ -133,6 +133,46 @@ async fn seed_group(scenario: &CommandHttpScenario, show_id: &str, group_id: &st
 }
 
 #[tokio::test]
+async fn group_master_mode_update_preserves_membership_and_can_return_to_htp() {
+    let scenario = CommandHttpScenario::new().await;
+    let show_id = scenario.create_and_open_show("Group master mode").await;
+    let fixture = scenario.install_direct_fixture();
+    scenario.state.programming.select(scenario.session.id, [fixture]);
+    seed_group(&scenario, &show_id, "balcony").await;
+
+    for (mode, stored_mode) in [("lotp", Some("lotp")), ("htp", None)] {
+        let (show_revision, object_revision) = group_authority(&scenario, &show_id, "balcony").await;
+        let request = group_management_request(
+            &format!("set-master-{mode}"),
+            "balcony",
+            serde_json::json!({"type":"set_master_mode","mode":mode}),
+            object_revision,
+            show_revision,
+        );
+        let response = scenario
+            .app
+            .clone()
+            .oneshot(
+                Request::post("/api/v2/groups/balcony/update")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", scenario.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-tosk-show", &show_id)
+                    .body(Body::from(request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let outcome = management_outcome(response).await;
+        assert!(matches!(outcome, GroupManagementOutcome::Changed { .. }));
+        let settings = group_settings_snapshot(&scenario, &show_id, "balcony").await;
+        let body = &settings["group"]["body"];
+        assert_eq!(body["group_master_mode"].as_str(), stored_mode);
+        assert_eq!(body["fixtures"], serde_json::json!([fixture.0]));
+    }
+}
+
+#[tokio::test]
 async fn property_update_is_authoritative_replay_safe_and_sparse_on_no_change() {
     let scenario = CommandHttpScenario::new().await;
     let show_id = scenario.create_and_open_show("Group property update").await;

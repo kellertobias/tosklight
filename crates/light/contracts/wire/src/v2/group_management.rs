@@ -170,6 +170,13 @@ pub struct GroupPropertiesUpdate {
     pub icon: Option<String>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum GroupMasterMode {
+    Htp,
+    Lotp,
+}
+
 /// Exact source authority a client observed. A mismatch fails before anything mutates.
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub struct GroupSourceExpectation {
@@ -185,6 +192,9 @@ pub struct GroupSourceExpectation {
 pub enum GroupManagementOperation {
     UpdateProperties {
         properties: GroupPropertiesUpdate,
+    },
+    SetMasterMode {
+        mode: GroupMasterMode,
     },
     /// Declared as an empty struct variant so `deny_unknown_fields` still applies; serde does not
     /// enforce it for an internally tagged unit variant.

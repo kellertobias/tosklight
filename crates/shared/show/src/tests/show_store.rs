@@ -500,7 +500,7 @@ fn newer_schema_error_reports_file_and_application_versions_without_changing_sou
             validate_show_file(&path).unwrap_err().to_string(),
         ] {
             assert!(
-                error.contains("show schema 999 is newer than supported schema 11"),
+                error.contains("show schema 999 is newer than supported schema 12"),
                 "{error}"
             );
             assert!(error.contains("file revision: 42"), "{error}");
