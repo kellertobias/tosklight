@@ -301,7 +301,12 @@ pub enum PlaybackTopologyFootprint {
         right_buttons: [PlaybackTopologyButtonAction; 3],
         right_fader: PlaybackTopologyFaderMode,
     },
-    SingleButton,
+    SingleButton {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(range(min = 1, max = 3))]
+        #[ts(optional = nullable)]
+        button: Option<u8>,
+    },
     PaneNormal,
     PaneTaller {
         upper_button: PlaybackTopologyButtonAction,

@@ -152,7 +152,10 @@ beforeEach(() => {
 
 function show(
 	playback: PlaybackDefinition = base,
-	props: Pick<PlaybackConfigurationDialogProps, "empty" | "paneFootprintDefault"> = {},
+	props: Partial<Pick<
+		PlaybackConfigurationDialogProps,
+		"empty" | "fallbackButtons" | "paneFootprintDefault"
+	>> = {},
 ) {
 	const close = vi.fn();
 	render(
@@ -224,6 +227,16 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 		});
 		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
 		fireEvent.click(screen.getByRole("radio", { name: "Single button" }));
+		expect(selectTrigger("Button")).toHaveTextContent("GO +");
+		for (const label of ["Top button", "Middle button", "Bottom button"])
+			expect(
+				screen.queryByText(label, { selector: "label", exact: true }),
+			).toBeNull();
+		fireEvent.click(screen.getByRole("radio", { name: "Normal" }));
+		expect(selectTrigger("Top button")).toHaveTextContent("GO −");
+		expect(selectTrigger("Middle button")).toHaveTextContent("GO +");
+		expect(selectTrigger("Bottom button")).toHaveTextContent("Flash");
+		fireEvent.click(screen.getByRole("radio", { name: "Single button" }));
 		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 		await waitFor(() =>
 			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
@@ -235,6 +248,44 @@ describe("PlaybackConfigurationModal function and behavior", () => {
 				}),
 			),
 		);
+	});
+
+	it("keeps the inherited compact action until its one visible button is edited", async () => {
+		show(base, { paneFootprintDefault: "single_button" });
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		expect(selectTrigger("Button")).toHaveTextContent("GO +");
+		expect(selectTrigger("Button")).toBeEnabled();
+		expect(document.querySelectorAll(".ui-grouped-selection-trigger")).toHaveLength(1);
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+		fireEvent.click(selectTrigger("Button"));
+		fireEvent.click(
+			within(screen.getByRole("dialog", { name: "Choose Button function" }))
+				.getByRole("button", { name: /^PausePauses/ }),
+		);
+		expect(selectTrigger("Button")).toHaveTextContent("Pause");
+		fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+		await waitFor(() =>
+			expect(mocks.savePlaybackSlot).toHaveBeenCalledWith(
+				2,
+				4,
+				expect.objectContaining({
+					footprint: { type: "single_button", button: 2 },
+					button_count: 3,
+					buttons: ["go_minus", "pause", "flash"],
+				}),
+			),
+		);
+	});
+
+	it("offers only the button positions present on the current controls surface", () => {
+		show(base, { fallbackButtons: 2 });
+		fireEvent.click(screen.getByRole("button", { name: "Layout" }));
+		expect(selectTrigger("Top button")).toBeEnabled();
+		expect(selectTrigger("Middle button")).toBeEnabled();
+		expect(
+			screen.queryByText("Bottom button", { selector: "label", exact: true }),
+		).toBeNull();
+		expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
 	});
 
 	it("persists shared Cuelist Auto-off options independently", async () => {

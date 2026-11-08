@@ -175,6 +175,7 @@ export function PlaybackConfigurationDialog({
 			slot={slot}
 			topology={topology}
 			paneFootprintDefault={paneFootprintDefault}
+			surfaceButtonCount={fallbackButtons}
 			busy={busy}
 			isDirty={isDirty}
 			targetValid={targetValid}
@@ -211,6 +212,7 @@ type DialogViewProps = {
 	slot: number;
 	topology: string;
 	paneFootprintDefault?: PaneFootprintDefault;
+	surfaceButtonCount: number;
 	busy: boolean;
 	isDirty: boolean;
 	targetValid: boolean;
@@ -369,6 +371,7 @@ function PlaybackConfigurationDialogView(props: DialogViewProps) {
 											draft={draft}
 											options={options}
 											paneFootprintDefault={paneFootprintDefault}
+											surfaceButtonCount={props.surfaceButtonCount}
 											onDraftChange={onDraftChange}
 										/>
 									)}

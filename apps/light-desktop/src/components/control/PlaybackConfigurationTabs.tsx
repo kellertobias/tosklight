@@ -16,7 +16,11 @@ import {
 } from "@tosklight/ui/window-kit";
 import { useDynamics } from "../../features/showObjects/ShowObjectsState";
 import { RootConfinedFilePickerButton } from "../files/RootConfinedFilePickerButton";
-import { PlaybackFootprintField } from "./PlaybackFootprintField";
+import {
+	PlaybackFootprintField,
+	playbackFootprintSelection,
+} from "./PlaybackFootprintField";
+import { primaryPlaybackAction } from "./playbackFaderBank/primaryPlaybackAction";
 import type { PaneFootprintDefault } from "./playbackFaderBank/types";
 
 export type PlaybackFamily =
@@ -795,18 +799,23 @@ export function PlaybackLayoutTab({
 	draft,
 	options,
 	paneFootprintDefault,
+	surfaceButtonCount,
 	onDraftChange,
 }: {
 	draft: PlaybackDefinition;
-	options: Array<{
-		value: PlaybackButtonAction;
-		label: string;
-		description: string;
-	}>;
+	options: PlaybackButtonOption[];
 	paneFootprintDefault?: PaneFootprintDefault;
+	surfaceButtonCount: number;
 	onDraftChange: (playback: PlaybackDefinition) => void;
 }) {
 	const footprint = draft.footprint ?? { type: "normal" as const };
+	const singleButton =
+		playbackFootprintSelection(footprint.type, paneFootprintDefault) ===
+		"single_button";
+	const paneExpanded = footprint.type.startsWith("pane_");
+	const storedButtonCount = draft.button_count ?? 3;
+	const buttonCount = Math.min(storedButtonCount, paneExpanded ? 3 : surfaceButtonCount);
+	const visibleButtons = singleButton ? Math.min(1, storedButtonCount) : buttonCount;
 	const buttonsOnly =
 		draft.target.type === "macro" || draft.target.type === "timecode";
 	return (
@@ -816,24 +825,14 @@ export function PlaybackLayoutTab({
 				paneFootprintDefault={paneFootprintDefault}
 				onDraftChange={onDraftChange}
 			/>
-			{Array.from({ length: draft.button_count ?? 3 }, (_, index) => (
-				<LayoutChoiceField
-					kind="button"
-					key={index}
-					label={["Top button", "Middle button", "Bottom button"][index]}
-					value={draft.buttons[index]}
-					options={options}
-					onChange={(value) => {
-						const next = [...draft.buttons] as PlaybackDefinition["buttons"];
-						next[index] = value as PlaybackButtonAction;
-						onDraftChange({ ...draft, buttons: next });
-					}}
-				/>
-			))}
-			{draft.button_count === 0 && (
-				<p className="playback-topology-note">This playback has no buttons.</p>
-			)}
-			{draft.has_fader && !buttonsOnly ? (
+			<PlaybackButtonFields
+				draft={draft}
+				buttonCount={visibleButtons}
+				singleButton={singleButton}
+				options={options}
+				onDraftChange={onDraftChange}
+			/>
+			{!singleButton && draft.has_fader && !buttonsOnly ? (
 				<LayoutChoiceField
 					kind="fader"
 					label="Fader"
@@ -859,7 +858,7 @@ export function PlaybackLayoutTab({
 						: "No fader on this playback."}
 				</p>
 			)}
-			{(footprint.type === "taller" || footprint.type === "pane_taller") && (
+			{!singleButton && (footprint.type === "taller" || footprint.type === "pane_taller") && (
 				<LayoutChoiceField
 					kind="button"
 					label="Additional upper button"
@@ -876,13 +875,10 @@ export function PlaybackLayoutTab({
 					}
 				/>
 			)}
-			{(footprint.type === "wider" || footprint.type === "pane_wider") && (
+			{!singleButton && (footprint.type === "wider" || footprint.type === "pane_wider") && (
 				<>
 					{footprint.right_buttons
-						.slice(
-							0,
-							footprint.type === "pane_wider" ? 3 : (draft.button_count ?? 3),
-						)
+						.slice(0, footprint.type === "pane_wider" ? 3 : buttonCount)
 						.map((value, index) => (
 							<LayoutChoiceField
 								kind="button"
@@ -927,7 +923,7 @@ export function PlaybackLayoutTab({
 					)}
 				</>
 			)}
-			{draft.target.type === "speed_group" &&
+			{!singleButton && draft.target.type === "speed_group" &&
 				draft.fader === "centered_relative" && (
 					<p className="playback-topology-note">
 						50% is exactly 1× the learned speed; lower travel slows and higher
@@ -936,6 +932,55 @@ export function PlaybackLayoutTab({
 				)}
 		</FormLayout>
 	);
+}
+
+type PlaybackButtonOption = {
+	value: PlaybackButtonAction;
+	label: string;
+	description: string;
+};
+
+function PlaybackButtonFields({
+	draft,
+	buttonCount,
+	singleButton,
+	options,
+	onDraftChange,
+}: {
+	draft: PlaybackDefinition;
+	buttonCount: number;
+	singleButton: boolean;
+	options: PlaybackButtonOption[];
+	onDraftChange(playback: PlaybackDefinition): void;
+}) {
+	if (buttonCount === 0)
+		return <p className="playback-topology-note">This playback has no buttons.</p>;
+
+	const labels = singleButton
+		? ["Button"]
+		: ["Top button", "Middle button", "Bottom button"];
+	const primary = singleButton ? primaryPlaybackAction(draft) : null;
+	return labels.slice(0, buttonCount).map((label, index) => (
+		<LayoutChoiceField
+			kind="button"
+			key={label}
+			label={label}
+			value={primary?.action ?? draft.buttons[index]}
+			options={options}
+			onChange={(value) => {
+				const buttons = [...draft.buttons] as PlaybackDefinition["buttons"];
+				const button = primary?.button ?? index;
+				buttons[button] = value as PlaybackButtonAction;
+				onDraftChange({
+					...draft,
+					buttons,
+					footprint: primary
+						? { type: "single_button", button: button + 1 }
+						: draft.footprint,
+				});
+			}}
+		/>
+	));
 }
 
 function LayoutChoiceField({

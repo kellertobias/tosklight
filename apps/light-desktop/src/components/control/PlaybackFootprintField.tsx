@@ -17,6 +17,20 @@ const paneFootprintOptions = [
 	{ value: "pane_wider", label: "Wider" },
 ] satisfies { value: Footprint["type"]; label: string }[];
 
+export function playbackFootprintSelection(
+	type: Footprint["type"],
+	paneFootprintDefault?: PaneFootprintDefault,
+): Footprint["type"] {
+	if (
+		!paneFootprintDefault ||
+		paneFootprintOptions.some((option) => option.value === type)
+	)
+		return type;
+	if (paneFootprintDefault === "single_button" || type === "normal")
+		return paneFootprintDefault;
+	return type === "taller" ? "pane_taller" : "pane_wider";
+}
+
 export function PlaybackFootprintField({
 	draft,
 	paneFootprintDefault,
@@ -31,19 +45,10 @@ export function PlaybackFootprintField({
 		({ value }) => value === footprint.type,
 	);
 	const pane = authoredPaneFootprint || paneFootprintDefault != null;
-	let selected = footprint.type;
-	if (!authoredPaneFootprint && paneFootprintDefault) {
-		selected =
-			paneFootprintDefault === "single_button" || footprint.type === "normal"
-				? paneFootprintDefault
-				: footprint.type === "taller"
-					? "pane_taller"
-					: "pane_wider";
-	}
 	return (
 		<MultiValueToggleField<Footprint["type"]>
 			label="Footprint"
-			value={selected}
+			value={playbackFootprintSelection(footprint.type, paneFootprintDefault)}
 			onChange={(type) => {
 				if (type !== footprint.type)
 					onDraftChange(withFootprint(draft, footprint, type));

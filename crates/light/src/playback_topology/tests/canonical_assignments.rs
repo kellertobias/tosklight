@@ -162,6 +162,47 @@ fn assign_occupied_and_update_missing_reject_without_changes() {
 }
 
 #[test]
+fn single_button_binding_persists_and_unavailable_positions_cannot_replace_it() {
+    use light_playback::PlaybackFootprint;
+
+    let rig = TestRig::new();
+    let mut definition = playback(0, "Single");
+    definition.footprint = PlaybackFootprint::SingleButton { button: Some(2) };
+    rig.handle(
+        "assign-single",
+        rig.show_revision(),
+        assignment(1, 2, definition.clone(), 0, None),
+    )
+    .unwrap();
+    assert_eq!(assigned(&rig, 1, 2), definition);
+    let revision = rig.show_revision();
+    for (button, count) in [(0, 3), (4, 3), (3, 2)] {
+        let mut invalid = definition.clone();
+        invalid.button_count = count;
+        invalid.footprint = PlaybackFootprint::SingleButton {
+            button: Some(button),
+        };
+        let error = rig
+            .handle(
+                &format!("invalid-single-{button}"),
+                revision,
+                PlaybackTopologyAction::UpdatePlayback {
+                    address: address(1, 2),
+                    expected_page_revision: 1,
+                    expected_page_object_id: Some("1".into()),
+                    playback: invalid,
+                },
+            )
+            .unwrap_err();
+        assert_eq!(error.kind, ActionErrorKind::Invalid);
+        assert!(error.message.contains("available Playback button"));
+    }
+    assert_eq!(rig.show_revision(), revision);
+    assert_eq!(assigned(&rig, 1, 2), definition);
+    assert_one_event(&rig, 1);
+}
+
+#[test]
 fn page_identity_collision_and_stale_identity_refuse_without_mutation() {
     let rig = TestRig::new();
     rig.seed(

@@ -118,6 +118,7 @@ describe("Unified page topology wire", () => {
 	});
 	it.each([
 		{ type: "single_button" },
+		{ type: "single_button", button: 1 },
 		{ type: "pane_normal" },
 		{ type: "pane_taller", upper_button: "pause" },
 		{
@@ -143,6 +144,13 @@ describe("Unified page topology wire", () => {
 			});
 		},
 	);
+	it.each([0, 2, 4])("rejects unavailable Single button position %i", (button) => {
+		const object = pageObject();
+		object.body.assignments[680].footprint = { type: "single_button", button };
+		expect(() =>
+			decodePlaybackTopologyOutcome(outcome({ objects: [object] }), request(), 11),
+		).toThrow("$.objects[0].body.assignments.680.footprint.button");
+	});
 	it.each([
 		{ page: 0, position: 1 },
 		{ page: 100, position: 1 },

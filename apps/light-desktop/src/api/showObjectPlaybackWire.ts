@@ -74,7 +74,12 @@ export function decodePlaybackBody(
 	);
 	if (target.type === "speed_group" && fader === "speed")
 		invalid(`${path}.fader`, "canonical Speed Group fader", fader);
-	const footprint = decodeFootprint(playback.footprint, `${path}.footprint`);
+	const buttonCount = optionalBoundedInteger(playback, "button_count", path, 3, 3);
+	const footprint = decodeFootprint(
+		playback.footprint,
+		`${path}.footprint`,
+		buttonCount,
+	);
 	return {
 		...playback,
 		name: plainStringAt(playback.name, `${path}.name`),
@@ -82,7 +87,7 @@ export function decodePlaybackBody(
 		buttons: buttons.map((button, index) =>
 			enumAt(button, `${path}.buttons[${index}]`, BUTTON_ACTIONS),
 		) as PlaybackDefinition["buttons"],
-		button_count: optionalBoundedInteger(playback, "button_count", path, 3, 3),
+		button_count: buttonCount,
 		fader,
 		has_fader: optionalBoolean(playback, "has_fader", path, true),
 		footprint,
@@ -119,6 +124,7 @@ export function decodePlaybackBody(
 function decodeFootprint(
 	value: unknown,
 	path: string,
+	buttonCount: number,
 ): NonNullable<PlaybackDefinition["footprint"]> {
 	if (value == null) return { type: "normal" };
 	const footprint = recordAt(value, path);
@@ -131,7 +137,14 @@ function decodeFootprint(
 		"wider",
 		"pane_wider",
 	]);
-	if (type === "normal" || type === "single_button" || type === "pane_normal")
+	if (type === "single_button") {
+		if (footprint.button == null) return { type };
+		const button = integerAt(footprint.button, `${path}.button`);
+		if (button < 1 || button > buttonCount)
+			invalid(`${path}.button`, "an available Playback button position", button);
+		return { type, button };
+	}
+	if (type === "normal" || type === "pane_normal")
 		return { type };
 	if (type === "taller" || type === "pane_taller")
 		return {

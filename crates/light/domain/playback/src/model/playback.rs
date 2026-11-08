@@ -345,7 +345,11 @@ pub enum PlaybackFootprint {
         right_buttons: [PlaybackButtonAction; 3],
         right_fader: PlaybackFaderMode,
     },
-    SingleButton,
+    SingleButton {
+        /// One-based anchor button chosen for the compact pane. Absent uses the automatic action.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        button: Option<u8>,
+    },
     PaneNormal,
     PaneTaller {
         upper_button: PlaybackButtonAction,
@@ -484,7 +488,7 @@ impl PlaybackDefinition {
         self.fader = Self::default_fader(&self.target);
         self.footprint = match self.footprint {
             footprint @ (PlaybackFootprint::Normal
-            | PlaybackFootprint::SingleButton
+            | PlaybackFootprint::SingleButton { .. }
             | PlaybackFootprint::PaneNormal) => footprint,
             PlaybackFootprint::Taller { .. } => PlaybackFootprint::Taller {
                 upper_button: PlaybackButtonAction::None,
@@ -624,7 +628,7 @@ impl PlaybackDefinition {
     fn footprint_is_compatible(&self) -> bool {
         match self.footprint {
             PlaybackFootprint::Normal
-            | PlaybackFootprint::SingleButton
+            | PlaybackFootprint::SingleButton { .. }
             | PlaybackFootprint::PaneNormal => true,
             PlaybackFootprint::Taller { upper_button }
             | PlaybackFootprint::PaneTaller { upper_button } => {
@@ -655,6 +659,13 @@ impl PlaybackDefinition {
         }
         if self.button_count > 3 {
             return Err("playback button count must be within 0-3".into());
+        }
+        if let PlaybackFootprint::SingleButton {
+            button: Some(button),
+        } = self.footprint
+            && !(1..=self.button_count).contains(&button)
+        {
+            return Err("Single button must reference an available Playback button".into());
         }
         if !self.layout_is_compatible() {
             return Err("playback layout is incompatible with its function".into());
