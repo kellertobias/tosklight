@@ -221,6 +221,16 @@ fn pane_playback_footprints_load_alongside_legacy_footprints_at_startup() {
                     "right_buttons": ["blackout", "none", "flash"],
                     "right_fader": "master"
                 }
+            },
+            "3": {
+                "name": "Automatic Single",
+                "target": {"type": "grand_master"},
+                "footprint": {"type": "single_button"}
+            },
+            "4": {
+                "name": "Assigned Single",
+                "target": {"type": "grand_master"},
+                "footprint": {"type": "single_button", "button": 2}
             }
         }
     });
@@ -252,6 +262,22 @@ fn pane_playback_footprints_load_alongside_legacy_footprints_at_startup() {
             ],
             right_fader: PlaybackFaderMode::Master,
         }
+    );
+    assert_eq!(
+        page.assignments[&3].footprint,
+        PlaybackFootprint::SingleButton { button: None }
+    );
+    assert_eq!(
+        page.assignments[&4].footprint,
+        PlaybackFootprint::SingleButton { button: Some(2) }
+    );
+    assert_eq!(
+        page.assignments[&4].buttons,
+        [
+            PlaybackButtonAction::Blackout,
+            PlaybackButtonAction::PauseDynamics,
+            PlaybackButtonAction::Flash,
+        ]
     );
     drop(restarted);
     std::fs::remove_dir_all(dir).unwrap();

@@ -21,6 +21,7 @@ import {
 	isHeldAction,
 	playbackButtonLabel,
 } from "./feedback";
+import { primaryPlaybackAction } from "./primaryPlaybackAction";
 import type { AssignedPlayback, PlaybackSnapshotActive } from "./types";
 
 interface PlaybackActionOptions {
@@ -40,21 +41,6 @@ export function buildPlaybackActions(options: PlaybackActionOptions) {
 	const primary = primaryPlaybackAction(options.playback);
 	const primaryAction = createPlaybackAction(options, primary.action, primary.button, primary.direct, true);
 	return { actions, faderActions, primaryAction };
-}
-
-/** A tile's normal action follows its target; a deliberately configured one-button control wins. */
-function primaryPlaybackAction(playback: AssignedPlayback | null): {
-	action: PlaybackDefinition["buttons"][number]; button: number; direct?: "go" | "toggle";
-} {
-	const configured = playback?.buttons.slice(0, playback.button_count ?? 3) ?? [];
-	if (!configured.some(action => action !== "none")) return { action: "none", button: 0 };
-	if (playback?.button_count === 1) return { action: configured[0], button: 0 };
-	const target = playback?.target.type;
-	const preferred = target === "dynamic" ? "toggle"
-		: target === "cue_list" || target === "macro" || target === "timecode" ? "go" : undefined;
-	const matching = preferred ? configured.indexOf(preferred) : configured.findIndex(action => action !== "none");
-	if (matching >= 0) return { action: configured[matching], button: matching };
-	return { action: preferred ?? "none", button: 0, direct: preferred };
 }
 
 function createPlaybackAction(

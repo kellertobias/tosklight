@@ -2324,6 +2324,15 @@
         {
           "type": "object",
           "properties": {
+            "button": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "uint8",
+              "maximum": 3,
+              "minimum": 1
+            },
             "type": {
               "type": "string",
               "const": "single_button"

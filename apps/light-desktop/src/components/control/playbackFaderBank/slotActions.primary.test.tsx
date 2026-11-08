@@ -64,6 +64,25 @@ describe("primary Playback tile actions", () => {
 		);
 	});
 
+	it("runs the authored Single binding even with a retained GO on another button", () => {
+		const { controller, build, show } = setup({
+			footprint: { type: "single_button", button: 2 },
+			buttons: ["go", "pause", "flash"],
+		});
+		expect(build().primaryAction.label).toBe("PAUSE");
+		show();
+		fireEvent.click(screen.getByRole("button"));
+		expect(controller.runtimeActions!.playbackAction).toHaveBeenCalledExactlyOnceWith(
+			{ page: 3, position: 402 },
+			"button",
+			{
+				button: 2,
+				pressed: true,
+				control_source: { surface_id: "software:tile", control_id: 2 },
+			},
+		);
+	});
+
 	it.each(["macro", "timecode"] as const)("uses GO for a %s tile", type => {
 		const { controller, show } = setup({ target: { type } as AssignedPlayback["target"], buttons: ["pause", "go", "off"] });
 		show(); fireEvent.click(screen.getByRole("button"));
