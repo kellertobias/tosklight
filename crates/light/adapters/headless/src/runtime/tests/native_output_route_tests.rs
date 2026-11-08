@@ -30,6 +30,58 @@ fn publish(state: &AppState) {
 }
 
 #[tokio::test]
+async fn stage_reads_admitted_dmx_while_the_output_writer_is_busy() {
+    let (state, data_dir) = test_state();
+    let app = router(state.clone());
+    let (token, _) = login(&app, "Operator").await;
+    state
+        .output
+        .replace_snapshot(EngineSnapshot {
+            fixtures: vec![operational_fixture(FixtureId::new())].into(),
+            revision: 1,
+            ..Default::default()
+        })
+        .unwrap();
+    state.output.set_dmx_override(1, 1, Some(42));
+    publish(&state);
+    let admitted = read(&app, &token).await;
+    assert_eq!(admitted.universes[0].slots[0], 42);
+
+    state.output.set_transition_hold(true);
+    state.output.set_dmx_override(1, 1, Some(83));
+    publish(&state);
+    let (locked, wait_for_lock) = tokio::sync::oneshot::channel();
+    let (release, wait_for_read) = std::sync::mpsc::channel();
+    let holder = std::thread::spawn({
+        let state = state.clone();
+        move || {
+            state.output.with_output_control_locked(|| {
+                locked.send(()).unwrap();
+                wait_for_read
+                    .recv_timeout(std::time::Duration::from_secs(5))
+                    .is_ok()
+            })
+        }
+    });
+    wait_for_lock.await.unwrap();
+    let held = read(&app, &token).await;
+    let _ = release.send(());
+    assert!(holder.join().unwrap(), "Stage waited for the output writer");
+    assert_eq!(held.frame, admitted.frame);
+    assert_eq!(held.native.unwrap().frame, admitted.frame);
+    assert_eq!(held.universes[0].slots[0], 42);
+    assert_eq!(held.overrides[0].value, 83);
+
+    state.output.set_transition_hold(false);
+    publish(&state);
+    let updated = read(&app, &token).await;
+    assert_ne!(updated.frame, admitted.frame);
+    assert_eq!(updated.native.unwrap().frame, updated.frame);
+    assert_eq!(updated.universes[0].slots[0], 83);
+    let _ = std::fs::remove_dir_all(data_dir);
+}
+
+#[tokio::test]
 async fn point_reads_retain_the_published_generation_and_pose_until_the_next_output_frame() {
     let (state, data_dir) = test_state();
     let app = router(state.clone());

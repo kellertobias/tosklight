@@ -1,6 +1,6 @@
 //! Latest-value publication from the output boundary to visualization transports.
 
-use arc_swap::ArcSwapOption;
+use arc_swap::{ArcSwap, ArcSwapOption};
 use light_engine::{RenderOptions, RenderResult};
 use light_wire::v2::{
     preload_values::ProgrammingPreloadAttributeValue,
@@ -108,10 +108,15 @@ pub(super) struct VisualizationMetrics {
     pub(super) stream_queue_drops: u64,
 }
 
+pub(super) type AcceptedDmxFrames =
+    Arc<light_engine::Pooled<HashMap<light_core::Universe, light_output::DmxFrame>>>;
+type RawDmxOverrides = HashMap<(light_core::Universe, light_core::DmxAddress), u8>;
+
 /// An immutable semantic frame known to have crossed the authoritative output boundary.
 #[derive(Clone, Debug)]
 pub(super) struct PublishedVisualizationFrame {
     pub(super) sequence: u64,
+    pub(super) dmx: AcceptedDmxFrames,
     pub(super) generation: u64,
     pub(super) sampled_at: chrono::DateTime<chrono::Utc>,
     pub(super) source_snapshot: Arc<light_engine::EngineSnapshot>,
@@ -154,6 +159,7 @@ pub(super) struct VisualizationFrameHub {
     next_sequence: AtomicU64,
     next_projection_sequence: AtomicU64,
     latest: ArcSwapOption<PublishedVisualizationFrame>,
+    raw_dmx_overrides: ArcSwap<RawDmxOverrides>,
     sampled: ArcSwapOption<PublishedVisualizationFrame>,
     projections:
         parking_lot::Mutex<HashMap<VisualizationProjectionKey, Arc<ProjectedVisualizationFrame>>>,
@@ -192,12 +198,14 @@ impl VisualizationFrameHub {
         &self,
         completed: &RenderedSemanticFrame,
         scope: VisualizationScope,
+        dmx: AcceptedDmxFrames,
         pool: Option<&light_engine::parallel::OutputPool>,
     ) {
         let rendered = &completed.rendered;
         let sequence = self.next_sequence.fetch_add(1, Ordering::Relaxed) + 1;
         let previous = self.latest.swap(Some(Arc::new(PublishedVisualizationFrame {
             sequence,
+            dmx,
             generation: rendered.generation,
             sampled_at: rendered.sampled_at,
             source_snapshot: Arc::clone(&rendered.source_snapshot),
@@ -221,6 +229,16 @@ impl VisualizationFrameHub {
 
     pub(super) fn latest(&self) -> Option<Arc<PublishedVisualizationFrame>> {
         self.latest.load_full()
+    }
+
+    // Overrides describe current operator intent, even while Hold keeps the last admitted DMX.
+    // Both this store and frame publication are serialized by the output-control writer.
+    pub(super) fn update_raw_dmx_overrides(&self, overrides: &RawDmxOverrides) {
+        self.raw_dmx_overrides.store(Arc::new(overrides.clone()));
+    }
+
+    pub(super) fn raw_dmx_overrides(&self) -> Arc<RawDmxOverrides> {
+        self.raw_dmx_overrides.load_full()
     }
 
     pub(super) fn sampled(&self) -> Option<Arc<PublishedVisualizationFrame>> {

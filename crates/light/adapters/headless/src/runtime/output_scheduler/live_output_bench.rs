@@ -243,6 +243,8 @@ impl LiveOutputBench {
             self.visualization.publish(
                 &frame,
                 VisualizationScope { show_id: None },
+                // The benchmark returns its pooled wire frames directly to the caller.
+                Default::default(),
                 self.engine.output_pool().as_deref(),
             );
         }

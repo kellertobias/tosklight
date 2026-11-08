@@ -5,6 +5,7 @@ fn source(sequence: u64) -> Arc<super::super::visualization_frame::PublishedVisu
         super::super::visualization_frame::PublishedVisualizationFrame {
             tracking: Arc::default(),
             sequence,
+            dmx: Default::default(),
             generation: sequence,
             sampled_at: chrono::Utc::now(),
             source_snapshot: Arc::new(light_engine::EngineSnapshot {

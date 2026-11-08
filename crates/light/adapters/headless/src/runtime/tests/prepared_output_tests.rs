@@ -353,7 +353,7 @@ fn assert_failed_capture_preserves_transition_and_retained_output(supersession: 
     {
         let retained = control.lock();
         assert_eq!(retained.last_routes.as_ref(), old_routes.as_ref());
-        assert_eq!(retained.last_frames, old_frames);
+        assert_eq!(**retained.last_frames, old_frames);
         assert_eq!(retained.last_patched_slots, old_slots);
     }
     let (dmx, still_source) = output.dmx_snapshot();
@@ -390,7 +390,7 @@ fn assert_failed_capture_preserves_transition_and_retained_output(supersession: 
         retained.last_routes.as_ref(),
         rendered.rendered.routes.as_ref()
     );
-    assert_eq!(retained.last_frames, *rendered.rendered.universes);
+    assert_eq!(**retained.last_frames, *rendered.rendered.universes);
     assert_eq!(
         retained.last_patched_slots,
         *rendered.rendered.patched_slots

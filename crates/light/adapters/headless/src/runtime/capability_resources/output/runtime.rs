@@ -229,6 +229,8 @@ impl OutputResource {
         } else {
             control.raw_overrides.remove(&(universe, address));
         }
+        self.visualization_frames
+            .update_raw_dmx_overrides(&control.raw_overrides);
     }
 
     #[cfg(test)]
@@ -244,6 +246,15 @@ impl OutputResource {
             .copied()
     }
 
+    #[cfg(test)]
+    pub(in crate::runtime) fn with_output_control_locked<T>(
+        &self,
+        action: impl FnOnce() -> T,
+    ) -> T {
+        let _control = self.control.lock();
+        action()
+    }
+
     pub(in crate::runtime) fn dmx_snapshot(
         &self,
     ) -> (
@@ -251,11 +262,12 @@ impl OutputResource {
         Option<Arc<super::super::super::visualization_frame::PublishedVisualizationFrame>>,
     ) {
         use light_wire::v2::output_control::*;
-        let control = self.control.lock();
+        // Readers only retain the last admitted publication. Building the response must never
+        // hold the output-control lock or make DMX wait on a slow Stage pane.
         let source = self.visualization_frames.latest();
-        let mut universes = control
-            .last_frames
+        let mut universes = source
             .iter()
+            .flat_map(|frame| frame.dmx.iter())
             .map(|(&universe, frame)| OutputDmxUniverse {
                 universe,
                 slots: frame.to_vec(),
@@ -266,8 +278,9 @@ impl OutputResource {
             native_protocol: 1,
             revision: source.as_ref().map_or(0, |s| s.show_revision),
             universes,
-            overrides: control
-                .raw_overrides
+            overrides: self
+                .visualization_frames
+                .raw_dmx_overrides()
                 .iter()
                 .map(|(&(universe, address), &value)| OutputDmxOverride {
                     universe,
@@ -316,10 +329,10 @@ impl OutputResource {
         &self,
         completed: &RenderedSemanticFrame,
         visualization_scope: light_wire::v2::visualization::VisualizationScope,
-    ) -> HashMap<light_core::Universe, light_output::DmxFrame> {
+    ) -> crate::runtime::visualization_frame::AcceptedDmxFrames {
         let mut control = self.control.lock();
         if control.effective_hold() {
-            return control.last_frames.clone();
+            return Arc::clone(&control.last_frames);
         }
         let rendered = &completed.rendered;
         let mut frames = rendered.universes.clone();
@@ -328,7 +341,8 @@ impl OutputResource {
                 frame[usize::from(address - 1)] = value;
             }
         }
-        control.last_frames = frames.clone();
+        let frames = Arc::new(light_engine::Pooled::unpooled(frames));
+        control.last_frames = Arc::clone(&frames);
         control.last_routes = Arc::clone(&rendered.routes);
         control
             .last_patched_slots
@@ -336,6 +350,7 @@ impl OutputResource {
         self.visualization_frames.publish(
             completed,
             visualization_scope,
+            Arc::clone(&frames),
             self.engine().output_pool().as_deref(),
         );
         frames
@@ -346,7 +361,7 @@ impl OutputResource {
             let control = self.control.lock();
             (
                 Arc::clone(&control.last_routes),
-                control.last_frames.clone(),
+                Arc::clone(&control.last_frames),
                 control.last_patched_slots.clone(),
             )
         };

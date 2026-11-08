@@ -356,7 +356,7 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let mut application = ApplicationSections::begin();
     let action_timing = runtime.action_timing.begin_output_render();
     let options = runtime.control.lock().render_options();
-    let (rendered, visualization_scope, dynamic, engine) = {
+    let (mut rendered, visualization_scope, dynamic, engine) = {
         let Ok(_activation) = runtime.activation.try_acquire() else {
             application.retain(1);
             let result = send_retained_output(&runtime, &mut application).await;
@@ -398,19 +398,22 @@ async fn render_tick(runtime: Runtime) -> io::Result<u64> {
     let publish_started = Instant::now();
     let (routes, frames, patched_slots) = {
         let mut control = runtime.control.lock();
-        if !control.effective_hold() {
+        let held = control.effective_hold();
+        let (routes, frames, patched_slots) = output_payload(
+            &mut control,
+            Arc::clone(&rendered.rendered.routes),
+            std::mem::take(&mut rendered.rendered.universes),
+            std::mem::take(&mut rendered.rendered.patched_slots),
+        );
+        if !held {
             runtime.visualization_frames.publish(
                 &rendered,
                 visualization_scope,
+                Arc::clone(&frames),
                 runtime.engine.output_pool().as_deref(),
             );
         }
-        output_payload(
-            &mut control,
-            rendered.rendered.routes,
-            rendered.rendered.universes,
-            rendered.rendered.patched_slots,
-        )
+        (routes, frames, patched_slots)
     };
     let publish = publish_started.elapsed();
     application.record(ApplicationPhase::PublicationPayload, publish);
@@ -958,31 +961,33 @@ fn timecode_frame(timecode: &SmpteTimecode) -> u64 {
 fn output_frames(
     control: &mut OutputControl,
     mut rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
-) -> light_engine::Pooled<HashMap<Universe, DmxFrame>> {
+) -> super::visualization_frame::AcceptedDmxFrames {
     if control.effective_hold() {
-        // Hold republishes what was last sent, in the borrowed frame this render already has.
-        rendered.clone_from(&control.last_frames);
-        return rendered;
+        return Arc::clone(&control.last_frames);
     }
     apply_raw_overrides(&mut rendered, &control.raw_overrides);
-    control.last_frames.clone_from(&rendered);
-    rendered
+    let frames = Arc::new(rendered);
+    control.last_frames = Arc::clone(&frames);
+    frames
 }
 
 fn output_payload(
     control: &mut OutputControl,
     routes: Arc<[light_output::OutputRoute]>,
-    mut rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
+    rendered: light_engine::Pooled<HashMap<Universe, DmxFrame>>,
     mut patched_slots: light_engine::Pooled<HashMap<Universe, u16>>,
 ) -> (
     Arc<[light_output::OutputRoute]>,
-    light_engine::Pooled<HashMap<Universe, DmxFrame>>,
+    super::visualization_frame::AcceptedDmxFrames,
     light_engine::Pooled<HashMap<Universe, u16>>,
 ) {
     if control.effective_hold() {
-        rendered.clone_from(&control.last_frames);
         patched_slots.clone_from(&control.last_patched_slots);
-        return (Arc::clone(&control.last_routes), rendered, patched_slots);
+        return (
+            Arc::clone(&control.last_routes),
+            Arc::clone(&control.last_frames),
+            patched_slots,
+        );
     }
     let frames = output_frames(control, rendered);
     control.last_routes = Arc::clone(&routes);

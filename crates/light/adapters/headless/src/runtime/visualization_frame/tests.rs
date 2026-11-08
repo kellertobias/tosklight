@@ -84,9 +84,9 @@ fn dynamic_stack_entry() -> light_wire::v2::visualization::VisualizationDynamicS
 fn retains_only_the_latest_complete_frame() {
     let hub = VisualizationFrameHub::default();
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
-    hub.publish(&rendered(20), scope, None);
-    hub.publish(&rendered(30), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
+    hub.publish(&rendered(30), scope, Default::default(), None);
 
     let latest = hub.latest().expect("a frame was published");
     assert_eq!(latest.sequence, 3);
@@ -111,7 +111,7 @@ fn source_sidecar_is_shared_with_values_and_released_with_the_last_frame_reader(
     let weak = Arc::downgrade(&sources);
     let mut first = rendered(10);
     first.dynamics = Some(sources);
-    hub.publish(&first, scope, None);
+    hub.publish(&first, scope, Default::default(), None);
     let retained = hub.latest().unwrap();
     assert!(Arc::ptr_eq(&first.rendered.mounts, &retained.mounts));
     assert!(Arc::ptr_eq(
@@ -119,7 +119,7 @@ fn source_sidecar_is_shared_with_values_and_released_with_the_last_frame_reader(
         retained.dynamics.as_ref().unwrap(),
     ));
     drop(first);
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     let latest = hub.latest().unwrap();
     assert_eq!(latest.sequence, 2);
     assert!(
@@ -142,7 +142,7 @@ fn source_sidecar_is_shared_with_values_and_released_with_the_last_frame_reader(
 fn shares_one_projection_for_the_same_lane_and_source_frame() {
     let hub = VisualizationFrameHub::default();
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let source = hub.latest().unwrap();
     let builds = AtomicUsize::new(0);
     let build = |_| {
@@ -195,7 +195,7 @@ fn dynamic_stack_refresh_is_capped_at_fixture_sheet_cadence() {
         include_dynamic_stack: true,
         complete_values: false,
     };
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let first_source = hub.latest().unwrap();
     hub.projection(key, &first_source, |refresh| {
         assert!(refresh);
@@ -203,7 +203,7 @@ fn dynamic_stack_refresh_is_capped_at_fixture_sheet_cadence() {
     })
     .unwrap();
 
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let second_source = hub.latest().unwrap();
     let second = hub
         .projection(key, &second_source, |refresh| {
@@ -215,7 +215,7 @@ fn dynamic_stack_refresh_is_capped_at_fixture_sheet_cadence() {
     assert!(second.delta.dynamic_stack.is_none());
 
     std::thread::sleep(DYNAMIC_STACK_PUBLICATION_INTERVAL);
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let third_source = hub.latest().unwrap();
     let third = hub
         .projection(key, &third_source, |refresh| {
@@ -230,7 +230,7 @@ fn dynamic_stack_refresh_is_capped_at_fixture_sheet_cadence() {
 fn sampler_publishes_one_shared_source_only_while_subscribed() {
     let hub = VisualizationFrameHub::default();
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     hub.sample_latest();
     assert!(hub.sampled().is_none());
 
@@ -238,7 +238,7 @@ fn sampler_publishes_one_shared_source_only_while_subscribed() {
     hub.sample_latest();
     assert_eq!(hub.sampled().unwrap().sequence, 1);
 
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     assert_eq!(hub.sampled().unwrap().sequence, 1);
     hub.sample_latest();
     assert_eq!(hub.sampled().unwrap().sequence, 2);
@@ -250,7 +250,7 @@ async fn sampler_parks_without_subscribers_and_resumes_on_first_claim() {
     let cancellation = CancellationToken::new();
     let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     tokio::time::advance(Duration::from_secs(1)).await;
     assert!(hub.sampled().is_none());
 
@@ -259,7 +259,7 @@ async fn sampler_parks_without_subscribers_and_resumes_on_first_claim() {
     assert_eq!(hub.sampled().unwrap().sequence, 1);
 
     hub.change_subscribers(VisualizationLane::Normal, -1);
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     tokio::time::advance(Duration::from_secs(1)).await;
     assert_eq!(hub.sampled().unwrap().sequence, 1);
 
@@ -273,7 +273,7 @@ async fn sampler_notifies_waiters_on_each_new_shared_sample() {
     let cancellation = CancellationToken::new();
     let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
 
     let first_waiter = {
         let hub = Arc::clone(&hub);
@@ -286,7 +286,7 @@ async fn sampler_notifies_waiters_on_each_new_shared_sample() {
         let hub = Arc::clone(&hub);
         tokio::spawn(async move { hub.wait_for_sample_after(1).await.sequence })
     };
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     tokio::task::yield_now().await;
     assert!(!second_waiter.is_finished());
 
@@ -304,7 +304,7 @@ async fn sampler_uses_the_next_source_when_a_cadence_deadline_precedes_publicati
     let cancellation = CancellationToken::new();
     let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     hub.change_subscribers(VisualizationLane::Normal, 1);
     assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
     tokio::task::yield_now().await;
@@ -317,7 +317,7 @@ async fn sampler_uses_the_next_source_when_a_cadence_deadline_precedes_publicati
     tokio::task::yield_now().await;
     assert!(!next_waiter.is_finished());
 
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     assert_eq!(next_waiter.await.unwrap(), 2);
 
     hub.change_subscribers(VisualizationLane::Normal, -1);
@@ -331,19 +331,19 @@ async fn reactivated_sampler_starts_a_fresh_shared_cadence() {
     let cancellation = CancellationToken::new();
     let sampler = tokio::spawn(Arc::clone(&hub).run_sampler(cancellation.clone()));
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     hub.change_subscribers(VisualizationLane::Normal, 1);
     assert_eq!(hub.wait_for_sample_after(0).await.sequence, 1);
     tokio::task::yield_now().await;
 
     tokio::time::advance(VISUALIZATION_SOURCE_SAMPLE_INTERVAL / 2).await;
     hub.change_subscribers(VisualizationLane::Normal, -1);
-    hub.publish(&rendered(20), scope, None);
+    hub.publish(&rendered(20), scope, Default::default(), None);
     hub.change_subscribers(VisualizationLane::Normal, 1);
     assert_eq!(hub.wait_for_sample_after(1).await.sequence, 2);
     tokio::task::yield_now().await;
 
-    hub.publish(&rendered(30), scope, None);
+    hub.publish(&rendered(30), scope, Default::default(), None);
     let next_waiter = {
         let hub = Arc::clone(&hub);
         tokio::spawn(async move { hub.wait_for_sample_after(2).await.sequence })
@@ -363,7 +363,7 @@ async fn reactivated_sampler_starts_a_fresh_shared_cadence() {
 fn preload_projection_uses_its_own_authoritative_source_identity_and_timestamp() {
     let hub = VisualizationFrameHub::default();
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let source = hub.latest().unwrap();
     let stale_timestamp = "2020-01-01T00:00:00Z";
 
@@ -422,7 +422,7 @@ fn final_projection_claim_releases_session_specific_cache() {
     };
     let scope = scope(Uuid::new_v4());
     hub.change_projection_claim(key, 1);
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let source = hub.latest().unwrap();
     let builds = AtomicUsize::new(0);
     let mut build = |_| {
@@ -512,7 +512,7 @@ fn removed_values_have_deterministic_fixture_and_attribute_order() {
 fn projection_work_cannot_block_latest_frame_publication() {
     let hub = Arc::new(VisualizationFrameHub::default());
     let scope = scope(Uuid::new_v4());
-    hub.publish(&rendered(10), scope, None);
+    hub.publish(&rendered(10), scope, Default::default(), None);
     let source = hub.latest().unwrap();
     let (projection_started_tx, projection_started_rx) = mpsc::channel();
     let (release_projection_tx, release_projection_rx) = mpsc::channel();
@@ -548,7 +548,7 @@ fn projection_work_cannot_block_latest_frame_publication() {
     let (published_tx, published_rx) = mpsc::channel();
     let publisher_hub = Arc::clone(&hub);
     thread::spawn(move || {
-        publisher_hub.publish(&rendered(20), scope, None);
+        publisher_hub.publish(&rendered(20), scope, Default::default(), None);
         published_tx.send(()).unwrap();
     });
     published_rx

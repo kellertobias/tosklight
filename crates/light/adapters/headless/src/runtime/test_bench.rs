@@ -89,7 +89,7 @@ pub(super) async fn advance_test_clock(
         "now": now,
         "revision": rendered.rendered.revision,
         "packets_sent": packets,
-        "universes": frames.into_iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
+        "universes": frames.iter().map(|(universe, slots)| serde_json::json!({"universe":universe,"slots":slots.to_vec()})).collect::<Vec<_>>(),
     })))
 }
 

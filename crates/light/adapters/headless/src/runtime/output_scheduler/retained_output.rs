@@ -19,7 +19,7 @@ pub(super) async fn send_retained_output(
             let control = runtime.control.lock();
             (
                 Arc::clone(&control.last_routes),
-                control.last_frames.clone(),
+                Arc::clone(&control.last_frames),
                 control.last_patched_slots.clone(),
             )
         });
