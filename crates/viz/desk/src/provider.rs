@@ -16,7 +16,7 @@ use crate::wire::StageLayoutBody;
 use std::net::Ipv4Addr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{Receiver, Sender, TryRecvError, channel};
+use std::sync::mpsc::{Receiver, TryRecvError};
 use std::time::{Duration, Instant};
 use viz_dmx::DmxReceiver;
 use viz_project::Decoder;
@@ -98,8 +98,8 @@ enum Message {
     Preview(Box<crate::wire::PreviewSnapshot>),
     /// Identity-based editor/CAD selection from a planning source.
     Selection(Box<crate::wire::SelectionSnapshot>),
-    /// The desk's own output, for a renderer inside the desk's window.
-    OutputRead(output_demand::OutputRead),
+    /// One read is available in the mailbox, unless a newer configuration invalidated it.
+    OutputReady(u64),
     #[cfg(test)]
     DeskOutput(Box<crate::wire::OutputDmxSnapshot>),
     /// The operator's preload, laid over the live picture while they are following it.
@@ -157,6 +157,7 @@ enum Command {
 pub struct DeskProvider {
     connection: DeskConnection,
     inbox: Receiver<Message>,
+    output_mailbox: Arc<OutputMailbox>,
     commands: tokio::sync::mpsc::UnboundedSender<Command>,
     stop: Arc<AtomicBool>,
     worker: Option<std::thread::JoinHandle<()>>,
@@ -211,12 +212,13 @@ pub struct DeskProvider {
 
 impl DeskProvider {
     pub fn start(connection: DeskConnection, epoch: Instant) -> Self {
-        let (outbox, inbox) = channel();
+        let (outbox, inbox, output_mailbox) = ProviderOutbox::channel();
         let (commands, orders) = tokio::sync::mpsc::unbounded_channel();
         let worker_connection = connection.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = stop.clone();
-        let mut provider = Self::with_worker(connection, epoch, inbox, commands, stop, None);
+        let mut provider =
+            Self::with_worker(connection, epoch, inbox, commands, stop, output_mailbox);
         let demand = provider.output_demand.clone();
         provider.worker = std::thread::Builder::new()
             .name("viz-desk".into())
@@ -228,12 +230,12 @@ impl DeskProvider {
     /// A provider fed by a test instead of a connection thread: the same inbox, the same
     /// ingestion and lifecycle, but the messages a worker would send are sent by hand.
     #[cfg(test)]
-    fn detached(connection: DeskConnection, epoch: Instant) -> (Self, Sender<Message>) {
-        let (outbox, inbox) = channel();
+    fn detached(connection: DeskConnection, epoch: Instant) -> (Self, ProviderOutbox) {
+        let (outbox, inbox, output_mailbox) = ProviderOutbox::channel();
         let (commands, _orders) = tokio::sync::mpsc::unbounded_channel();
         let stop = Arc::new(AtomicBool::new(false));
         (
-            Self::with_worker(connection, epoch, inbox, commands, stop, None),
+            Self::with_worker(connection, epoch, inbox, commands, stop, output_mailbox),
             outbox,
         )
     }
@@ -244,14 +246,15 @@ impl DeskProvider {
         inbox: Receiver<Message>,
         commands: tokio::sync::mpsc::UnboundedSender<Command>,
         stop: Arc<AtomicBool>,
-        worker: Option<std::thread::JoinHandle<()>>,
+        output_mailbox: Arc<OutputMailbox>,
     ) -> Self {
         Self {
             connection,
             inbox,
+            output_mailbox,
             commands,
             stop,
-            worker,
+            worker: None,
             receivers: None,
             decoder: None,
             monitor_frames: None,
@@ -349,6 +352,7 @@ impl DeskProvider {
             );
             return;
         };
+        self.discard_pending_desk_output();
         let decoder = Decoder::with_external_camera(
             bindings,
             (!self.connection.values_from_desk_output)
@@ -427,8 +431,7 @@ impl DeskProvider {
             self.following_preload = following;
             // A response from the previous mode must not seed the next picture. Keep source
             // admission history: a display choice never makes retired output current again.
-            self.desk_output = None;
-            self.preload_projection = Default::default();
+            self.discard_pending_desk_output();
             self.presented_desk_output = None;
         }
     }
@@ -524,8 +527,10 @@ impl DeskProvider {
                         events.push(ProviderEvent::Values(Box::new(self.values.clone())));
                     }
                 }
-                Ok(Message::OutputRead(read)) => {
-                    if self.output_demand.accepts(read.request) {
+                Ok(Message::OutputReady(marker)) => {
+                    if let Some(read) = self.output_mailbox.take(marker)
+                        && self.output_demand.accepts(read.request)
+                    {
                         if let Some(preload) = read.preload {
                             self.preload_projection = *preload;
                         }
@@ -547,6 +552,7 @@ impl DeskProvider {
                     events.push(ProviderEvent::RendererSettings(*settings));
                 }
                 Ok(Message::Resync(reason)) => {
+                    self.reset_desk_output_acceptance();
                     events.push(ProviderEvent::ResyncRequired { reason });
                 }
                 Err(TryRecvError::Empty) => break,
@@ -781,7 +787,7 @@ impl SceneProvider for DeskProvider {
 /// The connection thread: scene reads, opted-in native output reads and configuration events.
 fn run(
     connection: DeskConnection,
-    outbox: Sender<Message>,
+    outbox: ProviderOutbox,
     mut orders: tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: Arc<AtomicBool>,
     demand: output_demand::OutputDemand,
@@ -838,7 +844,7 @@ fn run(
 
 async fn connect_once(
     connection: &DeskConnection,
-    outbox: &Sender<Message>,
+    outbox: &ProviderOutbox,
     orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
     demand: &output_demand::OutputDemand,
@@ -1122,5 +1128,7 @@ mod provider_tests;
 mod input_monitor_tests;
 
 mod output_demand;
+mod output_mailbox;
+use output_mailbox::{OutputMailbox, ProviderOutbox};
 
 mod source_pacing;

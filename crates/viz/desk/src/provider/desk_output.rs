@@ -30,9 +30,14 @@ impl DeskProvider {
     /// whatever was proven about the last one's frames, and any snapshot still waiting from it,
     /// belongs to something that is no longer displayed.
     pub(super) fn reset_desk_output_acceptance(&mut self) {
-        self.desk_output = None;
+        self.discard_pending_desk_output();
         self.presented_desk_output = None;
         self.desk_output_admission.reset();
+    }
+
+    pub(super) fn discard_pending_desk_output(&mut self) {
+        self.desk_output = None;
+        self.preload_projection = Default::default();
     }
 
     /// Hold an arriving desk-output snapshot for the next poll.

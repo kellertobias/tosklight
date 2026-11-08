@@ -2,13 +2,12 @@
 
 use super::source_pacing::SourcePacing;
 use super::{
-    Command, ConnectionState, DeskConnection, Message, ProviderDiagnostics, read_scene, read_view,
-    replaces_the_show, scene_affecting, view_affecting,
+    Command, ConnectionState, DeskConnection, Message, ProviderDiagnostics, ProviderOutbox,
+    read_scene, read_view, replaces_the_show, scene_affecting, view_affecting,
 };
 use crate::client::DeskClient;
 use futures_util::StreamExt;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
 use std::{
     future::Future,
     pin::Pin,
@@ -31,7 +30,7 @@ pub(super) async fn watch(
     client: &DeskClient,
     endpoint: &str,
     connection: &DeskConnection,
-    outbox: &Sender<Message>,
+    outbox: &ProviderOutbox,
     orders: &mut tokio::sync::mpsc::UnboundedReceiver<Command>,
     stop: &AtomicBool,
     demand: &super::output_demand::OutputDemand,
@@ -47,6 +46,7 @@ pub(super) async fn watch(
 
     let mut pacing = SourcePacing::new(Instant::now());
     let mut source_read: Option<SourceRead<'_>> = None;
+    let mut source_read_matches_scene = true;
     loop {
         if stop.load(Ordering::Relaxed) {
             return;
@@ -56,11 +56,14 @@ pub(super) async fn watch(
                 let (started, read) = completed;
                 pacing.completed(started);
                 source_read = None;
-                if let Some(read) = read { let _ = outbox.send(Message::OutputRead(read)); }
+                if source_read_matches_scene && let Some(read) = read && demand.accepts(read.request) {
+                    let _ = outbox.send_output(read);
+                }
                 continue;
             }
             _ = tokio::time::sleep_until(tokio::time::Instant::from_std(pacing.deadline())),
                 if connection.values_from_desk_output && source_read.is_none() => {
+                source_read_matches_scene = true;
                 source_read = Some(Box::pin(async {
                     // This instant is captured on the future's FIRST poll, not its creation:
                     // configuration work may run before the HTTP future is first serviced.
@@ -102,6 +105,11 @@ pub(super) async fn watch(
         let Some(frame) = crate::wire::EventFrame::parse(&text) else {
             continue;
         };
+        // An outstanding read began against the earlier scene. Keep its cadence accounting but
+        // do not publish its result after the new configuration is ordered.
+        if scene_affecting(&frame.kind) {
+            source_read_matches_scene = false;
+        }
         if !apply_configuration_event(frame, client, endpoint, connection, outbox).await {
             return;
         }
@@ -113,7 +121,7 @@ async fn apply_configuration_event(
     client: &DeskClient,
     endpoint: &str,
     connection: &DeskConnection,
-    outbox: &Sender<Message>,
+    outbox: &ProviderOutbox,
 ) -> bool {
     if frame.kind == "renderer_settings_changed" {
         if let Some(settings) = frame.renderer_settings {
@@ -176,7 +184,7 @@ async fn apply_configuration_event(
 async fn open_event_stream(
     client: &DeskClient,
     endpoint: &str,
-    outbox: &Sender<Message>,
+    outbox: &ProviderOutbox,
 ) -> Option<EventSocket> {
     use futures_util::SinkExt;
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;

@@ -4,13 +4,12 @@
 //! sends — connection states, a scene, desk-output snapshots — and reads the result back from
 //! `poll`, so the guard is proven where the Stage gets its picture, not in a helper.
 
-use super::super::{DeskConnection, DeskProvider, Message};
+use super::super::{DeskConnection, DeskProvider, Message, ProviderOutbox};
 use light_wire::v2::output_control::{
     OutputDmxSnapshot, OutputDmxUniverse, OutputFrameIdentity, OutputNativeInstance,
     OutputNativeLane, OutputPointPose,
 };
 use std::sync::Arc;
-use std::sync::mpsc::Sender;
 use std::time::Instant;
 use uuid::Uuid;
 use viz_scene::{ConnectionState, ProviderDiagnostics, ProviderEvent, SceneProvider};
@@ -129,7 +128,7 @@ const B: Look = Look {
 
 struct Desk {
     provider: DeskProvider,
-    outbox: Sender<Message>,
+    outbox: ProviderOutbox,
     rig: Rig,
 }
 

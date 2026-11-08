@@ -93,7 +93,7 @@ async fn slow_source_http_does_not_block_configuration_or_resync_and_never_overl
     let (port, reads, _owned) = server().await;
     let mut client = DeskClient::new("127.0.0.1", port).unwrap();
     assert!(client.open_session().await.unwrap());
-    let (outbox, inbox) = std::sync::mpsc::channel();
+    let (outbox, inbox, _) = ProviderOutbox::channel();
     let (commands, mut orders) = tokio::sync::mpsc::unbounded_channel();
     let watching = tokio::spawn(async move {
         let connection = DeskConnection {

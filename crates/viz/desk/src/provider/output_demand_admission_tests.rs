@@ -1,30 +1,84 @@
 //! Exercise tagged asynchronous replies through the real provider inbox and native decode.
 use super::*;
 use crate::provider::output_demand::{OutputRead, OutputRequest};
+fn send_tagged(desk: &Desk, request: OutputRequest, output: OutputDmxSnapshot, legacy: bool) {
+    desk.outbox
+        .send_output(OutputRead {
+            request,
+            output: Box::new(output),
+            preload: legacy.then(|| {
+                Box::new(crate::wire::PreloadProjection {
+                    fixture_values: vec![crate::wire::PreloadFixtureValue {
+                        fixture_id: desk.rig.fixture,
+                        attribute: "intensity".into(),
+                        value: crate::wire::PreloadAttributeValue::Normalized(0.125),
+                    }],
+                })
+            }),
+        })
+        .unwrap();
+}
+
 fn tagged(
     desk: &mut Desk,
     request: OutputRequest,
     output: OutputDmxSnapshot,
     legacy: bool,
 ) -> usize {
-    desk.send(Message::OutputRead(OutputRead {
-        request,
-        output: Box::new(output),
-        preload: legacy.then(|| {
-            Box::new(crate::wire::PreloadProjection {
-                fixture_values: vec![crate::wire::PreloadFixtureValue {
-                    fixture_id: desk.rig.fixture,
-                    attribute: "intensity".into(),
-                    value: crate::wire::PreloadAttributeValue::Normalized(0.125),
-                }],
-            })
-        }),
-    }));
+    send_tagged(desk, request, output, legacy);
     desk.provider
         .poll()
         .iter()
         .filter(|e| matches!(e, ProviderEvent::Values(_)))
         .count()
+}
+
+#[test]
+fn queued_output_does_not_cross_a_lane_change_or_same_show_delta() {
+    let mut desk = Desk::new(false);
+    let live = desk.provider.output_demand.snapshot();
+    let initial = desk.output(Some(stamp(1, 2)), A);
+    assert_eq!(tagged(&mut desk, live, initial, false), 1);
+
+    send_tagged(&desk, live, desk.output(Some(stamp(2, 2)), B), false);
+    desk.provider.follow_preload(true);
+    assert!(
+        !desk
+            .provider
+            .poll()
+            .iter()
+            .any(|event| matches!(event, ProviderEvent::Values(_)))
+    );
+    assert_eq!(desk.point_height(), A.point_z);
+
+    let preload = desk.provider.output_demand.snapshot();
+    let old = desk.output(Some(stamp(3, 2)), B);
+    // The marker may already have been consumed when the delta reaches the render thread.
+    desk.provider.queue_desk_output(old.clone());
+    send_tagged(&desk, preload, old, false);
+    let mut plan = desk.rig.plan();
+    plan.scene.revision = 2;
+    desk.send(Message::delta(
+        plan,
+        Vec::new(),
+        ProviderDiagnostics::default(),
+    ));
+    let events = desk.provider.poll();
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, ProviderEvent::SceneDelta(_)))
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, ProviderEvent::Values(_)))
+    );
+    assert_eq!(desk.point_height(), A.point_z);
+
+    let fresh = desk.output(Some(stamp(4, 2)), B);
+    assert_eq!(tagged(&mut desk, preload, fresh, false), 1);
+    assert_eq!(desk.point_height(), B.point_z);
 }
 #[test]
 fn obsolete_native_and_legacy_responses_never_mutate_after_double_flip() {
