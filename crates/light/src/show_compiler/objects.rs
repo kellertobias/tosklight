@@ -4,7 +4,7 @@ use light_core::FixtureId;
 use light_playback::{CueList, PlaybackPage};
 use light_programmer::{GroupDefinition, Preset, resolve_group};
 use light_show::PortableShowCandidate;
-use serde::de::DeserializeOwned;
+use serde::{Deserialize, de::DeserializeOwned};
 use std::collections::HashMap;
 
 pub(super) fn decode<T: DeserializeOwned>(
@@ -14,7 +14,7 @@ pub(super) fn decode<T: DeserializeOwned>(
     candidate
         .objects_of_kind(kind)
         .map(|object| {
-            serde_json::from_value(object.body().clone()).map_err(|error| {
+            T::deserialize(object.body()).map_err(|error| {
                 invalid_candidate(format!("invalid {kind} {}: {error}", object.key().id()))
             })
         })
@@ -182,7 +182,7 @@ pub(super) fn decode_dynamics(
     let presets = candidate
         .objects_of_kind("preset")
         .map(|object| {
-            serde_json::from_value::<Preset>(object.body().clone())
+            Preset::deserialize(object.body())
                 .map_err(|error| error.to_string())
                 .and_then(|preset| {
                     preset
