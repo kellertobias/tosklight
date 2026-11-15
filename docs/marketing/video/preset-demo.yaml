@@ -1,0 +1,42 @@
+version: 1
+name: Colour and position preset take
+bpm: 120
+apps:
+  control:
+    bundleId: de.tokenet.light
+    window: ToskLight
+
+# Start with a fresh copy of the Demo Show and an empty selection.
+# Open and frame the separate Visualizer before starting the recorder.
+steps:
+  - marker: presets-start
+  - app: control
+  - click: Busking
+  - wait: 1s
+  - click:
+      name: "4 Beam Show "
+      match: prefix
+  - wait: 1s
+  - click: Set Enc 1 · Dimmer value
+  - fill:
+      name: Enc 1 · Dimmer value
+      text: "70"
+  - click: ENTER
+  - wait: 4 beats
+  - click:
+      name: "3 Yellow "
+      match: prefix
+  - wait: 8 beats
+  - click:
+      name: "4 Fan Out "
+      match: prefix
+  - wait: 8 beats
+  - click:
+      name: "9 Dark Blue "
+      match: prefix
+  - wait: 8 beats
+  - click:
+      name: "6 Cross 1 "
+      match: prefix
+  - wait: 8 beats
+  - marker: presets-end

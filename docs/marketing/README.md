@@ -1,5 +1,8 @@
 # Marketing Screenshots
 
+For recorded UI walkthroughs, use the [scripted video take runner](../engineering/scripted-video-takes.md)
+and its [preset demo script](video/preset-demo.yaml).
+
 The reviewed PNG files below `assets/screenshots` are generated from deterministic
 Storybook application stories. `screenshot-manifest.json` is the source contract
 for their filenames, gallery order, titles, captions, story IDs, viewport sizes,

@@ -44,6 +44,7 @@
 		"build:viz-editor": "bash tools/build.sh build-viz-editor",
 		"build:patch-mcp": "node tools/build-patch-mcp.mjs",
 		"demo:media": "node tools/run-demo-media.mjs",
+		"demo:script": "node tools/demo-script/cli.mjs",
 		"demo-show": "bash tools/build.sh demo-show",
 		"demo-capture": "bash tools/build.sh demo-capture",
 		"bundle": "bash tools/build.sh archive",
