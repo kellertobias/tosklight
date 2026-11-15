@@ -147,7 +147,7 @@ const preload003Scenario: PairedScenario<Preload003State> = {
 			"1 button · faderless",
 		);
 		await modal.getByRole("button", { name: "Layout", exact: true }).click();
-		await chooseSelect(page, modal, "Top button", "Toggle");
+		await chooseSelect(page, modal, "Button", "Toggle");
 		await modal.getByRole("button", { name: "Apply", exact: true }).click();
 		await expect(modal).toBeHidden();
 		await paneCard(pane, {page:1,position:401}).getByRole("button",{name:/^(GO \+|TOGGLE|ON)$/})

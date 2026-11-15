@@ -171,7 +171,7 @@ export class BrowserVirtualPlaybacks {
 		await chooseOption(
 			this.page,
 			modal,
-			"Top button",
+			"Button",
 			playbackButtonLabel(sourcePlayback.buttons[0]),
 		);
 		await this.desk.click(
@@ -219,7 +219,7 @@ export class BrowserVirtualPlaybacks {
 		await chooseOption(
 			this.page,
 			dialog,
-			"Top button",
+			"Button",
 			playbackButtonLabel(button),
 		);
 		await this.desk.click(
@@ -393,7 +393,7 @@ function playbackButtonLabel(button: PlaybackButton): string {
 		[PlaybackButton.Temp]: "Temp",
 		[PlaybackButton.Swap]: "Swap",
 		[PlaybackButton.Pause]: "Pause",
-		[PlaybackButton.Empty]: "None",
+		[PlaybackButton.Empty]: "Empty Button",
 	};
 	const label = labels[button];
 	if (!label)
