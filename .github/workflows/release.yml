@@ -980,7 +980,8 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
         with:
-          toolchain: stable
+          # Tauri 2.6 resolves sidecar destinations using Cargo's pre-1.100 layout.
+          toolchain: "1.99.1"
           targets: ${{ matrix.target }}
 
       - uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
