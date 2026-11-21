@@ -19,6 +19,9 @@ For a Homebrew installation of all three applications, follow the
 [macOS installation commands in the README](https://github.com/kellertobias/tosklight#install-on-macos).
 The `tosklight` cask installs Control, Architect with its visualizer, and Pixel from a prebuilt
 GitHub Release on Apple Silicon Macs. Homebrew also installs FFmpeg and ffprobe for Pixel imports.
+Before installation, Homebrew signs testing builds locally and verifies all three apps and their
+helpers. Valid Developer ID signatures are preserved. Rerun the Homebrew installation script to
+refresh signatures on an existing installation, even if its version is unchanged.
 The same macOS approval steps apply to testing builds installed through Homebrew.
 
 Pixel media import requires separately installed, working `ffmpeg` and `ffprobe` executables. These

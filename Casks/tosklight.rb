@@ -20,9 +20,19 @@ cask "tosklight" do
   app "tosklight-bundle-macos_arm64/tosklight-architect-macos_arm64.app", target: "ToskLight Architect.app"
   app "tosklight-bundle-macos_arm64/tosklight-media-macos_arm64.app", target: "ToskLight Pixel.app"
 
+  preflight_steps do
+    run "/bin/bash",
+        args:         [
+          "{{staged_path}}/tosklight-bundle-macos_arm64/sign-macos-apps-locally.sh",
+          "{{staged_path}}/tosklight-bundle-macos_arm64",
+        ],
+        print_stdout: true
+  end
+
   caveats <<~EOS
     Installs Control, Architect (including its visualizer), and Pixel.
-    Testing builds use ad-hoc signatures. If macOS blocks an app, verify
+    Testing builds are signed locally and verified during installation.
+    Valid Developer ID signatures are preserved. If macOS blocks an app, verify
     its source, then use System Settings > Privacy & Security > Open Anyway.
     FFmpeg and ffprobe are installed for Pixel media import.
   EOS

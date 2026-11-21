@@ -57,13 +57,18 @@ visualizer, and **ToskLight Pixel** into Applications. It also installs FFmpeg a
 Pixel media import. It requires an Apple Silicon Mac running macOS 11 or later; installation
 downloads compiled applications and needs no Rust, Node.js, or Xcode toolchain.
 
+Homebrew automatically runs the release's local-signing helper before installing the apps.
+It signs testing builds, including their helper executables, and verifies every app.
+Valid Developer ID signatures are preserved; signing or verification failures stop installation.
+
 The [Homebrew installation script](tools/install-homebrew.sh) runs these steps with progress
-messages and upgrades an existing Homebrew installation when run again. To update manually,
-run `brew update` followed by `brew upgrade --cask kellertobias/tosklight/tosklight`.
+messages and reinstalls an existing Homebrew installation to refresh local signatures, even at
+the same version. To update manually, run `brew update` followed by
+`brew upgrade --cask kellertobias/tosklight/tosklight`.
 To remove the suite, run `brew uninstall --cask kellertobias/tosklight/tosklight`;
 the cask keeps saved shows and settings.
 
-Testing releases use ad-hoc signatures. If macOS blocks an application, verify its download source,
+Local signing keeps download quarantine intact. If macOS blocks an application, verify its download source,
 then use **System Settings > Privacy & Security > Open Anyway** and confirm **Open**.
 See [Installation and first start](docs/help/00-Quick-Start/01-installation-and-first-start.md)
 for signing details and first-start checks.

@@ -19,6 +19,7 @@ test("a cask update rejects altered downloads and incomplete Architect installat
 	fs.writeFileSync(archive, "downloaded archive");
 	const digest = createHash("sha256").update(fs.readFileSync(archive)).digest("hex");
 	const entries = [
+		"sign-macos-apps-locally.sh",
 		"tosklight-desk-macos_arm64.app/Contents/MacOS/light-desktop",
 		"tosklight-desk-macos_arm64.app/Contents/MacOS/light-headless",
 		"tosklight-architect-macos_arm64.app/Contents/MacOS/ToskLight Architect",
@@ -29,6 +30,7 @@ test("a cask update rejects altered downloads and incomplete Architect installat
 	assert.equal(verifyBundle(archive, digest, entries), digest);
 	assert.throws(() => verifyBundle(archive, "0".repeat(64), entries), /SHA-256/);
 	assert.throws(() => verifyBundle(archive, digest, entries.filter((entry) => !entry.endsWith("viz-renderer"))), /viz-renderer/);
+	assert.throws(() => verifyBundle(archive, digest, entries.filter((entry) => !entry.endsWith("sign-macos-apps-locally.sh"))), /sign-macos-apps-locally/);
 	assert.throws(() => renderCask('1.0.0"; system("bad")', digest), /semantic version/);
 	assert.throws(() => renderCask("1.0.0", "bad"), /SHA-256/);
 });
@@ -47,7 +49,7 @@ function installer(t, { installed = false, failInstall = false, machine = "arm64
 	fs.writeFileSync(path.join(directory, "brew"), `#!/bin/bash
 printf '%s\\n' "$*" >> "$HOMEBREW_TEST_LOG"
 if [[ "$1" == list ]]; then exit ${installed ? 0 : 1}; fi
-if [[ "$1" == install || "$1" == upgrade ]]; then exit ${failInstall ? 1 : 0}; fi
+if [[ "$1" == install || "$1" == reinstall ]]; then exit ${failInstall ? 1 : 0}; fi
 `, { mode: 0o755 });
 	const result = spawnSync("/bin/bash", [path.join(repositoryRoot, "tools/install-homebrew.sh")], {
 		encoding: "utf8",
@@ -56,20 +58,22 @@ if [[ "$1" == install || "$1" == upgrade ]]; then exit ${failInstall ? 1 : 0}; f
 	return { ...result, commands: fs.existsSync(log) ? fs.readFileSync(log, "utf8") : "" };
 }
 
-test("the installer selects the GitHub tap and suite cask, then upgrades on a repeated run", (t) => {
+test("the installer selects the GitHub tap and refreshes signatures on a repeated run", (t) => {
 	const first = installer(t);
 	assert.equal(first.status, 0, first.stderr);
 	assert.match(first.commands, /^tap kellertobias\/tosklight https:\/\/github.com\/kellertobias\/tosklight.git\nupdate\ntrust --cask kellertobias\/tosklight\/tosklight\n/);
 	assert.match(first.commands, /install --cask kellertobias\/tosklight\/tosklight\n$/);
 	const repeat = installer(t, { installed: true });
 	assert.equal(repeat.status, 0, repeat.stderr);
-	assert.match(repeat.commands, /upgrade --cask kellertobias\/tosklight\/tosklight\n$/);
+	assert.match(repeat.commands, /reinstall --cask kellertobias\/tosklight\/tosklight\n$/);
 });
 
 test("failed installs report failure and unsupported Macs never change Homebrew", (t) => {
-	const failed = installer(t, { failInstall: true });
-	assert.notEqual(failed.status, 0);
-	assert.doesNotMatch(failed.stdout, /ToskLight is installed/);
+	for (const installed of [false, true]) {
+		const failed = installer(t, { installed, failInstall: true });
+		assert.notEqual(failed.status, 0);
+		assert.doesNotMatch(failed.stdout, /ToskLight is installed/);
+	}
 	const intel = installer(t, { machine: "x86_64" });
 	assert.notEqual(intel.status, 0);
 	assert.match(intel.stderr, /Apple Silicon/);

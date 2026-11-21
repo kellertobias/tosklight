@@ -26,10 +26,11 @@ echo "Updating the ToskLight Homebrew tap from GitHub..."
 brew tap kellertobias/tosklight https://github.com/kellertobias/tosklight.git
 brew update
 brew trust --cask "$package"
-echo "Installing Control, Architect with its visualizer, Pixel, and FFmpeg..."
+echo "Installing Control, Architect with its visualizer, Pixel, and FFmpeg; signing and verifying the apps..."
 if brew list --cask "$package" >/dev/null 2>&1; then
-  brew upgrade --cask "$package"
+  echo "Refreshing the existing installation so local signing runs even at the same version..."
+  brew reinstall --cask "$package"
 else
   brew install --cask "$package"
 fi
-echo "ToskLight is installed. Open Control, Architect, or Pixel from Applications."
+echo "ToskLight is installed with verified signatures. Open Control, Architect, or Pixel from Applications."
