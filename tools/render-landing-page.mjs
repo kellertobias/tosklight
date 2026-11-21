@@ -227,12 +227,26 @@ writeFileSync(
           <a class="button button-primary platform-download" id="platform-download" href="${escapeHtml(downloadUrl(initialPlatform.file))}" download>Download for ${escapeHtml(initialPlatform.title)}</a>
           <p class="platform-suite"><strong>The complete ToskLight suite.</strong> Control, Pixel, Architect, and the standalone server where supported are included in one download.</p>
         </div>
+        <section class="homebrew-install" id="homebrew" aria-labelledby="homebrew-title">
+          <div>
+            <h2 id="homebrew-title">Install with Homebrew.</h2>
+            <p>On an Apple Silicon Mac, use <a href="https://brew.sh/">Homebrew</a> as an alternative to downloading the ZIP. These commands install ToskLight Control, ToskLight Architect with its visualizer, and ToskLight Pixel from GitHub Releases.</p>
+            <p>Homebrew also installs FFmpeg for Pixel media import. Testing builds are signed locally and verified during installation; valid Developer ID signatures are preserved.</p>
+          </div>
+          <div class="homebrew-commands">
+            <pre aria-label="Homebrew installation commands" tabindex="0"><code>brew tap kellertobias/tosklight https://github.com/kellertobias/tosklight.git
+brew trust --cask kellertobias/tosklight/tosklight
+brew install --cask kellertobias/tosklight/tosklight</code></pre>
+            <p>To update, run <code>brew update</code>, then <code>brew upgrade --cask kellertobias/tosklight/tosklight</code>.</p>
+            <p>The <a href="https://github.com/kellertobias/tosklight/blob/main/tools/install-homebrew.sh">installation script</a> also refreshes local signatures on existing installations. See the <a href="../manual/#page-00-quick-start-01-installation-and-first-start-md">first-start guide</a> for macOS approval steps.</p>
+          </div>
+        </section>
         <section class="additional-downloads" aria-labelledby="additional-downloads-title">
           <div><p class="eyebrow">Useful alongside the suite</p><h2 id="additional-downloads-title">Start with a show and a handbook.</h2></div>
           <div class="additional-download-grid">${additionalDownloads}</div>
         </section>
         <aside class="install-notes" aria-label="Installation notes">
-          <div class="unsigned-warning"><strong>Warning: unsigned test build</strong><p>Extra installation steps are required on macOS and Windows. Signed builds are planned for the production release.</p><a class="download-button" href="../manual/#page-00-quick-start-01-installation-and-first-start-md">Installation steps</a></div>
+          <div class="unsigned-warning"><strong>Testing-build approvals</strong><p>macOS may still require Open Anyway approval after local signing. Unsigned Windows installers can trigger SmartScreen.</p><a class="download-button" href="../manual/#page-00-quick-start-01-installation-and-first-start-md">Installation steps</a></div>
           <div><strong>Need the details?</strong><p>Read the <a href="../manual/#page-00-quick-start-01-installation-and-first-start-md">installation guide</a>, review <a href="${escapeHtml(releaseUrl)}">release notes</a>, or inspect the measured evidence on <a href="../performance/">Development</a>.</p></div>
         </aside>
       </section>

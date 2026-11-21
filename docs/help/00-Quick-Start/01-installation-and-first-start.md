@@ -16,7 +16,7 @@ checks. The archive also includes `macos-first-start.txt` beside the application
 reference.
 
 For a Homebrew installation of all three applications, follow the
-[macOS installation commands in the README](https://github.com/kellertobias/tosklight#install-on-macos).
+[Homebrew instructions on the downloads page](https://tosklight.de/downloads/#homebrew).
 The `tosklight` cask installs Control, Architect with its visualizer, and Pixel from a prebuilt
 GitHub Release on Apple Silicon Macs. Homebrew also installs FFmpeg and ffprobe for Pixel imports.
 Before installation, Homebrew signs testing builds locally and verifies all three apps and their

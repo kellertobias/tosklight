@@ -547,6 +547,10 @@ test("landing-page assembly writes the same normalized object used by the HTML",
 		assert.equal(downloadsPage.match(/class="download-button"/gu)?.length, 3);
 		assert.equal(downloadsPage.match(/id="platform-download"/gu)?.length, 1);
 		assert.equal(downloadsPage.match(/<option value=/gu)?.length, 4);
+		assert.match(downloadsPage, /id="homebrew"/u);
+		assert.match(downloadsPage, /brew tap kellertobias\/tosklight https:\/\/github.com\/kellertobias\/tosklight.git\nbrew trust --cask kellertobias\/tosklight\/tosklight\nbrew install --cask kellertobias\/tosklight\/tosklight/u);
+		assert.match(downloadsPage, /ToskLight Architect with its visualizer/u);
+		assert.match(downloadsPage, /signed locally and verified/u);
 		assert.match(downloadsPage, /Useful alongside the suite/u);
 		assert.match(downloadsPage, /href="\.\.\/license\/"/u);
 		assert.match(downloadsPage, /href="\.\.\/impressum\/"/u);
