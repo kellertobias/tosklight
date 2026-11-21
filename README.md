@@ -37,6 +37,37 @@ The screenshots above are generated from the current application stories and pub
 [operator manual](https://kellertobias.github.io/tosklight/manual/), the generated product demo,
 and current release downloads.
 
+## Install on macOS
+
+Download `tosklight-bundle-macos_arm64.zip` from the
+[latest GitHub release](https://github.com/kellertobias/tosklight/releases/latest), expand it,
+and move the applications to Applications.
+
+With [Homebrew](https://brew.sh) installed, run these commands to install the complete suite
+from a prebuilt GitHub Release:
+
+```sh
+brew tap kellertobias/tosklight https://github.com/kellertobias/tosklight.git
+brew trust --cask kellertobias/tosklight/tosklight
+brew install --cask kellertobias/tosklight/tosklight
+```
+
+The cask installs **ToskLight Control**, **ToskLight Architect**, including its CAD editor and
+visualizer, and **ToskLight Pixel** into Applications. It also installs FFmpeg and ffprobe for
+Pixel media import. It requires an Apple Silicon Mac running macOS 11 or later; installation
+downloads compiled applications and needs no Rust, Node.js, or Xcode toolchain.
+
+The [Homebrew installation script](tools/install-homebrew.sh) runs these steps with progress
+messages and upgrades an existing Homebrew installation when run again. To update manually,
+run `brew update` followed by `brew upgrade --cask kellertobias/tosklight/tosklight`.
+To remove the suite, run `brew uninstall --cask kellertobias/tosklight/tosklight`;
+the cask keeps saved shows and settings.
+
+Testing releases use ad-hoc signatures. If macOS blocks an application, verify its download source,
+then use **System Settings > Privacy & Security > Open Anyway** and confirm **Open**.
+See [Installation and first start](docs/help/00-Quick-Start/01-installation-and-first-start.md)
+for signing details and first-start checks.
+
 ## Product family
 
 | Icon | Application | Role |
@@ -88,7 +119,7 @@ for the documentation workflow.
 
 | Platform | Desktop application | Standalone/headless server |
 | --- | --- | --- |
-| macOS | Apple Silicon (M1 and later) | Universal macOS archive |
+| macOS | Apple Silicon (M1 and later) | Apple Silicon macOS archive |
 | Windows | 64-bit installer | Windows AMD64 archive |
 | Linux | x86_64 AppImage and Debian package | Linux AMD64 archive |
 | Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |

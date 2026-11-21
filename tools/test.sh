@@ -83,6 +83,7 @@ architecture_check(){
 }
 architecture(){
   architecture_check "Artifact paths and repository root" "$ROOT/tools/test-artifact-paths.sh"
+  architecture_check "Homebrew suite distribution" node --test "$ROOT/tools/homebrew.test.mjs"
   architecture_check "Cargo workspace lint inheritance" node --test "$ROOT/tools/cargo-workspace-lints.test.mjs"
   architecture_check "Control state labels" node --test "$ROOT/tools/check-control-state-labels.test.mjs"
   architecture_check "Programmer action timing" node --test "$ROOT/tools/programmer-action-timing.test.mjs"

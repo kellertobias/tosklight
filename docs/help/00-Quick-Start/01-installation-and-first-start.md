@@ -15,6 +15,12 @@ against `report-checksums.txt` and use the newest release instead of overriding 
 checks. The archive also includes `macos-first-start.txt` beside the applications for offline
 reference.
 
+For a Homebrew installation of all three applications, follow the
+[macOS installation commands in the README](https://github.com/kellertobias/tosklight#install-on-macos).
+The `tosklight` cask installs Control, Architect with its visualizer, and Pixel from a prebuilt
+GitHub Release on Apple Silicon Macs. Homebrew also installs FFmpeg and ffprobe for Pixel imports.
+The same macOS approval steps apply to testing builds installed through Homebrew.
+
 Pixel media import requires separately installed, working `ffmpeg` and `ffprobe` executables. These
 dependencies are not included in the application downloads. Existing playback and application
 startup checks do not prove that importing new media is available on a machine without them.

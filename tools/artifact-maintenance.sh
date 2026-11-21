@@ -56,7 +56,7 @@ light_assert_safe_cleanup_target() {
 
 light_root_directory_allowed() {
   case "$1" in
-    .agents|.artifacts|.cargo|.forgejo|.git|.github|.show|.tour|apps|assets|crates|docs|experiments|node_modules|tests|tools)
+    .agents|.artifacts|.cargo|.forgejo|.git|.github|.show|.tour|Casks|apps|assets|crates|docs|experiments|node_modules|tests|tools)
       return 0
       ;;
     *)
