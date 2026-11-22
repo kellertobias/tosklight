@@ -39,7 +39,7 @@ test("the committed cask is reproducible from its pinned release and checksum", 
 	const source = fs.readFileSync(path.join(repositoryRoot, "Casks/tosklight.rb"), "utf8");
 	const version = source.match(/version "([^"]+)"/)[1];
 	const checksum = source.match(/sha256 "([^"]+)"/)[1];
-	assert.equal(source, renderCask(version, checksum));
+	assert.equal(source, renderCask(version, checksum, { launcher: /app ".*ToskLight Launcher\.app"/u.test(source) }));
 });
 
 test("the cask includes the launcher only when the verified release contains it", () => {
