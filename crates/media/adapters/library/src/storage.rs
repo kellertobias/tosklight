@@ -893,7 +893,7 @@ fn read_item_metadata(path: &Path) -> serde_json::Map<String, serde_json::Value>
         .unwrap_or_default()
 }
 
-fn write_item_metadata(
+pub(crate) fn write_item_metadata(
     path: &Path,
     metadata: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), StorageError> {
@@ -915,8 +915,8 @@ fn write_item_metadata(
         })?;
     }
     let bytes = serde_json::to_vec_pretty(metadata).expect("metadata is serializable");
-    std::fs::write(path, bytes).map_err(|source| StorageError::Filesystem {
-        operation: "write",
+    crate::identity::atomic_metadata(path, &bytes).map_err(|source| StorageError::Filesystem {
+        operation: "atomically write metadata",
         path: path.to_path_buf(),
         source,
     })

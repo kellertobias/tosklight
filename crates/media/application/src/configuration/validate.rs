@@ -17,6 +17,8 @@ use super::{
 /// Why a configuration cannot be used.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ConfigurationError {
+    #[error("the playlist/schedule configuration is invalid: {0}")]
+    Automation(String),
     #[error("the configuration document is not readable: {detail}")]
     Malformed { detail: String },
     #[error(transparent)]
@@ -169,6 +171,8 @@ pub(super) fn validate(configuration: &MediaConfiguration) -> Result<(), Configu
     }
     configuration.effects.validate()?;
     configuration.models.validate()?;
+    super::automation::validate_automation(configuration)
+        .map_err(ConfigurationError::Automation)?;
 
     let mut seen = HashSet::new();
     for output in &configuration.outputs {

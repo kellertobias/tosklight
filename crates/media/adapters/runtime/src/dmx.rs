@@ -82,6 +82,18 @@ pub fn diagnostics() -> SharedDiagnostics {
     Arc::new(Mutex::new(HashMap::new()))
 }
 
+/// Last matching full-footprint input, including input ignored during manual takeover.
+pub(crate) fn last_received(
+    diagnostics: &SharedDiagnostics,
+    output: OutputId,
+) -> Option<Timestamp> {
+    diagnostics
+        .lock()
+        .ok()?
+        .get(&output)
+        .map(|sample| sample.received_at)
+}
+
 pub fn diagnostic_snapshot(
     diagnostics: &SharedDiagnostics,
     now: Timestamp,

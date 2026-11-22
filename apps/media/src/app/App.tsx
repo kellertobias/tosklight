@@ -5,6 +5,8 @@
 import { WindowFrame } from "@tosklight/ui/window-kit";
 import { useEffect, useState } from "react";
 import { AudioPage } from "../features/audio/AudioPage";
+import { PlaylistsPage } from "../features/automation/PlaylistsPage";
+import { SchedulePage } from "../features/automation/SchedulePage";
 import { DmxPage } from "../features/dmx/DmxPage";
 import { MediaPanePage } from "../features/layers/MediaPanePage";
 import { LibraryPage } from "../features/media-library/LibraryPage";
@@ -41,6 +43,8 @@ const PREVIEW_PATHS: ReadonlySet<string> = new Set([
 const PAGES: Record<RoutePath, () => React.ReactElement> = {
 	"/": MediaPanePage,
 	"/library": () => <LibraryPage />,
+	"/playlists": PlaylistsPage,
+	"/schedule": SchedulePage,
 	"/visualizers": () => <LibraryPage mode="visualizers" />,
 	"/text": () => <LibraryPage mode="text" />,
 	"/effects": () => <LibraryPage mode="effects" />,
@@ -54,6 +58,8 @@ const PAGES: Record<RoutePath, () => React.ReactElement> = {
 const SECTION_BY_PATH: Record<RoutePath, MediaServerSection> = {
 	"/": "media",
 	"/library": "library",
+	"/playlists": "playlists",
+	"/schedule": "schedule",
 	"/visualizers": "library",
 	"/text": "library",
 	"/effects": "library",
@@ -85,6 +91,8 @@ function AppSurface() {
 	const pageOwnsWindow =
 		path === "/" ||
 		path === "/library" ||
+		path === "/playlists" ||
+		path === "/schedule" ||
 		path === "/visualizers" ||
 		path === "/text" ||
 		path === "/effects" ||

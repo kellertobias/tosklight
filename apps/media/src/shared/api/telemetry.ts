@@ -9,11 +9,39 @@
 // last frame it happened to get.
 
 import { useEffect, useRef, useState } from "react";
-import { telemetryUrl } from "./client";
-import type { TelemetryFrame } from "./generated/media-wire";
+import { ApiFailure, telemetryUrl } from "./client";
+import type { AutomationAction, TelemetryFrame } from "./generated/media-wire";
+import { newIdentity } from "./identity";
 
 /** How long to wait before dialling again. Long enough not to hammer a server that is restarting. */
 const RECONNECT_MS = 2_000;
+const liveSockets = new Set<WebSocket>();
+const pendingActions = new Map<string, { socket: WebSocket; resolve: () => void; reject: (error: ApiFailure) => void; timer: ReturnType<typeof setTimeout> }>();
+
+/** A live action is sent once, only over a connected socket. Reconnect never replays it. */
+export function sendTelemetryAction(action: AutomationAction): Promise<void> {
+	const socket = [...liveSockets].find((candidate) => candidate.readyState === WebSocket.OPEN);
+	if (!socket) return Promise.reject(new ApiFailure("action-disconnected", "The live connection is unavailable. Wait for reconnection and try again.", 0));
+	const actionId = newIdentity();
+	return new Promise((resolve, reject) => {
+		const timer = setTimeout(() => {
+			pendingActions.delete(actionId);
+			reject(new ApiFailure("action-unconfirmed", "The server did not confirm the action. Check the current playback state before trying again.", 0));
+		}, 10_000);
+		pendingActions.set(actionId, { socket, resolve, reject, timer });
+		try { socket.send(JSON.stringify({ ...action, actionId })); }
+		catch { clearTimeout(timer); pendingActions.delete(actionId); reject(new ApiFailure("action-disconnected", "The live connection closed before the action could be sent.", 0)); }
+	});
+}
+
+function failSocketActions(socket: WebSocket) {
+	for (const [id, action] of pendingActions) {
+		if (action.socket !== socket) continue;
+		clearTimeout(action.timer);
+		pendingActions.delete(id);
+		action.reject(new ApiFailure("action-unconfirmed", "The live connection closed. Check the current playback state before trying again.", 0));
+	}
+}
 
 export interface Telemetry {
 	frame: TelemetryFrame | undefined;
@@ -52,15 +80,27 @@ export function useTelemetry(enabled = true): Telemetry {
 			}
 			socket.current = next;
 
-			next.onopen = () => setConnected(true);
+			next.onopen = () => { liveSockets.add(next); setConnected(true); };
 			next.onmessage = (event) => {
 				try {
-					setFrame(JSON.parse(String(event.data)) as TelemetryFrame);
+					const frame = JSON.parse(String(event.data));
+					if (frame.type === "automation-action-result") {
+						const action = pendingActions.get(frame.actionId);
+						if (action?.socket === next) {
+							clearTimeout(action.timer); pendingActions.delete(frame.actionId);
+							if (frame.ok) action.resolve();
+							else action.reject(new ApiFailure("action-refused", frame.message ?? "The scheduling action was refused.", 400));
+						}
+						return;
+					}
+					setFrame(frame as TelemetryFrame);
 				} catch {
 					// A frame this client cannot read is not worth tearing the socket down for.
 				}
 			};
 			next.onclose = () => {
+				liveSockets.delete(next);
+				failSocketActions(next);
 				setConnected(false);
 				if (!closed) timer = setTimeout(open, RECONNECT_MS);
 			};
@@ -72,6 +112,7 @@ export function useTelemetry(enabled = true): Telemetry {
 		return () => {
 			closed = true;
 			if (timer) clearTimeout(timer);
+			if (socket.current) { liveSockets.delete(socket.current); failSocketActions(socket.current); }
 			socket.current?.close();
 			socket.current = undefined;
 			setConnected(false);

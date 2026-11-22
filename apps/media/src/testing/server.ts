@@ -325,7 +325,7 @@ export function stubServer(
 
 			if (path.endsWith("/reset")) return new Response(null, { status: 204 });
 			const takeover = path.match(
-				/^\/outputs\/([^/]+)\/playback\/(take-over|release)$/u,
+				/^\/outputs\/([^/]+)\/playback\/(take-over|release)(?:\?.*)?$/u,
 			);
 			if (takeover) {
 				const output = server.outputs.find(
@@ -333,7 +333,12 @@ export function stubServer(
 				);
 				if (!output)
 					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
-				output.playbackTakeover = takeover[2] === "take-over";
+				const expected = new URL(path, "http://pixel.test").searchParams.get("expectedOwnershipGeneration");
+				if (expected !== null && Number(expected) !== output.ownershipGeneration)
+					return jsonResponse({ code: "playback-owner-changed", message: "playback ownership changed" }, 409);
+				const takeOver = takeover[2] === "take-over";
+				if (output.playbackTakeover !== takeOver) output.ownershipGeneration += 1;
+				output.playbackTakeover = takeOver;
 				return jsonResponse(output);
 			}
 
@@ -380,6 +385,8 @@ export function stubServer(
 				if (!output)
 					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
 				const layer = output.layers[Number(update[2])];
+				if (body.expectedOwnershipGeneration !== undefined && body.expectedOwnershipGeneration !== output.ownershipGeneration)
+					return jsonResponse({ code: "playback-owner-changed", message: "playback ownership changed" }, 409);
 				if (body.dimmer !== undefined) layer.dimmer = body.dimmer;
 				if (body.folder !== undefined) layer.address.folder = body.folder;
 				if (body.file !== undefined) layer.address.file = body.file;
@@ -645,6 +652,8 @@ export function stubServer(
 				);
 				if (!output)
 					return jsonResponse({ code: "unknown-output", message: "no" }, 404);
+				if (body.expectedOwnershipGeneration !== undefined && body.expectedOwnershipGeneration !== output.ownershipGeneration)
+					return jsonResponse({ code: "playback-owner-changed", message: "playback ownership changed" }, 409);
 				for (const key of [
 					"dimmer",
 					"volume",
@@ -1026,6 +1035,7 @@ export function anOutput(overrides: Partial<OutputView> = {}): OutputView {
 		layerCount: 2,
 		dmxActive: false,
 		playbackTakeover: false,
+		ownershipGeneration: 0,
 		frameRate: 25,
 		master: {
 			dimmer: 1,

@@ -6,6 +6,8 @@
 export const ROUTES = [
 	{ path: "/", label: "Playback" },
 	{ path: "/library", label: "Library" },
+	{ path: "/playlists", label: "Playlists" },
+	{ path: "/schedule", label: "Schedule" },
 	{ path: "/visualizers", label: "Visualizers" },
 	{ path: "/text", label: "Text" },
 	{ path: "/effects", label: "Effects" },

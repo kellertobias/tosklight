@@ -288,6 +288,10 @@ pub struct OutputView {
     pub dmx_active: bool,
     /// Whether this server explicitly ignores network playback control in favour of the web UI.
     pub playback_takeover: bool,
+    /// Changes when playback ownership changes, so an old preview cannot restore over a new owner.
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub ownership_generation: u64,
     /// Frames per second the layers' In and Out points count in, so a desk or panel can show and
     /// enter them as `mm:ss.ff`. Server-wide; every output reports the same rate.
     pub frame_rate: u8,
@@ -308,6 +312,7 @@ impl OutputView {
             master: MasterView::of(output.master),
             dmx_active,
             playback_takeover: output.ownership.web_takeover,
+            ownership_generation: output.ownership.generation,
             frame_rate,
         }
     }
@@ -603,6 +608,9 @@ impl OutputConfigurationValuesView {
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateLayer {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number | null")]
+    pub expected_ownership_generation: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -913,6 +921,9 @@ impl UpdateLayer {
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateMaster {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(type = "number | null")]
+    pub expected_ownership_generation: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dimmer: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

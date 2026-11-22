@@ -9,6 +9,7 @@
 
 mod admin_listener;
 mod audio_input;
+mod automation;
 mod beat_events;
 mod beat_form_flash;
 mod beat_grid_wave;
@@ -40,6 +41,7 @@ mod output_device_inventory;
 pub mod pixel_output;
 pub mod presentation;
 mod preview;
+mod service_tasks;
 mod shutdown;
 mod snapshot_render;
 mod speed_groups;
@@ -116,7 +118,7 @@ fn run_inner() -> anyhow::Result<()> {
     let state: dmx::SharedState = std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
         initial_state(&configuration),
     ));
-    let catalog = discover_catalog(&configuration);
+    let catalog = discover_catalog(&configuration)?;
 
     let catalog_edits = std::sync::Arc::new(std::sync::Mutex::new(()));
     let importer = start_importer(&configuration, &catalog, &catalog_edits);
@@ -184,17 +186,23 @@ fn run_inner() -> anyhow::Result<()> {
         &shared,
         &shutdown,
         started,
-        dmx_diagnostics,
+        dmx_diagnostics.clone(),
         &network_warnings,
         console_identity,
         &live_settings,
     );
 
-    // Off-screen outputs render on their own thread with their own device, so they run whether or
-    // not this process also hosts a window. A rack server with no display is still a media server.
-    let off_screen = off_screen::spawn(&configuration, shared.clone(), shutdown.clone());
+    let (off_screen, automation) = service_tasks::start_output_services(
+        &runtime,
+        &shared,
+        &shutdown,
+        started,
+        &diagnostics.automation,
+        dmx_diagnostics,
+    );
 
     let services = Services {
+        started,
         configuration: shared.configuration.clone(),
         active_configuration: active_configuration.clone(),
         shutdown: shutdown.clone(),
@@ -215,19 +223,13 @@ fn run_inner() -> anyhow::Result<()> {
         let served = runtime.block_on(serve_with(services));
         shutdown.request(ShutdownReason::Requested);
         stop_background(importer, off_screen, audio);
+        runtime.block_on(automation)?;
         return served;
     }
 
     // The services run on the background runtime; the main thread hosts the outputs. Shutdown
     // reaches both through the same handle, whichever of them starts it.
-    let service_shutdown = shutdown.clone();
-    let serving = runtime.spawn(async move {
-        let result = serve_with(services).await;
-        // Failed administration startup must stop the output/event loop too. Otherwise the
-        // process looks alive but cannot be administered, and its error is never observed.
-        service_shutdown.request(ShutdownReason::Requested);
-        result
-    });
+    let serving = service_tasks::spawn_administration(&runtime, &shutdown, services);
 
     let has_network_warnings = has_network_warnings(&network_warnings);
     let presented = presentation::run_event_loop(
@@ -245,6 +247,7 @@ fn run_inner() -> anyhow::Result<()> {
     shutdown.request(ShutdownReason::Requested);
     let served = runtime.block_on(serving);
     stop_background(importer, off_screen, audio);
+    runtime.block_on(automation)?;
     presented?;
     served.map_err(|error| anyhow::anyhow!("administration task failed: {error}"))?
 }
@@ -258,10 +261,13 @@ fn has_network_warnings(warnings: &dmx_listeners::SharedWarnings) -> bool {
 }
 
 /// The picker, API and compositor share one discovered catalog.
-fn discover_catalog(configuration: &MediaConfiguration) -> presentation::SharedCatalog {
-    std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-        media_library::discover(&configuration.library.root).unwrap_or_default(),
-    ))
+fn discover_catalog(
+    configuration: &MediaConfiguration,
+) -> Result<presentation::SharedCatalog, media_library::DiscoveryError> {
+    let catalog = media_library::discover(&configuration.library.root)?;
+    Ok(std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
+        catalog,
+    )))
 }
 
 /// Brings up the DMX and CITP listeners on the background runtime, recording any network warnings
@@ -596,6 +602,7 @@ fn diagnostics_of(
     let available_monitors = available_monitors.clone();
     let output_devices = output_devices.clone();
     media_http::Diagnostics {
+        automation: media_http::automation::AutomationAccess::default(),
         models: models.access(live),
         audio: audio_input::telemetry(audio, analysis),
         audio_devices: std::sync::Arc::new(media_audio::input_devices),
@@ -808,6 +815,7 @@ pub fn initial_state(configuration: &MediaConfiguration) -> MediaState {
 pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> anyhow::Result<()> {
     let administration = admin_listener::bind(configuration.network.resolved().http_listen).await?;
     serve_with(Services {
+        started: std::time::Instant::now(),
         active_configuration: std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
             configuration.clone(),
         )),
@@ -832,6 +840,8 @@ pub async fn serve(configuration: MediaConfiguration, shutdown: Shutdown) -> any
 /// share the same handles and adding a sixth argument to a function nobody can read is not an
 /// improvement.
 pub(crate) struct Services {
+    /// One monotonic origin shared by ingress, renderer, web commands and scheduling.
+    pub started: std::time::Instant,
     /// The live configuration document, shared with the outputs.
     pub configuration: SharedConfiguration,
     /// Startup settings with live monitor moves applied after the window actually moves.
@@ -863,6 +873,7 @@ pub(crate) struct Services {
 /// outputs read; there is no second copy for the web to diverge from.
 pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
     let Services {
+        started,
         configuration: live,
         active_configuration,
         shutdown,
@@ -890,18 +901,16 @@ pub(crate) async fn serve_with(services: Services) -> anyhow::Result<()> {
             &configuration,
         )))
     });
-    let catalog = catalog.unwrap_or_else(|| {
-        std::sync::Arc::new(arc_swap::ArcSwap::from_pointee(
-            media_library::discover(&configuration.library.root).unwrap_or_default(),
-        ))
-    });
+    let catalog = match catalog {
+        Some(catalog) => catalog,
+        None => discover_catalog(&configuration)?,
+    };
     tracing::info!(
         items = catalog.load().item_count(),
         root = %configuration.library.root.display(),
         "library discovered"
     );
 
-    let started = std::time::Instant::now();
     // Where an accepted edit is written. The API adapter never touches the filesystem itself; it
     // is handed the one path this run was started from, so a saved edit lands where the next
     // start will read it.

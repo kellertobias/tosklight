@@ -38,6 +38,8 @@ pub mod output;
 pub mod personality;
 pub mod pixel_map;
 pub mod playback;
+pub mod playlist;
+pub mod schedule;
 pub mod speed;
 pub mod state;
 pub mod tempo;

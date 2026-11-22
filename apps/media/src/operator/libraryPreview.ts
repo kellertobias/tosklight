@@ -8,7 +8,7 @@
  * layer and the master back as they were when it was turned on, so nothing of the preview lingers
  * and no second layer is left playing.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OutputView, UpdateLayer, UpdateMaster } from "../shared/api/generated/media-wire";
 import type { LayerControl } from "../shared/api/layerControl";
 
@@ -99,14 +99,14 @@ export function restoreWrites(before: OutputView, current: OutputView): PreviewW
 }
 
 /** Writes one layer's changes in order, since each effect bank is its own write; layers side by side. */
-async function write(control: LayerControl, output: OutputView, writes: PreviewWrites) {
+async function write(control: LayerControl, output: OutputView, writes: PreviewWrites, generation: number) {
 	const byLayer = new Map<number, UpdateLayer[]>();
 	for (const { index, change } of writes.layers) byLayer.set(index, [...(byLayer.get(index) ?? []), change]);
 	await Promise.all([
 		...[...byLayer].map(async ([index, changes]) => {
-			for (const change of changes) await control.update(output, index, change);
+			for (const change of changes) await control.update(output, index, { ...change, expectedOwnershipGeneration: generation });
 		}),
-		...(writes.master ? [control.updateMaster(output, writes.master)] : []),
+		...(writes.master ? [control.updateMaster(output, { ...writes.master, expectedOwnershipGeneration: generation })] : []),
 	]);
 }
 
@@ -130,9 +130,18 @@ export function useLibraryPreview(
 	const [before, setBefore] = useState<OutputView | null>(null);
 	const lastSlot = useRef<Slot | null>(null);
 	const enabling = useRef(false);
+	const lease = useRef<{ outputId: string; generation: number } | null>(null);
 	const latest = useRef(outputs);
 	latest.current = outputs;
 	const current = (id: string) => latest.current?.find((output) => output.id === id);
+	useEffect(() => {
+		if (!before || !lease.current) return;
+		const output = outputs?.find((output) => output.id === before.id);
+		if (output && (output.ownershipGeneration !== lease.current.generation || !output.playbackTakeover)) {
+			lease.current = null;
+			setBefore(null);
+		}
+	}, [outputs, before]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `current` reads the latest outputs from a ref.
 	const setEnabled = useCallback(
@@ -142,21 +151,33 @@ export function useLibraryPreview(
 				if (!output || before || enabling.current) return;
 				enabling.current = true;
 				try {
-					if (!output.playbackTakeover) await control.setTakeover(output, true);
-					await write(control, output, previewWrites(output, null));
+					const acquired = output.playbackTakeover ? output : await control.setTakeover(output, true, output.ownershipGeneration);
+					if (!acquired) return;
+					lease.current = { outputId: output.id, generation: acquired.ownershipGeneration };
+					await write(control, acquired, previewWrites(acquired, null), acquired.ownershipGeneration);
+					setBefore(output);
+				} catch {
+					lease.current = null;
+					// The control hook retains the actionable refusal. No later preview write or
+					// release may run after a guarded command has lost its owner.
 				} finally {
 					enabling.current = false;
 				}
-				// On only once every other layer is out, so what an editor shows next is not put out too.
-				setBefore(output);
 				return;
 			}
 			if (!before) return;
+			const held = lease.current;
+			lease.current = null;
 			setBefore(null);
 			const output = current(before.id);
-			if (!output) return;
-			await write(control, output, restoreWrites(before, output));
-			if (!before.playbackTakeover) await control.setTakeover(output, false);
+			if (!output || !held || output.ownershipGeneration !== held.generation || !output.playbackTakeover) return;
+			try {
+				await write(control, output, restoreWrites(before, output), held.generation);
+				if (!before.playbackTakeover) await control.setTakeover(output, false, held.generation);
+			} catch {
+				// A new owner may arrive between the read and any write; the server's atomic
+				// generation guard rejects the old snapshot and the hook shows its refusal.
+			}
 		},
 		// `current` reads the ref, so the latest outputs never go stale here.
 		[before, control, selectedOutputId],
@@ -166,11 +187,22 @@ export function useLibraryPreview(
 	const show = useCallback(
 		async (target: PreviewTarget) => {
 			const output = before && current(before.id);
-			if (!output) return;
+			const held = lease.current;
+			if (!output || !held) return;
+			if (output.ownershipGeneration !== held.generation || !output.playbackTakeover) {
+				lease.current = null;
+				setBefore(null);
+				return;
+			}
 			// An effect or a model goes over the slot last shown, or over whatever the layer holds.
 			const slot = target.slot ?? (target.effect || target.model ? lastSlot.current : null);
 			if (target.slot) lastSlot.current = target.slot;
-			await write(control, output, previewWrites(output, { ...target, slot }));
+			try {
+				await write(control, output, previewWrites(output, { ...target, slot }), held.generation);
+			} catch {
+				lease.current = null;
+				setBefore(null);
+			}
 		},
 		[before, control],
 	);

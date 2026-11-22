@@ -209,7 +209,7 @@ pub fn run(configuration: &MediaConfiguration, shared: Shared, shutdown: Shutdow
             }
         }
 
-        publish(&shared, reports, now);
+        publish(&shared, reports, now, &state);
         // A short sleep rather than a spin: the clocks decide when to present, and burning a core
         // between frames would take it from the decoders.
         std::thread::sleep(std::time::Duration::from_millis(2));
@@ -263,12 +263,13 @@ fn publish(
     shared: &Shared,
     reports: Vec<(media_domain::OutputId, usize, media_domain::SourceStatus)>,
     now: Timestamp,
+    rendered: &MediaState,
 ) {
     if reports.is_empty() {
         return;
     }
     shared.state.rcu(|current| {
-        crate::presentation::with_reports(current, &reports, now)
+        crate::presentation::with_reports_from(current, &reports, now, rendered)
             .map(Arc::new)
             .unwrap_or_else(|| Arc::clone(current))
     });

@@ -39,6 +39,38 @@ function aPlayingOutput() {
 }
 
 describe("the Library's live preview", () => {
+	it("cancels stale preview restoration after another browser retakes playback", async () => {
+		const server = stubServer({ outputs: [aPlayingOutput()] });
+		render(<PlaybackTakeoverProvider><PlaybackTakeoverToggle preview /><LibraryPage /></PlaybackTakeoverProvider>);
+		const preview = await screen.findByRole("switch", { name: "Enable preview" });
+		await userEvent.click(preview);
+		await waitFor(() => expect(preview).toBeChecked());
+		const output = server.outputs[0];
+		expect(output.ownershipGeneration).toBe(1);
+		let release!: () => void;
+		server.holdWrites = new Promise<void>((resolve) => { release = resolve; });
+		const writes = server.writeBodies.length;
+		await userEvent.click(preview);
+		await waitFor(() => expect(server.writeBodies.length).toBeGreaterThan(writes));
+		// Another browser releases and retakes playback after restoration has been sent,
+		// before its first guarded command reaches the authoritative reducer.
+		output.ownershipGeneration += 2;
+		output.layers[0].address.file = 7;
+		output.layers[0].dimmer = 0.25;
+		output.master.dimmer = 0.3;
+		const releases = () => server.writes.filter((path) => path.includes("/playback/release")).length;
+		const before = releases();
+		release();
+		await waitFor(() => expect(preview).not.toBeChecked());
+		await waitFor(() => expect(server.writeBodies.length).toBeGreaterThan(writes + 1));
+		expect(server.writeBodies.slice(writes)).toEqual(expect.arrayContaining([expect.objectContaining({ expectedOwnershipGeneration: 1 })]));
+		expect(output.playbackTakeover).toBe(true);
+		expect(output.layers[0].address.file).toBe(7);
+		expect(output.layers[0].dimmer).toBe(0.25);
+		expect(output.master.dimmer).toBe(0.3);
+		expect(releases()).toBe(before);
+	});
+
 	it("plays the chosen slot alone on Layer 1 and puts everything back when turned off", async () => {
 		const server = stubServer({ outputs: [aPlayingOutput()] });
 		render(

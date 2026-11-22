@@ -98,6 +98,11 @@ export function usePlaybackTakeover(): PlaybackTakeoverValue {
 	return value;
 }
 
+/** Pages with their own output picker keep the dock pointed at that same output. */
+export function useOptionalPlaybackTakeover(): PlaybackTakeoverValue | null {
+	return useContext(PlaybackTakeoverContext);
+}
+
 /** The Library's preview, or null outside the provider (feature tests and stories). */
 export function useOptionalLibraryPreview(): LibraryPreview | null {
 	return useContext(PlaybackTakeoverContext)?.preview ?? null;

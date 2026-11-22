@@ -43,6 +43,23 @@ pub fn reason(
     }
 }
 
+/// Autonomous playback is a local owner and must reach the physical display without DMX.
+pub(crate) fn reason_for_output(
+    status_overlay: bool,
+    output: &media_domain::OutputState,
+    now: media_domain::Timestamp,
+    library_empty: bool,
+    configuration_issue: bool,
+) -> Option<Reason> {
+    reason(
+        status_overlay,
+        output.ownership.dmx_is_active(now),
+        output.ownership.web_takeover || output.ownership.scheduler_active,
+        library_empty,
+        configuration_issue,
+    )
+}
+
 /// One line of the standby block.
 ///
 /// `height` is the height of the glyphs themselves, not of the band they are drawn into, so the
@@ -308,6 +325,23 @@ fn blend(frame: &mut Frame, x: u32, y: u32, source: &[u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scheduled_and_fallback_playback_reach_the_native_output_without_dmx() {
+        let mut output = media_domain::OutputState::new(
+            media_domain::OutputId::new(),
+            media_domain::LayerPersonality::EightLayers,
+        );
+        assert_eq!(
+            reason_for_output(true, &output, media_domain::Timestamp::ZERO, false, false),
+            Some(Reason::WaitingForDmx)
+        );
+        output.ownership.scheduler_active = true;
+        assert_eq!(
+            reason_for_output(true, &output, media_domain::Timestamp::ZERO, false, false),
+            None
+        );
+    }
 
     #[test]
     fn any_valid_dmx_frame_clears_the_waiting_picture() {

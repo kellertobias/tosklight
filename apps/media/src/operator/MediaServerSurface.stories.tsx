@@ -47,6 +47,8 @@ const NOW = new Date("2026-08-12T21:31:00+02:00");
 const MEDIA_STORY_BY_SECTION: Record<MediaServerSection, string> = {
 	media: "media",
 	library: "library",
+	playlists: "library",
+	schedule: "media",
 	audio: "audio",
 	dmx: "dmx-diagnostics",
 	"pixel-map": "pixel-map",
@@ -62,6 +64,9 @@ const SETTINGS_STORY_BY_SECTION = {
 } as const;
 
 function mediaServerStoryPath(section: MediaServerSection) {
+	if (section === "playlists" || section === "schedule") {
+		return `/?path=/story/tosklight-media-server-automation--${section}`;
+	}
 	return `/?path=/story/tosklight-media-server--${MEDIA_STORY_BY_SECTION[section]}`;
 }
 

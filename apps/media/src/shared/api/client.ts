@@ -89,7 +89,7 @@ export class ApiFailure extends Error {
 
 const BASE = "/api/v2";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 	let response: Response;
 	try {
 		response = await fetch(`${BASE}${path}`, {
@@ -340,9 +340,9 @@ export const api = {
 		}
 		return `${BASE}/outputs/${output}/layers/${layer}/preview?${query.toString()}`;
 	},
-	setPlaybackTakeover: (output: string, takeOver: boolean) =>
+	setPlaybackTakeover: (output: string, takeOver: boolean, expectedOwnershipGeneration?: number) =>
 		request<OutputView>(
-			`/outputs/${output}/playback/${takeOver ? "take-over" : "release"}`,
+			`/outputs/${output}/playback/${takeOver ? "take-over" : "release"}${expectedOwnershipGeneration === undefined ? "" : `?expectedOwnershipGeneration=${expectedOwnershipGeneration}`}`,
 		),
 	outputConfiguration: (output: string) =>
 		request<OutputConfigurationView>(`/outputs/${output}/configuration`),

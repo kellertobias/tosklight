@@ -1,6 +1,31 @@
 use super::*;
 use media_application::configuration::MonitorSelector;
 
+#[test]
+fn a_frame_from_before_a_playlist_restart_cannot_mark_the_new_source_ready() {
+    let id = media_domain::OutputId::new();
+    let rendered = MediaState::with_outputs(vec![media_domain::OutputState::new(
+        id,
+        media_domain::LayerPersonality::TwoLayers,
+    )]);
+    let mut current = rendered.clone();
+    current.outputs[0].layers[0].reset_trigger_id += 1;
+    current.outputs[0].layers[0].source_status = media_domain::SourceStatus::Loading;
+    assert!(
+        with_reports_from(
+            &current,
+            &[(id, 0, media_domain::SourceStatus::Ready)],
+            Timestamp::ZERO,
+            &rendered
+        )
+        .is_none()
+    );
+    assert_eq!(
+        current.outputs[0].layers[0].source_status,
+        media_domain::SourceStatus::Loading
+    );
+}
+
 fn monitor_output() -> OutputConfiguration {
     let mut output = OutputConfiguration::new("Main");
     output.target = OutputTarget::Monitor {

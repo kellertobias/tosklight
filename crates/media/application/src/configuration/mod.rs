@@ -4,6 +4,7 @@
 //! configuration prevents startup with an actionable error rather than silently choosing a
 //! dangerous or incompatible value.
 
+mod automation;
 mod legacy_text;
 mod migration;
 mod network;
@@ -12,6 +13,7 @@ mod pixel_map;
 mod service;
 mod validate;
 
+pub use automation::validate_automation;
 pub use legacy_text::{
     LEGACY_TEXT_DOCUMENT, LegacyTextError, Migrated as MigratedText, Note as TextMigrationNote,
     migrate as migrate_legacy_text,
@@ -72,6 +74,8 @@ impl Default for InstanceId {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MediaConfiguration {
     #[serde(default)]
+    pub automation: media_domain::playlist::AutomationConfiguration,
+    #[serde(default)]
     pub instance_id: InstanceId,
     #[serde(default)]
     pub network: NetworkConfiguration,
@@ -116,6 +120,7 @@ impl Default for MediaConfiguration {
             fullscreen: false,
         };
         Self {
+            automation: Default::default(),
             instance_id: InstanceId::default(),
             network: NetworkConfiguration::default(),
             library: LibraryConfiguration::default(),

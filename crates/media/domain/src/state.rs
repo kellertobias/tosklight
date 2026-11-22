@@ -102,7 +102,7 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
 
     let previous_ownership = output.ownership;
     if command.source.is_external_dmx() {
-        output.ownership.observe_dmx(command.source, command.at);
+        observe_external_owner(output, command);
     }
 
     match &command.kind {
@@ -224,6 +224,11 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
             Applied::Changed
         }
         CommandKind::TakeOverPlayback { take_over, .. } => apply_takeover(output, *take_over),
+        CommandKind::SetSchedulerOwnership {
+            active,
+            dmx_silence_millis,
+            ..
+        } => apply_scheduler_ownership(output, *active, *dmx_silence_millis),
         CommandKind::ReportSourceStatus { layer, status, .. } => {
             let Some(target) = output.layers.get_mut(*layer) else {
                 return Applied::RejectedUnknownLayer;
@@ -233,10 +238,44 @@ pub fn apply(state: &mut MediaState, command: &Command) -> Applied {
     }
 }
 
+fn observe_external_owner(output: &mut OutputState, command: &Command) {
+    output.ownership.observe_dmx(command.source, command.at);
+    if output.ownership.scheduler_active {
+        output.ownership.scheduler_active = false;
+        output.ownership.generation = output.ownership.generation.wrapping_add(1);
+    }
+}
+
+fn apply_scheduler_ownership(output: &mut OutputState, active: bool, silence: u64) -> Applied {
+    if active && !output.ownership.scheduler_active {
+        restore_empty_desk_homes(output);
+    }
+    let previous = output.ownership;
+    if output.ownership.scheduler_active != active {
+        output.ownership.generation = output.ownership.generation.wrapping_add(1);
+    }
+    output.ownership.scheduler_active = active;
+    output.ownership.scheduler_dmx_silence_millis = silence.max(2_500);
+    changed_or_not(previous != output.ownership)
+}
+
 fn apply_takeover(output: &mut OutputState, take_over: bool) -> Applied {
-    if take_over
-        && !output.ownership.web_takeover
-        && output.ownership.dmx.is_some()
+    let previous = output.ownership;
+    if take_over && output.ownership.scheduler_active {
+        output.ownership.scheduler_active = false;
+    }
+    if take_over != output.ownership.web_takeover {
+        output.ownership.generation = output.ownership.generation.wrapping_add(1);
+    }
+    if take_over && !output.ownership.web_takeover {
+        restore_empty_desk_homes(output);
+    }
+    output.ownership.web_takeover = take_over;
+    changed_or_not(previous != output.ownership)
+}
+
+fn restore_empty_desk_homes(output: &mut OutputState) {
+    if output.ownership.dmx.is_some()
         && output.master.dimmer == 0.0
         && output.master.scale_x == -4.0
         && output.master.scale_y == -4.0
@@ -254,7 +293,23 @@ fn apply_takeover(output: &mut OutputState, take_over: bool) -> Applied {
         output.master = MasterState::default();
         output.layers.fill(LayerState::default());
     }
-    changed_or_not(replace(&mut output.ownership.web_takeover, take_over))
+}
+
+/// Reduces a complete command batch without publishing a partially accepted action.
+pub fn reduce_commands(
+    current: &MediaState,
+    commands: &[Command],
+) -> Result<Option<MediaState>, Applied> {
+    let mut next = current.clone();
+    let mut changed = false;
+    for command in commands {
+        match apply(&mut next, command) {
+            Applied::Changed => changed = true,
+            Applied::Unchanged => {}
+            refusal => return Err(refusal),
+        }
+    }
+    Ok(changed.then_some(next))
 }
 
 fn apply_master_controls(
@@ -315,6 +370,7 @@ pub const fn describe_source(source: CommandSource) -> &'static str {
         CommandSource::ArtNet => "art-net",
         CommandSource::Sacn => "sacn",
         CommandSource::Web => "web",
+        CommandSource::Scheduler => "scheduler",
         CommandSource::Internal => "internal",
         CommandSource::Recovery => "recovery",
     }

@@ -65,7 +65,7 @@ pub(crate) fn edited_addresses(
 pub(crate) fn publish_import(
     catalog: &SharedCatalog,
     edits: &CatalogEdits,
-    imported: MediaAddress,
+    _imported: MediaAddress,
     discover: impl FnOnce() -> Result<CatalogSnapshot, String>,
 ) -> Result<(), String> {
     // Acquire before scanning: a rename/move must not publish over a scan taken mid-edit.
@@ -74,27 +74,8 @@ pub(crate) fn publish_import(
         .map_err(|_| "the catalog edit lock is unavailable".to_owned())?;
     let previous = catalog.load_full();
     let mut next = discover()?;
-    for folder in &mut next.folders {
-        for item in &mut folder.items {
-            if folder.folder == u16::from(imported.folder) && item.file == imported.file {
-                // The new ID invalidates a resident copy of a replaced clip even when all its
-                // visible metadata happens to match the old one.
-                continue;
-            }
-            if let Some(existing) = previous
-                .folder(folder.folder)
-                .and_then(|folder| folder.item(item.file))
-            {
-                // Discovery mints provisional IDs. Preserve identity only for the unchanged
-                // item at this address; independently modified disk content stays a new asset.
-                let discovered_id = item.id;
-                item.id = existing.id;
-                if item != existing {
-                    item.id = discovered_id;
-                }
-            }
-        }
-    }
+    // Discovery has already anchored every ID in portable metadata. Successful replacement
+    // imports rotate their own sidecar before this callback; addresses never infer identity.
     next.revision = previous.revision.next();
     catalog.store(Arc::new(next));
     Ok(())
@@ -145,7 +126,7 @@ mod tests {
         let published = Arc::new(arc_swap::ArcSwap::from_pointee(before));
         let edits = Arc::new(Mutex::new(()));
         publish_import(&published, &edits, MediaAddress::new(1, 2), || {
-            Ok(catalog(vec![item(1, "Opening"), item(2, "New clip")]))
+            Ok(catalog(vec![existing.clone(), item(2, "New clip")]))
         })
         .unwrap();
         let after = published.load();
@@ -169,7 +150,7 @@ mod tests {
             &published,
             &Arc::new(Mutex::new(())),
             MediaAddress::new(1, 1),
-            || Ok(catalog(vec![item(1, "Opening"), item(2, "Closing")])),
+            || Ok(catalog(vec![item(1, "Opening"), closing.clone()])),
         )
         .unwrap();
         let after = published.load();
@@ -191,6 +172,7 @@ mod tests {
         ])));
         let edits = Arc::new(Mutex::new(()));
         let worker_catalog = published.clone();
+        let worker_existing = existing.clone();
         let worker_edits = edits.clone();
         let (started, scan_started) = std::sync::mpsc::channel();
         let (resume, scan_resume) = std::sync::mpsc::channel();
@@ -204,7 +186,7 @@ mod tests {
                     scan_resume
                         .recv_timeout(std::time::Duration::from_secs(5))
                         .unwrap();
-                    Ok(catalog(vec![item(1, "Opening"), item(2, "New clip")]))
+                    Ok(catalog(vec![worker_existing.clone(), item(2, "New clip")]))
                 },
             )
             .unwrap();

@@ -118,6 +118,11 @@ impl AudioView {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct TelemetryFrame {
+    #[serde(default)]
+    #[ts(type = "number")]
+    pub automation_revision: u64,
+    #[serde(default)]
+    pub automation: Vec<crate::wire::AutomationStatus>,
     pub audio: AudioView,
     /// Every import this run has seen. Pushed rather than polled for the same reason as the
     /// meters: a progress bar that has to ask is a progress bar that stutters.

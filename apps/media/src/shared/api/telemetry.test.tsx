@@ -1,11 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useTelemetry } from "./telemetry";
+import { sendTelemetryAction, useTelemetry } from "./telemetry";
 
 /// A socket a test drives, standing in for the browser's.
 class FakeSocket {
 	static opened: FakeSocket[] = [];
+	static OPEN = 1;
+	readyState = 1;
+	sent: string[] = [];
 	readonly url: string;
 	onopen: (() => void) | undefined;
 	onclose: (() => void) | undefined;
@@ -19,9 +22,11 @@ class FakeSocket {
 	}
 
 	close() {
+		this.readyState = 3;
 		this.closed = true;
 		this.onclose?.();
 	}
+	send(value: string) { this.sent.push(value); }
 }
 
 function Meter() {
@@ -98,5 +103,46 @@ describe("pushed telemetry", () => {
 		render(<Meter />);
 
 		expect(screen.getByText(/not connected · no frame/u)).toBeInTheDocument();
+	});
+
+	it("correlates one live action acknowledgement without replacing the telemetry frame", async () => {
+		vi.stubGlobal("WebSocket", FakeSocket);
+		render(<Meter />);
+		const socket = FakeSocket.opened[0];
+		act(() => socket.onopen?.());
+		act(() => socket.onmessage?.({ data: JSON.stringify({ audio: { bpm: 128, capturing: true } }) }));
+		const promise = sendTelemetryAction({ type: "automation-set-enabled", outputId: "main", enabled: true });
+		const action = JSON.parse(socket.sent[0]);
+		expect(action).toMatchObject({ type: "automation-set-enabled", outputId: "main", enabled: true, actionId: expect.any(String) });
+		act(() => socket.onmessage?.({ data: JSON.stringify({ type: "automation-action-result", actionId: action.actionId, ok: true, message: null }) }));
+		await expect(promise).resolves.toBeUndefined();
+		expect(screen.getByText(/128 BPM/)).toBeVisible();
+		expect(socket.sent).toHaveLength(1);
+	});
+
+	it("reports live action refusals instead of claiming they succeeded", async () => {
+		vi.stubGlobal("WebSocket", FakeSocket);
+		render(<Meter />);
+		const socket = FakeSocket.opened[0];
+		act(() => socket.onopen?.());
+		const promise = sendTelemetryAction({ type: "automation-apply-now", outputId: "main" });
+		const rejection = expect(promise).rejects.toThrow("DMX owns the output");
+		const action = JSON.parse(socket.sent[0]);
+		act(() => socket.onmessage?.({ data: JSON.stringify({ type: "automation-action-result", actionId: action.actionId, ok: false, message: "DMX owns the output" }) }));
+		await rejection;
+	});
+
+	it("rejects disconnected actions and never queues them for a later connection", async () => {
+		vi.stubGlobal("WebSocket", FakeSocket);
+		render(<Meter />);
+		const socket = FakeSocket.opened[0];
+		await expect(sendTelemetryAction({ type: "automation-apply-now", outputId: "main" })).rejects.toThrow(/unavailable/);
+		act(() => socket.onopen?.());
+		expect(socket.sent).toEqual([]);
+		const promise = sendTelemetryAction({ type: "automation-apply-now", outputId: "main" });
+		const rejection = expect(promise).rejects.toThrow(/Check the current playback state/);
+		act(() => socket.close());
+		await rejection;
+		expect(socket.sent).toHaveLength(1);
 	});
 });

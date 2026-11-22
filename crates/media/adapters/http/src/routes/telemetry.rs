@@ -33,9 +33,8 @@ pub(super) async fn telemetry(
 
 /// Sends frames until the client goes away.
 ///
-/// Nothing is read from the socket except its closure: this direction carries telemetry, and a
-/// client that wants to change something uses the API. Anything the client does send is drained so
-/// a chatty one cannot fill a buffer.
+/// Live actions share this ordered connection. Acknowledgements carry an action identity for
+/// feedback only; neither end queues or replays actions after reconnection.
 async fn push(mut socket: WebSocket, state: ApiState) {
     let mut ticks = tokio::time::interval(FRAME_INTERVAL);
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -45,6 +44,8 @@ async fn push(mut socket: WebSocket, state: ApiState) {
             _ = ticks.tick() => {
                 let (_, jobs) = (state.diagnostics.imports.state)();
                 let frame = TelemetryFrame {
+                    automation_revision: state.diagnostics.automation.snapshot.load().automation_revision,
+                    automation: state.diagnostics.automation.snapshot.load().status.clone(),
                     audio: AudioView::of(&(state.diagnostics.audio)()),
                     imports: jobs.iter().map(ImportJobView::of).collect(),
                     dmx: (state.diagnostics.dmx)().iter().map(DmxIngressView::of).collect(),
@@ -64,9 +65,47 @@ async fn push(mut socket: WebSocket, state: ApiState) {
                 match incoming {
                     // The client closed, or the connection broke. Either way this is over.
                     None | Some(Err(_)) | Some(Ok(Message::Close(_))) => return,
+                    Some(Ok(Message::Text(body))) => {
+                        let answer = action(&state, &body).await;
+                        if let Ok(serialized) = serde_json::to_string(&answer)
+                            && socket.send(Message::Text(serialized.into())).await.is_err() { return; }
+                    }
                     Some(Ok(_)) => {}
                 }
             }
         }
+    }
+}
+
+async fn action(state: &ApiState, body: &str) -> crate::wire::AutomationActionResult {
+    let parsed: Result<crate::wire::AutomationActionFrame, _> = serde_ignored::deserialize(
+        &mut serde_json::Deserializer::from_str(body),
+        |path| tracing::warn!(route = "/api/v2/telemetry", field = %path, "unknown action field"),
+    );
+    let (action_id, result) = match parsed {
+        Ok(frame) if !frame.action_id.is_empty() && frame.action_id.len() <= 256 => {
+            let result = match frame.action {
+                crate::wire::AutomationAction::AutomationApplyNow { output_id } => {
+                    super::automation::apply_now_action(state, &output_id)
+                }
+                crate::wire::AutomationAction::AutomationSetEnabled { output_id, enabled } => {
+                    super::automation::set_enabled_action(state, &output_id, enabled).await
+                }
+            };
+            (frame.action_id, result)
+        }
+        _ => (
+            String::new(),
+            Err(crate::ApiError::bad_request(
+                "invalid-action",
+                "Send a valid automation action with an actionId",
+            )),
+        ),
+    };
+    crate::wire::AutomationActionResult {
+        kind: "automation-action-result".into(),
+        action_id,
+        ok: result.is_ok(),
+        message: result.err().map(|error| error.body().message.clone()),
     }
 }

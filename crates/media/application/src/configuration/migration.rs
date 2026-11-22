@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 10;
+pub const CURRENT_VERSION: u32 = 11;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -64,11 +64,25 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             7 => Ok(without_effect_visualizer_tuning(current)),
             8 => Ok(with_slice_grid_preset(current)),
             9 => Ok(without_galaxy_simulator(current)),
+            10 => Ok(with_automation(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
     }
     Ok(current)
+}
+
+fn with_automation(mut document: Value) -> Value {
+    if let Some(configuration) = document
+        .get_mut("configuration")
+        .and_then(Value::as_object_mut)
+    {
+        configuration
+            .entry("automation")
+            .or_insert_with(|| json!({"playlists":[],"events":[],"outputs":[]}));
+    }
+    document["version"] = json!(11);
+    document
 }
 
 /// Version 3 → 4: effect definitions move out of volatile layer state into an addressed,
@@ -488,7 +502,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 10"));
+        assert!(written.contains("\"version\": 11"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -678,8 +692,8 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 10,
-            "documents without the retired Galaxy kind are version 10"
+            CURRENT_VERSION, 11,
+            "documents with playlist automation are version 11"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);
@@ -840,7 +854,7 @@ mod tests {
         old.remove(14);
         let stored = json!({"version": 8, "configuration": {"effects": old}});
         let migrated = migrate_to_current(stored).unwrap();
-        assert_eq!(migrated["version"], 10);
+        assert_eq!(migrated["version"], CURRENT_VERSION);
         let library: media_domain::EffectLibrary =
             serde_json::from_value(migrated["configuration"]["effects"].clone()).unwrap();
         assert_eq!(

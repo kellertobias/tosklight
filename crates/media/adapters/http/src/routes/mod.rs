@@ -12,6 +12,7 @@
 //! edit follows, and the state below.
 
 mod audio;
+mod automation;
 #[cfg(test)]
 pub(crate) mod bench;
 mod data_folder;
@@ -29,6 +30,8 @@ mod logs;
 mod models;
 mod network;
 mod output_effects;
+#[cfg(test)]
+mod output_ownership_tests;
 mod outputs;
 mod playback;
 pub mod snapshot;
@@ -158,6 +161,7 @@ pub fn settles_at_once() -> SettleConfiguration {
 pub fn router(state: ApiState) -> Router {
     let upload_body_limit = state.upload_body_limit;
     Router::new()
+        .merge(automation_router())
         .route("/api/v2/health", get(health::health))
         .route("/api/v2/runtime", get(health::runtime))
         .route(
@@ -358,5 +362,46 @@ fn library_router(upload_body_limit: usize) -> Router<ApiState> {
         .route(
             "/api/v2/library/imports/{job}/cancel",
             get(library::cancel_import),
+        )
+}
+
+fn automation_router() -> Router<ApiState> {
+    Router::new()
+        .route("/api/v2/automation", get(automation::automation))
+        .route(
+            "/api/v2/automation/playlists/create",
+            post(automation::create_playlist),
+        )
+        .route(
+            "/api/v2/automation/playlists/{id}/update",
+            post(automation::update_playlist),
+        )
+        .route(
+            "/api/v2/automation/playlists/{id}/delete",
+            post(automation::delete_playlist),
+        )
+        .route(
+            "/api/v2/automation/events/create",
+            post(automation::create_event),
+        )
+        .route(
+            "/api/v2/automation/events/{id}/update",
+            post(automation::update_event),
+        )
+        .route(
+            "/api/v2/automation/events/{id}/delete",
+            post(automation::delete_event),
+        )
+        .route(
+            "/api/v2/automation/outputs/{id}/update",
+            post(automation::update_output),
+        )
+        .route(
+            "/api/v2/automation/outputs/{id}/enabled",
+            post(automation::set_enabled),
+        )
+        .route(
+            "/api/v2/automation/outputs/{id}/apply-now",
+            get(automation::apply_now),
         )
 }

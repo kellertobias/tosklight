@@ -55,7 +55,7 @@ export interface LayerControl {
 		output: OutputView,
 		change: UpdateMaster,
 	) => Promise<void>;
-	setTakeover: (output: OutputView, takeOver: boolean) => Promise<void>;
+	setTakeover: (output: OutputView, takeOver: boolean, expectedOwnershipGeneration?: number) => Promise<OutputView | undefined>;
 	reset: (output: OutputView, layer: number) => Promise<void>;
 	busy: boolean;
 }
@@ -70,6 +70,12 @@ interface ContinuousSlot {
 		change: UpdateLayer | UpdateMaster,
 	) => OutputView[];
 	request: (change: UpdateLayer | UpdateMaster) => Promise<OutputView>;
+}
+
+function settleOutput(token: string, updated: OutputView) {
+	settleOptimisticResource<OutputView[]>(KEYS.outputs, token, (current) =>
+		replaceOutput(current, updated),
+	);
 }
 
 export function useLayerControl(): LayerControl {
@@ -119,19 +125,20 @@ export function useLayerControl(): LayerControl {
 			outputId: string,
 			project: (outputs: OutputView[]) => OutputView[],
 			request: () => Promise<OutputView>,
+			propagateFailure = false,
 		) => {
 			const token = `output-${sequence.current++}`;
 			stageOptimisticResource(KEYS.outputs, token, project);
 			begin();
 			try {
 				const updated = await enqueueDiscrete(outputId, request);
-				settleOptimisticResource<OutputView[]>(KEYS.outputs, token, (current) =>
-					replaceOutput(current, updated),
-				);
+				settleOutput(token, updated);
 				setRefusal(undefined);
+				return updated;
 			} catch (error) {
 				settleOptimisticResource<OutputView[]>(KEYS.outputs, token);
 				setRefusal(asFailure(error));
+				if (propagateFailure) throw error;
 			} finally {
 				end();
 			}
@@ -188,11 +195,7 @@ export function useLayerControl(): LayerControl {
 					const submitted = slot.change;
 					try {
 						const updated = await slot.request(submitted);
-						settleOptimisticResource<OutputView[]>(
-							KEYS.outputs,
-							slot.token,
-							(current) => replaceOutput(current, updated),
-						);
+						settleOutput(slot.token, updated);
 						setRefusal(undefined);
 					} catch (error) {
 						settleOptimisticResource<OutputView[]>(KEYS.outputs, slot.token);
@@ -221,6 +224,7 @@ export function useLayerControl(): LayerControl {
 				output.id,
 				(current) => applyLocally(current, output.id, layer, change),
 				() => api.updateLayer(output.id, layer, change),
+				change.expectedOwnershipGeneration !== undefined,
 			);
 		},
 		[optimisticOutput],
@@ -262,6 +266,7 @@ export function useLayerControl(): LayerControl {
 				output.id,
 				(current) => applyMasterLocally(current, output.id, change),
 				() => api.updateMaster(output.id, change),
+				change.expectedOwnershipGeneration !== undefined,
 			);
 		},
 		[optimisticOutput],
@@ -281,11 +286,12 @@ export function useLayerControl(): LayerControl {
 		[optimisticContinuousOutput],
 	);
 	const setTakeover = useCallback(
-		async (output: OutputView, takeOver: boolean) => {
-			await optimisticOutput(
+		async (output: OutputView, takeOver: boolean, expectedOwnershipGeneration?: number) => {
+			return optimisticOutput(
 				output.id,
 				(current) => applyTakeoverLocally(current, output.id, takeOver),
-				() => api.setPlaybackTakeover(output.id, takeOver),
+				() => api.setPlaybackTakeover(output.id, takeOver, expectedOwnershipGeneration),
+				expectedOwnershipGeneration !== undefined,
 			);
 		},
 		[optimisticOutput],

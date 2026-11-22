@@ -5,16 +5,14 @@
 //! ownership — the web interface reads but does not write until it explicitly takes over the
 //! selected output.
 
-use std::sync::Arc;
-
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use media_application::MediaConfiguration;
 use media_application::configuration::{load, save};
 use media_domain::{
-    Applied, Command, CommandKind, CommandSource, FlipMirror, MasterControls, MasterShaper,
-    MediaAddress, MediaState, OutputId, ScalingMode, Timestamp, Tint, apply,
+    Applied, CommandKind, CommandSource, FlipMirror, MasterControls, MasterShaper, MediaAddress,
+    MediaState, OutputId, ScalingMode, Timestamp, Tint,
 };
 
 use crate::error::ApiError;
@@ -268,7 +266,13 @@ async fn update_layer_inner(
             }),
         }
     };
-    submit(&state, vec![command], now)?;
+    submit_guarded(
+        &state.state,
+        vec![command],
+        now,
+        body.expected_ownership_generation
+            .map(|generation| (id, generation)),
+    )?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
     Ok(axum::Json(view_of(&state, found, now)).into_response())
@@ -379,8 +383,8 @@ pub(super) async fn update_master(
             .unwrap_or(current.shaper.bottom_rotation),
         rotation: body.shaper_rotation.unwrap_or(current.shaper.rotation),
     });
-    submit(
-        &state,
+    submit_guarded(
+        &state.state,
         vec![CommandKind::SetMasterControls {
             output: id,
             controls: Box::new(MasterControls {
@@ -404,6 +408,8 @@ pub(super) async fn update_master(
             }),
         }],
         now,
+        body.expected_ownership_generation
+            .map(|generation| (id, generation)),
     )?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
@@ -489,9 +495,16 @@ pub(super) async fn reset_layer(
 
 /// Explicitly changes playback ownership. Taking over makes subsequent network DMX read-only;
 /// releasing immediately lets the next Art-Net or sACN frame drive the output again.
+#[derive(Default, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TakeoverQuery {
+    expected_ownership_generation: Option<u64>,
+}
+
 pub(super) async fn set_playback_takeover(
     State(state): State<ApiState>,
     Path((output, mode)): Path<(String, String)>,
+    Query(query): Query<TakeoverQuery>,
 ) -> Result<Response, ApiError> {
     let id = parse_output(&output)?;
     let take_over = match mode.as_str() {
@@ -505,13 +518,16 @@ pub(super) async fn set_playback_takeover(
         }
     };
     let now = (state.now)();
-    submit(
-        &state,
+    submit_guarded(
+        &state.state,
         vec![CommandKind::TakeOverPlayback {
             output: id,
             take_over,
         }],
         now,
+        query
+            .expected_ownership_generation
+            .map(|generation| (id, generation)),
     )?;
     let media = state.state.load();
     let found = media.output(id).ok_or_else(|| unknown_output(id))?;
@@ -532,44 +548,33 @@ fn submit_to(
     commands: Vec<CommandKind>,
     now: Timestamp,
 ) -> Result<(), ApiError> {
-    if commands.is_empty() {
-        return Ok(());
-    }
-    loop {
-        let current = state.load_full();
-        let mut next = MediaState::clone(&current);
-        let mut published = false;
+    submit_guarded(state, commands, now, None)
+}
 
-        for kind in &commands {
-            let command = Command::new(kind.clone(), CommandSource::Web, now);
-            match apply(&mut next, &command) {
-                Applied::Changed => published = true,
-                Applied::Unchanged => {}
-                Applied::RejectedNotOwner => {
-                    return Err(ApiError::new(
-                        StatusCode::CONFLICT,
-                        "playback-takeover-required",
-                        "take over playback for this output before changing its live values",
-                    ));
-                }
-                Applied::RejectedUnknownOutput => {
-                    return Err(ApiError::not_found("unknown-output", "no such output"));
-                }
-                Applied::RejectedUnknownLayer => {
-                    return Err(ApiError::not_found("unknown-layer", "no such layer"));
-                }
+fn submit_guarded(
+    state: &arc_swap::ArcSwap<MediaState>,
+    commands: Vec<CommandKind>,
+    now: Timestamp,
+    expected: Option<(OutputId, u64)>,
+) -> Result<(), ApiError> {
+    crate::control::submit_commands_guarded(state, &commands, CommandSource::Web, now, expected).map_err(|refusal| {
+        match refusal {
+            Applied::RejectedNotOwner if expected.is_some() => ApiError::new(
+                StatusCode::CONFLICT, "playback-owner-changed",
+                "playback ownership changed; the old preview was cancelled without restoring its snapshot",
+            ),
+            Applied::RejectedNotOwner => ApiError::new(
+                StatusCode::CONFLICT,
+                "playback-takeover-required",
+                "take over playback for this output before changing its live values",
+            ),
+            Applied::RejectedUnknownOutput => {
+                ApiError::not_found("unknown-output", "no such output")
             }
+            Applied::RejectedUnknownLayer => ApiError::not_found("unknown-layer", "no such layer"),
+            _ => unreachable!("command publication returns only a refusal"),
         }
-
-        if !published {
-            return Ok(());
-        }
-        let previous = state.compare_and_swap(&current, Arc::new(next));
-        if Arc::ptr_eq(&previous, &current) {
-            return Ok(());
-        }
-        // Ownership and output existence must be checked again against the winning snapshot.
-    }
+    })
 }
 
 /// The layer's own visualizer tuning edit. It belongs to the layer and the address it shows,

@@ -25,6 +25,8 @@ describe("routing", () => {
 		expect(ROUTES.map((route) => route.label)).toEqual([
 			"Playback",
 			"Library",
+			"Playlists",
+			"Schedule",
 			"Visualizers",
 			"Text",
 			"Effects",

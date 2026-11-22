@@ -6,6 +6,26 @@ export type ApiErrorBody = {
  * Stable across releases. Clients branch on this, never on the message.
  */
 code: string, message: string, };
+export type PlaylistEntryView = { id: string, assetId: string, plays: number, holdMillis: number | null, fadeMillis: number, };
+export type LayerPresetView = { playMode: string | { once: { end_state: string } } | { 'reverse-once': { end_state: string } }, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, dimmer: number, volume: number, tint: {red:number, green:number, blue:number}, grayscale: number, mask: {address:{folder:number,file:number},scaleX:number,scaleY:number,positionX:number,positionY:number,invert:boolean,opacity:number,source:string}, effectBanks: Array<{select:number,strength:number,parameters:number[]}>, effects: unknown[], speedMultiplier: {kind:'unity'} | {kind:'divide'|'multiply',factor:number}, playbackBpm: number | null, blur: number, blend: string, strobeHz: number | null, inPoint: number, outPoint: number, visualizerControls: [number, number, number, number], visualizerTuning: unknown | null, model: {model:number,pan:number,tilt:number}, };
+export type AuxiliaryLayerView = { layer: number, mode: string, assetId: string | null, controls: LayerPresetView, };
+export type PlaylistView = { id: string, name: string, enabled: boolean, priority: number, layers: [number, number], masterDimmer: number, masterVolume: number, defaultFadeMillis: number, entries: Array<PlaylistEntryView>, auxiliaryLayers: Array<AuxiliaryLayerView>, };
+export type ScheduleTriggerView = { "kind": "fixed", start: string, end: string | null, } | { "kind": "weekly", weekdays: Array<number>, startTime: string, endTime: string | null, endDayOffset: number, firstDate: string | null, lastDate: string | null, };
+export type ScheduleEventView = { id: string, name: string, enabled: boolean, outputId: string, playlistId: string, trigger: ScheduleTriggerView, };
+export type AutomationOutputView = { outputId: string, enabled: boolean, fallbackPlaylistId: string | null, dmxSilenceSeconds: number, };
+export type AutomationConfigurationView = { playlists: Array<PlaylistView>, events: Array<ScheduleEventView>, outputs: Array<AutomationOutputView>, };
+export type AutomationStatus = { outputId: string, owner: string, playlistId: string | null, eventId: string | null, playlistName: string | null, entryIndex: number | null, play: number, phase: string, error: string | null, lastOccurrenceOutcome: string | null, lastOccurrenceName: string | null, dmxAgeMillis: number | null, resumeInMillis: number | null, };
+export type UpcomingOccurrenceView = { eventId: string, playlistId: string, outputId: string, name: string, start: string, end: string | null, priority: number, winning: boolean, reason: string, };
+export type AutomationRuntimeView = { automationRevision: number, timeZone: string, status: Array<AutomationStatus>, upcoming: Array<UpcomingOccurrenceView>, };
+export type AutomationView = { configuration: AutomationConfigurationView, automationRevision: number, timeZone: string, status: Array<AutomationStatus>, upcoming: Array<UpcomingOccurrenceView>, };
+export type PlaylistEdit = { requestId: string, name?: string | null, enabled?: boolean | null, priority?: number | null, layers?: [number, number] | null, masterDimmer?: number | null, masterVolume?: number | null, defaultFadeMillis?: number | null, entries?: Array<PlaylistEntryView> | null, auxiliaryLayers?: Array<AuxiliaryLayerView> | null, };
+export type ScheduleEventEdit = { requestId: string, name?: string | null, enabled?: boolean | null, outputId?: string | null, playlistId?: string | null, trigger?: ScheduleTriggerView | null, };
+export type AutomationOutputEdit = { requestId: string, fallbackPlaylistId?: string | null | null, dmxSilenceSeconds?: number | null, };
+export type DeleteAutomationObject = { requestId: string, };
+export type AutomationAction = { "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, };
+export type SetAutomationEnabled = { enabled: boolean, };
+export type AutomationActionFrame = { actionId: string, } & ({ "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, });
+export type AutomationActionResult = { type: string, actionId: string, ok: boolean, message: string | null, };
 export type Health = {
 /**
  * Always [`PRODUCT`]. Identifies the answering process as a ToskLight Pixel.
@@ -138,6 +158,10 @@ dmxActive: boolean,
  * Whether this server explicitly ignores network playback control in favour of the web UI.
  */
 playbackTakeover: boolean,
+/**
+ * Changes when playback ownership changes, so an old preview cannot restore over a new owner.
+ */
+ownershipGeneration: number,
 /**
  * Frames per second the layers' In and Out points count in, so a desk or panel can show and
  * enter them as `mm:ss.ff`. Server-wide; every output reports the same rate.
@@ -615,7 +639,7 @@ export type SpeedGroupReceptionView = {
  * `disabled`, `unavailable`, `waiting`, `connected`, or `lost`.
  */
 connection: string, listening: string | null, detail: string | null, sender: string | null, senderAddress: string | null, lastUpdateAgeMillis: number | null, accepted: number, rejected: number, rejections: Array<SpeedGroupRejectionView>, groups: Array<SpeedGroupReadingView>, };
-export type TelemetryFrame = { audio: AudioView,
+export type TelemetryFrame = { automationRevision: number, automation: Array<AutomationStatus>, audio: AudioView,
 /**
  * Every import this run has seen. Pushed rather than polled for the same reason as the
  * meters: a progress bar that has to ask is a progress bar that stutters.
@@ -656,7 +680,7 @@ export type ServerLogLevelView = { level: string,
  * This is always true: the maintainer chose parity with the reference's runtime-only control.
  */
 resetsOnRestart: boolean, };
-export type UpdateLayer = { folder?: number | null, file?: number | null, dimmer?: number | null, playModeDmx?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, grayscale?: number | null, maskFolder?: number | null, maskFile?: number | null, maskScaleX?: number | null, maskScaleY?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, maskInvert?: boolean | null, maskOpacity?: number | null, speedMultiplierDmx?: number | null,
+export type UpdateLayer = { expectedOwnershipGeneration?: number | null, folder?: number | null, file?: number | null, dimmer?: number | null, playModeDmx?: number | null, scaleX?: number | null, scaleY?: number | null, scalingMode?: string | null, positionX?: number | null, positionY?: number | null, rotation?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null, grayscale?: number | null, maskFolder?: number | null, maskFile?: number | null, maskScaleX?: number | null, maskScaleY?: number | null, maskPositionX?: number | null, maskPositionY?: number | null, maskInvert?: boolean | null, maskOpacity?: number | null, speedMultiplierDmx?: number | null,
 /**
  * Zero disables the per-layer BPM target; 1..=255 selects a target.
  */
@@ -730,7 +754,7 @@ visualizerParameters?: VisualizerParametersView | null,
  * `true` drops the layer's visualizer tuning, so the configured parameters apply again.
  */
 resetVisualizerParameters?: boolean | null, };
-export type UpdateMaster = { dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null,
+export type UpdateMaster = { expectedOwnershipGeneration?: number | null, dimmer?: number | null, volume?: number | null, tintRed?: number | null, tintGreen?: number | null, tintBlue?: number | null,
 /**
  * Layer Opacity Cycle beat multiplier/divider encoded by the personality's published bands.
  */

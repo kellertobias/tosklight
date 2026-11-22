@@ -23,3 +23,4 @@ For a particular task:
 - [Map display regions and pixels](10-pixel-map.md): crop display regions and patch pixel zones.
 - [Set up audio](11-audio.md): check the analysis input, instrument detection and sound output.
 - [Connect another console](12-other-consoles.md): download Layer/Master profiles and configure DMX and CITP.
+- [Run playlists on a schedule](13-playlists-and-schedules.md): arrange clips, configure fixed layers and schedule autonomous playback with DMX precedence.

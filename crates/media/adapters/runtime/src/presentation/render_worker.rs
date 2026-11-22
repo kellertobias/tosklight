@@ -52,10 +52,10 @@ impl RenderWorkerState {
             let status_overlay = configuration
                 .output(output_state.id)
                 .is_some_and(|output| output.status_overlay);
-            let standby_reason = crate::standby::reason(
+            let standby_reason = crate::standby::reason_for_output(
                 status_overlay,
-                output_state.ownership.dmx_is_active(now),
-                output_state.ownership.web_takeover,
+                output_state,
+                now,
                 catalog.item_count() == 0,
                 self.configuration_issue,
             );
@@ -158,7 +158,7 @@ impl RenderWorkerState {
             );
         }
 
-        self.publish(reports, now);
+        self.publish(reports, now, &state);
     }
 
     /// Tells the reducer what each layer's source did, so the API, the UI, and CITP all report the
@@ -167,12 +167,13 @@ impl RenderWorkerState {
         &self,
         reports: Vec<(media_domain::OutputId, usize, media_domain::SourceStatus)>,
         now: Timestamp,
+        rendered: &MediaState,
     ) {
         if reports.is_empty() {
             return;
         }
         self.state.rcu(|current| {
-            with_reports(current, &reports, now)
+            super::with_reports_from(current, &reports, now, rendered)
                 .map(Arc::new)
                 .unwrap_or_else(|| Arc::clone(current))
         });

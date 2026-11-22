@@ -11,6 +11,8 @@ import { type ReactNode, useEffect, useRef } from "react";
 export const MEDIA_SERVER_SECTIONS = [
 	{ id: "media", label: "Playback", icon: "▣" },
 	{ id: "library", label: "Library", icon: "▦" },
+	{ id: "playlists", label: "Playlists", icon: "▷" },
+	{ id: "schedule", label: "Schedule", icon: "◷" },
 	{ id: "audio", label: "Audio", icon: "≋" },
 	{ id: "dmx", label: "DMX", icon: "↯" },
 	{ id: "pixel-map", label: "Pixel Map", icon: "▩" },

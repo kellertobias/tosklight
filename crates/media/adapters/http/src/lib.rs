@@ -10,6 +10,8 @@
 //! says and carries no authentication of its own.
 
 pub mod assets;
+pub mod automation;
+pub mod control;
 pub mod data_folder;
 pub mod diagnostics;
 pub mod error;

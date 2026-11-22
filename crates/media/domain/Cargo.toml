@@ -9,6 +9,7 @@ authors.workspace = true
 # crates. Protocol, HTTP, filesystem, decoder, GPU, and operating-system types never enter
 # domain state; adapters translate those at the boundary.
 [dependencies]
+chrono.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

@@ -560,6 +560,7 @@ impl std::fmt::Debug for LogLevelControl {
 /// The diagnostics the API can read from the running process.
 #[derive(Clone)]
 pub struct Diagnostics {
+    pub automation: crate::automation::AutomationAccess,
     /// The 3D model store the process owns.
     pub models: ModelAccess,
     pub audio: AudioSource,
@@ -586,6 +587,7 @@ impl Default for Diagnostics {
     /// route still answers — with the truth, which is that nothing is being captured or recorded.
     fn default() -> Self {
         Self {
+            automation: crate::automation::AutomationAccess::default(),
             models: ModelAccess::default(),
             audio: Arc::new(AudioTelemetry::default),
             audio_devices: Arc::new(Vec::new),

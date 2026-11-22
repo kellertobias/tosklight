@@ -95,6 +95,8 @@ pub enum CommandSource {
     ArtNet,
     Sacn,
     Web,
+    /// The autonomous playlist runner, subordinate to manual takeover and external DMX.
+    Scheduler,
     /// The application itself — a playback session reporting status, a job completing.
     Internal,
     /// Restoring state after a failure. Never blocked by ownership.
@@ -189,6 +191,12 @@ pub enum CommandKind {
     ResetLayer { output: OutputId, layer: usize },
     /// Gives or releases the Media Server web operator priority over external DMX.
     TakeOverPlayback { output: OutputId, take_over: bool },
+    /// Acquires or releases autonomous playback without overriding a live desk.
+    SetSchedulerOwnership {
+        output: OutputId,
+        active: bool,
+        dmx_silence_millis: u64,
+    },
     /// A playback session reporting what happened to a source it was asked to load.
     ReportSourceStatus {
         output: OutputId,
@@ -209,6 +217,7 @@ impl CommandKind {
             | Self::SetMasterControls { output, .. }
             | Self::ResetLayer { output, .. }
             | Self::TakeOverPlayback { output, .. }
+            | Self::SetSchedulerOwnership { output, .. }
             | Self::ReportSourceStatus { output, .. } => *output,
         }
     }
@@ -244,7 +253,7 @@ impl Command {
 }
 
 /// Who currently owns an output's continuously controlled values.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ControlOwnership {
     /// The last external DMX source seen, and when.
@@ -252,6 +261,29 @@ pub struct ControlOwnership {
     /// Explicit local priority. While set, incoming network DMX is ignored.
     #[serde(default)]
     pub web_takeover: bool,
+    #[serde(default)]
+    pub scheduler_active: bool,
+    #[serde(default = "default_scheduler_silence")]
+    pub scheduler_dmx_silence_millis: u64,
+    /// Changes whenever an owner acquires or loses control, guarding stale restoration.
+    #[serde(default)]
+    pub generation: u64,
+}
+
+const fn default_scheduler_silence() -> u64 {
+    10_000
+}
+
+impl Default for ControlOwnership {
+    fn default() -> Self {
+        Self {
+            dmx: None,
+            web_takeover: false,
+            scheduler_active: false,
+            scheduler_dmx_silence_millis: default_scheduler_silence(),
+            generation: 0,
+        }
+    }
 }
 
 /// The most recent external DMX activity on an output.
@@ -292,6 +324,27 @@ impl ControlOwnership {
             // External DMX and the application always write.
             CommandSource::ArtNet | CommandSource::Sacn => !self.web_takeover,
             CommandSource::Internal => true,
+            CommandSource::Scheduler => {
+                if matches!(
+                    command.kind,
+                    CommandKind::SetSchedulerOwnership { active: false, .. }
+                ) {
+                    return true;
+                }
+                let silence = match command.kind {
+                    CommandKind::SetSchedulerOwnership {
+                        dmx_silence_millis, ..
+                    } => dmx_silence_millis,
+                    _ => self.scheduler_dmx_silence_millis,
+                };
+                !self.web_takeover
+                    && !self.dmx.is_some_and(|activity| {
+                        command.at.since(activity.last_seen).as_millis()
+                            < u128::from(silence.max(2_500))
+                    })
+                    && (self.scheduler_active
+                        || matches!(command.kind, CommandKind::SetSchedulerOwnership { .. }))
+            }
             // The web UI may always inspect and perform administrative actions. Continuously
             // controlled playback values require an explicit output-scoped takeover, even before
             // the first DMX packet, so merely opening the administration page can never change

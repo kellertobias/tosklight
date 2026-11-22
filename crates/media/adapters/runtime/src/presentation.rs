@@ -1003,33 +1003,10 @@ fn capture_previews(
     }
 }
 
-/// Applies the renderer's source reports to the authoritative state.
-///
-/// Returns the next state when anything changed, so a frame in which nothing loaded or failed
-/// publishes nothing at all rather than churning a snapshot every sixtieth of a second.
-pub(crate) fn with_reports(
-    state: &MediaState,
-    reports: &[(media_domain::OutputId, usize, media_domain::SourceStatus)],
-    now: Timestamp,
-) -> Option<MediaState> {
-    let mut next = MediaState::clone(state);
-    let mut changed = false;
-    for (output, layer, status) in reports {
-        let command = media_domain::Command::new(
-            media_domain::CommandKind::ReportSourceStatus {
-                output: *output,
-                layer: *layer,
-                status: *status,
-            },
-            media_domain::CommandSource::Internal,
-            now,
-        );
-        if media_domain::apply(&mut next, &command) == media_domain::Applied::Changed {
-            changed = true;
-        }
-    }
-    changed.then_some(next)
-}
+mod source_reports;
+#[cfg(test)]
+use source_reports::with_reports;
+pub(crate) use source_reports::with_reports_from;
 
 impl ApplicationHandler for PresentationHost {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {

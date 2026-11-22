@@ -7,6 +7,7 @@
 //! for itself, so nothing can disagree about what the library contains.
 
 pub mod discovery;
+mod identity;
 pub mod importer;
 pub mod jobs;
 pub mod models;

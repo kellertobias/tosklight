@@ -404,11 +404,19 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
                 .job(id)
                 .is_none_or(|job| !matches!(job.state, JobState::Running { .. }))
     });
+    let staged = StagedClip(destination.with_file_name(format!(
+            ".{}.importing-{}",
+            destination
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy(),
+            uuid::Uuid::new_v4()
+        )));
     let imported = retry_once(
         || {
             media_codec::import::import_cancellable(
                 &job.source,
-                &destination,
+                &staged.0,
                 &mut report,
                 Arc::clone(&cancelled),
             )
@@ -429,6 +437,15 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
     match imported {
         Ok(0) => JobState::Cancelled,
         Ok(frames) => {
+            if let Err(error) =
+                crate::identity::publish(&staged.0, &destination, job.destination.file)
+            {
+                return JobState::Failed {
+                    reason: format!(
+                        "the converted clip could not receive a durable identity: {error}; repair its .metadata permissions before retrying"
+                    ),
+                };
+            }
             if let Err(error) = crate::thumbnails::generate_cancellable(
                 &inner.storage,
                 job.destination.into(),
@@ -459,6 +476,14 @@ fn run_one(inner: &Arc<Inner>, job: &Job, details: &ImportDetails) -> JobState {
                 reason: format!("failed after two attempts: {error}"),
             }
         }
+    }
+}
+
+struct StagedClip(PathBuf);
+
+impl Drop for StagedClip {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
     }
 }
 
@@ -843,6 +868,7 @@ mod tests {
 
     #[test]
     fn running_uploaded_sources_keep_the_lease_until_the_worker_returns() {
+        use media_codec::container::{ClipHeader, ClipWriter};
         for cancelled in [false, true] {
             let storage = library(if cancelled {
                 "cancelled-upload-lease"
@@ -851,8 +877,30 @@ mod tests {
             });
             let (importer, _) = idle_importer(storage.clone(), 1);
             let address = MediaAddress::new(1, 1);
+            storage.ensure_folder(1u8).unwrap();
+            let mut writer = ClipWriter::new(
+                std::io::Cursor::new(Vec::new()),
+                ClipHeader {
+                    width: 4,
+                    height: 4,
+                    frame_count: 0,
+                    frame_rate: (25, 1),
+                    intrinsic_bpm: None,
+                },
+            )
+            .unwrap();
+            writer.write_frame(&[7; 16], 0).unwrap();
+            let original = writer.finish().unwrap().into_inner();
+            let path = storage.item_path(address, "Clip");
+            std::fs::write(&path, &original).unwrap();
+            let old_id = crate::discover(storage.root())
+                .unwrap()
+                .resolve(address)
+                .unwrap()
+                .id;
             let mut upload =
-                crate::Upload::begin(storage.root(), address, "Clip", "clip.mp4").unwrap();
+                crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4")
+                    .unwrap();
             upload
                 .write(b"invalid source that will fail conversion")
                 .unwrap();
@@ -886,6 +934,15 @@ mod tests {
             } else {
                 assert!(matches!(outcome, JobState::Failed { .. }));
             }
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+            assert_eq!(
+                crate::discover(storage.root())
+                    .unwrap()
+                    .resolve(address)
+                    .unwrap()
+                    .id,
+                old_id
+            );
             drop(details);
             assert!(
                 crate::Upload::begin_replacement(storage.root(), address, "Clip", "clip.mp4")
@@ -904,6 +961,11 @@ mod tests {
         let (importer, _) = importer(storage.clone(), 2);
         importer.submit(source.clone(), MediaAddress::new(1, 1), "Original");
         settle(&importer);
+        let original = crate::discover(storage.root())
+            .unwrap()
+            .resolve(MediaAddress::new(1, 1))
+            .unwrap()
+            .id;
         importer.submit(source, MediaAddress::new(1, 1), "Replacement");
         let jobs = settle(&importer);
         importer.stop();
@@ -913,6 +975,10 @@ mod tests {
             "{jobs:?}"
         );
         let catalog = crate::discover(storage.root()).unwrap();
+        assert_ne!(
+            catalog.resolve(MediaAddress::new(1, 1)).unwrap().id,
+            original
+        );
         assert_eq!(catalog.item_count(), 1);
         assert_eq!(
             catalog.resolve(MediaAddress::new(1, 1)).unwrap().name,

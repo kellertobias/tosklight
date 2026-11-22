@@ -5,20 +5,26 @@
 //! reason in the log rather than failing the scan — an operator with one bad file still gets a
 //! working library.
 //!
-//! Identities are provisional for a new scan. The runtime reconciles unchanged items with the
-//! published catalog before replacing it, so importing a new clip preserves other item identities.
+//! Each published identity is stored in the clip's portable metadata first, so playlists can
+//! resolve the same asset after restart or an address change.
 
 use std::path::{Path, PathBuf};
 
 use media_codec::container::ClipReader;
 use media_domain::catalog::{CatalogItem, CatalogSnapshot, ItemKind, is_storage_folder};
-use media_domain::{AssetId, MediaAddress, authored_tempo};
+use media_domain::{MediaAddress, authored_tempo};
 
 use crate::naming;
 
 /// Why a library could not be scanned at all.
 #[derive(Debug, thiserror::Error)]
 pub enum DiscoveryError {
+    #[error("cannot preserve the media identity for {}: {source}. Make the clip's .metadata directory writable or repair its metadata before using this library", clip.display())]
+    Identity {
+        clip: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("cannot read the library at {}: {source}", root.display())]
     Unreadable {
         root: PathBuf,
@@ -58,7 +64,7 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
             tracing::debug!(%folder, "folder 000 holds no addressable media");
             continue;
         }
-        for item in scan_folder(&path) {
+        for item in scan_folder(&path)? {
             if let Err(error) = catalog.insert(folder, item) {
                 tracing::warn!(%folder, %error, "skipping an item the catalog will not accept");
             }
@@ -99,35 +105,56 @@ pub fn discover(root: &Path) -> Result<CatalogSnapshot, DiscoveryError> {
     Ok(catalog)
 }
 
-fn scan_folder(path: &Path) -> Vec<CatalogItem> {
+fn scan_folder(path: &Path) -> Result<Vec<CatalogItem>, DiscoveryError> {
     let Ok(entries) = std::fs::read_dir(path) else {
         tracing::warn!(path = %path.display(), "cannot read folder");
-        return Vec::new();
+        return Ok(Vec::new());
     };
 
-    let mut items: Vec<CatalogItem> = entries
+    let mut paths: Vec<_> = entries
         .flatten()
         .filter_map(|entry| {
             let filename = entry.file_name().to_str()?.to_owned();
             let (file, name) = naming::parse_item_filename(&filename)?;
-            read_item(&entry.path(), file, &name)
+            Some((file, filename, name, entry.path()))
         })
         .collect();
-    items.sort_by_key(|item| item.file);
-    items
+    paths.sort_by(|left, right| (left.0, &left.1).cmp(&(right.0, &right.1)));
+    let mut items = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for (file, _, name, path) in paths {
+        if seen.contains(&file) {
+            tracing::warn!(%file, path = %path.display(), "two clips claim one address; keeping the first filename");
+            continue;
+        }
+        if let Some(item) = read_item(&path, file, &name)? {
+            seen.insert(file);
+            items.push(item);
+        }
+    }
+    Ok(items)
 }
 
-fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
-    let handle = std::fs::File::open(path)
+fn read_item(path: &Path, file: u8, name: &str) -> Result<Option<CatalogItem>, DiscoveryError> {
+    let Some(handle) = std::fs::File::open(path)
         .inspect_err(|error| tracing::warn!(path = %path.display(), %error, "cannot open clip"))
-        .ok()?;
-    let reader = ClipReader::open(handle)
+        .ok()
+    else {
+        return Ok(None);
+    };
+    let Some(reader) = ClipReader::open(handle)
         .inspect_err(|error| tracing::warn!(path = %path.display(), %error, "not a usable clip"))
-        .ok()?;
+        .ok()
+    else {
+        return Ok(None);
+    };
     let header = reader.header();
 
-    Some(CatalogItem {
-        id: AssetId::new(),
+    Ok(Some(CatalogItem {
+        id: crate::identity::ensure(path, file).map_err(|source| DiscoveryError::Identity {
+            clip: path.to_path_buf(),
+            source,
+        })?,
         file,
         name: name.to_owned(),
         // A single frame is a still; anything longer has a timeline.
@@ -149,7 +176,7 @@ fn read_item(path: &Path, file: u8, name: &str) -> Option<CatalogItem> {
         }),
         note: item_note(path, file),
         enabled: item_enabled(path, file),
-    })
+    }))
 }
 
 /// The clip's playing time as its index records it, in whole milliseconds.
