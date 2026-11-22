@@ -1,6 +1,29 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import resolver from "../../../../tools/artifact-paths.cjs";
+
+async function expectLeftAlignedContent(control: Locator) {
+	await expect
+		.poll(() =>
+			control.evaluate((element) => {
+				const first = element.firstChild;
+				if (!first) throw new Error("Expected visible control content");
+				const range = document.createRange();
+				range.selectNode(first);
+				const content =
+					first instanceof Element
+						? first.getBoundingClientRect()
+						: range.getBoundingClientRect();
+				const style = getComputedStyle(element);
+				const left =
+					element.getBoundingClientRect().left +
+					Number.parseFloat(style.borderLeftWidth) +
+					Number.parseFloat(style.paddingLeft);
+				return content.left - left;
+			}),
+		)
+		.toBeCloseTo(0, 0);
+}
 
 const { artifactPaths, repositoryRoot } = resolver;
 const storyIndex = JSON.parse(
@@ -3558,7 +3581,7 @@ test("button variants expose animated loading, larger icon-only controls, icons,
 		alignedSection.locator(".ui-button.is-left-aligned"),
 	).toHaveCount(6);
 	for (const button of await alignedSection.locator(".ui-button").all()) {
-		await expect(button).toHaveCSS("justify-content", "flex-start");
+		await expectLeftAlignedContent(button);
 	}
 });
 
@@ -4171,7 +4194,7 @@ test("Form stories keep inputs, scrolling, fader, pickers, grouped selections, a
 	for (const option of await grouped
 		.locator(".ui-grouped-selection-options .ui-button")
 		.all()) {
-		await expect(option).toHaveCSS("justify-content", "flex-start");
+		await expectLeftAlignedContent(option);
 		const optionBox = await option.boundingBox();
 		const contentBox = await option
 			.locator(".ui-grouped-selection-option")
@@ -4229,7 +4252,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	const numberPreview = numberModal.getByRole("textbox", {
 		name: "Fade time value",
 	});
-	await expect(numberPreview).toHaveCSS("justify-content", "flex-start");
+	await expectLeftAlignedContent(numberPreview);
 	await expect(numberPreview).toHaveCSS("text-align", "left");
 	const previewBox = await numberPreview.boundingBox();
 	const cursorLeft = numberModal.getByRole("button", {
@@ -4307,7 +4330,7 @@ test("input modal stories expose authoritative carets and literal keypad or keyb
 	expect(
 		Math.abs((leadingAfter?.x ?? 0) - (leadingBefore?.x ?? 0)),
 	).toBeLessThan(1);
-	await expect(preview).toHaveCSS("justify-content", "flex-start");
+	await expectLeftAlignedContent(preview);
 	await expect(preview).toHaveCSS("text-align", "left");
 	expect(
 		Number.parseFloat(
