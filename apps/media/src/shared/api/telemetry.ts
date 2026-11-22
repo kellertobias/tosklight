@@ -10,16 +10,21 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ApiFailure, telemetryUrl } from "./client";
-import type { AutomationAction, TelemetryFrame } from "./generated/media-wire";
+import type { AutomationAction, AutomationActionResult, TelemetryFrame } from "./generated/media-wire";
 import { newIdentity } from "./identity";
 
 /** How long to wait before dialling again. Long enough not to hammer a server that is restarting. */
 const RECONNECT_MS = 2_000;
 const liveSockets = new Set<WebSocket>();
-const pendingActions = new Map<string, { socket: WebSocket; resolve: () => void; reject: (error: ApiFailure) => void; timer: ReturnType<typeof setTimeout> }>();
+const pendingActions = new Map<string, { socket: WebSocket; resolve: (result: AutomationActionResult) => void; reject: (error: ApiFailure) => void; timer: ReturnType<typeof setTimeout> }>();
 
 /** A live action is sent once, only over a connected socket. Reconnect never replays it. */
-export function sendTelemetryAction(action: AutomationAction): Promise<void> {
+export async function sendTelemetryAction(action: AutomationAction): Promise<void> {
+	await sendTelemetryActionResult(action);
+}
+
+/** The acknowledged result for actions whose output snapshot is needed immediately. */
+export function sendTelemetryActionResult(action: AutomationAction): Promise<AutomationActionResult> {
 	const socket = [...liveSockets].find((candidate) => candidate.readyState === WebSocket.OPEN);
 	if (!socket) return Promise.reject(new ApiFailure("action-disconnected", "The live connection is unavailable. Wait for reconnection and try again.", 0));
 	const actionId = newIdentity();
@@ -88,7 +93,7 @@ export function useTelemetry(enabled = true): Telemetry {
 						const action = pendingActions.get(frame.actionId);
 						if (action?.socket === next) {
 							clearTimeout(action.timer); pendingActions.delete(frame.actionId);
-							if (frame.ok) action.resolve();
+							if (frame.ok) action.resolve(frame as AutomationActionResult);
 							else action.reject(new ApiFailure("action-refused", frame.message ?? "The scheduling action was refused.", 400));
 						}
 						return;

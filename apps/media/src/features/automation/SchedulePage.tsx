@@ -29,7 +29,7 @@ export function SchedulePage() {
 	const [actionFailure, setActionFailure] = useState<string | null>(null);
 	const selectedOutput = outputs.data?.find((output) => output.id === (playback?.selectedOutputId || outputId)) ?? outputs.data?.[0];
 	return <section className="media-page pixel-automation-page">
-		<MediaScreenHeader title="Schedule" detail="Dated and weekly playback, in the computer’s local time" actions={<Button variant="primary" disabled={!selectedOutput || !automation.data?.configuration.playlists.length} onClick={() => setSelectedId(NEW)}>New event</Button>} />
+		<MediaScreenHeader title="Schedule" detail="Dated and weekly playback, in the computer’s local time" actions={<Button size="compact" variant="primary" disabled={!selectedOutput || !automation.data?.configuration.playlists.length} onClick={() => setSelectedId(NEW)}>New event</Button>} />
 		{(editing.failure || actionFailure) && <MediaErrorToast message={editing.failure?.message ?? actionFailure ?? "Scheduling action failed"} onDismiss={() => { editing.dismiss(); setActionFailure(null); }} />}
 		<ResourceState resource={automation} subject="the schedule">{(data) => {
 			if (!selectedOutput) return <p className="media-state">Create an output in Settings before scheduling playlists.</p>;

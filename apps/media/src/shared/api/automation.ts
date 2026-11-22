@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { request } from "./client";
 import { requestId } from "./editing";
-import { type Resource, useResource } from "./resource";
+import { type Resource, useResource, writeResource } from "./resource";
 import { useTelemetry } from "./telemetry";
 
 import type {
@@ -32,6 +32,10 @@ export type AutomationView = Omit<WireAutomationView, "configuration" | "status"
 
 const BASE = "/automation";
 const KEY = "automation";
+/** Reconcile a confirmed configuration edit before selecting its newly created object. */
+export function acceptAutomationSnapshot(snapshot: AutomationView): void {
+	writeResource(KEY, snapshot);
+}
 /** Include every locally changed field, including a correction whose earlier save was refused. */
 export function changedFields<T extends object>(draft: T, saved: T): Partial<T> {
 	return Object.fromEntries(Object.keys(draft).filter((key) => key !== "id" && JSON.stringify(draft[key as keyof T]) !== JSON.stringify(saved[key as keyof T])).map((key) => [key, draft[key as keyof T]])) as Partial<T>;

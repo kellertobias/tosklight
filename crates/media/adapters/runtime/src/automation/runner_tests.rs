@@ -36,6 +36,7 @@ fn asset(
 
 fn entry(asset_id: AssetId, hold_millis: Option<u64>, fade_millis: u64) -> PlaylistEntry {
     PlaylistEntry {
+        transform: Default::default(),
         id: Playlist::default().id,
         asset_id,
         plays: 1,
@@ -394,4 +395,72 @@ fn zero_fade_video_waits_for_natural_completion_even_after_the_catalog_estimate(
     output.layers[1].source_status = SourceStatus::Completed;
     let update = runner.tick(&output, &catalog, at(501));
     assert_eq!(update.status.entry_index, Some(1));
+}
+
+#[test]
+fn steps_keep_independent_framing_through_preload_repeat_and_loop_wrap() {
+    use media_domain::playlist::PlaylistTransform;
+    let mut catalog = CatalogSnapshot::default();
+    let first = asset(&mut catalog, 1, ItemKind::Image, None);
+    let second = asset(&mut catalog, 2, ItemKind::Image, None);
+    let transform = PlaylistTransform {
+        scale_x: 0.4,
+        scale_y: 0.7,
+        position_x: -0.3,
+        position_y: 0.2,
+        rotation: 90.0,
+    };
+    let mut first_entry = entry(first, Some(100), 0);
+    first_entry.transform = transform;
+    first_entry.plays = 2;
+    let playlist = Playlist {
+        entries: vec![first_entry, entry(second, Some(100), 0)],
+        ..Default::default()
+    };
+    let mut output = output();
+    let mut runner = begin(playlist, &mut output, &catalog, true);
+    let frame = |output: &OutputState, layer: usize| PlaylistTransform {
+        scale_x: output.layers[layer].scale_x,
+        scale_y: output.layers[layer].scale_y,
+        position_x: output.layers[layer].position_x,
+        position_y: output.layers[layer].position_y,
+        rotation: output.layers[layer].rotation,
+    };
+    assert_eq!(frame(&output, 1), transform);
+    // Loading the inactive layer explicitly resets all five values to this entry's homes.
+    output.layers[2].scale_x = 9.0;
+    output.layers[2].scale_y = 0.2;
+    output.layers[2].position_x = 1.0;
+    output.layers[2].position_y = -1.0;
+    output.layers[2].rotation = -120.0;
+    let update = runner.tick(&output, &catalog, at(101));
+    assert_eq!(update.status.play, 2);
+    submit(&mut output, &update, 101);
+    assert_eq!(
+        frame(&output, 1),
+        transform,
+        "the same clip's next play keeps its authored frame"
+    );
+    ready(&mut output, 1);
+    let update = runner.tick(&output, &catalog, at(102));
+    submit(&mut output, &update, 102);
+    assert_eq!(frame(&output, 2), PlaylistTransform::default());
+    ready(&mut output, 2);
+    let update = runner.tick(&output, &catalog, at(202));
+    submit(&mut output, &update, 202);
+    assert_eq!(update.status.entry_index, Some(1));
+    assert_eq!(frame(&output, 2), PlaylistTransform::default());
+    ready(&mut output, 2);
+    let update = runner.tick(&output, &catalog, at(203));
+    submit(&mut output, &update, 203);
+    assert_eq!(
+        frame(&output, 1),
+        transform,
+        "wrap preloads the first entry's authored frame"
+    );
+    ready(&mut output, 1);
+    let update = runner.tick(&output, &catalog, at(302));
+    submit(&mut output, &update, 302);
+    assert_eq!(update.status.entry_index, Some(0));
+    assert_eq!(frame(&output, 1), transform);
 }

@@ -113,7 +113,7 @@ async function write(control: LayerControl, output: OutputView, writes: PreviewW
 export interface LibraryPreview {
 	/** The output preview is on, or null while it is off. */
 	outputId: string | null;
-	setEnabled: (enabled: boolean) => Promise<void>;
+	setEnabled: (enabled: boolean, freshOutput?: OutputView) => Promise<void>;
 	/** Shows a target on the preview layer; does nothing while preview is off. */
 	show: (target: PreviewTarget) => Promise<void>;
 }
@@ -145,9 +145,9 @@ export function useLibraryPreview(
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: `current` reads the latest outputs from a ref.
 	const setEnabled = useCallback(
-		async (enabled: boolean) => {
+		async (enabled: boolean, freshOutput?: OutputView) => {
 			if (enabled) {
-				const output = current(selectedOutputId);
+				const output = freshOutput ?? current(selectedOutputId);
 				if (!output || before || enabling.current) return;
 				enabling.current = true;
 				try {

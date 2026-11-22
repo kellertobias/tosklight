@@ -34,6 +34,7 @@ mod output_effects;
 mod output_ownership_tests;
 mod outputs;
 mod playback;
+mod playlist_preview;
 pub mod snapshot;
 mod telemetry;
 mod text;
@@ -367,6 +368,14 @@ fn library_router(upload_body_limit: usize) -> Router<ApiState> {
 
 fn automation_router() -> Router<ApiState> {
     Router::new()
+        .route(
+            "/api/v2/automation/preview-step",
+            post(playlist_preview::show),
+        )
+        .route(
+            "/api/v2/automation/preview-stop",
+            post(playlist_preview::stop),
+        )
         .route("/api/v2/automation", get(automation::automation))
         .route(
             "/api/v2/automation/playlists/create",

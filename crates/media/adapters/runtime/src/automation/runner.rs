@@ -644,7 +644,7 @@ impl PlaylistRunner {
             play_mode: PlayMode::Stop,
             dimmer: 0.0,
             volume: 0.0,
-            ..Default::default()
+            ..self.playlist.entries[index].transform.layer_preset()
         }
         .controls(address);
         commands.push(CommandKind::SetLayerControls {

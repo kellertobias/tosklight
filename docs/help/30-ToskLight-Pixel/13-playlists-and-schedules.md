@@ -10,6 +10,13 @@ Use **Move up** and **Move down** to arrange them. **Plays** is the total number
 `1` plays the clip once and `3` plays it three times before advancing.
 Still images need an **Image duration** for each pass.
 
+Each clip has its own **Frame** controls. Set **scale X** and **scale Y** independently,
+move it with **position X** and **position Y**, and set its **rotation (°)**.
+Scale is a multiplier: `1` is the original size and `0.5` is half size.
+Position `0` is centred. **Reset frame** restores that clip to scale `1`, position `0`
+and rotation `0°`, without changing the other clips. The saved frame applies on every play,
+including repeats and playlist loops.
+
 Set **Fade to next** on each clip to choose the transition duration in seconds. Zero makes a cut.
 The last clip's fade also applies when the playlist loops back to its first clip.
 **Default fade** supplies the initial value for newly added clips.
@@ -33,6 +40,23 @@ it does not silently select the new occupant of its former address.
 Pixel keeps each file's identity in its dotted library metadata. Keep these files when copying
 the library. If an existing clip has no saved identity, Pixel writes one before publishing it.
 An unwritable or damaged identity file produces an actionable startup error and preserves the original.
+
+## Preview a step on the output
+
+Choose the **Preview output**, then press **Preview step** on any clip.
+Pixel takes over that output and shows the selected step with its saved frame, the playlist's
+other layers, and its Master dimmer and volume. The selected clip loops for inspection;
+preview does not advance to the following step or run a scheduled event.
+The active clip is marked **Previewing**. Changing its frame updates the output while it plays.
+
+Use **Stop preview** to restore the previous composition. Switching output or leaving Playlists
+also ends preview. Pixel restores only a preview it still owns; newer desk or operator control
+is never overwritten. If takeover was already enabled, it stays enabled after preview.
+Otherwise stopping preview releases takeover so scheduling or incoming DMX can resume.
+
+If the browser closes before its cleanup reaches Pixel, takeover can remain active.
+Reopen Pixel and release **Take over playback** to return control.
+Playlists saved before per-clip framing was added open with their original size and placement.
 
 ## Schedule an event
 

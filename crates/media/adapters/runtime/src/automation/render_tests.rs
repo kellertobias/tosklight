@@ -3,7 +3,9 @@
 //! disk I/O are outside these bounded transition cases.
 
 use media_domain::geometry::Size;
-use media_domain::playlist::{AuxiliaryLayer, AuxiliaryMode, LayerPreset, Playlist, PlaylistEntry};
+use media_domain::playlist::{
+    AuxiliaryLayer, AuxiliaryMode, LayerPreset, Playlist, PlaylistEntry, PlaylistTransform,
+};
 use media_domain::{
     AssetId, CatalogItem, CatalogSnapshot, Command, CommandKind, CommandSource, ItemKind,
     LayerPersonality, MediaState, OutputId, OutputState, PresentationMode, SourceStatus, Timestamp,
@@ -77,6 +79,10 @@ fn submit(state: &mut MediaState, commands: Vec<CommandKind>, now: u64) {
 
 impl RenderBench {
     fn new(alpha: u8, fade_millis: u64) -> Self {
+        Self::with_transforms(alpha, fade_millis, [PlaylistTransform::default(); 2])
+    }
+
+    fn with_transforms(alpha: u8, fade_millis: u64, transforms: [PlaylistTransform; 2]) -> Self {
         let gpu = Gpu::off_screen().expect("playlist rendering requires a GPU or software adapter");
         let output = OutputId::new();
         let renderer =
@@ -117,7 +123,9 @@ impl RenderBench {
         let playlist = Playlist {
             entries: ids[..2]
                 .iter()
-                .map(|id| PlaylistEntry {
+                .enumerate()
+                .map(|(index, id)| PlaylistEntry {
+                    transform: transforms[index],
                     id: Playlist::default().id,
                     asset_id: *id,
                     plays: 1,
@@ -301,4 +309,50 @@ fn rendered_zero_duration_transitions_cut_to_each_next_clip_without_overlay_rese
         let offset = ((4 * SIZE.width + 10) * 4) as usize;
         assert_eq!(&image[offset..offset + 3], &color);
     }
+}
+
+#[test]
+fn rendered_step_framing_scales_moves_rotates_and_resets_without_moving_fixed_content() {
+    let frame = PlaylistTransform {
+        scale_x: 0.5,
+        scale_y: 1.0,
+        position_x: -0.5,
+        position_y: 0.0,
+        rotation: 180.0,
+    };
+    let mut bench = RenderBench::with_transforms(255, 0, [frame, PlaylistTransform::default()]);
+    let at_pixel = |image: &[u8], x: u32| {
+        let offset = ((4 * SIZE.width + x) * 4) as usize;
+        image[offset..offset + 3].to_vec()
+    };
+    let first = bench.render(2);
+    assert_eq!(
+        at_pixel(&first, 2),
+        [255, 0, 0],
+        "180-degree rotation puts the source's red half at the left"
+    );
+    assert_eq!(
+        at_pixel(&first, 10),
+        [0, 0, 0],
+        "half-width shifted step leaves the right side empty"
+    );
+    assert_eq!(
+        at_pixel(&first, 14),
+        [0, 255, 0],
+        "fixed content keeps its own full-output geometry"
+    );
+    assert_eq!(bench.tick(101).entry_index, Some(1));
+    let next = bench.render(101);
+    assert_eq!(
+        at_pixel(&next, 10),
+        [0, 0, 255],
+        "next entry's identity frame covers the whole output"
+    );
+    bench.tick(102);
+    assert_eq!(bench.tick(201).entry_index, Some(0));
+    let wrapped = bench.render(201);
+    assert_eq!(at_pixel(&wrapped, 2), [255, 0, 0]);
+    assert_eq!(at_pixel(&wrapped, 10), [0, 0, 0]);
+    assert_eq!(at_pixel(&wrapped, 14), [0, 255, 0]);
+    bench.assert_overlay_unchanged();
 }

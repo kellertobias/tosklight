@@ -16,6 +16,7 @@ pub mod data_folder;
 pub mod diagnostics;
 pub mod error;
 pub mod generation;
+pub mod playlist_preview;
 pub mod replay;
 pub mod routes;
 pub mod tolerant;

@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use media_domain::{LayerPersonality, OutputId, OutputName};
 
 /// The version this build writes.
-pub const CURRENT_VERSION: u32 = 11;
+pub const CURRENT_VERSION: u32 = 12;
 
 /// Why a stored document cannot be brought forward.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -65,11 +65,34 @@ pub fn migrate_to_current(document: Value) -> Result<Value, MigrationError> {
             8 => Ok(with_slice_grid_preset(current)),
             9 => Ok(without_galaxy_simulator(current)),
             10 => Ok(with_automation(current)),
+            11 => Ok(with_playlist_transforms(current)),
             other => unreachable!("no migration is registered for version {other}"),
         }?;
         version += 1;
     }
     Ok(current)
+}
+
+/// Version 11 → 12: existing steps retain their identity framing and stable media IDs.
+fn with_playlist_transforms(mut document: Value) -> Value {
+    if let Some(playlists) = document
+        .pointer_mut("/configuration/automation/playlists")
+        .and_then(Value::as_array_mut)
+    {
+        for playlist in playlists {
+            if let Some(entries) = playlist.get_mut("entries").and_then(Value::as_array_mut) {
+                for entry in entries {
+                    if let Some(entry) = entry.as_object_mut() {
+                        entry.entry("transform").or_insert_with(|| json!({
+                            "scaleX": 1.0, "scaleY": 1.0, "positionX": 0.0, "positionY": 0.0, "rotation": 0.0
+                        }));
+                    }
+                }
+            }
+        }
+    }
+    document["version"] = json!(12);
+    document
 }
 
 fn with_automation(mut document: Value) -> Value {
@@ -502,7 +525,7 @@ mod tests {
             !written.contains("personalityVersion"),
             "there is one personality, so nothing records which one"
         );
-        assert!(written.contains("\"version\": 11"));
+        assert!(written.contains("\"version\": 12"));
         assert!(
             !written.contains("personalityLayout"),
             "there is one channel layout, so nothing records which one"
@@ -692,8 +715,8 @@ mod tests {
     #[test]
     fn a_current_document_is_left_alone() {
         assert_eq!(
-            CURRENT_VERSION, 11,
-            "documents with playlist automation are version 11"
+            CURRENT_VERSION, 12,
+            "documents with playlist transforms are version 12"
         );
         let document = json!({ "version": CURRENT_VERSION, "configuration": { "outputs": [] } });
         assert_eq!(migrate_to_current(document.clone()).unwrap(), document);

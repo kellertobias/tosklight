@@ -4,36 +4,130 @@ import { ModalProvider } from "@tosklight/ui/modals";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../../app/ToastContext";
 import { automationApi, type AutomationView, type Playlist } from "../../shared/api/automation";
+import { ApiFailure } from "../../shared/api/client";
+import type { useOptionalPlaylistStepPreview } from "../../operator/PlaybackTakeoverContext";
 import { resetResources } from "../../shared/api/resource";
 import { sendTelemetryAction } from "../../shared/api/telemetry";
 import { emptyPlaylist, PlaylistsPage } from "./PlaylistsPage";
 import { SchedulePage } from "./SchedulePage";
+import { DEFAULT_PLAYLIST_TRANSFORM } from "./playlistTransform";
+
+let stepPreview: ReturnType<typeof useOptionalPlaylistStepPreview> = null;
+let previewSourceState = "ready";
+const selectPreviewOutput = vi.fn();
+vi.mock("../../operator/PlaybackTakeoverContext", () => ({
+	useOptionalPlaybackTakeover: () => ({ selectedOutputId: "main", selectOutput: selectPreviewOutput }),
+	useOptionalPlaylistStepPreview: () => stepPreview,
+}));
 
 vi.mock("../../shared/api/telemetry", () => ({ useTelemetry: () => ({ frame: undefined, connected: true }), sendTelemetryAction: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../../shared/api/queries", () => ({
 	useCatalog: () => ({ data: { revision: 1, itemCount: 2, folders: [{ folder: 1, name: "Marketing", items: [{ id: "asset-image", file: 1, name: "Opening hours", kind: "image", enabled: true, width: 1920, height: 1080 }, { id: "asset-video", file: 2, name: "Venue film", kind: "video", enabled: true, width: 1920, height: 1080 }] }] } }),
-	useOutputs: () => ({ data: [{ id: "main", name: "Main", layerCount: 8 }] }),
+	useOutputs: () => ({ data: [{ id: "main", name: "Main", layerCount: 8, layers: Array.from({ length: 8 }, () => ({ sourceStatus: { state: previewSourceState, failure: previewSourceState === "failed" ? "Media file is missing." : null } })) }] }),
 	useEffects: () => ({ data: [] }), useModels: () => ({ data: [] }),
 }));
 
 let view: AutomationView;
 const playlist = (): Playlist => ({ ...emptyPlaylist(), id: "playlist-1", name: "Lobby", enabled: true, entries: [
-	{ id: "entry-1", assetId: "asset-image", plays: 1, holdMillis: 10000, fadeMillis: 1000 },
-	{ id: "entry-2", assetId: "asset-video", plays: 2, holdMillis: null, fadeMillis: 500 },
+	{ id: "entry-1", assetId: "asset-image", plays: 1, holdMillis: 10000, fadeMillis: 1000, transform: { ...DEFAULT_PLAYLIST_TRANSFORM } },
+	{ id: "entry-2", assetId: "asset-video", plays: 2, holdMillis: null, fadeMillis: 500, transform: { ...DEFAULT_PLAYLIST_TRANSFORM } },
 ] });
 function mount(page: React.ReactNode) { return render(<ModalProvider><ToastProvider>{page}</ToastProvider></ModalProvider>); }
 
 beforeEach(() => {
+	stepPreview = null;
+	previewSourceState = "ready";
+	selectPreviewOutput.mockClear();
 	resetResources();
 	view = { automationRevision: 1, configuration: { playlists: [playlist()], events: [], outputs: [{ outputId: "main", enabled: false, fallbackPlaylistId: null, dmxSilenceSeconds: 10 }] }, timeZone: "Europe/Berlin", status: [{ outputId: "main", owner: "disabled", playlistId: null, eventId: null, playlistName: null, entryIndex: null, play: 0, phase: "idle", error: null, dmxAgeMillis: null, resumeInMillis: null, lastOccurrenceOutcome: null, lastOccurrenceName: null }], upcoming: [] };
 	vi.spyOn(automationApi, "read").mockImplementation(async () => structuredClone(view));
 	vi.spyOn(automationApi, "updatePlaylist").mockImplementation(async (id, change) => { Object.assign(view.configuration.playlists.find((playlist) => playlist.id === id)!, change); return structuredClone(view); });
 	vi.spyOn(automationApi, "updateOutput").mockImplementation(async (id, change) => { Object.assign(view.configuration.outputs.find((output) => output.outputId === id)!, change); return structuredClone(view); });
 	vi.spyOn(automationApi, "createEvent").mockImplementation(async (event) => { view.configuration.events.push({ ...event, id: "event-new" }); return structuredClone(view); });
+	vi.spyOn(automationApi, "createPlaylist").mockImplementation(async (value) => { view.configuration.playlists.push({ ...value, id: "playlist-new" }); return structuredClone(view); });
 });
 afterEach(() => { vi.restoreAllMocks(); vi.mocked(sendTelemetryAction).mockClear(); });
 
 describe("Pixel playlist editing", () => {
+	it("waits for the first read and selects its confirmed created draft before a slow refresh", async () => {
+		let resolveFirstRead!: (value: AutomationView) => void;
+		let resolveRefresh!: (value: AutomationView) => void;
+		vi.mocked(automationApi.read).mockImplementationOnce(() => new Promise((resolve) => { resolveFirstRead = resolve; }))
+			.mockImplementationOnce(() => new Promise((resolve) => { resolveRefresh = resolve; }));
+		vi.mocked(automationApi.createPlaylist).mockImplementation(async (value) => {
+			view.configuration.playlists.push({ ...emptyPlaylist(), id: "other-browser", name: "Another browser's draft" }, { ...value, id: "playlist-new" });
+			return structuredClone(view);
+		});
+		mount(<PlaylistsPage />);
+		expect(screen.getByRole("button", { name: "New playlist" })).toBeDisabled();
+		await act(async () => resolveFirstRead(structuredClone(view)));
+		await screen.findByRole("article", { name: "Edit Lobby" });
+		await userEvent.click(screen.getByRole("button", { name: "New playlist" }));
+		await screen.findByRole("article", { name: "Edit New playlist" });
+		expect(screen.queryByRole("article", { name: "Edit Another browser's draft" })).not.toBeInTheDocument();
+		expect(screen.getByLabelText("Playlist enabled", { exact: true })).not.toBeChecked();
+		expect(screen.getByRole("button", { name: "New playlist" })).toBeDisabled();
+		expect(automationApi.createPlaylist).toHaveBeenCalledTimes(1);
+		await act(async () => resolveRefresh(structuredClone(view)));
+		await waitFor(() => expect(screen.getByRole("button", { name: "New playlist" })).toBeEnabled());
+	});
+
+	it("shows a create refusal and retains the current playlist", async () => {
+		vi.mocked(automationApi.createPlaylist).mockRejectedValue(new ApiFailure("configuration-not-written", "The playlist configuration is read-only.", 500));
+		mount(<PlaylistsPage />);
+		await screen.findByRole("article", { name: "Edit Lobby" });
+		await userEvent.click(screen.getByRole("button", { name: "New playlist" }));
+		await screen.findByText("The playlist configuration is read-only.");
+		expect(screen.getByRole("article", { name: "Edit Lobby" })).toBeVisible();
+		expect(view.configuration.playlists).toHaveLength(1);
+	});
+
+	it("stores independent step framing and resets only the selected step's frame", async () => {
+		mount(<PlaylistsPage />);
+		await screen.findByRole("article", { name: "Edit Lobby" });
+		for (const [label, value] of [["scale X", "1.35"], ["scale Y", "0.7"], ["position X", "-0.4"], ["position Y", "0.25"], ["rotation (°)", "30"]]) {
+			fireEvent.change(screen.getByLabelText(`Clip 1 ${label}`, { exact: true }), { target: { value } });
+		}
+		await waitFor(() => expect(view.configuration.playlists[0].entries[0].transform).toEqual({ scaleX: 1.35, scaleY: 0.7, positionX: -0.4, positionY: 0.25, rotation: 30 }));
+		expect(view.configuration.playlists[0].entries[1].transform).toEqual(DEFAULT_PLAYLIST_TRANSFORM);
+		await userEvent.click(screen.getByRole("button", { name: "Reset clip 1 frame" }));
+		await waitFor(() => expect(view.configuration.playlists[0].entries[0].transform).toEqual(DEFAULT_PLAYLIST_TRANSFORM));
+		expect(view.configuration.playlists[0].entries[1].plays).toBe(2);
+	});
+
+	it("previews the chosen step, updates that active frame and exposes Stop", async () => {
+		const show = vi.fn().mockResolvedValue(undefined);
+		const stop = vi.fn().mockResolvedValue(undefined);
+		stepPreview = { active: null, busy: false, failure: undefined, show, stop, dismissFailure: vi.fn() };
+		const mounted = mount(<PlaylistsPage />);
+		await screen.findByRole("article", { name: "Edit Lobby" });
+		await userEvent.click(screen.getByRole("button", { name: "Preview clip 2" }));
+		expect(show).toHaveBeenCalledWith(expect.objectContaining({ id: "playlist-1" }), "entry-2");
+		stepPreview = { ...stepPreview, active: { outputId: "main", playlistId: "playlist-1", entryId: "entry-2", previewId: "preview-1" } };
+		mounted.rerender(<ModalProvider><ToastProvider><PlaylistsPage /></ToastProvider></ModalProvider>);
+		expect(screen.getByText("Previewing Lobby · Step 2")).toBeVisible();
+		expect(screen.getByRole("img", { name: "Live playlist step preview on Main" })).toHaveAttribute("src", expect.stringContaining("/outputs/main/preview"));
+		previewSourceState = "loading";
+		mounted.rerender(<ModalProvider><ToastProvider><PlaylistsPage /></ToastProvider></ModalProvider>);
+		expect(screen.getByText("Loading clip…")).toBeVisible();
+		previewSourceState = "failed";
+		mounted.rerender(<ModalProvider><ToastProvider><PlaylistsPage /></ToastProvider></ModalProvider>);
+		expect(screen.getByRole("alert")).toHaveTextContent("Media file is missing.");
+		await userEvent.click(screen.getByRole("button", { name: "Retry step" }));
+		expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ id: "playlist-1" }), "entry-2");
+		fireEvent.change(screen.getByLabelText("Clip 2 rotation (°)", { exact: true }), { target: { value: "-45" } });
+		await waitFor(() => expect(show).toHaveBeenLastCalledWith(expect.objectContaining({ entries: expect.arrayContaining([expect.objectContaining({ id: "entry-2", transform: expect.objectContaining({ rotation: -45 }) })]) }), "entry-2"));
+		await userEvent.click(screen.getByRole("button", { name: "Stop preview" }));
+		expect(stop).toHaveBeenCalledTimes(1);
+		stepPreview = { ...stepPreview, active: null, failure: new ApiFailure("preview-stop-failed", "Could not restore the output. Retry Stop preview.", 503), needsHandoff: () => true };
+		mounted.rerender(<ModalProvider><ToastProvider><PlaylistsPage /></ToastProvider></ModalProvider>);
+		expect(screen.getByRole("button", { name: "Stop preview" })).toBeEnabled();
+		await userEvent.click(screen.getByRole("button", { name: "Stop preview" }));
+		expect(stop).toHaveBeenCalledTimes(2);
+		stepPreview = { ...stepPreview, failure: undefined, needsHandoff: () => false };
+		mounted.rerender(<ModalProvider><ToastProvider><PlaylistsPage /></ToastProvider></ModalProvider>);
+		expect(screen.getByRole("button", { name: "Stop preview" })).toBeDisabled();
+	});
 	it("keeps invalid edits visibly unsaved and stores all corrections together", async () => {
 		mount(<PlaylistsPage />);
 		await screen.findByRole("article", { name: "Edit Lobby" });

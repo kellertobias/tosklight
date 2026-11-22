@@ -259,6 +259,7 @@ mod tests {
             id,
             priority,
             entries: vec![PlaylistEntry {
+                transform: Default::default(),
                 id: Uuid::new_v4(),
                 asset_id: AssetId::new(),
                 plays: 1,

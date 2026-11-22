@@ -83,6 +83,7 @@ fn validate_playlist(playlist: &Playlist) -> Result<(), String> {
     }
     let mut entries = HashSet::new();
     for entry in &playlist.entries {
+        entry.transform.validate()?;
         if entry.id.is_nil() || !entries.insert(entry.id) {
             return Err(
                 "playlist entry IDs must be nonempty and unique within their playlist".into(),
@@ -204,6 +205,7 @@ mod tests {
         let mut configuration = MediaConfiguration::default();
         let playlist = Playlist {
             entries: vec![PlaylistEntry {
+                transform: Default::default(),
                 id: Uuid::new_v4(),
                 asset_id: AssetId::new(),
                 plays: 1,
@@ -285,6 +287,52 @@ mod tests {
             validate_automation(&configuration)
                 .unwrap_err()
                 .contains("fadeMillis")
+        );
+    }
+
+    #[test]
+    fn version_eleven_entries_migrate_without_changing_identity_or_framing() {
+        let configuration = authored();
+        let mut value: serde_json::Value =
+            serde_json::from_str(&super::super::save(&configuration)).unwrap();
+        value["version"] = serde_json::json!(11);
+        let entry = &mut value["configuration"]["automation"]["playlists"][0]["entries"][0];
+        entry.as_object_mut().unwrap().remove("transform");
+        entry["futureAuthoringNote"] = serde_json::json!("retained");
+        let migrated = super::super::migration::migrate_to_current(value).unwrap();
+        let migrated_entry = &migrated["configuration"]["automation"]["playlists"][0]["entries"][0];
+        assert_eq!(migrated_entry["futureAuthoringNote"], "retained");
+        assert_eq!(migrated_entry["transform"]["scaleX"], 1.0);
+        assert_eq!(migrated_entry["transform"]["rotation"], 0.0);
+        assert_eq!(migrated["version"], 12);
+        assert_eq!(
+            super::super::load(&migrated.to_string()).unwrap(),
+            configuration
+        );
+    }
+
+    #[test]
+    fn authored_step_framing_round_trips_and_invalid_ranges_are_refused() {
+        let mut configuration = authored();
+        let transform = media_domain::playlist::PlaylistTransform {
+            scale_x: 0.6,
+            scale_y: 0.8,
+            position_x: -0.4,
+            position_y: 0.2,
+            rotation: -45.0,
+        };
+        configuration.automation.playlists[0].entries[0].transform = transform;
+        assert_eq!(
+            super::super::load(&super::super::save(&configuration)).unwrap(),
+            configuration
+        );
+        configuration.automation.playlists[0].entries[0]
+            .transform
+            .position_y = 2.1;
+        assert!(
+            validate_automation(&configuration)
+                .unwrap_err()
+                .contains("positionY")
         );
     }
 

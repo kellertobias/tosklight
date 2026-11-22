@@ -3,6 +3,7 @@ import {
 	createContext,
 	type ReactNode,
 	useContext,
+	useRef,
 	useEffect,
 	useMemo,
 	useState,
@@ -16,6 +17,8 @@ import {
 	useOutputsForControl,
 } from "../shared/api/layerControl";
 import type { Resource } from "../shared/api/resource";
+import { api } from "../shared/api/client";
+import { type PlaylistStepPreview, usePlaylistStepPreview } from "./usePlaylistStepPreview";
 import { type LibraryPreview, type PreviewTarget, useLibraryPreview } from "./libraryPreview";
 
 interface PlaybackTakeoverValue {
@@ -24,6 +27,7 @@ interface PlaybackTakeoverValue {
 	selectedOutputId: string;
 	selectOutput: (outputId: string) => void;
 	preview: LibraryPreview;
+	playlistPreview: PlaylistStepPreview;
 }
 
 const PlaybackTakeoverContext = createContext<PlaybackTakeoverValue | null>(
@@ -36,10 +40,27 @@ export function PlaybackTakeoverProvider({
 	children: ReactNode;
 }) {
 	const outputs = useOutputsForControl();
-	const control = useLayerControl();
+	const rawControl = useLayerControl();
 	const [selectedOutputId, selectOutput] = useState("");
-	const preview = useLibraryPreview(outputs.data, control, selectedOutputId);
+	const rawPreview = useLibraryPreview(outputs.data, rawControl, selectedOutputId);
+	const playlistPreview = usePlaylistStepPreview(outputs, selectedOutputId, rawPreview);
+	const stopPlaylist = playlistPreview.stop;
+	const needsHandoff = playlistPreview.needsHandoff;
+	const preview = useMemo<LibraryPreview>(() => ({ ...rawPreview, setEnabled: async enabled => {
+		if (enabled && (needsHandoff?.() ?? true)) {
+			await stopPlaylist();
+			const fresh = (await api.outputs()).find(output => output.id === selectedOutputId);
+			await rawPreview.setEnabled(true, fresh);
+		} else await rawPreview.setEnabled(enabled);
+	} }), [rawPreview, stopPlaylist, selectedOutputId, needsHandoff]);
+	const control = useMemo<LayerControl>(() => ({ ...rawControl, setTakeover: async (output, takeOver, expected) => {
+		if (!(needsHandoff?.() ?? true)) return rawControl.setTakeover(output, takeOver, expected);
+		await stopPlaylist();
+		const fresh = (await api.outputs()).find(each => each.id === output.id) ?? output;
+		return rawControl.setTakeover(fresh, takeOver, expected === undefined ? undefined : fresh.ownershipGeneration);
+	} }), [rawControl, stopPlaylist, needsHandoff]);
 	useFailureToast(control.refusal);
+	useFailureToast(playlistPreview.failure);
 
 	useEffect(() => {
 		const available = outputs.data ?? [];
@@ -48,8 +69,8 @@ export function PlaybackTakeoverProvider({
 	}, [outputs.data, selectedOutputId]);
 
 	const value = useMemo(
-		() => ({ outputs, control, selectedOutputId, selectOutput, preview }),
-		[outputs, control, selectedOutputId, preview],
+		() => ({ outputs, control, selectedOutputId, selectOutput, preview, playlistPreview }),
+		[outputs, control, selectedOutputId, preview, playlistPreview],
 	);
 	return (
 		<PlaybackTakeoverContext.Provider value={value}>
@@ -101,6 +122,15 @@ export function usePlaybackTakeover(): PlaybackTakeoverValue {
 /** Pages with their own output picker keep the dock pointed at that same output. */
 export function useOptionalPlaybackTakeover(): PlaybackTakeoverValue | null {
 	return useContext(PlaybackTakeoverContext);
+}
+
+/** Leaving the playlist editor stops its temporary output audition. */
+export function useOptionalPlaylistStepPreview(): PlaylistStepPreview | null {
+	const value = useContext(PlaybackTakeoverContext)?.playlistPreview ?? null;
+	const current = useRef(value);
+	current.current = value;
+	useEffect(() => () => { void current.current?.stop().catch(() => undefined); }, []);
+	return value;
 }
 
 /** The Library's preview, or null outside the provider (feature tests and stories). */

@@ -24,6 +24,7 @@ import {
 } from "../operator/MediaServerSurface";
 import { useHealth } from "../shared/api/queries";
 import { useTelemetry } from "../shared/api/telemetry";
+import { usePreviewNavigation } from "../operator/usePreviewNavigation";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { ROUTES, type RoutePath } from "./routes";
 import { ToastProvider } from "./ToastContext";
@@ -111,7 +112,8 @@ function AppSurface() {
 			: path === "/text"
 				? "text"
 				: "media";
-	const { preview } = usePlaybackTakeover();
+	const { preview, playlistPreview } = usePlaybackTakeover();
+	const leaving = usePreviewNavigation(playlistPreview.stop, navigate);
 	// Preview belongs to the Library: leaving it puts the output back as it was.
 	// Moving between previewing pages keeps preview on; any other page turns it off.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: only a change of page turns it off.
@@ -136,11 +138,12 @@ function AppSurface() {
 				const route = ROUTES.find(
 					(candidate) => SECTION_BY_PATH[candidate.path] === section,
 				);
-				if (route) navigate(route.path);
+				if (route) void leaving.navigate(route.path);
 			}}
 		>
 			<DeskIdentityProvider showName={showName}>
-				<div ref={headingRef} tabIndex={-1} className="media-route-surface">
+				{leaving.stopping && <p role="status">Stopping playlist preview…</p>}
+				<div ref={headingRef} tabIndex={-1} className="media-route-surface" inert={leaving.stopping} aria-busy={leaving.stopping}>
 					<ErrorBoundary key={path}>
 						{pageOwnsWindow ? (
 							path === "/library" ||

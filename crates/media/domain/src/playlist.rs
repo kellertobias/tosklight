@@ -65,7 +65,7 @@ impl Default for Playlist {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaylistEntry {
     pub id: Uuid,
@@ -76,6 +76,62 @@ pub struct PlaylistEntry {
     pub hold_millis: Option<u64>,
     #[serde(default)]
     pub fade_millis: u64,
+    #[serde(default)]
+    pub transform: PlaylistTransform,
+}
+
+/// Framing authored independently for one playlist step, in ordinary layer-control units.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlaylistTransform {
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub position_x: f32,
+    pub position_y: f32,
+    pub rotation: f32,
+}
+
+impl Default for PlaylistTransform {
+    fn default() -> Self {
+        Self {
+            scale_x: 1.0,
+            scale_y: 1.0,
+            position_x: 0.0,
+            position_y: 0.0,
+            rotation: 0.0,
+        }
+    }
+}
+
+impl PlaylistTransform {
+    pub fn validate(&self) -> Result<(), String> {
+        for (name, value, minimum, maximum) in [
+            ("scaleX", self.scale_x, 0.0, 10.0),
+            ("scaleY", self.scale_y, 0.0, 10.0),
+            ("positionX", self.position_x, -2.0, 2.0),
+            ("positionY", self.position_y, -2.0, 2.0),
+            ("rotation", self.rotation, -360.0, 360.0),
+        ] {
+            if !value.is_finite() || !(minimum..=maximum).contains(&value) {
+                return Err(format!(
+                    "{name} must be finite and between {minimum} and {maximum}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Shared by autonomous playback and step preview so their framing is identical.
+    pub fn layer_preset(&self) -> LayerPreset {
+        LayerPreset {
+            scale_x: self.scale_x,
+            scale_y: self.scale_y,
+            position_x: self.position_x,
+            position_y: self.position_y,
+            rotation: self.rotation,
+            ..LayerPreset::default()
+        }
+    }
 }
 
 const fn one() -> u32 {
@@ -281,6 +337,78 @@ mod tests {
         let restored: Playlist =
             serde_json::from_str(&serde_json::to_string(&playlist).unwrap()).unwrap();
         assert_eq!(restored, playlist);
+    }
+
+    #[test]
+    fn legacy_entries_and_partial_transform_values_keep_identity_homes() {
+        let id = Uuid::new_v4();
+        let asset = AssetId::new();
+        let mut value = serde_json::json!({"id":id,"assetId":asset,"plays":2,"fadeMillis":500});
+        let legacy: PlaylistEntry = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(legacy.transform, PlaylistTransform::default());
+        value["transform"] = serde_json::json!({"rotation":90.0});
+        let partial: PlaylistEntry = serde_json::from_value(value).unwrap();
+        assert_eq!(partial.transform.scale_x, 1.0);
+        assert_eq!(partial.transform.scale_y, 1.0);
+        assert_eq!(partial.transform.rotation, 90.0);
+        assert_eq!(partial.id, id);
+        assert_eq!(partial.asset_id, asset);
+    }
+
+    #[test]
+    fn step_framing_becomes_regular_layer_controls_and_rejects_invalid_values() {
+        let transform = PlaylistTransform {
+            scale_x: 0.4,
+            scale_y: 0.7,
+            position_x: -0.2,
+            position_y: 0.3,
+            rotation: 90.0,
+        };
+        transform.validate().unwrap();
+        let controls = transform.layer_preset().controls(MediaAddress::new(1, 2));
+        assert_eq!((controls.scale_x, controls.scale_y), (Some(0.4), Some(0.7)));
+        assert_eq!(
+            (controls.position_x, controls.position_y),
+            (Some(-0.2), Some(0.3))
+        );
+        assert_eq!(controls.rotation, Some(90.0));
+        PlaylistTransform {
+            scale_x: 0.0,
+            scale_y: 10.0,
+            position_x: -2.0,
+            position_y: 2.0,
+            rotation: 360.0,
+        }
+        .validate()
+        .unwrap();
+        for bad in [
+            PlaylistTransform {
+                scale_x: -0.1,
+                ..Default::default()
+            },
+            PlaylistTransform {
+                scale_y: 10.1,
+                ..Default::default()
+            },
+            PlaylistTransform {
+                position_x: -2.1,
+                ..Default::default()
+            },
+            PlaylistTransform {
+                position_y: 2.1,
+                ..Default::default()
+            },
+            PlaylistTransform {
+                rotation: 361.0,
+                ..Default::default()
+            },
+            PlaylistTransform {
+                rotation: f32::NAN,
+                ..Default::default()
+            },
+        ] {
+            assert!(bad.validate().is_err(), "{bad:?}");
+        }
     }
 
     #[test]

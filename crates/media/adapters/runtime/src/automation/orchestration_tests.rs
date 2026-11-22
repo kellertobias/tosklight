@@ -43,6 +43,7 @@ impl Bench {
             .unwrap();
         let playlist = Playlist {
             entries: vec![PlaylistEntry {
+                transform: Default::default(),
                 id: Playlist::default().id,
                 asset_id: asset,
                 plays: 1,

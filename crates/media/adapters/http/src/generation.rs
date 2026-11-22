@@ -37,8 +37,9 @@ use crate::wire::{
     AutomationAction, AutomationActionFrame, AutomationActionResult, AutomationConfigurationView,
     AutomationOutputEdit, AutomationOutputView, AutomationRuntimeView, AutomationStatus,
     AutomationView, AuxiliaryLayerView, DeleteAutomationObject, LayerPresetView, PlaylistEdit,
-    PlaylistEntryView, PlaylistView, ScheduleEventEdit, ScheduleEventView, ScheduleTriggerView,
-    SetAutomationEnabled, UpcomingOccurrenceView,
+    PlaylistEntryView, PlaylistPreviewResult, PlaylistPreviewState, PlaylistTransformView,
+    PlaylistView, PreviewPlaylistStep, ScheduleEventEdit, ScheduleEventView, ScheduleTriggerView,
+    SetAutomationEnabled, StopPlaylistPreview, UpcomingOccurrenceView,
 };
 
 const TYPESCRIPT_PATH: &str = "apps/media/src/shared/api/generated/media-wire.ts";
@@ -85,6 +86,7 @@ fn typescript_bindings() -> String {
 fn declarations(config: &Config) -> Vec<String> {
     vec![
         ApiErrorBody::decl(config),
+        PlaylistTransformView::decl(config),
         PlaylistEntryView::decl(config),
         LayerPresetView::decl(config),
         AuxiliaryLayerView::decl(config),
@@ -101,6 +103,10 @@ fn declarations(config: &Config) -> Vec<String> {
         ScheduleEventEdit::decl(config),
         AutomationOutputEdit::decl(config),
         DeleteAutomationObject::decl(config),
+        PreviewPlaylistStep::decl(config),
+        StopPlaylistPreview::decl(config),
+        PlaylistPreviewState::decl(config),
+        PlaylistPreviewResult::decl(config),
         AutomationAction::decl(config),
         SetAutomationEnabled::decl(config),
         AutomationActionFrame::decl(config),

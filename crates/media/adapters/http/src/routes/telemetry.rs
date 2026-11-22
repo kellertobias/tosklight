@@ -82,9 +82,20 @@ async fn action(state: &ApiState, body: &str) -> crate::wire::AutomationActionRe
         &mut serde_json::Deserializer::from_str(body),
         |path| tracing::warn!(route = "/api/v2/telemetry", field = %path, "unknown action field"),
     );
+    let mut preview = None;
     let (action_id, result) = match parsed {
         Ok(frame) if !frame.action_id.is_empty() && frame.action_id.len() <= 256 => {
             let result = match frame.action {
+                crate::wire::AutomationAction::AutomationPreviewStep { request } => {
+                    super::playlist_preview::show_action(state, &request).map(|result| {
+                        preview = Some(result);
+                    })
+                }
+                crate::wire::AutomationAction::AutomationStopPreview { request } => {
+                    super::playlist_preview::stop_action(state, &request).map(|result| {
+                        preview = Some(result);
+                    })
+                }
                 crate::wire::AutomationAction::AutomationApplyNow { output_id } => {
                     super::automation::apply_now_action(state, &output_id)
                 }
@@ -103,6 +114,7 @@ async fn action(state: &ApiState, body: &str) -> crate::wire::AutomationActionRe
         ),
     };
     crate::wire::AutomationActionResult {
+        preview,
         kind: "automation-action-result".into(),
         action_id,
         ok: result.is_ok(),

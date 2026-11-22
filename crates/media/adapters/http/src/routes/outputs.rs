@@ -609,7 +609,11 @@ fn visualizer_tuning(
     })))
 }
 
-fn view_of(state: &ApiState, output: &media_domain::OutputState, now: Timestamp) -> OutputView {
+pub(super) fn view_of(
+    state: &ApiState,
+    output: &media_domain::OutputState,
+    now: Timestamp,
+) -> OutputView {
     let configuration = state.configuration.load();
     let name = configuration
         .output(output.id)

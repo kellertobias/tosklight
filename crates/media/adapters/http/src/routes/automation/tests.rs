@@ -325,3 +325,51 @@ async fn snapshot_contains_configuration_and_runtime_and_edits_require_identity(
     );
     assert!(bench.stored.lock().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn entry_transform_defaults_round_trip_and_invalid_edits_leave_saved_framing_intact() {
+    let bench = bench();
+    let id = playlist(&bench).await;
+    let path = format!("/playlists/{id}/update");
+    let mut entry = json!({"id":uuid::Uuid::new_v4(),"assetId":uuid::Uuid::new_v4(),"plays":1,"holdMillis":1000,"fadeMillis":0});
+    let (status, response) = edit(
+        &bench,
+        &path,
+        json!({"requestId":"legacy-step","entries":[entry.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        response["configuration"]["playlists"][0]["entries"][0]["transform"],
+        json!({"scaleX":1.0,"scaleY":1.0,"positionX":0.0,"positionY":0.0,"rotation":0.0})
+    );
+    entry["transform"] =
+        json!({"scaleX":0.5,"scaleY":0.75,"positionX":-0.4,"positionY":0.2,"rotation":90.0});
+    let (status, response) = edit(
+        &bench,
+        &path,
+        json!({"requestId":"authored-step","entries":[entry.clone()]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(
+        response["configuration"]["playlists"][0]["entries"][0]["transform"],
+        entry["transform"]
+    );
+    let saved = bench.configuration.load().automation.playlists[0].entries[0].transform;
+    entry["transform"]["rotation"] = json!(361.0);
+    let (status, response) = edit(
+        &bench,
+        &path,
+        json!({"requestId":"bad-step","entries":[entry]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(response["code"], "automation-invalid");
+    assert!(response["message"].as_str().unwrap().contains("rotation"));
+    assert_eq!(
+        bench.configuration.load().automation.playlists[0].entries[0].transform,
+        saved
+    );
+    assert_eq!(bench.stored.lock().unwrap().len(), 3);
+}

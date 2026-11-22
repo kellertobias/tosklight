@@ -11,6 +11,7 @@ import type {
 	OutputView,
 } from "../../shared/api/generated/media-wire";
 import { resetResources } from "../../shared/api/resource";
+import { DEFAULT_PLAYLIST_TRANSFORM } from "./playlistTransform";
 
 const OUTPUT = "a20d74ef-5cb7-4c42-8df5-f39859864021";
 const LOBBY = "lobby-information";
@@ -117,6 +118,7 @@ function snapshot(): AutomationView {
 				plays: 1,
 				holdMillis: 15000,
 				fadeMillis: 1500,
+				transform: { ...DEFAULT_PLAYLIST_TRANSFORM },
 			},
 			{
 				id: "film-entry",
@@ -124,6 +126,7 @@ function snapshot(): AutomationView {
 				plays: 2,
 				holdMillis: null,
 				fadeMillis: 1500,
+				transform: { ...DEFAULT_PLAYLIST_TRANSFORM },
 			},
 		],
 		auxiliaryLayers: [

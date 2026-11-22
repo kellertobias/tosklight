@@ -6,7 +6,8 @@ export type ApiErrorBody = {
  * Stable across releases. Clients branch on this, never on the message.
  */
 code: string, message: string, };
-export type PlaylistEntryView = { id: string, assetId: string, plays: number, holdMillis: number | null, fadeMillis: number, };
+export type PlaylistTransformView = { scaleX: number, scaleY: number, positionX: number, positionY: number, rotation: number, };
+export type PlaylistEntryView = { id: string, assetId: string, plays: number, holdMillis: number | null, fadeMillis: number, transform: PlaylistTransformView, };
 export type LayerPresetView = { playMode: string | { once: { end_state: string } } | { 'reverse-once': { end_state: string } }, scaleX: number, scaleY: number, scalingMode: string, positionX: number, positionY: number, rotation: number, dimmer: number, volume: number, tint: {red:number, green:number, blue:number}, grayscale: number, mask: {address:{folder:number,file:number},scaleX:number,scaleY:number,positionX:number,positionY:number,invert:boolean,opacity:number,source:string}, effectBanks: Array<{select:number,strength:number,parameters:number[]}>, effects: unknown[], speedMultiplier: {kind:'unity'} | {kind:'divide'|'multiply',factor:number}, playbackBpm: number | null, blur: number, blend: string, strobeHz: number | null, inPoint: number, outPoint: number, visualizerControls: [number, number, number, number], visualizerTuning: unknown | null, model: {model:number,pan:number,tilt:number}, };
 export type AuxiliaryLayerView = { layer: number, mode: string, assetId: string | null, controls: LayerPresetView, };
 export type PlaylistView = { id: string, name: string, enabled: boolean, priority: number, layers: [number, number], masterDimmer: number, masterVolume: number, defaultFadeMillis: number, entries: Array<PlaylistEntryView>, auxiliaryLayers: Array<AuxiliaryLayerView>, };
@@ -22,10 +23,18 @@ export type PlaylistEdit = { requestId: string, name?: string | null, enabled?: 
 export type ScheduleEventEdit = { requestId: string, name?: string | null, enabled?: boolean | null, outputId?: string | null, playlistId?: string | null, trigger?: ScheduleTriggerView | null, };
 export type AutomationOutputEdit = { requestId: string, fallbackPlaylistId?: string | null | null, dmxSilenceSeconds?: number | null, };
 export type DeleteAutomationObject = { requestId: string, };
-export type AutomationAction = { "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, };
+export type PreviewPlaylistStep = { outputId: string, previewId: string, sequence: number, expectedOwnershipGeneration: number,
+/**
+ * Authoring draft, rather than a second persisted playlist or client-computed layer writes.
+ */
+playlist: Omit<PlaylistView, 'auxiliaryLayers'> & { auxiliaryLayers: Array<Omit<AuxiliaryLayerView, 'controls'> & { controls: Partial<LayerPresetView> }> }, entryId: string, };
+export type StopPlaylistPreview = { outputId: string, previewId: string, sequence: number, };
+export type PlaylistPreviewState = { outputId: string, previewId: string, sequence: number, ownershipGeneration: number, playlistId: string, entryId: string, };
+export type PlaylistPreviewResult = { active: PlaylistPreviewState | null, output: OutputView, };
+export type AutomationAction = { "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, } | { "type": "automation-preview-step", request: PreviewPlaylistStep, } | { "type": "automation-stop-preview", request: StopPlaylistPreview, };
 export type SetAutomationEnabled = { enabled: boolean, };
-export type AutomationActionFrame = { actionId: string, } & ({ "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, });
-export type AutomationActionResult = { type: string, actionId: string, ok: boolean, message: string | null, };
+export type AutomationActionFrame = { actionId: string, } & ({ "type": "automation-apply-now", outputId: string, } | { "type": "automation-set-enabled", outputId: string, enabled: boolean, } | { "type": "automation-preview-step", request: PreviewPlaylistStep, } | { "type": "automation-stop-preview", request: StopPlaylistPreview, });
+export type AutomationActionResult = { preview?: PlaylistPreviewResult, type: string, actionId: string, ok: boolean, message: string | null, };
 export type Health = {
 /**
  * Always [`PRODUCT`]. Identifies the answering process as a ToskLight Pixel.

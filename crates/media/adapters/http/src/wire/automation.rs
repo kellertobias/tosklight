@@ -13,6 +13,32 @@ pub struct PlaylistEntryView {
     pub hold_millis: Option<u64>,
     #[ts(type = "number")]
     pub fade_millis: u64,
+    #[serde(default)]
+    pub transform: PlaylistTransformView,
+}
+
+/// Step framing uses the same units and limits as ordinary layer controls.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PlaylistTransformView {
+    pub scale_x: f32,
+    pub scale_y: f32,
+    pub position_x: f32,
+    pub position_y: f32,
+    pub rotation: f32,
+}
+
+impl Default for PlaylistTransformView {
+    fn default() -> Self {
+        let transform = media_domain::playlist::PlaylistTransform::default();
+        Self {
+            scale_x: transform.scale_x,
+            scale_y: transform.scale_y,
+            position_x: transform.position_x,
+            position_y: transform.position_y,
+            rotation: transform.rotation,
+        }
+    }
 }
 
 /// The ordinary layer-control shape, without live source status or reset counters.
@@ -300,9 +326,20 @@ pub struct DeleteAutomationObject {
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum AutomationAction {
     #[serde(rename_all = "camelCase")]
-    AutomationApplyNow { output_id: String },
+    AutomationApplyNow {
+        output_id: String,
+    },
     #[serde(rename_all = "camelCase")]
-    AutomationSetEnabled { output_id: String, enabled: bool },
+    AutomationSetEnabled {
+        output_id: String,
+        enabled: bool,
+    },
+    AutomationPreviewStep {
+        request: super::PreviewPlaylistStep,
+    },
+    AutomationStopPreview {
+        request: super::StopPlaylistPreview,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
@@ -321,6 +358,9 @@ pub struct AutomationActionFrame {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct AutomationActionResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub preview: Option<super::PlaylistPreviewResult>,
     #[serde(rename = "type")]
     pub kind: String,
     pub action_id: String,
