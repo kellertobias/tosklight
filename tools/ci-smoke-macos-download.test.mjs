@@ -73,7 +73,7 @@ test("Mach-O checks permit system and bundled dependencies but reject build-mach
 	]);
 });
 
-test("actual ZIP extraction identifies the three applications by ID despite names with spaces", {
+test("actual ZIP extraction identifies the suite and launcher by ID despite names with spaces", {
 	skip: process.platform !== "darwin",
 }, async (t) => {
 	await fs.mkdir(artifactPaths.tmp, { recursive: true });
@@ -86,6 +86,7 @@ test("actual ZIP extraction identifies the three applications by ID despite name
 		["The Desk", "de.tokenet.light", "light-desktop"],
 		["The Architect", "de.tokenet.tosklight.visualizer", "ToskLight Architect"],
 		["The Pixel", "de.tokenet.tosklight.media", "ToskLight Pixel"],
+		["The Launcher", "de.tokenet.tosklight.launcher", "ToskLight Launcher"],
 	];
 	for (const [name, id, executable] of products) {
 		const contents = path.join(suite, `${name}.app/Contents`);
@@ -110,7 +111,7 @@ test("actual ZIP extraction identifies the three applications by ID despite name
 	const extracted = path.join(root, "Extracted With Spaces");
 	await extractArchive(archive, extracted);
 	const found = await findApplications(extracted);
-	assert.deepEqual([...found.keys()].sort(), ["architect", "control", "pixel"]);
+	assert.deepEqual([...found.keys()].sort(), ["architect", "control", "launcher", "pixel"]);
 	assert.equal(
 		path.basename(found.get("architect").executable),
 		"ToskLight Architect",

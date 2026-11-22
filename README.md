@@ -37,6 +37,50 @@ The screenshots above are generated from the current application stories and pub
 [operator manual](https://kellertobias.github.io/tosklight/manual/), the generated product demo,
 and current release downloads.
 
+## Install on macOS
+
+Download `tosklight-bundle-macos_arm64.zip` from the
+[latest GitHub release](https://github.com/kellertobias/tosklight/releases/latest), expand it,
+and move the applications to Applications.
+
+With [Homebrew](https://brew.sh) installed, run these commands to install the complete suite
+from a prebuilt GitHub Release:
+
+```sh
+brew tap kellertobias/tosklight https://github.com/kellertobias/tosklight.git
+brew trust --cask kellertobias/tosklight/tosklight
+brew install --cask kellertobias/tosklight/tosklight
+```
+
+The cask installs **ToskLight Control**, **ToskLight Architect**, including its CAD editor and
+visualizer, and **ToskLight Pixel** into Applications. It also installs FFmpeg and ffprobe for
+Pixel media import. It requires an Apple Silicon Mac running macOS 11 or later; installation
+downloads compiled applications and needs no Rust, Node.js, or Xcode toolchain.
+
+macOS suite releases include **ToskLight Launcher**. Pin the launcher in the Dock to choose
+Control, Architect, or Pixel from one icon; running products keep their own Dock icons.
+The launcher shows each installed version and the latest GitHub release. When they differ,
+**Update** links and **Update all ToskLight applications** install the complete suite, including
+the launcher. Close the product applications first. Downloads are verified before replacement,
+and failed installations restore the previous app bundles. **Change log** opens the selected
+GitHub release notes in your default browser.
+
+Homebrew automatically runs the release's local-signing helper before installing the apps.
+It signs testing builds, including their helper executables, and verifies every app.
+Valid Developer ID signatures are preserved; signing or verification failures stop installation.
+
+The [Homebrew installation script](tools/install-homebrew.sh) runs these steps with progress
+messages and reinstalls an existing Homebrew installation to refresh local signatures, even at
+the same version. To update manually, run `brew update` followed by
+`brew upgrade --cask --greedy kellertobias/tosklight/tosklight`.
+To remove the suite, run `brew uninstall --cask kellertobias/tosklight/tosklight`;
+the cask keeps saved shows and settings.
+
+Local signing keeps download quarantine intact. If macOS blocks an application, verify its download source,
+then use **System Settings > Privacy & Security > Open Anyway** and confirm **Open**.
+See [Installation and first start](docs/help/00-Quick-Start/01-installation-and-first-start.md)
+for signing details and first-start checks.
+
 ## Product family
 
 | Icon | Application | Role |
@@ -76,7 +120,8 @@ it does not rebuild or stop an already-ready server.
 | --- | --- | --- |
 | Build the operator manual | `npm run manual` | Verified PDF and deployable HTML manual under `.artifacts/generated/manual/` |
 | Bundle release artifacts | `npm run bundle` | Desktop packages and standalone server archives under `.artifacts/release/` |
-| Bundle and install locally | `npm run bundle:install` | Builds the archives and installs/opens the macOS application |
+| Bundle and install locally | `npm run bundle:install` | Builds the archives, installs the macOS applications, and opens the suite launcher |
+| Build the macOS launcher | `npm run build:launcher:open` | Builds the native chooser and updater, then opens it |
 | Build the public site | `npm run pages:generate` | Landing page, manual, Code Safari, semantic test catalog, and release assets under `.artifacts/generated/pages/` |
 | Run the headless development server | `npm run dev:headless` | Embedded browser UI at `http://127.0.0.1:5000` |
 
@@ -88,7 +133,7 @@ for the documentation workflow.
 
 | Platform | Desktop application | Standalone/headless server |
 | --- | --- | --- |
-| macOS | Apple Silicon (M1 and later) | Universal macOS archive |
+| macOS | Apple Silicon (M1 and later) | Apple Silicon macOS archive |
 | Windows | 64-bit installer | Windows AMD64 archive |
 | Linux | x86_64 AppImage and Debian package | Linux AMD64 archive |
 | Raspberry Pi | Use the browser desk from another computer | Pi 4 or Pi 5, 64-bit Raspberry Pi OS, ARM64 archive |

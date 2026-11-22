@@ -79,7 +79,7 @@ Honor the narrowest requested scope. If the request says to edit planning or tes
   CI-service files such as `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` are not repository build
   artifacts. Keep their established ownership and workflows.
 - The only approved root directories are `.agents`, `.artifacts`, `.cargo`, `.forgejo`, `.git`,
-  `.github`, `.show`, `.tour`, `apps`, `assets`, `crates`, `docs`, `experiments`, `node_modules`,
+  `.github`, `.show`, `.tour`, `Casks`, `apps`, `assets`, `crates`, `docs`, `experiments`, `node_modules`,
   `tests`, and `tools`. Regular root files are allowed. Use `npm run clean:root` to move any other
   root entry into recoverable storage under `.artifacts/cleanup/repository-root/`.
 - Use `npm run clean:artifacts` to remove generated artifact trees while preserving

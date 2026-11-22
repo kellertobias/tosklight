@@ -71,6 +71,7 @@ test(
 			["Architect.app", "de.tokenet.tosklight.visualizer"],
 			["Pixel.app", "de.tokenet.tosklight.media"],
 			["Hardware.app", "de.tokenet.tosklight.hardware-controls"],
+			["Launcher.app", "de.tokenet.tosklight.launcher"],
 		]) {
 			const destination = path.join(root, name);
 			fs.cpSync(app, destination, { recursive: true });

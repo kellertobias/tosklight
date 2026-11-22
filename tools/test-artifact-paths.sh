@@ -59,6 +59,8 @@ light_init_artifact_paths "$TEST_ROOT/repository"
 [[ "$(PYTHONPATH="$ROOT/tools" python3 -c 'from artifact_paths import artifact_path; print(artifact_path("LIGHT_TMP_DIR", "TMP_ROOT"))')" == "$LIGHT_TMP_DIR" ]]
 
 printf root-file > "$TEST_ROOT/repository/README.md"
+mkdir -p "$TEST_ROOT/repository/Casks"
+printf 'cask "tosklight" do\nend\n' > "$TEST_ROOT/repository/Casks/tosklight.rb"
 mkdir -p "$TEST_ROOT/repository/.next"
 printf generated > "$TEST_ROOT/repository/.next/output"
 ln -s "$TEST_ROOT/repository/README.md" "$TEST_ROOT/repository/root-link"
@@ -66,8 +68,10 @@ unexpected="$(light_list_unexpected_root_entries "$TEST_ROOT/repository")"
 [[ "$unexpected" == *"$TEST_ROOT/repository/.next"* ]]
 [[ "$unexpected" == *"$TEST_ROOT/repository/root-link"* ]]
 [[ "$unexpected" != *"$TEST_ROOT/repository/tools"* ]]
+[[ "$unexpected" != *"$TEST_ROOT/repository/Casks"* ]]
 [[ "$unexpected" != *"$TEST_ROOT/repository/README.md"* ]]
 light_clean_repository_root >/dev/null
+[[ -f "$TEST_ROOT/repository/Casks/tosklight.rb" ]]
 [[ ! -e "$TEST_ROOT/repository/.next" && ! -L "$TEST_ROOT/repository/root-link" ]]
 cleanup_archive="$(find "$LIGHT_ARTIFACTS_DIR/cleanup/repository-root" -mindepth 1 -maxdepth 1 -type d -print -quit)"
 [[ -n "$cleanup_archive" ]]

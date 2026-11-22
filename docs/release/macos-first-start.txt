@@ -10,6 +10,19 @@ Testing builds made without these credentials are ad-hoc signed.
    the application, and confirm Open. On macOS Sequoia and later, Control-click does not bypass
    this approval.
 
+One Dock icon for the suite
+--------------------------
+
+Move ToskLight Launcher.app beside the product applications in Applications and pin it in the Dock.
+Choose Control, Architect, or Pixel. Each running product keeps its own Dock icon; click the
+launcher icon again to choose another product.
+
+The launcher shows installed and latest GitHub versions. Update links and Update all ToskLight
+applications install the matching complete suite, including the launcher. Save work and quit
+the product applications first. Download and installation progress are shown; failed replacements
+restore the previous app bundles. Shows, libraries and desk settings are preserved. Change log
+opens the selected GitHub release notes in your default browser.
+
 Optional local signing for testing builds
 ----------------------------------------
 

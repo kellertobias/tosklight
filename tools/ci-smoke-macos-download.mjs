@@ -17,6 +17,7 @@ const PRODUCTS = new Map([
 	["de.tokenet.light", "control"],
 	["de.tokenet.tosklight.visualizer", "architect"],
 	["de.tokenet.tosklight.media", "pixel"],
+	["de.tokenet.tosklight.launcher", "launcher"],
 ]);
 
 /** Reject path traversal and archives that write through a previously extracted symlink. */
@@ -318,6 +319,11 @@ async function freePort(udp = false) {
 
 async function smokeApplications(apps, directory) {
 	const env = isolatedEnvironment();
+	const launcher = await run(apps.get("launcher").executable, ["--verify"]);
+	const resolved = JSON.parse(launcher.stdout);
+	for (const product of ["control", "architect", "pixel"])
+		if (resolved.find((entry) => entry.id === product)?.application !== apps.get(product).app)
+			throw new Error(`Launcher did not resolve the downloaded ${product} application`);
 	await processSmoke(
 		process.execPath,
 		[path.join(repositoryRoot, "tools/ci-smoke-built-desktop.mjs")],

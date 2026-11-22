@@ -34,6 +34,10 @@ const PRODUCT_NAMES = {
 	pixel: "ToskLight Pixel",
 };
 
+export function macLauncherLocation(locations) {
+	return path.join(path.dirname(locations.control.directory), "ToskLight Launcher.app");
+}
+
 /** Where each product is installed on `platform`, for a user whose home is `home`. */
 export function installLocations(
 	platform,
@@ -200,6 +204,16 @@ async function main() {
 			revertToPreviousVersion(installed);
 			console.log(`Restored the previous ${PRODUCT_NAMES[product]}`);
 		}
+		if (platform === "darwin") {
+			const launcher = macLauncherLocation(locations);
+			if (fs.existsSync(previousVersionPath(launcher))) {
+				if (!dryRun) {
+					quitInstalled(platform, launcher);
+					revertToPreviousVersion(launcher);
+				}
+				console.log(`Restored the previous ToskLight Launcher in ${launcher}`);
+			}
+		}
 		return;
 	}
 	const target = hostTarget();
@@ -211,6 +225,7 @@ async function main() {
 		`Installing ${selfContained ? "self-contained " : ""}${products.map((product) => PRODUCT_NAMES[product]).join(", ")} for ${target}:`,
 	);
 	for (const product of products) console.log(`  ${PRODUCT_NAMES[product]} → ${locations[product].directory}`);
+	if (platform === "darwin") console.log(`  ToskLight Launcher → ${macLauncherLocation(locations)}`);
 	if (dryRun) return;
 
 	const run = (command, args, options = {}) => {
@@ -311,6 +326,15 @@ async function main() {
 		else if (location.appImage) installAppImage(built[product], location.directory);
 		else installDirectory(product, location, { release, exe, platform, artifactPaths, run, selfContained });
 		console.log(`Installed ${PRODUCT_NAMES[product]} in ${location.directory}`);
+	}
+	if (platform === "darwin") {
+		const bundles = path.join(release, "bundle", "macos");
+		run("bash", ["tools/bundle-launcher-macos.sh", bundles]);
+		const destination = macLauncherLocation(locations);
+		quitInstalled(platform, destination);
+		keepPreviousVersion(destination);
+		installMac(run, path.join(bundles, "ToskLight Launcher.app"), destination, "ToskLight Launcher");
+		console.log(`Installed ToskLight Launcher in ${destination}. Pin it in the Dock to open the suite.`);
 	}
 	if (products.length)
 		console.log("Revert to the previous versions with: npm run install-all -- --revert" +

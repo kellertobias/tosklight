@@ -286,6 +286,7 @@ function notarizationFixture(t) {
 		"tosklight-desk-macos_arm64.app",
 		"tosklight-architect-macos_arm64.app",
 		"tosklight-media-macos_arm64.app",
+		"ToskLight Launcher.app",
 	];
 	for (const name of combinedNames)
 		fs.cpSync(app, path.join(bundle, name), { recursive: true });
