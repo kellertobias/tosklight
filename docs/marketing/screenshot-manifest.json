@@ -440,6 +440,26 @@
 			"sourceFile": "docs/marketing/assets/stills/media-server-text.png"
 		},
 		{
+			"file": "pixel-playlists.png",
+			"title": "Clips, fades and fixed layers",
+			"caption": "Arrange clips, total plays and fades on selected layers. Keep venue information on the other layers. Production playlist editor with offline example data.",
+			"storyId": "tosklight-media-server-automation--playlists",
+			"viewport": { "width": 1440, "height": 1100 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Lobby information')" }]
+		},
+		{
+			"file": "pixel-schedule.png",
+			"title": "A programme that runs itself",
+			"caption": "Set dated and weekly events, priorities, fallback playback and DMX silence timeout. Production schedule editor with offline example data.",
+			"storyId": "tosklight-media-server-automation--schedule",
+			"viewport": { "width": 1440, "height": 1100 },
+			"theme": "dark",
+			"mode": "software",
+			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Weekday opening hours')" }]
+		},
+		{
 			"file": "media-server-outputs.png",
 			"title": "Media Server outputs",
 			"caption": "Configure the output target, resolution, and frame rate. This actual example uses an off-screen 1280 × 720 output.",

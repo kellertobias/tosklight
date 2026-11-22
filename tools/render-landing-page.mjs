@@ -52,7 +52,7 @@ const HOMEPAGE_SHOT_COPY = {
 };
 const DETAIL_GALLERIES = {
 	control: ["application-overview-icons.png", "tracked-programming.png", "control-programmer.png", "control-groups.png", "control-cues.png", "control-timecode.png", "control-output-engine.png", ["dynamics.png", "dynamics-projection.png", "dynamics-phase.png"], "control-media-pane.png", ["control-playbacks-software.png", "control-playbacks-hardware.png"]],
-	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", "media-server-outputs.png"],
+	pixel: ["media-server-library.png", "media-server-visualizers.png", "media-server-text.png", "pixel-eight-layer-composite.png", ["pixel-playlists.png", "pixel-schedule.png"], "media-server-outputs.png"],
 	architect: [["architect-native-export-4k.png", "architect-wireframe-native.png", "architect-renderer-draft.png", "architect-renderer-standard.png", "architect-renderer-ultra-live.png"], "architect-show-transfer.png", "architect-cad.png", "architect-patch.png", "control-position-reference.png", ["architect-laser-code.png", "architect-laser-output.png"], null, ["architect-media-surface-config.png", "architect-media-crop-config.png", "architect-media-output-config.png"]],
 };
 
@@ -284,7 +284,7 @@ const productPages = [
 		benefits: [
 			["Eight layers, one output.", "Build a rich visual picture from up to eight independently controlled layers, including masks and master shapes that keep the composition intentional."],
 			["A library made for live work.", "Bring in videos and transparent images, add flexible text such as time and text files, and use live sound-driven visualizers. Pixel prepares imported media for efficient playback."],
-			["Direct control or network control.", "Use familiar desk-style live controls when you want to operate Pixel on its own, or connect it to any Art-Net or sACN desk. CITP/MSEX keeps media choices and previews close to the console."],
+			["Scheduled playback, desk priority.", "Run playlists at fixed dates or every week, with repeats, fades and a fallback. Incoming DMX suspends the schedule until the configured silence timeout expires."],
 		],
 		images: DETAIL_GALLERIES.pixel,
 		manual: "../manual/#page-30-tosklight-media-index-md",
@@ -294,6 +294,7 @@ const productPages = [
 			["Text", "Doors open in …", "Put a countdown, clock, title, or message into the picture with an editable text layer. For example, count down to doors opening, then switch to the next message for the audience.", "Position and style text alongside video and images, with the same layer controls as the rest of the composition."],
 			["Layers", "Image and video layers, up to eight at once.", "Build a complete visual output from up to eight independently controlled image and video layers. Shape their position, opacity, masks, frames, and effects while keeping the complete composition visible.", "The layers are designed for a live show: each one can be controlled directly in Pixel or reached from the lighting desk over sACN and Art-Net."],
 
+			["Playlists and schedules", "Run the daily programme.", "Arrange clips, repeats and fades in the browser. Choose the playback layers and keep a logo, information image or looping video on the other layers.", "Set dated or weekly events to play once or loop until an end time. Priorities resolve overlaps and a fallback fills the gaps. Incoming DMX takes control immediately; scheduling resumes after a configurable silence timeout, with no late replay of missed events."],
 			["Output", "Send the picture to the screen.", "Show Pixel’s output on a connected display or projector, including HDMI. Control layers over Art-Net or sACN, with CITP/MSEX for media names, thumbnails, and live previews.", "DMX pixel output and multiple outputs are in public beta. Configure their mapping for the actual room and check the result on the production hardware."],
 		],
 		coming: [["DMX output and multiple outputs", "Public beta"], ["More visualizers", "The visualizer catalogue continues to grow."]],

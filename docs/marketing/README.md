@@ -67,3 +67,8 @@ always uses its own generated artifact and does not depend on this promotion. Co
 `AWS_SESSION_TOKEN` is supported as an optional secret for temporary credentials.
 The upload copies PNG files into the configured prefix without deleting any other
 S3 objects.
+
+The Pixel playlist and schedule captures use the production pages with the isolated offline
+example in `apps/media/src/features/automation/Automation.stories.tsx`. It supplies deterministic
+configuration, library and in-memory telemetry, restores those adapters after each story, and never
+connects to an operator server. Both captures are regenerated through the normal gallery command.
