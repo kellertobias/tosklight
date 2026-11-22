@@ -56,7 +56,8 @@ tools/build.sh is invoked by the root package.json scripts:
   npm run pages:serve [PORT]   Serve the assembled public site locally
   npm run codesafari           Run the CodeSafari code tour locally
   npm run bundle               Create self-contained server archives for macOS, Windows, Linux AMD64/ARM64
-  npm run bundle:install       Also install and open ToskLight.app in ~/Applications
+  npm run bundle:install       Install the macOS apps and open the suite launcher
+  npm run build:launcher:open  Build and open the macOS suite launcher
   npm run migrate-artifacts    Move legacy ./light-data to the canonical development runtime directory
   npm run clean:root           Move unexpected root directories into recoverable artifact storage
   npm run clean:artifacts      Remove generated artifacts while preserving runtime and root-cleanup recovery
@@ -581,6 +582,8 @@ archive_release_locked() {
 
   app_path="$TARGET_DIR/release/bundle/macos/ToskLight.app"
   hardware_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Hardware Controls.app"
+  bash "$ROOT/tools/bundle-launcher-macos.sh" "$TARGET_DIR/release/bundle/macos" "$version"
+  launcher_app_path="$TARGET_DIR/release/bundle/macos/ToskLight Launcher.app"
   cp "$universal_server" "$app_path/Contents/MacOS/light-headless"
   cp "$universal_renderer" "$app_path/Contents/MacOS/viz-renderer"
   mkdir -p "$artifact_dir"
@@ -594,6 +597,9 @@ archive_release_locked() {
   rm -f "$hardware_app_zip"
   ditto -c -k --sequesterRsrc --keepParent "$hardware_app_path" "$hardware_app_zip"
   echo "Created $hardware_app_zip"
+  launcher_zip="$artifact_dir/tosklight-launcher-$version-macos-$(uname -m).zip"
+  ditto -c -k --sequesterRsrc --keepParent "$launcher_app_path" "$launcher_zip"
+  echo "Created $launcher_zip"
 
   if [[ "$install" == true ]]; then
     require open
@@ -603,8 +609,12 @@ archive_release_locked() {
     ditto "$app_path" "$HOME/Applications/ToskLight.app"
     rm -rf "$HOME/Applications/ToskLight Hardware Controls.app"
     ditto "$hardware_app_path" "$HOME/Applications/ToskLight Hardware Controls.app"
-    open "$HOME/Applications/ToskLight.app"
-    echo "Installed and opened $HOME/Applications/ToskLight.app"
+    launcher_destination="$HOME/Applications/ToskLight Launcher.app"
+    if [[ -d "$launcher_destination" ]]; then osascript -e "quit app \"$launcher_destination\"" || true; fi
+    [[ ! -e "$launcher_destination" ]] || mv "$launcher_destination" "$LIGHT_TMP_DIR/previous-launcher-$(date +%s).app"
+    ditto "$launcher_app_path" "$launcher_destination"
+    open "$launcher_destination"
+    echo "Installed the applications and opened $launcher_destination"
   fi
 }
 
@@ -1042,6 +1052,17 @@ case "${1:-}" in
   codesafari)
     [[ $# -eq 1 ]] || { usage >&2; exit 2; }
     run_safari_dev
+    ;;
+  build-launcher|build-launcher-open|open-launcher)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    launcher="$TARGET_DIR/release/bundle/macos/ToskLight Launcher.app"
+    if [[ "$1" != open-launcher ]]; then
+      bash "$ROOT/tools/bundle-launcher-macos.sh" "$(dirname "$launcher")"
+    fi
+    if [[ "$1" != build-launcher ]]; then
+      require_built_app "$launcher" "npm run build:launcher:open"
+      open "$launcher"
+    fi
     ;;
   pages-serve)
     [[ $# -le 2 ]] || { usage >&2; exit 2; }

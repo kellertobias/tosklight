@@ -71,12 +71,14 @@ case "$SLUG" in
     previz_unpack="$stage_root/previz"
     extract_archive "$COMPONENTS/tosklight-viz-$VERSION-macos-arm64.zip" "$previz_unpack"
     mv "$previz_unpack/ToskLight Architect.app" "$bundle/tosklight-architect-$asset_slug.app"
+    bash "$ROOT/tools/bundle-launcher-macos.sh" "$bundle" "$VERSION" arm64
     cp "$ROOT/docs/release/macos-first-start.txt" "$bundle/"
     cp "$ROOT/tools/sign-macos-apps-locally.sh" "$bundle/"
     chmod +x "$bundle/sign-macos-apps-locally.sh"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-desk-$asset_slug.app"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-architect-$asset_slug.app"
     codesign --verify --deep --strict --verbose=2 "$bundle/tosklight-media-$asset_slug.app"
+    codesign --verify --deep --strict --verbose=2 "$bundle/ToskLight Launcher.app"
     ;;
   windows-amd64)
     cp "$COMPONENTS/tosklight-media-$VERSION-windows-amd64-setup.exe" \

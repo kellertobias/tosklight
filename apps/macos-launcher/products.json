@@ -1,0 +1,5 @@
+[
+  { "id": "control", "name": "ToskLight Control", "role": "Lighting desk", "bundleIdentifier": "de.tokenet.light", "icon": "control.png" },
+  { "id": "architect", "name": "ToskLight Architect", "role": "CAD and visualizer", "bundleIdentifier": "de.tokenet.tosklight.visualizer", "icon": "architect.png" },
+  { "id": "pixel", "name": "ToskLight Pixel", "role": "Media server", "bundleIdentifier": "de.tokenet.tosklight.media", "icon": "pixel.png" }
+]

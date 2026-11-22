@@ -237,7 +237,7 @@ writeFileSync(
             <pre aria-label="Homebrew installation commands" tabindex="0"><code>brew tap kellertobias/tosklight https://github.com/kellertobias/tosklight.git
 brew trust --cask kellertobias/tosklight/tosklight
 brew install --cask kellertobias/tosklight/tosklight</code></pre>
-            <p>To update, run <code>brew update</code>, then <code>brew upgrade --cask kellertobias/tosklight/tosklight</code>.</p>
+            <p>To update, run <code>brew update</code>, then <code>brew upgrade --cask --greedy kellertobias/tosklight/tosklight</code>.</p>
             <p>The <a href="https://github.com/kellertobias/tosklight/blob/main/tools/install-homebrew.sh">installation script</a> also refreshes local signatures on existing installations. See the <a href="../manual/#page-00-quick-start-01-installation-and-first-start-md">first-start guide</a> for macOS approval steps.</p>
           </div>
         </section>

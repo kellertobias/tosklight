@@ -7,6 +7,7 @@ import { artifactPaths } from "./artifact-paths.mjs";
 import {
 	assembleArchitectMac,
 	installLocations,
+	macLauncherLocation,
 	keepPreviousVersion,
 	PRODUCTS,
 	previousVersionPath,
@@ -75,6 +76,7 @@ test("macOS installs each product as an app in the user's Applications folder", 
 			"/Users/operator/Applications/ToskLight Pixel.app",
 		],
 	);
+	assert.equal(macLauncherLocation(locations), "/Users/operator/Applications/ToskLight Launcher.app");
 });
 
 test("Windows installs per user under Programs, where the Pixel installer puts Pixel", () => {
@@ -102,6 +104,7 @@ test("--only narrows the products and refuses unknown names", () => {
 test("--self-contained places portable copies on the Desktop", () => {
 	const mac = installLocations("darwin", { home: "/Users/operator", selfContained: true });
 	assert.equal(mac.architect.directory, "/Users/operator/Desktop/ToskLight Architect.app");
+	assert.equal(macLauncherLocation(mac), "/Users/operator/Desktop/ToskLight Launcher.app");
 	const windows = installLocations("win32", {
 		desktop: "C:\\Users\\operator\\OneDrive\\Desktop",
 		selfContained: true,

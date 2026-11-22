@@ -27,7 +27,7 @@ for app in "${apps[@]}"; do
   [[ -z "$(find "$app" -type l -print -quit)" ]] || fail "refusing a bundle containing symbolic links: $app"
   identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist" 2>/dev/null)" || fail "cannot read the bundle identifier: $app"
   case "$identifier" in
-    de.tokenet.light|de.tokenet.tosklight.visualizer|de.tokenet.tosklight.media|de.tokenet.tosklight.hardware-controls) ;;
+    de.tokenet.light|de.tokenet.tosklight.visualizer|de.tokenet.tosklight.media|de.tokenet.tosklight.hardware-controls|de.tokenet.tosklight.launcher) ;;
     *) fail "not a recognized ToskLight application ($identifier): $app" ;;
   esac
   signature="$(codesign --display --verbose=4 "$app" 2>&1 || true)"

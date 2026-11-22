@@ -10,7 +10,7 @@ export const repository = "kellertobias/tosklight";
 export const assetName = "tosklight-bundle-macos_arm64.zip";
 const bundle = "tosklight-bundle-macos_arm64";
 
-export function renderCask(version, checksum) {
+export function renderCask(version, checksum, { launcher = false } = {}) {
 	if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error("Expected a stable semantic version");
 	if (!/^[a-f0-9]{64}$/.test(checksum)) throw new Error("Expected a SHA-256 checksum");
 	return `# frozen_string_literal: true
@@ -26,7 +26,7 @@ cask "tosklight" do
   name "ToskLight Pixel"
   desc "Lighting control desk, CAD and visualizer, and media server"
   homepage "https://github.com/${repository}"
-
+${launcher ? "\n  auto_updates true" : ""}
   depends_on arch: :arm64
   depends_on formula: "ffmpeg"
   depends_on :macos
@@ -34,7 +34,7 @@ cask "tosklight" do
   app "${bundle}/tosklight-desk-macos_arm64.app", target: "ToskLight Control.app"
   app "${bundle}/tosklight-architect-macos_arm64.app", target: "ToskLight Architect.app"
   app "${bundle}/tosklight-media-macos_arm64.app", target: "ToskLight Pixel.app"
-
+${launcher ? `  app "${bundle}/ToskLight Launcher.app"\n` : ""}
   preflight_steps do
     run "/bin/bash",
         args:         [
@@ -103,7 +103,8 @@ function main() {
 		const checksum = verifyBundle(archive, expected, entries);
 		const destination = path.join(repositoryRoot, "Casks", "tosklight.rb");
 		fs.mkdirSync(path.dirname(destination), { recursive: true });
-		fs.writeFileSync(destination, renderCask(version, checksum));
+		const launcher = entries.includes(`${bundle}/ToskLight Launcher.app/Contents/MacOS/ToskLight Launcher`);
+		fs.writeFileSync(destination, renderCask(version, checksum, { launcher }));
 		console.log(`Updated ${destination} to ${version}. Review and commit through Forgejo.`);
 	} finally {
 		fs.rmSync(scratch, { recursive: true, force: true });

@@ -57,6 +57,14 @@ visualizer, and **ToskLight Pixel** into Applications. It also installs FFmpeg a
 Pixel media import. It requires an Apple Silicon Mac running macOS 11 or later; installation
 downloads compiled applications and needs no Rust, Node.js, or Xcode toolchain.
 
+macOS suite releases include **ToskLight Launcher**. Pin the launcher in the Dock to choose
+Control, Architect, or Pixel from one icon; running products keep their own Dock icons.
+The launcher shows each installed version and the latest GitHub release. When they differ,
+**Update** links and **Update all ToskLight applications** install the complete suite, including
+the launcher. Close the product applications first. Downloads are verified before replacement,
+and failed installations restore the previous app bundles. **Change log** opens the selected
+GitHub release notes in your default browser.
+
 Homebrew automatically runs the release's local-signing helper before installing the apps.
 It signs testing builds, including their helper executables, and verifies every app.
 Valid Developer ID signatures are preserved; signing or verification failures stop installation.
@@ -64,7 +72,7 @@ Valid Developer ID signatures are preserved; signing or verification failures st
 The [Homebrew installation script](tools/install-homebrew.sh) runs these steps with progress
 messages and reinstalls an existing Homebrew installation to refresh local signatures, even at
 the same version. To update manually, run `brew update` followed by
-`brew upgrade --cask kellertobias/tosklight/tosklight`.
+`brew upgrade --cask --greedy kellertobias/tosklight/tosklight`.
 To remove the suite, run `brew uninstall --cask kellertobias/tosklight/tosklight`;
 the cask keeps saved shows and settings.
 
@@ -112,7 +120,8 @@ it does not rebuild or stop an already-ready server.
 | --- | --- | --- |
 | Build the operator manual | `npm run manual` | Verified PDF and deployable HTML manual under `.artifacts/generated/manual/` |
 | Bundle release artifacts | `npm run bundle` | Desktop packages and standalone server archives under `.artifacts/release/` |
-| Bundle and install locally | `npm run bundle:install` | Builds the archives and installs/opens the macOS application |
+| Bundle and install locally | `npm run bundle:install` | Builds the archives, installs the macOS applications, and opens the suite launcher |
+| Build the macOS launcher | `npm run build:launcher:open` | Builds the native chooser and updater, then opens it |
 | Build the public site | `npm run pages:generate` | Landing page, manual, Code Safari, semantic test catalog, and release assets under `.artifacts/generated/pages/` |
 | Run the headless development server | `npm run dev:headless` | Embedded browser UI at `http://127.0.0.1:5000` |
 

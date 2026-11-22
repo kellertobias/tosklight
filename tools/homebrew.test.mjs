@@ -42,6 +42,13 @@ test("the committed cask is reproducible from its pinned release and checksum", 
 	assert.equal(source, renderCask(version, checksum));
 });
 
+test("the cask includes the launcher only when the verified release contains it", () => {
+	const digest = "a".repeat(64);
+	assert.doesNotMatch(renderCask("1.7.0", digest), /app ".*ToskLight Launcher\.app"/);
+	assert.match(renderCask("1.8.0", digest, { launcher: true }), /app "tosklight-bundle-macos_arm64\/ToskLight Launcher\.app"/);
+	assert.match(renderCask("1.8.0", digest, { launcher: true }), /auto_updates true/);
+});
+
 function installer(t, { installed = false, failInstall = false, machine = "arm64" } = {}) {
 	const directory = scratch(t);
 	const log = path.join(directory, "commands");
