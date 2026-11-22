@@ -9,6 +9,7 @@ import "../../operator/mediaServerSurface.css";
 /** Production pages, with an isolated offline example for repeatable documentation captures. */
 const meta = {
 	title: "ToskLight/Media Server/Automation",
+	tags: ["autodocs"],
 	parameters: { layout: "fullscreen" },
 	beforeEach: installAutomationExample,
 } satisfies Meta;
