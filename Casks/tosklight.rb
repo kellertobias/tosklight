@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 cask "tosklight" do
-  version "1.8.0"
-  sha256 "83716b49c6f38b5c012746f67fd4dfd5002141e355f94d38ee97e2fad681352f"
+  version "1.9.1"
+  sha256 "94a91f237379b64b4aea61db356ee6282e761cfd774e761d53d1bcfdab0338fa"
 
   url "https://github.com/kellertobias/tosklight/releases/download/v#{version}/tosklight-bundle-macos_arm64.zip"
   name "ToskLight"
