@@ -426,7 +426,7 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
                 if let error = error {
                     self.showError("Could not open \(product.name).", detail: error.localizedDescription)
                 } else {
-                    self.window.orderOut(nil)
+                    NSApp.terminate(nil)
                 }
             }
         }

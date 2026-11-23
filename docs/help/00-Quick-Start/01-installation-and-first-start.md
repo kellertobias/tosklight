@@ -28,8 +28,8 @@ The same macOS approval steps apply to testing builds installed through Homebrew
 
 Keep **ToskLight Launcher** beside the product applications in Applications and pin only the
 launcher in the Dock. Choose **ToskLight Control**, **ToskLight Architect**, or **ToskLight Pixel**
-to open that application. Each running product has its own Dock icon. Click the launcher icon
-again to return to the chooser.
+to open that application. The launcher quits after the application opens successfully. Each running
+product has its own Dock icon. Click the pinned launcher icon again to reopen the chooser.
 
 The launcher displays **Installed** and **Latest** versions for each product and checks GitHub
 Releases when opened. Use **Check for updates** to check again. When versions differ, click the
