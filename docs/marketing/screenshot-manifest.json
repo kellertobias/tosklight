@@ -447,7 +447,7 @@
 			"viewport": { "width": 1440, "height": 1100 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Lobby information')" }]
+			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Lobby information')" }, { "action": "expect-visible", "selector": ".ui-window-action-groups .ui-title-chrome-action button" }]
 		},
 		{
 			"file": "pixel-schedule.png",
@@ -457,7 +457,7 @@
 			"viewport": { "width": 1440, "height": 1100 },
 			"theme": "dark",
 			"mode": "software",
-			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Weekday opening hours')" }]
+			"interactions": [{ "action": "expect-visible", "selector": "h2:has-text('Weekday opening hours')" }, { "action": "expect-visible", "selector": ".ui-window-action-groups .ui-title-chrome-action button" }]
 		},
 		{
 			"file": "media-server-outputs.png",

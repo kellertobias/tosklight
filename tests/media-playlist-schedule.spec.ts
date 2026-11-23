@@ -221,12 +221,19 @@ test("@ui › Pixel weekly scheduling saves overnight windows and receives DMX o
 async function assertHeaderButtonFits(page: Page, label: string) {
 	const button = page.getByRole("button", { name: label, exact: true });
 	await expect(button).toBeVisible();
+	// Creation belongs to the shared window-title action group, with its flat, unwrapped chrome.
+	await expect(button).toHaveCSS("border-radius", "0px");
+	await expect(button).toHaveCSS("white-space", "nowrap");
+	expect(await button.evaluate((element) => element.scrollWidth <= element.clientWidth + 1), "the full title-action label must fit").toBe(true);
+	await expect(page.locator(".ui-window-action-groups .ui-title-chrome-action").getByRole("button", { name: label, exact: true })).toBeVisible();
 	const geometry = await button.evaluate((element) => {
 		const bounds = element.getBoundingClientRect();
 		const header = element.closest(".ui-window-header")!.getBoundingClientRect();
 		const hit = document.elementFromPoint(bounds.x + bounds.width / 2, bounds.bottom - 2);
-		return { top: bounds.top, bottom: bounds.bottom, headerTop: header.top, headerBottom: header.bottom, bottomHit: element.contains(hit) };
+		return { left: bounds.left, right: bounds.right, headerLeft: header.left, headerRight: Math.min(header.right, window.innerWidth), top: bounds.top, bottom: bounds.bottom, headerTop: header.top, headerBottom: header.bottom, bottomHit: element.contains(hit) };
 	});
+	expect(geometry.left).toBeGreaterThanOrEqual(geometry.headerLeft);
+	expect(geometry.right).toBeLessThanOrEqual(geometry.headerRight);
 	expect(geometry.top).toBeGreaterThanOrEqual(geometry.headerTop);
 	expect(geometry.bottom).toBeLessThanOrEqual(geometry.headerBottom);
 	expect(geometry.bottomHit).toBe(true);

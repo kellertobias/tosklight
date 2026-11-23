@@ -32,7 +32,7 @@ export function PlaylistsPage() {
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [creating, setCreating] = useState(false);
 	return <section className="media-page pixel-automation-page">
-		<MediaScreenHeader title="Playlists" detail="Ordered clips, transitions and fixed layers" actions={<Button size="compact" variant="primary" aria-label="New playlist" disabled={editing.busy || !automation.data || automation.loading} onClick={() => {
+		<MediaScreenHeader title="Playlists" detail="Ordered clips, transitions and fixed layers" groups={[{ id: "playlist-actions", actions: [{ id: "new-playlist", label: creating ? "Creating…" : "New playlist", ariaLabel: "New playlist", loading: creating, disabled: editing.busy || !automation.data || automation.loading, onPress: () => {
 			setCreating(true);
 			void editing.save(async () => {
 				if (preview?.active || preview?.busy) await preview.stop();
@@ -44,7 +44,7 @@ export function PlaylistsPage() {
 				acceptAutomationSnapshot(result);
 				setSelectedId(created.id);
 			}).finally(() => setCreating(false));
-		}}>{creating ? "Creating…" : "New playlist"}</Button>} />
+		} }] }]} />
 		{editing.failure && <MediaErrorToast message={editing.failure.message} onDismiss={editing.dismiss} />}
 		<PlaylistPreviewPanel outputs={outputs.data ?? []} playlists={automation.data?.configuration.playlists ?? []} playback={playback} preview={preview} />
 		<ResourceState resource={automation} subject="playlists">{(data) => {

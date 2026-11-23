@@ -112,11 +112,13 @@ export function MediaScreenHeader({
 	title,
 	detail,
 	actions,
+	groups,
 }: {
 	eyebrow?: string;
 	title: string;
 	detail: string;
 	actions?: ReactNode;
+	groups?: TitleActionGroup[];
 }) {
 	return (
 		<div className="media-screen-header">
@@ -125,6 +127,7 @@ export function MediaScreenHeader({
 				title={title}
 				info={{ primary: eyebrow ?? "Media Server", secondary: detail }}
 				toolbar={actions}
+				groups={groups}
 			/>
 		</div>
 	);

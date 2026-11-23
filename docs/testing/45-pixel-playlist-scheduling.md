@@ -14,7 +14,8 @@ give the image a positive duration and set both zero and nonzero outgoing fades.
 Enable, reload and verify the saved order and values.
 
 Verify **New playlist** and **New event** are fully visible within their title bars at desktop,
-tablet and phone widths. Create a playlist through the button while the initial list loads;
+tablet and phone widths. Both must use the shared window-title action group, with flat corners
+and unwrapped labels, matching the other Pixel windows. Create a playlist through the button while the initial list loads;
 it must wait for that list, then select the actual new disabled draft without switching to an
 existing playlist. A failed create must show an actionable error.
 
