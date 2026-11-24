@@ -673,7 +673,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const patchSection = architectPage.split('<p class="eyebrow">Patch</p>')[1]?.split('</article>')[0];
         assert.ok(patchSection);
         assert.match(patchSection, /screenshots\/architect-patch\.jpg/u);
-        const movingSection = architectPage.split('<p class="eyebrow">Moving scenes</p>')[1]?.split('</article>')[0];
+        const movingSection = architectPage.split('<p class="eyebrow">Scenes in motion</p>')[1]?.split('</article>')[0];
         assert.ok(movingSection);
         assert.match(movingSection, /screenshots\/control-position-reference\.jpg/u);
         assert.match(movingSection, /Control’s Patch sheet/u);
