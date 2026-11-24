@@ -609,11 +609,11 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const pixelPage = readFileSync(resolve(directory, "pixel/index.html"), "utf8");
         const pixelSections = [...pixelPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
         assert.deepEqual(pixelSections.slice(0, 3), ["Library", "Visualizers", "Text"]);
-        assert.match(pixelPage, /Doors open in/u);
+        assert.match(pixelPage, /count down to doors opening/u);
         assert.match(pixelPage, /including HDMI/u);
         assert.match(pixelPage, /DMX output and multiple outputs<\/strong><p>Public beta/u);
         const architectPage = readFileSync(resolve(directory, "architect/index.html"), "utf8");
-        assert.match(architectPage, /export clear PDF plans/u);
+        assert.match(architectPage, /Export venue and rig plans as PDFs/u);
         const architectSections = [...architectPage.matchAll(/<p class="eyebrow">([^<]+)<\/p>/gu)].map(match => match[1]);
         assert.deepEqual(architectSections.slice(0, 3), ["Visualization", "Interchange", "CAD"]);
         const firstArchitectImage = [...architectPage.matchAll(/<img\b[^>]*src="(\.\.\/screenshots\/[^"]+)"/gu)][0]?.[1];
@@ -647,11 +647,11 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(visualizationSection, /separate 4K export for high-quality customer images/u);
         assert.match(visualizationSection, /without changing the live preview quality/u);
         assert.doesNotMatch(visualizationSection, /original venue|rig in white|architect-renderer-(?:white|warm)-ultra\.jpg/iu);
-        assert.match(architectPage, /Simulate your venue and rig\./u);
-        assert.match(architectPage, /Build the rig\. Export the PDF plan\./u);
+        assert.match(architectPage, /Preview the lighting in your venue\./u);
+        assert.match(architectPage, /Export venue and rig plans as PDFs\./u);
         const interchangeSection = architectPage.split('<p class="eyebrow">Interchange</p>')[1]?.split('</article>')[0];
         assert.ok(interchangeSection);
-        assert.match(interchangeSection, /Bring the rig in\. Take the rig out\./u);
+        assert.match(interchangeSection, /Import and export MVR/u);
         assert.match(interchangeSection, /screenshots\/architect-show-transfer\.jpg/u);
         assert.doesNotMatch(interchangeSection, /architect-renderer-/u);
 
@@ -660,10 +660,9 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         assert.match(mediaIntegrationSection, /screenshots\/architect-media-output-config\.jpg/u);
         assert.match(mediaIntegrationSection, /screenshots\/architect-media-surface-config\.jpg/u);
         assert.match(mediaIntegrationSection, /screenshots\/architect-media-crop-config\.jpg/u);
-        assert.match(mediaIntegrationSection, /Configure the source, physical LED panels and normalized crops in Architect/u);
-        assert.match(mediaIntegrationSection, /1536 × 512/u);
-        assert.match(mediaIntegrationSection, /source 514/u);
-        assert.match(mediaIntegrationSection, /three contiguous mapped LED panels/u);
+        assert.match(mediaIntegrationSection, /live video from Pixel/u);
+        assert.match(mediaIntegrationSection, /crop the video for each panel/u);
+        assert.match(mediaIntegrationSection, /three panels each show one third/u);
         assert.match(architectPage, /screenshots\/architect-patch\.jpg/u);
         assert.doesNotMatch(architectPage, /screenshots\/architect-elevation\.jpg/u);
         const lasersSection = architectPage.split('<p class="eyebrow">Lasers</p>')[1]?.split('</article>')[0];
@@ -677,7 +676,7 @@ test("landing-page assembly writes the same normalized object used by the HTML",
         const movingSection = architectPage.split('<p class="eyebrow">Moving scenes</p>')[1]?.split('</article>')[0];
         assert.ok(movingSection);
         assert.match(movingSection, /screenshots\/control-position-reference\.jpg/u);
-        assert.match(movingSection, /Control’s Patch sheet for the same portable Show/u);
+        assert.match(movingSection, /Control’s Patch sheet/u);
         assert.match(movingSection, /relative to a shared 3D point/u);
 
         assert.match(lasersSection, /screenshots\/architect-laser-code\.jpg/u);

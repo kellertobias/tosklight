@@ -564,7 +564,7 @@
 			"file": "architect-media-output-config.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-output-config.png",
 			"title": "Pixel output for Architect's LED panels",
-			"caption": "Pixel's LED Triptych output at 1536 × 512, advertised source 514, feeds three contiguous mapped LED panels in Architect.",
+			"caption": "One Pixel output supplies live video to all three LED panels in Architect.",
 			"theme": "dark"
 		},
 		{
@@ -599,14 +599,14 @@
 			"file": "architect-media-surface-config.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-surface-config.png",
 			"title": "Map video to the LED walls",
-			"caption": "Architect maps the Stage LED Panels source to three physical LED panels; the first panel uses the left third of the source.",
+			"caption": "Choose the video source for the LED wall and set the size and position of its panels.",
 			"theme": "dark"
 		},
 		{
 			"file": "architect-media-crop-config.png",
 			"sourceFile": "docs/marketing/assets/stills/architect-media-crop-config.png",
 			"title": "Crop the source across LED panels",
-			"caption": "The actual Architect surface editor exposes normalized source crops, two-metre panel dimensions and occupied LED cells.",
+			"caption": "Crop the video for each panel so the picture continues across the wall. The preview shows which part each panel displays.",
 			"theme": "dark"
 		},
 		{
